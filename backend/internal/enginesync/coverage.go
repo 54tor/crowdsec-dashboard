@@ -3,7 +3,6 @@ package enginesync
 import (
 	"cmp"
 	"net/netip"
-	"strings"
 )
 
 type coverageIndex map[netip.Prefix]bool
@@ -23,8 +22,5 @@ func (index coverageIndex) covers(target Target) bool {
 }
 
 func compareWidestFirst(first, second Target) int {
-	return cmp.Or(
-		cmp.Compare(first.Prefix.Bits(), second.Prefix.Bits()),
-		strings.Compare(first.String(), second.String()),
-	)
+	return cmp.Or(cmp.Compare(first.Prefix.Bits(), second.Prefix.Bits()), compareTargets(first, second))
 }

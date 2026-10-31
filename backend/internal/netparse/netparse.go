@@ -27,10 +27,14 @@ func ParsePrefix(rawPrefix string) (netip.Prefix, error) {
 	if parseError != nil {
 		return netip.Prefix{}, errors.New("invalid CIDR")
 	}
+	return CanonicalPrefix(prefix), nil
+}
+
+func CanonicalPrefix(prefix netip.Prefix) netip.Prefix {
 	if prefix.Addr().Is4In6() && prefix.Bits() >= ipv4MappedPrefixBits {
 		prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-ipv4MappedPrefixBits)
 	}
-	return prefix.Masked(), nil
+	return prefix.Masked()
 }
 
 func MeetsBanPrefixFloor(prefix netip.Prefix) bool {

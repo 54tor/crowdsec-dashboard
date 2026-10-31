@@ -75,7 +75,8 @@ func TestPrivateAndLoopbackNeverShared(testContext *testing.T) {
 	privateValues := []string{
 		"10.1.2.3", "172.16.5.4", "192.168.1.1", "127.0.0.1", "169.254.10.10", "0.0.0.1",
 		"224.0.0.1", "::1", "::", "fe80::1", "fd00::1", "ff02::1", "192.168.0.0/16", "fc00::/7",
-		"8.0.0.0/7",
+		"8.0.0.0/7", "100.64.0.1", "100.64.0.0/10", "100.127.255.254", "::ffff:0:0/96", "::fffe:0:0/95",
+		"64:ff9b::cb00:7107", "64:ff9b::/96", "64:ff9b:1::/48", "64:ff9b:1:2::1",
 	}
 	for _, privateValue := range privateValues {
 		ban := nativeBan(testContext, 1, privateValue, time.Hour)
@@ -110,6 +111,9 @@ func TestExclusionOverlapSkipsWholeRange(testContext *testing.T) {
 		{"203.0.113.64/27", ReasonExcluded},
 		{"198.51.100.0/24", ReasonEngineAddress},
 		{"198.51.100.20", ReasonEngineAddress},
+		{"::ffff:203.0.113.0/120", ReasonExcluded},
+		{"::ffff:203.0.113.70", ReasonExcluded},
+		{"::fffe:0:0/95", ReasonPrivate},
 	}
 	for _, testCase := range cases {
 		ban := nativeBan(testContext, 1, testCase.value, time.Hour)
@@ -128,5 +132,19 @@ func TestExclusionOverlapSkipsWholeRange(testContext *testing.T) {
 	}
 	if !hasSkip(plan, "alpha", wholeRange.Target, ReasonExcluded) {
 		testContext.Errorf("skip must be reported, got %+v", plan.Skipped)
+	}
+}
+
+func TestMappedRangeCanonicalisesToIPv4AndFollowsNormalRules(testContext *testing.T) {
+	mappedRange := nativeBan(testContext, 1, "::ffff:198.51.100.0/120", time.Hour)
+	if mappedRange.Target != mustTarget(testContext, "Range", "198.51.100.0/24") {
+		testContext.Fatalf("a mapped /120 must become the IPv4 /24, got %+v", mappedRange.Target)
+	}
+	if shareable, reason := IsShareable(mappedRange, defaultRules()); !shareable {
+		testContext.Errorf("the canonical IPv4 /24 is a normal public range, got %q", reason)
+	}
+	cgnatNeighbour := nativeBan(testContext, 2, "100.128.0.1", time.Hour)
+	if shareable, reason := IsShareable(cgnatNeighbour, defaultRules()); !shareable {
+		testContext.Errorf("100.128.0.1 is outside 100.64.0.0/10, got %q", reason)
 	}
 }

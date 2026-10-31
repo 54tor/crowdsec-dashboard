@@ -3,17 +3,13 @@ package enginesync
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
-
-type copyKey struct {
-	source string
-	target Target
-}
 
 func planEngine(targetSnapshot classifiedSnapshot, offers offerBook, guardedSources map[string]bool, rules Rules) ([]Change, []Skip) {
 	copyChanges, keptCopies := reconcileCopies(targetSnapshot, offers, guardedSources, rules)
-	coverage := coverageIndex{}
-	exactCopies := map[Target]bool{}
+	coverage := make(coverageIndex, len(targetSnapshot.Bans))
+	exactCopies := make(map[Target]bool, len(keptCopies))
 	for _, localBan := range targetSnapshot.natives {
 		if localBan.isActive() {
 			coverage.add(localBan.Target)
@@ -38,7 +34,7 @@ func planAdds(engineName string, offers offerBook, guardedSources map[string]boo
 			skips = append(skips, Skip{Engine: engineName, Target: candidate, Reason: ReasonCovered})
 			continue
 		}
-		sourceName, remaining := offers.firstSource(engineName, candidate, guardedSources)
+		sourceName, remaining := offers.bestSource(engineName, candidate, guardedSources)
 		changes = append(changes, Change{Engine: engineName, Kind: ChangeAdd, Target: candidate, Source: sourceName, Remaining: remaining})
 		coverage.add(candidate)
 	}
@@ -51,7 +47,7 @@ func reconcileCopies(targetSnapshot classifiedSnapshot, offers offerBook, guarde
 	for _, copyGroup := range groupCopies(targetSnapshot.copies) {
 		sourceName := copySource(copyGroup[0])
 		if guardedSources[sourceName] {
-			keptCopies = append(keptCopies, copyGroup...)
+			keptCopies = append(keptCopies, activeCopies(copyGroup)...)
 			continue
 		}
 		keeper := copyGroup[0]
@@ -71,7 +67,7 @@ func reconcileCopies(targetSnapshot classifiedSnapshot, offers offerBook, guarde
 
 func reconcileCopy(engineName string, existingCopy Ban, offers offerBook, rules Rules) (*Change, bool) {
 	sourceName := copySource(existingCopy)
-	if !existingCopy.isActive() || targetRefusal(existingCopy.Target, rules) != "" {
+	if sourceName == engineName || !existingCopy.isActive() || targetRefusal(existingCopy.Target, rules) != "" {
 		return new(removal(engineName, existingCopy)), false
 	}
 	if len(rules.KnownEngines) > 0 && !rules.KnownEngines[sourceName] {
@@ -90,27 +86,42 @@ func reconcileCopy(engineName string, existingCopy Ban, offers offerBook, rules 
 	return nil, true
 }
 
+func activeCopies(copyGroup []Ban) []Ban {
+	var active []Ban
+	for _, existingCopy := range copyGroup {
+		if existingCopy.isActive() {
+			active = append(active, existingCopy)
+		}
+	}
+	return active
+}
+
 func removal(engineName string, existingCopy Ban) Change {
 	return Change{Engine: engineName, Kind: ChangeRemove, Target: existingCopy.Target, Source: copySource(existingCopy), DecisionID: existingCopy.ID}
 }
 
 func groupCopies(copies []Ban) [][]Ban {
-	groupsByKey := map[copyKey][]Ban{}
-	var keys []copyKey
-	for _, existingCopy := range copies {
-		key := copyKey{source: copySource(existingCopy), target: existingCopy.Target}
-		if _, known := groupsByKey[key]; !known {
-			keys = append(keys, key)
+	sortedCopies := slices.Clone(copies)
+	slices.SortFunc(sortedCopies, func(first, second Ban) int {
+		return cmp.Or(
+			strings.Compare(first.Scenario, second.Scenario),
+			compareTargets(first.Target, second.Target),
+			cmp.Compare(second.Remaining, first.Remaining),
+			cmp.Compare(first.ID, second.ID),
+		)
+	})
+	groups := make([][]Ban, 0, len(sortedCopies))
+	groupStart := 0
+	for copyIndex := 1; copyIndex <= len(sortedCopies); copyIndex++ {
+		isGroupEnd := copyIndex == len(sortedCopies) || !sameCopyKey(sortedCopies[groupStart], sortedCopies[copyIndex])
+		if isGroupEnd {
+			groups = append(groups, sortedCopies[groupStart:copyIndex])
+			groupStart = copyIndex
 		}
-		groupsByKey[key] = append(groupsByKey[key], existingCopy)
-	}
-	groups := make([][]Ban, 0, len(keys))
-	for _, key := range keys {
-		group := groupsByKey[key]
-		slices.SortFunc(group, func(first, second Ban) int {
-			return cmp.Or(cmp.Compare(second.Remaining, first.Remaining), cmp.Compare(first.ID, second.ID))
-		})
-		groups = append(groups, group)
 	}
 	return groups
+}
+
+func sameCopyKey(first, second Ban) bool {
+	return first.Scenario == second.Scenario && first.Target == second.Target
 }

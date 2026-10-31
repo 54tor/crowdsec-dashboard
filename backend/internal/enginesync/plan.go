@@ -2,6 +2,7 @@ package enginesync
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -38,6 +39,7 @@ type Plan struct {
 
 func BuildPlan(snapshots []Snapshot, rules Rules, now time.Time) Plan {
 	classifiedSnapshots := classifyAll(snapshots)
+	rules.KnownEngines = knownEnginesWithSnapshots(rules.KnownEngines, classifiedSnapshots)
 	offers, shareSkips := collectOffers(classifiedSnapshots, rules)
 	guardedSources := map[string]bool{}
 	for {
@@ -69,6 +71,17 @@ func classifyAll(snapshots []Snapshot) []classifiedSnapshot {
 	return classifiedSnapshots
 }
 
+func knownEnginesWithSnapshots(configuredEngines map[string]bool, classifiedSnapshots []classifiedSnapshot) map[string]bool {
+	if len(configuredEngines) == 0 {
+		return configuredEngines
+	}
+	knownEngines := maps.Clone(configuredEngines)
+	for _, snapshot := range classifiedSnapshots {
+		knownEngines[snapshot.Engine] = true
+	}
+	return knownEngines
+}
+
 func planAllEngines(classifiedSnapshots []classifiedSnapshot, offers offerBook, guardedSources map[string]bool, rules Rules) ([]Change, []Skip) {
 	var changes []Change
 	var skips []Skip
@@ -88,7 +101,7 @@ func sortedChanges(changes []Change) []Change {
 		return cmp.Or(
 			strings.Compare(first.Engine, second.Engine),
 			strings.Compare(string(first.Kind), string(second.Kind)),
-			strings.Compare(first.Target.String(), second.Target.String()),
+			compareTargets(first.Target, second.Target),
 			strings.Compare(first.Source, second.Source),
 			cmp.Compare(first.DecisionID, second.DecisionID),
 		)
@@ -100,7 +113,7 @@ func sortedSkips(skips []Skip) []Skip {
 	slices.SortFunc(skips, func(first, second Skip) int {
 		return cmp.Or(
 			strings.Compare(first.Engine, second.Engine),
-			strings.Compare(first.Target.String(), second.Target.String()),
+			compareTargets(first.Target, second.Target),
 			strings.Compare(first.Reason, second.Reason),
 		)
 	})

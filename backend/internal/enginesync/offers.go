@@ -14,7 +14,7 @@ func collectOffers(classifiedSnapshots []classifiedSnapshot, rules Rules) (offer
 		if sourceSnapshot.State != ReadComplete {
 			continue
 		}
-		sourceOffers := map[Target]time.Duration{}
+		sourceOffers := make(map[Target]time.Duration, len(sourceSnapshot.natives))
 		for _, localBan := range sourceSnapshot.natives {
 			shareable, reason := IsShareable(localBan, rules)
 			if !shareable {
@@ -39,8 +39,12 @@ func (offers offerBook) remaining(sourceName string, target Target) (time.Durati
 }
 
 func (offers offerBook) candidatesFor(engineName string, guardedSources map[string]bool) []Target {
-	seenTargets := map[Target]bool{}
-	var candidates []Target
+	offerCount := 0
+	for _, sourceOffers := range offers {
+		offerCount += len(sourceOffers)
+	}
+	seenTargets := make(map[Target]bool, offerCount)
+	candidates := make([]Target, 0, offerCount)
 	for sourceName, sourceOffers := range offers {
 		if sourceName == engineName || guardedSources[sourceName] {
 			continue
@@ -56,13 +60,20 @@ func (offers offerBook) candidatesFor(engineName string, guardedSources map[stri
 	return candidates
 }
 
-func (offers offerBook) firstSource(engineName string, target Target, guardedSources map[string]bool) (string, time.Duration) {
-	var sourceNames []string
+func (offers offerBook) bestSource(engineName string, target Target, guardedSources map[string]bool) (string, time.Duration) {
+	chosenSource := ""
+	chosenRemaining := time.Duration(0)
 	for sourceName, sourceOffers := range offers {
-		if _, offered := sourceOffers[target]; offered && sourceName != engineName && !guardedSources[sourceName] {
-			sourceNames = append(sourceNames, sourceName)
+		remaining, offered := sourceOffers[target]
+		if !offered || sourceName == engineName || guardedSources[sourceName] {
+			continue
+		}
+		isLonger := remaining > chosenRemaining
+		isTieSortingFirst := remaining == chosenRemaining && sourceName < chosenSource
+		if chosenSource == "" || isLonger || isTieSortingFirst {
+			chosenSource = sourceName
+			chosenRemaining = remaining
 		}
 	}
-	chosenSource := slices.Min(sourceNames)
-	return chosenSource, offers[chosenSource][target]
+	return chosenSource, chosenRemaining
 }

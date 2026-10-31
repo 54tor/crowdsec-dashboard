@@ -1,6 +1,7 @@
 package enginesync
 
 import (
+	"cmp"
 	"errors"
 	"net/netip"
 	"strings"
@@ -44,13 +45,21 @@ func targetFromPrefix(prefix netip.Prefix) Target {
 	return Target{Scope: ScopeRange, Prefix: prefix}
 }
 
+func (target Target) canonical() Target {
+	return targetFromPrefix(netparse.CanonicalPrefix(target.Prefix))
+}
+
+func compareTargets(first, second Target) int {
+	return cmp.Or(
+		first.Prefix.Addr().Compare(second.Prefix.Addr()),
+		cmp.Compare(first.Prefix.Bits(), second.Prefix.Bits()),
+		strings.Compare(first.Scope, second.Scope),
+	)
+}
+
 func (target Target) String() string {
 	if target.Scope == ScopeIP {
 		return target.Prefix.Addr().String()
 	}
 	return target.Prefix.String()
-}
-
-func (target Target) coveredBy(wider netip.Prefix) bool {
-	return wider.Bits() <= target.Prefix.Bits() && wider.Contains(target.Prefix.Addr())
 }

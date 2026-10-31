@@ -85,8 +85,8 @@ func TestThreeEnginesSameBanOnTwoGivesOneCopyOnThird(testContext *testing.T) {
 	if len(plan.Changes) != 1 || len(additions) != 1 {
 		testContext.Fatalf("expected exactly one copy on gamma, got %+v", plan.Changes)
 	}
-	if additions[0].Source != "alpha" || additions[0].Remaining != 2*time.Hour {
-		testContext.Errorf("the source sorting first must be chosen with its remaining duration, got %+v", additions[0])
+	if additions[0].Source != "beta" || additions[0].Remaining != 3*time.Hour {
+		testContext.Errorf("the source with the longest remaining duration must be chosen, got %+v", additions[0])
 	}
 	appliedSnapshots := requireStable(testContext, snapshots, rules)
 	requireStable(testContext, appliedSnapshots, rules)

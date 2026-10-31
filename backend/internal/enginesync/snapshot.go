@@ -44,6 +44,7 @@ type classifiedSnapshot struct {
 func classify(snapshot Snapshot) classifiedSnapshot {
 	classified := classifiedSnapshot{Snapshot: snapshot}
 	for _, ban := range snapshot.Bans {
+		ban.Target = ban.Target.canonical()
 		if isCopyOf(ban, snapshot.DashboardMachineID) {
 			classified.copies = append(classified.copies, ban)
 		} else {

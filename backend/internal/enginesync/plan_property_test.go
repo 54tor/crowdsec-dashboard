@@ -110,6 +110,33 @@ func checkPlanInvariants(snapshots []Snapshot, plan Plan) error {
 	return nil
 }
 
+// checkLiveness proves the plan is not lazily empty: once applied, every shareable offer of a
+// complete, unguarded source is enforced on every other complete, unblocked engine, either by a
+// ban on that exact target or by an active wider ban.
+func checkLiveness(originalSnapshots []Snapshot, appliedSnapshots []Snapshot, plan Plan, rules Rules) error {
+	for _, sourceSnapshot := range originalSnapshots {
+		if _, sourceBlocked := plan.Blocked[sourceSnapshot.Engine]; sourceBlocked || sourceSnapshot.State != ReadComplete {
+			continue
+		}
+		for _, offeredBan := range sourceSnapshot.Bans {
+			if isDashboardCopy(offeredBan) {
+				continue
+			}
+			if shareable, _ := IsShareable(offeredBan, rules); !shareable {
+				continue
+			}
+			for _, appliedTarget := range appliedSnapshots {
+				_, targetBlocked := plan.Blocked[appliedTarget.Engine]
+				isEligibleTarget := appliedTarget.Engine != sourceSnapshot.Engine && appliedTarget.State == ReadComplete && !targetBlocked
+				if isEligibleTarget && !coveredByActiveBan(appliedTarget, map[int64]bool{}, offeredBan.Target) {
+					return fmt.Errorf("offer %s from %s is missing on %s", offeredBan.Target, sourceSnapshot.Engine, appliedTarget.Engine)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func TestRandomMeshesKeepPlanInvariants(testContext *testing.T) {
 	rules := defaultRules(randomEngineNames...)
 	rules.MaxChanges = 10000
@@ -121,6 +148,9 @@ func TestRandomMeshesKeepPlanInvariants(testContext *testing.T) {
 			testContext.Fatalf("scenario %d: %v\nsnapshots %+v", scenarioNumber, invariantError, snapshots)
 		}
 		appliedSnapshots := applyPlan(snapshots, firstPlan)
+		if livenessError := checkLiveness(snapshots, appliedSnapshots, firstPlan, rules); livenessError != nil {
+			testContext.Fatalf("scenario %d: %v\nfirst plan %+v\nsnapshots %+v", scenarioNumber, livenessError, firstPlan.Changes, snapshots)
+		}
 		secondPlan := BuildPlan(appliedSnapshots, rules, planTime)
 		if len(secondPlan.Changes) != 0 {
 			testContext.Fatalf("scenario %d: replanning after apply must be empty, got %+v\nfirst plan %+v\nsnapshots %+v",
