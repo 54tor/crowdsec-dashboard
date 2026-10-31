@@ -90,7 +90,7 @@ func TestCreateBouncerReturnsKeyOnceAndDoesNotLogIt(testContext *testing.T) {
 
 func TestCreateMachineReturnsPasswordOnceWithoutLoggingIt(testContext *testing.T) {
 	outputs := map[string]string{
-		"cscli machines add agent-1 --auto -f -": "url: http://127.0.0.1:8080\nlogin: agent-1\npassword: " + testMachinePassword + "\n",
+		"cscli machines add agent-1 --auto -f /dev/stdout": "url: http://127.0.0.1:8080\nlogin: agent-1\npassword: " + testMachinePassword + "\n",
 	}
 	fixture := newAdminFixture(testContext, outputs, nil)
 	logBuffer := captureLogs(testContext)
@@ -141,8 +141,8 @@ func TestParseMachinePasswordAcceptsKnownShapes(testContext *testing.T) {
 
 func TestCreateCredentialsFailOnUnparseableOutputWithoutEchoingIt(testContext *testing.T) {
 	outputs := map[string]string{
-		"cscli bouncers add b1":             "unexpected words only",
-		"cscli machines add m1 --auto -f -": "nothing useful here secret-marker",
+		"cscli bouncers add b1":                       "unexpected words only",
+		"cscli machines add m1 --auto -f /dev/stdout": "nothing useful here secret-marker",
 	}
 	fixture := newAdminFixture(testContext, outputs, nil)
 
@@ -154,7 +154,7 @@ func TestCreateCredentialsFailOnUnparseableOutputWithoutEchoingIt(testContext *t
 }
 
 func TestCreateCredentialsMapCscliFailureWithoutLeak(testContext *testing.T) {
-	failing := map[string]bool{"cscli bouncers add b1": true, "cscli machines add m1 --auto -f -": true}
+	failing := map[string]bool{"cscli bouncers add b1": true, "cscli machines add m1 --auto -f /dev/stdout": true}
 	fixture := newAdminFixture(testContext, nil, failing)
 	logBuffer := captureLogs(testContext)
 
