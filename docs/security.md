@@ -21,8 +21,8 @@ socket (see [Limits](#honest-limits)).
   first account exists, enrolment is closed for good: the route answers 404 and the old token is
   useless. Two simultaneous enrolments with the right token create one account (a PostgreSQL advisory
   lock); the other gets 404, as enrolment is then closed.
-- A wrong or missing token answers 403 `invalid_enrollment_token`, is compared in constant time and
-  is limited per client like login.
+- A wrong token answers 403 `invalid_enrollment_token` (a missing or empty one, 400 `invalid_request`);
+  it is compared in constant time and enrolment is limited per client like login.
 
 ## Login
 
