@@ -44,17 +44,23 @@ func (maxMindFile *MaxMindFile) CountryCode(_ context.Context, address netip.Add
 	if lookupError != nil {
 		return "", fmt.Errorf("geo: lookup: %w", lookupError)
 	}
-	if !record.HasData() || record.Country.ISOCode == "" {
+	if !record.HasData() {
 		return "", ErrCountryUnknown
 	}
-	return record.Country.ISOCode, nil
+	countryCode, isValid := normaliseCountryCode(record.Country.ISOCode)
+	if !isValid {
+		return "", ErrCountryUnknown
+	}
+	return countryCode, nil
 }
 
 func (maxMindFile *MaxMindFile) Available() bool {
+	maxMindFile.reloadIfDue()
 	return maxMindFile.current.Load() != nil
 }
 
 func (maxMindFile *MaxMindFile) DatabaseAge() (time.Duration, bool) {
+	maxMindFile.reloadIfDue()
 	database := maxMindFile.current.Load()
 	if database == nil {
 		return 0, false
@@ -108,5 +114,12 @@ func openReader(databasePath string) (*geoip2.Reader, error) {
 	if readError != nil {
 		return nil, readError
 	}
-	return geoip2.OpenBytes(content)
+	reader, openError := geoip2.OpenBytes(content)
+	if openError != nil {
+		return nil, openError
+	}
+	if _, probeError := reader.Country(netip.IPv4Unspecified()); probeError != nil {
+		return nil, fmt.Errorf("not a country database: %w", probeError)
+	}
+	return reader, nil
 }

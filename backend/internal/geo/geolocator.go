@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"strings"
 	"time"
 )
 
@@ -39,8 +40,8 @@ func (providerChain *chain) CountryCode(ctx context.Context, address netip.Addr)
 	}
 	for _, fallback := range providerChain.fallbacks {
 		fallbackCountryCode, fallbackError := providerChain.askFallback(ctx, fallback, address)
-		if fallbackError == nil && fallbackCountryCode != "" {
-			return fallbackCountryCode, nil
+		if normalisedCountryCode, isValid := normaliseCountryCode(fallbackCountryCode); fallbackError == nil && isValid {
+			return normalisedCountryCode, nil
 		}
 	}
 	return "", ErrCountryUnknown
@@ -50,4 +51,17 @@ func (providerChain *chain) askFallback(ctx context.Context, fallback Geolocator
 	fallbackContext, cancelFallback := context.WithTimeout(ctx, providerChain.fallbackTimeout)
 	defer cancelFallback()
 	return fallback.CountryCode(fallbackContext, address)
+}
+
+func normaliseCountryCode(rawCountryCode string) (string, bool) {
+	upperCaseCode := strings.ToUpper(rawCountryCode)
+	if len(upperCaseCode) != 2 {
+		return "", false
+	}
+	for _, letter := range upperCaseCode {
+		if letter < 'A' || letter > 'Z' {
+			return "", false
+		}
+	}
+	return upperCaseCode, true
 }

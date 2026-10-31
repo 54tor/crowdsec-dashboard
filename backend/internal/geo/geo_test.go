@@ -35,8 +35,13 @@ func (clock *testClock) Advance(duration time.Duration) {
 
 func buildDatabase(testContext *testing.T, countryByPrefix map[string]string) []byte {
 	testContext.Helper()
+	return buildDatabaseOfType(testContext, "GeoLite2-Country", countryByPrefix)
+}
+
+func buildDatabaseOfType(testContext *testing.T, databaseType string, countryByPrefix map[string]string) []byte {
+	testContext.Helper()
 	writer, newError := mmdbwriter.New(mmdbwriter.Options{
-		DatabaseType:            "GeoLite2-Country",
+		DatabaseType:            databaseType,
 		IncludeReservedNetworks: true,
 	})
 	if newError != nil {
@@ -287,5 +292,79 @@ func TestChainStopsSlowFallbackAfterTimeout(testContext *testing.T) {
 
 	if !errors.Is(lookupError, ErrCountryUnknown) {
 		testContext.Fatalf("a timed-out fallback must leave the country unknown, got %v", lookupError)
+	}
+}
+
+func TestWrongTypeReplacementKeepsPreviousReader(testContext *testing.T) {
+	databasePath, clock, database := newTestDatabase(testContext)
+	replaceFileAtomically(testContext, databasePath, buildDatabaseOfType(testContext, "GeoLite2-ASN", map[string]string{"192.0.2.0/24": "BE"}))
+	clock.Advance(61 * time.Second)
+
+	obtainedCountry, lookupError := database.CountryCode(context.Background(), netip.MustParseAddr("192.0.2.1"))
+
+	if lookupError != nil || obtainedCountry != "FR" || !database.Available() {
+		testContext.Fatalf("previous reader must keep serving, got %q, %v, available=%v", obtainedCountry, lookupError, database.Available())
+	}
+}
+
+func TestWrongTypeFirstFileIsUnavailable(testContext *testing.T) {
+	databasePath := filepath.Join(testContext.TempDir(), "asn.mmdb")
+	replaceFileAtomically(testContext, databasePath, buildDatabaseOfType(testContext, "GeoLite2-ASN", map[string]string{"192.0.2.0/24": "BE"}))
+
+	database := NewMaxMindFile(databasePath, newTestClock().Now)
+
+	if database.Available() {
+		testContext.Fatal("a non-country database must not be available")
+	}
+}
+
+func TestCountryCodeIsNormalised(testContext *testing.T) {
+	databasePath := filepath.Join(testContext.TempDir(), "country.mmdb")
+	replaceFileAtomically(testContext, databasePath, buildDatabase(testContext, map[string]string{
+		"192.0.2.0/24":    "fr",
+		"198.51.100.0/24": "A1",
+		"203.0.113.0/24":  "",
+	}))
+	database := NewMaxMindFile(databasePath, newTestClock().Now)
+
+	lowerCaseCountry, lowerCaseError := database.CountryCode(context.Background(), netip.MustParseAddr("192.0.2.1"))
+	if lowerCaseError != nil || lowerCaseCountry != "FR" {
+		testContext.Errorf("want FR, got %q, %v", lowerCaseCountry, lowerCaseError)
+	}
+	for _, rawAddress := range []string{"198.51.100.1", "203.0.113.1"} {
+		_, lookupError := database.CountryCode(context.Background(), netip.MustParseAddr(rawAddress))
+		if !errors.Is(lookupError, ErrCountryUnknown) {
+			testContext.Errorf("%s: want ErrCountryUnknown, got %v", rawAddress, lookupError)
+		}
+	}
+}
+
+func TestChainNormalisesFallbackCountryCodes(testContext *testing.T) {
+	unknownPrimary := &stubGeolocator{lookupError: ErrCountryUnknown}
+	address := netip.MustParseAddr("192.0.2.1")
+
+	normalisedCountry, normalisedError := NewChain(time.Second, unknownPrimary, &stubGeolocator{countryCode: "fr"}).CountryCode(context.Background(), address)
+	if normalisedError != nil || normalisedCountry != "FR" {
+		testContext.Errorf("want FR, got %q, %v", normalisedCountry, normalisedError)
+	}
+	_, invalidError := NewChain(time.Second, unknownPrimary, &stubGeolocator{countryCode: "XYZ"}).CountryCode(context.Background(), address)
+	if !errors.Is(invalidError, ErrCountryUnknown) {
+		testContext.Errorf("want ErrCountryUnknown, got %v", invalidError)
+	}
+}
+
+func TestAvailableReloadsWithoutLookup(testContext *testing.T) {
+	databasePath := filepath.Join(testContext.TempDir(), "late.mmdb")
+	clock := newTestClock()
+	database := NewMaxMindFile(databasePath, clock.Now)
+	replaceFileAtomically(testContext, databasePath, buildDatabase(testContext, map[string]string{"192.0.2.0/24": "FR"}))
+
+	if database.Available() {
+		testContext.Fatal("must stay unavailable before the interval elapses")
+	}
+	clock.Advance(61 * time.Second)
+
+	if !database.Available() {
+		testContext.Fatal("Available must pick up the new file without a lookup")
 	}
 }
