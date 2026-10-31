@@ -1,0 +1,198 @@
+{
+ "appsec-configs": [],
+ "appsec-rules": [],
+ "collections": [
+  {
+   "name": "crowdsecurity/linux",
+   "local_version": "0.4",
+   "local_path": "/etc/crowdsec/collections/linux.yaml",
+   "description": "core linux support : syslog+geoip+ssh",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/sshd",
+   "local_version": "0.9",
+   "local_path": "/etc/crowdsec/collections/sshd.yaml",
+   "description": "sshd support : parser and brute-force detection",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/whitelist-good-actors",
+   "local_version": "0.4",
+   "local_path": "/etc/crowdsec/collections/whitelist-good-actors.yaml",
+   "description": "Good actors whitelists",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  }
+ ],
+ "contexts": [
+  {
+   "name": "crowdsecurity/bf_base",
+   "local_version": "0.1",
+   "local_path": "/etc/crowdsec/contexts/bf_base.yaml",
+   "description": "",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  }
+ ],
+ "parsers": [
+  {
+   "name": "crowdsecurity/cri-logs",
+   "local_version": "0.1",
+   "local_path": "/etc/crowdsec/parsers/s00-raw/cri-logs.yaml",
+   "description": "CRI logging format parser",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/dateparse-enrich",
+   "local_version": "0.2",
+   "local_path": "/etc/crowdsec/parsers/s02-enrich/dateparse-enrich.yaml",
+   "description": "",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/docker-logs",
+   "local_version": "0.1",
+   "local_path": "/etc/crowdsec/parsers/s00-raw/docker-logs.yaml",
+   "description": "docker json logs parser",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/geoip-enrich",
+   "local_version": "0.5",
+   "local_path": "/etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml",
+   "description": "Populate event with geoloc info : as, country, coords, source range.",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/public-dns-allowlist",
+   "local_version": "0.1",
+   "local_path": "/etc/crowdsec/parsers/s02-enrich/public-dns-allowlist.yaml",
+   "description": "Allow events from public DNS servers",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/sshd-logs",
+   "local_version": "3.1",
+   "local_path": "/etc/crowdsec/parsers/s01-parse/sshd-logs.yaml",
+   "description": "Parse openSSH logs",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/sshd-success-logs",
+   "local_version": "0.2",
+   "local_path": "/etc/crowdsec/parsers/s01-parse/sshd-success-logs.yaml",
+   "description": "Parse successful ssh logins",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/syslog-logs",
+   "local_version": "1.1",
+   "local_path": "/etc/crowdsec/parsers/s00-raw/syslog-logs.yaml",
+   "description": "",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/whitelists",
+   "local_version": "0.3",
+   "local_path": "/etc/crowdsec/parsers/s02-enrich/whitelists.yaml",
+   "description": "Whitelist events from private ipv4 addresses",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  }
+ ],
+ "postoverflows": [
+  {
+   "name": "crowdsecurity/cdn-whitelist",
+   "local_version": "0.5",
+   "local_path": "/etc/crowdsec/postoverflows/s01-whitelist/cdn-whitelist.yaml",
+   "description": "Whitelist CDN providers",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/google-special-crawlers-whitelist",
+   "local_version": "0.1",
+   "local_path": "/etc/crowdsec/postoverflows/s01-whitelist/google-special-crawlers-whitelist.yaml",
+   "description": "Whitelist events from Google special crawlers (e.g. Google-InspectionTool, GoogleOther)",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/rdns",
+   "local_version": "0.4",
+   "local_path": "/etc/crowdsec/postoverflows/s00-enrich/rdns.yaml",
+   "description": "Lookup the DNS associated to the source IP only for overflows",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/seo-bots-whitelist",
+   "local_version": "0.5",
+   "local_path": "/etc/crowdsec/postoverflows/s01-whitelist/seo-bots-whitelist.yaml",
+   "description": "Whitelist good search engine crawlers",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  }
+ ],
+ "scenarios": [
+  {
+   "name": "crowdsecurity/ssh-bf",
+   "local_version": "0.3",
+   "local_path": "/etc/crowdsec/scenarios/ssh-bf.yaml",
+   "description": "Detect ssh bruteforce",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/ssh-cve-2024-6387",
+   "local_version": "0.2",
+   "local_path": "/etc/crowdsec/scenarios/ssh-cve-2024-6387.yaml",
+   "description": "Detect exploitation attempt of CVE-2024-6387",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/ssh-generic-test",
+   "local_version": "0.3",
+   "local_path": "/etc/crowdsec/scenarios/ssh-generic-test.yaml",
+   "description": "Crowdsec Generic Test Scenario: SSH brute force trigger",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/ssh-refused-conn",
+   "local_version": "0.1",
+   "local_path": "/etc/crowdsec/scenarios/ssh-refused-conn.yaml",
+   "description": "Detect sshd refused connections",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/ssh-slow-bf",
+   "local_version": "0.4",
+   "local_path": "/etc/crowdsec/scenarios/ssh-slow-bf.yaml",
+   "description": "Detect slow ssh bruteforce",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/ssh-time-based-bf",
+   "local_version": "0.3",
+   "local_path": "/etc/crowdsec/scenarios/ssh-time-based-bf.yaml",
+   "description": "Detect time-based ssh bruteforce attempts that evade rate limiting (with false positive reduction)",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  }
+ ]
+}

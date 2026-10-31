@@ -1,0 +1,368 @@
+[
+ {
+  "capacity": 5,
+  "created_at": "2026-10-31T11:26:34Z",
+  "decisions": [
+   {
+    "duration": "-30h0m31s",
+    "id": 9,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/ssh-bf",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "ban",
+    "value": "203.0.113.13"
+   }
+  ],
+  "events": null,
+  "events_count": 6,
+  "id": 10,
+  "labels": null,
+  "leakspeed": "10s",
+  "machine_id": "dev-agent",
+  "message": "seed alert from 203.0.113.13",
+  "scenario": "crowdsecurity/ssh-bf",
+  "scenario_hash": "",
+  "scenario_version": "0.1",
+  "simulated": false,
+  "source": {
+   "as_name": "Example Net",
+   "as_number": "64496",
+   "cn": "ZZ",
+   "ip": "203.0.113.13",
+   "scope": "Ip",
+   "value": "203.0.113.13"
+  },
+  "start_at": "2026-10-30T05:26:34Z",
+  "stop_at": "2026-10-30T05:26:34Z",
+  "uuid": "52d7d85d-6474-4023-9590-16ee46642c51"
+ },
+ {
+  "capacity": 5,
+  "created_at": "2026-10-31T11:26:34Z",
+  "decisions": null,
+  "events": null,
+  "events_count": 6,
+  "id": 9,
+  "labels": null,
+  "leakspeed": "10s",
+  "machine_id": "dev-agent",
+  "message": "seed alert from 203.0.113.12",
+  "scenario": "crowdsecurity/http-crawl-non_statics",
+  "scenario_hash": "",
+  "scenario_version": "0.1",
+  "simulated": false,
+  "source": {
+   "as_name": "Example Net",
+   "as_number": "64496",
+   "cn": "ZZ",
+   "ip": "203.0.113.12",
+   "scope": "Ip",
+   "value": "203.0.113.12"
+  },
+  "start_at": "2026-10-31T10:26:34Z",
+  "stop_at": "2026-10-31T10:26:34Z",
+  "uuid": "0f7c028b-6430-4272-8078-9497a014c9ea"
+ },
+ {
+  "capacity": 5,
+  "created_at": "2026-10-31T11:26:34Z",
+  "decisions": [
+   {
+    "duration": "59m28s",
+    "id": 8,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/ssh-bf",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "ban",
+    "value": "2001:db8::42"
+   }
+  ],
+  "events": null,
+  "events_count": 6,
+  "id": 8,
+  "labels": null,
+  "leakspeed": "10s",
+  "machine_id": "dev-agent",
+  "message": "seed alert from 2001:db8::42",
+  "scenario": "crowdsecurity/ssh-bf",
+  "scenario_hash": "",
+  "scenario_version": "0.1",
+  "simulated": false,
+  "source": {
+   "as_name": "Example Net",
+   "as_number": "64496",
+   "cn": "ZZ",
+   "ip": "2001:db8::42",
+   "scope": "Ip",
+   "value": "2001:db8::42"
+  },
+  "start_at": "2026-10-31T08:26:34Z",
+  "stop_at": "2026-10-31T08:26:34Z",
+  "uuid": "1a938f36-531f-4d9f-99b4-898cf6da3c2b"
+ },
+ {
+  "capacity": 5,
+  "created_at": "2026-10-31T11:26:34Z",
+  "decisions": [
+   {
+    "duration": "6h59m28s",
+    "id": 7,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/http-probing",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "ban",
+    "value": "198.51.100.8"
+   }
+  ],
+  "events": null,
+  "events_count": 6,
+  "id": 7,
+  "labels": null,
+  "leakspeed": "10s",
+  "machine_id": "dev-agent",
+  "message": "seed alert from 198.51.100.8",
+  "scenario": "crowdsecurity/http-probing",
+  "scenario_hash": "",
+  "scenario_version": "0.1",
+  "simulated": false,
+  "source": {
+   "as_name": "Example Net",
+   "as_number": "64496",
+   "cn": "ZZ",
+   "ip": "198.51.100.8",
+   "scope": "Ip",
+   "value": "198.51.100.8"
+  },
+  "start_at": "2026-10-31T06:26:34Z",
+  "stop_at": "2026-10-31T06:26:34Z",
+  "uuid": "96f1c324-104a-464c-8624-9a9958843fda"
+ },
+ {
+  "capacity": 5,
+  "created_at": "2026-10-31T11:26:34Z",
+  "decisions": [
+   {
+    "duration": "14h59m28s",
+    "id": 6,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/ssh-slow-bf",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "ban",
+    "value": "198.51.100.7"
+   }
+  ],
+  "events": null,
+  "events_count": 6,
+  "id": 6,
+  "labels": null,
+  "leakspeed": "10s",
+  "machine_id": "dev-agent",
+  "message": "seed alert from 198.51.100.7",
+  "scenario": "crowdsecurity/ssh-slow-bf",
+  "scenario_hash": "",
+  "scenario_version": "0.1",
+  "simulated": false,
+  "source": {
+   "as_name": "Example Net",
+   "as_number": "64496",
+   "cn": "ZZ",
+   "ip": "198.51.100.7",
+   "scope": "Ip",
+   "value": "198.51.100.7"
+  },
+  "start_at": "2026-10-31T02:26:34Z",
+  "stop_at": "2026-10-31T02:26:34Z",
+  "uuid": "3f07d38c-41b5-4a3d-869c-f5ea1c1814ef"
+ },
+ {
+  "capacity": 5,
+  "created_at": "2026-10-31T11:26:34Z",
+  "decisions": [
+   {
+    "duration": "33h59m28s",
+    "id": 5,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/ssh-bf",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "ban",
+    "value": "203.0.113.11"
+   }
+  ],
+  "events": null,
+  "events_count": 6,
+  "id": 5,
+  "labels": null,
+  "leakspeed": "10s",
+  "machine_id": "dev-agent",
+  "message": "seed alert from 203.0.113.11",
+  "scenario": "crowdsecurity/ssh-bf",
+  "scenario_hash": "",
+  "scenario_version": "0.1",
+  "simulated": false,
+  "source": {
+   "as_name": "Example Net",
+   "as_number": "64496",
+   "cn": "ZZ",
+   "ip": "203.0.113.11",
+   "scope": "Ip",
+   "value": "203.0.113.11"
+  },
+  "start_at": "2026-10-30T21:26:34Z",
+  "stop_at": "2026-10-30T21:26:34Z",
+  "uuid": "557cc3bb-d8d5-4db3-b991-4ff404543372"
+ },
+ {
+  "capacity": 5,
+  "created_at": "2026-10-31T11:26:34Z",
+  "decisions": [
+   {
+    "duration": "27h59m28s",
+    "id": 4,
+    "origin": "crowdsec",
+    "scenario": "crowdsecurity/ssh-bf",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "ban",
+    "value": "203.0.113.10"
+   }
+  ],
+  "events": null,
+  "events_count": 6,
+  "id": 4,
+  "labels": null,
+  "leakspeed": "10s",
+  "machine_id": "dev-agent",
+  "message": "seed alert from 203.0.113.10",
+  "scenario": "crowdsecurity/ssh-bf",
+  "scenario_hash": "",
+  "scenario_version": "0.1",
+  "simulated": false,
+  "source": {
+   "as_name": "Example Net",
+   "as_number": "64496",
+   "cn": "ZZ",
+   "ip": "203.0.113.10",
+   "scope": "Ip",
+   "value": "203.0.113.10"
+  },
+  "start_at": "2026-10-30T15:26:34Z",
+  "stop_at": "2026-10-30T15:26:34Z",
+  "uuid": "31b980dc-4f99-4843-88b5-9c758ddaeca6"
+ },
+ {
+  "capacity": 0,
+  "created_at": "2026-10-31T11:26:33Z",
+  "decisions": [
+   {
+    "duration": "1h59m27s",
+    "id": 3,
+    "origin": "cscli",
+    "scenario": "seed captcha",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "captcha",
+    "value": "2001:db8::1"
+   }
+  ],
+  "events": null,
+  "events_count": 1,
+  "id": 3,
+  "kind": "cscli",
+  "labels": null,
+  "leakspeed": "0",
+  "machine_id": "localhost",
+  "message": "seed captcha",
+  "remediation": true,
+  "scenario": "seed captcha",
+  "scenario_hash": "",
+  "scenario_version": "",
+  "simulated": false,
+  "source": {
+   "ip": "2001:db8::1",
+   "scope": "Ip",
+   "value": "2001:db8::1"
+  },
+  "start_at": "2026-10-31T11:26:33Z",
+  "stop_at": "2026-10-31T11:26:33Z",
+  "uuid": "5fe9e93a-b15a-4a1f-a745-f8bc6d5eb3bd"
+ },
+ {
+  "capacity": 0,
+  "created_at": "2026-10-31T11:26:33Z",
+  "decisions": [
+   {
+    "duration": "23h59m27s",
+    "id": 2,
+    "origin": "cscli",
+    "scenario": "seed range ban",
+    "scope": "Range",
+    "simulated": false,
+    "type": "ban",
+    "value": "198.51.100.0/24"
+   }
+  ],
+  "events": null,
+  "events_count": 1,
+  "id": 2,
+  "kind": "cscli",
+  "labels": null,
+  "leakspeed": "0",
+  "machine_id": "localhost",
+  "message": "seed range ban",
+  "remediation": true,
+  "scenario": "seed range ban",
+  "scenario_hash": "",
+  "scenario_version": "",
+  "simulated": false,
+  "source": {
+   "ip": "198.51.100.0/24",
+   "scope": "Range",
+   "value": "198.51.100.0/24"
+  },
+  "start_at": "2026-10-31T11:26:33Z",
+  "stop_at": "2026-10-31T11:26:33Z",
+  "uuid": "66ccb82d-8662-4a6c-9763-2419df6b4cc7"
+ },
+ {
+  "capacity": 0,
+  "created_at": "2026-10-31T11:26:33Z",
+  "decisions": [
+   {
+    "duration": "3h59m27s",
+    "id": 1,
+    "origin": "cscli",
+    "scenario": "seed manual ban",
+    "scope": "Ip",
+    "simulated": false,
+    "type": "ban",
+    "value": "203.0.113.5"
+   }
+  ],
+  "events": null,
+  "events_count": 1,
+  "id": 1,
+  "kind": "cscli",
+  "labels": null,
+  "leakspeed": "0",
+  "machine_id": "localhost",
+  "message": "seed manual ban",
+  "remediation": true,
+  "scenario": "seed manual ban",
+  "scenario_hash": "",
+  "scenario_version": "",
+  "simulated": false,
+  "source": {
+   "ip": "203.0.113.5",
+   "scope": "Ip",
+   "value": "203.0.113.5"
+  },
+  "start_at": "2026-10-31T11:26:33Z",
+  "stop_at": "2026-10-31T11:26:33Z",
+  "uuid": "6e83bf79-4cf4-429c-804d-256419942c2c"
+ }
+]

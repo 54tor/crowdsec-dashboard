@@ -1,0 +1,3 @@
+url: http://0.0.0.0:8080
+login: fixture-add
+password: FakeMachinePasswordFakeMachinePasswordFakeMachinePasswordFake01

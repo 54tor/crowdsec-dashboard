@@ -1,0 +1,159 @@
+{
+ "acquisition": {
+  "file:/var/log/dev/auth.log": {
+   "parsed": 1,
+   "pour": 6,
+   "reads": 1
+  }
+ },
+ "alerts": {
+  "crowdsecurity/http-crawl-non_statics": 1,
+  "crowdsecurity/http-probing": 1,
+  "crowdsecurity/ssh-bf": 4,
+  "crowdsecurity/ssh-slow-bf": 1,
+  "seed captcha": 1,
+  "seed manual ban": 1,
+  "seed range ban": 1
+ },
+ "appsec-challenge": {
+  "funnel": {},
+  "reasons": {}
+ },
+ "appsec-challenge-infra": {},
+ "appsec-engine": {},
+ "appsec-rule": {},
+ "bouncers": {},
+ "decisions": {
+  "crowdsecurity/http-probing": {
+   "crowdsec": {
+    "ban": 1
+   }
+  },
+  "crowdsecurity/ssh-bf": {
+   "crowdsec": {
+    "ban": 3
+   }
+  },
+  "crowdsecurity/ssh-slow-bf": {
+   "crowdsec": {
+    "ban": 1
+   }
+  },
+  "seed captcha": {
+   "cscli": {
+    "captcha": 1
+   }
+  },
+  "seed manual ban": {
+   "cscli": {
+    "ban": 1
+   }
+  },
+  "seed range ban": {
+   "cscli": {
+    "ban": 1
+   }
+  }
+ },
+ "lapi": {
+  "/v1/alerts": {
+   "GET": 2
+  },
+  "/v1/usage-metrics": {
+   "POST": 2
+  },
+  "/v1/watchers/login": {
+   "POST": 4
+  }
+ },
+ "lapi-bouncer": {},
+ "lapi-decisions": {},
+ "lapi-machine": {
+  "localhost": {
+   "/v1/alerts": {
+    "GET": 2
+   }
+  }
+ },
+ "parsers": {
+  "child-crowdsecurity/sshd-logs": {
+   "hits": 10,
+   "parsed": 1,
+   "unparsed": 9
+  },
+  "child-crowdsecurity/syslog-logs": {
+   "hits": 2,
+   "parsed": 1,
+   "unparsed": 1
+  },
+  "crowdsecurity/dateparse-enrich": {
+   "hits": 1,
+   "parsed": 1
+  },
+  "crowdsecurity/geoip-enrich": {
+   "hits": 1,
+   "parsed": 1
+  },
+  "crowdsecurity/public-dns-allowlist": {
+   "hits": 1,
+   "parsed": 1
+  },
+  "crowdsecurity/sshd-logs": {
+   "hits": 1,
+   "parsed": 1
+  },
+  "crowdsecurity/syslog-logs": {
+   "hits": 1,
+   "parsed": 1
+  },
+  "crowdsecurity/whitelists": {
+   "hits": 1,
+   "parsed": 1
+  }
+ },
+ "scenarios": {
+  "crowdsecurity/ssh-bf": {
+   "curr_count": 1,
+   "instantiation": 1,
+   "pour": 1
+  },
+  "crowdsecurity/ssh-bf_user-enum": {
+   "curr_count": 1,
+   "instantiation": 1,
+   "pour": 1
+  },
+  "crowdsecurity/ssh-slow-bf": {
+   "curr_count": 1,
+   "instantiation": 1,
+   "pour": 1
+  },
+  "crowdsecurity/ssh-slow-bf_user-enum": {
+   "curr_count": 1,
+   "instantiation": 1,
+   "pour": 1
+  },
+  "crowdsecurity/ssh-time-based-bf": {
+   "curr_count": 1,
+   "instantiation": 1,
+   "pour": 1
+  },
+  "crowdsecurity/ssh-time-based-bf_user-enum": {
+   "curr_count": 1,
+   "instantiation": 1,
+   "pour": 1
+  }
+ },
+ "stash": {},
+ "whitelists": {
+  "crowdsecurity/public-dns-allowlist": {
+   "public DNS server": {
+    "hits": 1
+   }
+  },
+  "crowdsecurity/whitelists": {
+   "private ipv4/ipv6 ip/ranges": {
+    "hits": 1
+   }
+  }
+ }
+}

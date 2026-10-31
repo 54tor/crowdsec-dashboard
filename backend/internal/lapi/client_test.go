@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -462,5 +463,39 @@ func TestFlattenDecisionsDropsExpiredDecisions(testing *testing.T) {
 	}
 	if len(keptIdentifiers) != 2 || keptIdentifiers[0] != 1 || keptIdentifiers[1] != 5 {
 		testing.Fatalf("expected decisions 1 and 5, got %v", keptIdentifiers)
+	}
+}
+
+func TestListAlertsAndDecisionsDecodeFrozenLAPIResponse(testing *testing.T) {
+	frozenResponse, readError := os.ReadFile("../../../deploy/dev/fixtures/lapi-alerts.json")
+	if readError != nil {
+		testing.Fatalf("read fixture: %v", readError)
+	}
+	fake, client := newFakeLAPI(testing)
+	fake.alertsBody.Store(string(frozenResponse))
+
+	alerts, alertsError := client.ListAlerts(context.Background(), AlertFilter{})
+	if alertsError != nil || len(alerts) != 10 {
+		testing.Fatalf("unexpected alerts %d (%v)", len(alerts), alertsError)
+	}
+	newestAlert := alerts[0]
+	if newestAlert.MachineID != "dev-agent" || newestAlert.Scenario != "crowdsecurity/ssh-bf" || newestAlert.CreatedAt == "" ||
+		newestAlert.StartAt == "" || newestAlert.Source.IP != "203.0.113.13" || newestAlert.Source.Country != "ZZ" || newestAlert.Source.ASNumber != "64496" {
+		testing.Errorf("unexpected alert decoding: %+v", newestAlert)
+	}
+	if len(alerts[1].Decisions) != 0 {
+		testing.Errorf("alert without decision must decode to an empty list: %+v", alerts[1].Decisions)
+	}
+
+	decisionList, decisionsError := client.ListDecisions(context.Background(), DecisionFilter{})
+	if decisionsError != nil || len(decisionList.Decisions) != 8 {
+		testing.Fatalf("expected 8 active decisions, got %d (%v)", len(decisionList.Decisions), decisionsError)
+	}
+	scopesSeen := map[string]bool{}
+	for _, decision := range decisionList.Decisions {
+		scopesSeen[decision.Scope] = true
+	}
+	if !scopesSeen["Ip"] || !scopesSeen["Range"] {
+		testing.Errorf("scopes keep the casing returned by the LAPI: %v", scopesSeen)
 	}
 }

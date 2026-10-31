@@ -1,0 +1,5 @@
+API key for 'fixture-b':
+
+   fakeBouncerKey+fakeBouncerKey/fakeBouncer0
+
+Please keep this key since you will not be able to retrieve it!

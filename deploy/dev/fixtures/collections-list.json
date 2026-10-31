@@ -1,0 +1,28 @@
+{
+ "collections": [
+  {
+   "name": "crowdsecurity/linux",
+   "local_version": "0.4",
+   "local_path": "/etc/crowdsec/collections/linux.yaml",
+   "description": "core linux support : syslog+geoip+ssh",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/sshd",
+   "local_version": "0.9",
+   "local_path": "/etc/crowdsec/collections/sshd.yaml",
+   "description": "sshd support : parser and brute-force detection",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  },
+  {
+   "name": "crowdsecurity/whitelist-good-actors",
+   "local_version": "0.4",
+   "local_path": "/etc/crowdsec/collections/whitelist-good-actors.yaml",
+   "description": "Good actors whitelists",
+   "utf8_status": "✔️  enabled",
+   "status": "enabled"
+  }
+ ]
+}
