@@ -23,6 +23,10 @@ type Services struct {
 	DecisionReader DecisionLister
 	Platform       Platform
 	ConfigFiles    ConfigFiles
+	Bouncers       BouncerService
+	Machines       MachineService
+	Hub            HubService
+	Reloader       Reloader
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {
@@ -33,6 +37,10 @@ func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) S
 		DecisionReader: lapiClient,
 		Platform:       cscliPlatform{runner: runner},
 		ConfigFiles:    dirConfigFiles{dir: confDir},
+		Bouncers:       cscliBouncers{runner: runner},
+		Machines:       cscliMachines{runner: runner},
+		Hub:            cscliHub{runner: runner},
+		Reloader:       cscliReloader{runner: runner},
 	}
 }
 
