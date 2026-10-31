@@ -1,0 +1,43 @@
+{
+  "app": { "title": "CrowdSec dashboard", "skipToContent": "Skip to content" },
+  "nav": {
+    "label": "Main navigation",
+    "alerts": "Alerts",
+    "decisions": "Decisions",
+    "health": "Health",
+    "metrics": "Metrics",
+    "config": "Config",
+    "bouncers": "Bouncers",
+    "machines": "Machines",
+    "hub": "Hub"
+  },
+  "common": { "loading": "Loading…", "comingSoon": "This page is coming soon." },
+  "language": { "label": "Language", "fr": "Français", "en": "English" },
+  "login": {
+    "title": "Sign in",
+    "description": "Enter the dashboard password.",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…"
+  },
+  "logout": "Log out",
+  "errors": {
+    "unauthenticated": "Your session has expired. Please sign in again.",
+    "invalid_credentials": "Incorrect password.",
+    "too_many_attempts": "Too many attempts. Please try again later.",
+    "cross_origin": "Request blocked: cross-origin requests are not allowed.",
+    "not_found": "Resource not found.",
+    "invalid_request": "The request is invalid.",
+    "invalid_target": "The target must be a valid IP address or CIDR range.",
+    "invalid_duration": "The duration is invalid.",
+    "invalid_reason": "The reason is invalid.",
+    "confirmation_required": "Confirmation does not match the target.",
+    "lapi_unavailable": "The CrowdSec local API is unavailable.",
+    "lapi_error": "The CrowdSec local API returned an error.",
+    "cscli_failed": "The cscli command failed.",
+    "cscli_timeout": "The cscli command timed out.",
+    "self_account": "You cannot act on the dashboard's own account.",
+    "network": "Network error. Check your connection.",
+    "unknown": "An unexpected error occurred."
+  }
+}

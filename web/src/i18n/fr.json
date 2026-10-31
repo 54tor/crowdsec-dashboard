@@ -1,0 +1,43 @@
+{
+  "app": { "title": "Tableau de bord CrowdSec", "skipToContent": "Aller au contenu" },
+  "nav": {
+    "label": "Navigation principale",
+    "alerts": "Alertes",
+    "decisions": "Décisions",
+    "health": "Santé",
+    "metrics": "Métriques",
+    "config": "Configuration",
+    "bouncers": "Bouncers",
+    "machines": "Machines",
+    "hub": "Hub"
+  },
+  "common": { "loading": "Chargement…", "comingSoon": "Cette page arrive bientôt." },
+  "language": { "label": "Langue", "fr": "Français", "en": "English" },
+  "login": {
+    "title": "Connexion",
+    "description": "Saisissez le mot de passe du tableau de bord.",
+    "password": "Mot de passe",
+    "submit": "Se connecter",
+    "submitting": "Connexion…"
+  },
+  "logout": "Se déconnecter",
+  "errors": {
+    "unauthenticated": "Votre session a expiré. Veuillez vous reconnecter.",
+    "invalid_credentials": "Mot de passe incorrect.",
+    "too_many_attempts": "Trop de tentatives. Réessayez plus tard.",
+    "cross_origin": "Requête bloquée : les requêtes inter-origines sont interdites.",
+    "not_found": "Ressource introuvable.",
+    "invalid_request": "La requête est invalide.",
+    "invalid_target": "La cible doit être une adresse IP ou une plage CIDR valide.",
+    "invalid_duration": "La durée est invalide.",
+    "invalid_reason": "Le motif est invalide.",
+    "confirmation_required": "La confirmation ne correspond pas à la cible.",
+    "lapi_unavailable": "L'API locale CrowdSec est indisponible.",
+    "lapi_error": "L'API locale CrowdSec a renvoyé une erreur.",
+    "cscli_failed": "La commande cscli a échoué.",
+    "cscli_timeout": "La commande cscli a expiré.",
+    "self_account": "Vous ne pouvez pas agir sur le compte du tableau de bord lui-même.",
+    "network": "Erreur réseau. Vérifiez votre connexion.",
+    "unknown": "Une erreur inattendue s'est produite."
+  }
+}
