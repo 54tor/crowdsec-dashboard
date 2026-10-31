@@ -12,6 +12,8 @@ import (
 
 	"crowdsec-dashboard/internal/api"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/cscli"
+	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/webui"
 )
 
@@ -30,8 +32,11 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              loadedConfig.ListenAddr,
-		Handler:           api.NewHandler(loadedConfig, webui.Handler()),
+		Addr: loadedConfig.ListenAddr,
+		Handler: api.NewHandler(loadedConfig, webui.Handler(), api.NewServices(
+			lapi.NewClient(loadedConfig.LAPIURL, loadedConfig.LAPIMachineID, loadedConfig.LAPIMachinePassword, nil),
+			cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer),
+		)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,

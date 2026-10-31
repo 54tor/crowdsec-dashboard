@@ -8,11 +8,11 @@ import (
 	"crowdsec-dashboard/internal/config"
 )
 
-func NewHandler(loadedConfig config.Config, singlePageApp http.Handler) http.Handler {
-	return newHandler(loadedConfig, singlePageApp, loginFailureMinimumWait)
+func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services Services) http.Handler {
+	return newHandler(loadedConfig, singlePageApp, loginFailureMinimumWait, services)
 }
 
-func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration) http.Handler {
+func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration, services Services) http.Handler {
 	sessions := auth.NewSessionStore(loadedConfig.SessionTTL, time.Now)
 	requireSession := auth.RequireSession(sessions)
 	handlers := &authHandlers{
@@ -30,6 +30,9 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 	router.HandleFunc("POST /api/auth/login", handlers.login)
 	router.HandleFunc("POST /api/auth/logout", handlers.logout)
 	router.Handle("GET /api/auth/me", requireSession(http.HandlerFunc(handlers.me)))
+	router.Handle("POST /api/decisions", requireSession(http.HandlerFunc(decisionHandlers{service: services.Decisions}.add)))
+	router.Handle("DELETE /api/decisions/{id}", requireSession(http.HandlerFunc(decisionHandlers{service: services.Decisions}.remove)))
+	router.Handle("DELETE /api/alerts/{id}", requireSession(http.HandlerFunc(alertHandlers{service: services.Alerts}.remove)))
 	router.Handle("/api/", requireSession(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
 		writeError(responseWriter, http.StatusNotFound, "not_found")
 	})))

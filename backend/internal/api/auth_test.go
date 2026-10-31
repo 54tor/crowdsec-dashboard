@@ -17,12 +17,16 @@ import (
 const testPassword = "correct horse"
 
 func newTestHandler(testContext *testing.T) http.Handler {
+	return newTestHandlerWithServices(testContext, Services{})
+}
+
+func newTestHandlerWithServices(testContext *testing.T, services Services) http.Handler {
 	testContext.Helper()
 	encodedHash, hashError := argon2id.CreateHash(testPassword, &argon2id.Params{Memory: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32})
 	if hashError != nil {
 		testContext.Fatal(hashError)
 	}
-	handler := newHandler(config.Config{AdminPasswordHash: encodedHash, SessionTTL: time.Hour}, http.NotFoundHandler(), 0)
+	handler := newHandler(config.Config{AdminPasswordHash: encodedHash, SessionTTL: time.Hour}, http.NotFoundHandler(), 0, services)
 	return handler
 }
 
