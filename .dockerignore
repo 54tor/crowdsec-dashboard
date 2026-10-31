@@ -1,0 +1,8 @@
+.git
+.superpowers
+docs/superpowers
+**/node_modules
+web/dist
+deploy/dev/.env.local
+backend/internal/webui/dist/*
+!backend/internal/webui/dist/.gitkeep
