@@ -43,8 +43,8 @@ type adminFixture struct {
 func newAdminFixture(testContext *testing.T, outputs map[string]string, failing map[string]bool) adminFixture {
 	testContext.Helper()
 	runner := &outputRunner{outputsByCommand: outputs, failingCommands: failing}
-	handler := newTestHandlerWithServices(testContext, NewServices(nil, runner, ""))
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, runner, ""), "")
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return adminFixture{writeFixture: writeFixture{handler: handler, cookie: cookie}, runner: runner}
 }
 

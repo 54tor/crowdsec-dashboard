@@ -81,14 +81,14 @@ func newAccessRuleFixture(testContext *testing.T, trustedProxyCIDRs []*net.IPNet
 	testContext.Helper()
 	service := &fakeAccessRules{}
 	recorder := &fakeAuditRecorder{}
+	sessions := authtest.NewSessionStore(time.Hour, time.Now)
 	handler := newHandler(config.Config{SessionTTL: time.Hour, TrustedProxyCIDRs: trustedProxyCIDRs}, http.NotFoundHandler(), 0, Services{
-		AccessRules:   service,
-		Geolocator:    fixedGeolocator("FR"),
-		Audit:         recorder,
-		Sessions:      authtest.NewSessionStore(time.Hour, time.Now),
-		Authenticator: authtest.NewAuthenticator(map[string]string{testAccountName: testPassword}),
+		AccessRules: service,
+		Geolocator:  fixedGeolocator("FR"),
+		Audit:       recorder,
+		Sessions:    sessions,
 	})
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return accessRuleFixture{handler: handler, cookie: cookie, service: service, recorder: recorder}
 }
 

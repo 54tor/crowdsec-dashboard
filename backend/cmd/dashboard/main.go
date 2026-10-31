@@ -62,11 +62,12 @@ func main() {
 		cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer),
 		loadedConfig.ConfDir,
 	)
-	services.Authenticator = accountServices.repository
+	auditRecorder := audit.NewPostgresRecorder(database)
+	services.Login = newLoginService(database, accountServices, sessionStore, webAuthn, auditRecorder)
 	services.Enrollment = accountServices.enrollment
 	services.Sessions = sessionStore
 	services.Database = database
-	services.Audit = audit.NewPostgresRecorder(database)
+	services.Audit = auditRecorder
 	services.Geolocator = accountServices.geolocator
 	services.AccessRules = accessrule.NewRepository(database)
 	services.WebAuthn = webAuthn

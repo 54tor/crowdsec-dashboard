@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +15,10 @@ import (
 	"github.com/pquerna/otp/totp"
 
 	"crowdsec-dashboard/internal/accounts"
+	"crowdsec-dashboard/internal/audit"
+	"crowdsec-dashboard/internal/login"
 	"crowdsec-dashboard/internal/secrets"
+	"crowdsec-dashboard/internal/sessions"
 	"crowdsec-dashboard/internal/store/storetest"
 )
 
@@ -169,5 +174,29 @@ func TestOpenWebAuthnIsDisabledWithoutRelyingParty(testContext *testing.T) {
 	}
 	if _, invalidError := openWebAuthn("example.com", []string{"https://other.example.net"}); invalidError == nil {
 		testContext.Error("an origin outside the relying party must be refused")
+	}
+}
+
+func TestLoginServiceAsksTheEnrolledAccountForItsSecondFactor(testContext *testing.T) {
+	database := storetest.NewUnmigrated(testContext)
+	sink := &capturedLog{}
+	services, startupError := initialiseAccounts(context.Background(), database, newTestKeyring(testContext), sink.printf)
+	if startupError != nil {
+		testContext.Fatalf("startup: %v", startupError)
+	}
+	loggedToken := tokenFromLine(sink.lines[0])
+	if startError := services.enrollment.Start(context.Background(), loggedToken, "admin", "a-long-enough-password"); startError != nil {
+		testContext.Fatal(startError)
+	}
+	confirmTOTPAndRecoveryCodes(testContext, services.enrollment, loggedToken)
+	if _, completeError := services.enrollment.Complete(context.Background(), loggedToken); completeError != nil {
+		testContext.Fatal(completeError)
+	}
+	loginService := newLoginService(database, services, sessions.NewPostgresStore(database, time.Hour, time.Now), nil, audit.NewPostgresRecorder(database))
+
+	beginResult, beginError := loginService.Begin(context.Background(), "admin", "a-long-enough-password", netip.MustParseAddr("192.0.2.1"))
+
+	if beginError != nil || beginResult.Stage != login.StageSecondFactor || beginResult.PendingID == "" || !slices.Contains(beginResult.Methods, "totp") {
+		testContext.Errorf("the password alone must lead to the second factor, got %+v (%v)", beginResult, beginError)
 	}
 }

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -14,14 +13,12 @@ import (
 	"crowdsec-dashboard/internal/config"
 )
 
-type failingAuthenticator struct{ failure error }
-
-func (authenticator failingAuthenticator) Authenticate(_ context.Context, _, _ string) (auth.AccountIdentity, error) {
-	return auth.AccountIdentity{}, authenticator.failure
+func newHandlerWithDoubles(sessions auth.SessionStore, loginService LoginService) http.Handler {
+	return newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, Services{Sessions: sessions, Login: loginService})
 }
 
-func newHandlerWithDoubles(sessions auth.SessionStore, authenticator auth.Authenticator) http.Handler {
-	return newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, Services{Sessions: sessions, Authenticator: authenticator})
+func newAdminLoginService() *fakeLoginService {
+	return newFakeLoginService(authtest.NewAuthenticator(map[string]string{testAccountName: testPassword}))
 }
 
 func TestLoginRequiresAccountNameAndPassword(testContext *testing.T) {
@@ -54,7 +51,9 @@ func TestLoginWithUnknownAccountReturnsSameBodyAsWrongPassword(testContext *test
 }
 
 func TestLoginReturns503WhenAuthenticatorFailsWithInfrastructureError(testContext *testing.T) {
-	handler := newHandlerWithDoubles(authtest.NewSessionStore(time.Hour, time.Now), failingAuthenticator{failure: errors.New("connection refused")})
+	loginService := newAdminLoginService()
+	loginService.beginFailure = errors.New("connection refused")
+	handler := newHandlerWithDoubles(authtest.NewSessionStore(time.Hour, time.Now), loginService)
 
 	recorder := postLogin(handler, loginBody(testPassword))
 
@@ -66,22 +65,26 @@ func TestLoginReturns503WhenAuthenticatorFailsWithInfrastructureError(testContex
 	}
 }
 
-func TestLoginReturns503WhenSessionCreationFails(testContext *testing.T) {
+func TestSecondFactorReturns503WhenSessionCreationFails(testContext *testing.T) {
 	sessions := authtest.NewSessionStore(time.Hour, time.Now)
+	handler := newHandlerWithDoubles(sessions, newAdminLoginService())
+	pendingCookie := requirePendingCookie(testContext, postLogin(handler, loginBody(testPassword)))
 	sessions.FailWith(errors.New("connection refused"))
-	handler := newHandlerWithDoubles(sessions, authtest.NewAuthenticator(map[string]string{testAccountName: testPassword}))
 
-	recorder := postLogin(handler, loginBody(testPassword))
+	recorder := postLoginStep(handler, "/api/auth/login/totp", codeBody(validLoginTOTPCode), pendingCookie, loginClientIP)
 
 	if recorder.Code != http.StatusServiceUnavailable || strings.TrimSpace(recorder.Body.String()) != `{"error":"database_unavailable"}` {
 		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
+	}
+	if sessionCookieFrom(recorder) != nil {
+		testContext.Error("no session cookie expected when the session cannot be stored")
 	}
 }
 
 func TestAuthenticatedRouteReturns503WhenSessionStoreFails(testContext *testing.T) {
 	sessions := authtest.NewSessionStore(time.Hour, time.Now)
-	handler := newHandlerWithDoubles(sessions, authtest.NewAuthenticator(map[string]string{testAccountName: testPassword}))
-	sessionCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler := newHandlerWithDoubles(sessions, newAdminLoginService())
+	sessionCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	sessions.FailWith(errors.New("connection refused"))
 	request := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/auth/me", nil)
 	request.AddCookie(sessionCookie)
@@ -96,8 +99,8 @@ func TestAuthenticatedRouteReturns503WhenSessionStoreFails(testContext *testing.
 
 func TestLogoutReturns503WhenSessionStoreFails(testContext *testing.T) {
 	sessions := authtest.NewSessionStore(time.Hour, time.Now)
-	handler := newHandlerWithDoubles(sessions, authtest.NewAuthenticator(map[string]string{testAccountName: testPassword}))
-	sessionCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler := newHandlerWithDoubles(sessions, newAdminLoginService())
+	sessionCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	sessions.FailWith(errors.New("connection refused"))
 	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/logout", nil)
 	request.AddCookie(sessionCookie)

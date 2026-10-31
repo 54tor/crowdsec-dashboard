@@ -51,8 +51,8 @@ func newWriteFixture(testContext *testing.T) writeFixture {
 	testContext.Helper()
 	decisions := &fakeDecisions{}
 	runner := &recordingRunner{}
-	handler := newTestHandlerWithServices(testContext, Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}})
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}}, "")
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return writeFixture{handler: handler, cookie: cookie, decisions: decisions, runner: runner}
 }
 

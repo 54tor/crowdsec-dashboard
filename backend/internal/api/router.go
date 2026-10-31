@@ -16,7 +16,7 @@ func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services
 func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration, services Services) http.Handler {
 	requireSession := auth.RequireSession(services.Sessions)
 	handlers := &authHandlers{
-		authenticator:       services.Authenticator,
+		loginService:        services.Login,
 		sessionTTL:          loadedConfig.SessionTTL,
 		trustedCIDRs:        loadedConfig.TrustedProxyCIDRs,
 		sessions:            services.Sessions,
@@ -24,6 +24,8 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 		secondFactorLimiter: auth.NewLoginLimiter(secondFactorAttemptsPerIP, 0),
 		failureWait:         failureWait,
 		hashSlots:           make(chan struct{}, concurrentPasswordHashes),
+		webAuthn:            services.WebAuthn,
+		now:                 time.Now,
 	}
 
 	longWrite := extendWriteDeadline(cscli.HubMutationTimeout)
@@ -40,6 +42,18 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 	router.HandleFunc("POST /api/auth/enroll/recovery-codes", enrollmentFactors.recoveryCodes)
 	router.HandleFunc("POST /api/auth/enroll/complete", enrollment.complete)
 	router.HandleFunc("POST /api/auth/login", handlers.login)
+	loginSteps := loginStepHandlers{auth: handlers}
+	loginSetup := loginSteps.setupHandlers()
+	router.HandleFunc("POST /api/auth/login/totp", loginSteps.verifyTOTP)
+	router.HandleFunc("POST /api/auth/login/recovery-code", loginSteps.verifyRecoveryCode)
+	router.HandleFunc("POST /api/auth/login/webauthn/options", loginSteps.webAuthnOptions)
+	router.HandleFunc("POST /api/auth/login/webauthn", loginSteps.verifyWebAuthn)
+	router.HandleFunc("POST /api/auth/login/setup/totp", loginSetup.beginTOTP)
+	router.HandleFunc("POST /api/auth/login/setup/totp/confirm", loginSetup.confirmTOTP)
+	router.HandleFunc("POST /api/auth/login/setup/webauthn/options", loginSetup.beginWebAuthn)
+	router.HandleFunc("POST /api/auth/login/setup/webauthn/confirm", loginSetup.confirmWebAuthn)
+	router.HandleFunc("POST /api/auth/login/setup/recovery-codes", loginSetup.recoveryCodes)
+	router.HandleFunc("POST /api/auth/login/setup/complete", loginSteps.completeSetup)
 	router.HandleFunc("POST /api/auth/logout", handlers.logout)
 	router.Handle("POST /api/auth/logout-all", requireSession(http.HandlerFunc(handlers.logoutAll)))
 	router.Handle("GET /api/auth/me", requireSession(http.HandlerFunc(handlers.me)))

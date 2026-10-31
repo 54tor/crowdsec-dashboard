@@ -83,7 +83,11 @@ func (handlers enrollmentHandlers) enroll(responseWriter http.ResponseWriter, re
 }
 
 func (handlers enrollmentHandlers) methods() []string {
-	if handlers.webAuthn == nil {
+	return availableSecondFactorMethods(handlers.webAuthn)
+}
+
+func availableSecondFactorMethods(webAuthn *secondfactor.WebAuthn) []string {
+	if webAuthn == nil {
 		return []string{"totp"}
 	}
 	return []string{"totp", "webauthn"}

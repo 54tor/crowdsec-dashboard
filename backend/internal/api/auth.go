@@ -6,9 +6,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/login"
+	"crowdsec-dashboard/internal/secondfactor"
 )
 
 const (
@@ -21,7 +24,7 @@ const (
 )
 
 type authHandlers struct {
-	authenticator       auth.Authenticator
+	loginService        LoginService
 	sessionTTL          time.Duration
 	trustedCIDRs        []*net.IPNet
 	sessions            auth.SessionStore
@@ -29,6 +32,8 @@ type authHandlers struct {
 	secondFactorLimiter *auth.LoginLimiter
 	failureWait         time.Duration
 	hashSlots           chan struct{}
+	webAuthn            *secondfactor.WebAuthn
+	now                 func() time.Time
 }
 
 type loginRequest struct {
@@ -36,8 +41,14 @@ type loginRequest struct {
 	Password    string `json:"password"`
 }
 
+type loginStepResponse struct {
+	Status  string   `json:"status"`
+	Methods []string `json:"methods"`
+}
+
 func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request *http.Request) {
-	if !handlers.limiter.Allow(auth.ClientIP(request, handlers.trustedCIDRs)) {
+	clientAddress := auth.ClientIP(request, handlers.trustedCIDRs)
+	if !handlers.limiter.Allow(clientAddress) {
 		writeTooManyAttempts(responseWriter)
 		return
 	}
@@ -47,7 +58,8 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	if credentials.AccountName == "" || credentials.Password == "" {
+	clientIP, parseError := netip.ParseAddr(clientAddress)
+	if credentials.AccountName == "" || credentials.Password == "" || parseError != nil {
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
@@ -59,18 +71,27 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 		return
 	}
 	attemptStart := time.Now()
-	identity, authenticateError := handlers.authenticator.Authenticate(request.Context(), credentials.AccountName, credentials.Password)
-	if errors.Is(authenticateError, auth.ErrInvalidCredentials) {
+	beginResult, beginError := handlers.loginService.Begin(request.Context(), credentials.AccountName, credentials.Password, clientIP)
+	if errors.Is(beginError, auth.ErrInvalidCredentials) {
 		time.Sleep(handlers.failureWait - time.Since(attemptStart))
 		writeError(responseWriter, http.StatusUnauthorized, "invalid_credentials")
 		return
 	}
-	if authenticateError != nil {
-		log.Printf("authenticate: %v", authenticateError)
-		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
+	if beginError != nil {
+		failure := loginFailure(beginError, "", handlers.now())
+		failure.clearsPendingLogin = false
+		failure.write(responseWriter)
 		return
 	}
-	handlers.openSession(responseWriter, request, identity)
+	http.SetCookie(responseWriter, pendingLoginCookie(beginResult.PendingID, pendingLoginMaxAgeSeconds))
+	writeJSON(responseWriter, http.StatusOK, handlers.loginStep(beginResult))
+}
+
+func (handlers *authHandlers) loginStep(beginResult login.BeginResult) loginStepResponse {
+	if beginResult.Stage == login.StageSetup {
+		return loginStepResponse{Status: "second_factor_setup_required", Methods: availableSecondFactorMethods(handlers.webAuthn)}
+	}
+	return loginStepResponse{Status: "second_factor_required", Methods: beginResult.Methods}
 }
 
 func (handlers *authHandlers) openSession(responseWriter http.ResponseWriter, request *http.Request, identity auth.AccountIdentity) {

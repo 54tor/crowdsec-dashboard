@@ -14,8 +14,8 @@ func authenticatedRequest(method, path string, sessionCookie *http.Cookie) *http
 }
 
 func TestMeReturnsAccountNameAndRole(testContext *testing.T) {
-	handler := newTestHandler(testContext)
-	sessionCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, Services{}, "")
+	sessionCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	recorder := httptest.NewRecorder()
 
 	handler.ServeHTTP(recorder, authenticatedRequest(http.MethodGet, "/api/auth/me", sessionCookie))
@@ -27,9 +27,9 @@ func TestMeReturnsAccountNameAndRole(testContext *testing.T) {
 }
 
 func TestLogoutAllInvalidatesEverySessionOfTheAccount(testContext *testing.T) {
-	handler := newTestHandler(testContext)
-	firstCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
-	otherDeviceCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, Services{}, "")
+	firstCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
+	otherDeviceCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	logoutRecorder := httptest.NewRecorder()
 
 	handler.ServeHTTP(logoutRecorder, authenticatedRequest(http.MethodPost, "/api/auth/logout-all", firstCookie))

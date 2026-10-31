@@ -7,8 +7,12 @@ import (
 
 	"github.com/uptrace/bun"
 
+	"crowdsec-dashboard/internal/accessrule"
 	"crowdsec-dashboard/internal/accounts"
+	"crowdsec-dashboard/internal/audit"
+	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/geo"
+	"crowdsec-dashboard/internal/login"
 	"crowdsec-dashboard/internal/secondfactor"
 	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store"
@@ -22,10 +26,11 @@ const (
 )
 
 type accountServices struct {
-	repository *accounts.Repository
-	enrollment *accounts.Enrollment
-	keyring    *secrets.Keyring
-	geolocator geo.Geolocator
+	repository    *accounts.Repository
+	enrollment    *accounts.Enrollment
+	secondFactors *secondfactor.Repository
+	keyring       *secrets.Keyring
+	geolocator    geo.Geolocator
 }
 
 func loadSecretsKeyring(keyFilePath string) (*secrets.Keyring, error) {
@@ -66,7 +71,8 @@ func initialiseAccounts(ctx context.Context, database *bun.DB, keyring *secrets.
 		return accountServices{}, migrateError
 	}
 	repository := accounts.NewRepository(database)
-	enrollment := accounts.NewEnrollment(repository, secondfactor.NewRepository(database, keyring))
+	secondFactors := secondfactor.NewRepository(database, keyring)
+	enrollment := accounts.NewEnrollment(repository, secondFactors)
 	token, isOpened, openError := enrollment.Open(ctx)
 	if openError != nil {
 		return accountServices{}, fmt.Errorf("open enrollment: %w", openError)
@@ -74,7 +80,21 @@ func initialiseAccounts(ctx context.Context, database *bun.DB, keyring *secrets.
 	if isOpened {
 		logLine("no account yet: open %s and enroll the first account with token %s", enrollmentPath, token)
 	}
-	return accountServices{repository: repository, enrollment: enrollment, keyring: keyring}, nil
+	return accountServices{repository: repository, enrollment: enrollment, secondFactors: secondFactors, keyring: keyring}, nil
+}
+
+func newLoginService(database *bun.DB, services accountServices, sessionStore auth.SessionStore, webAuthn *secondfactor.WebAuthn, recorder audit.Recorder) *login.Service {
+	return login.NewService(login.Dependencies{
+		Authenticator: services.repository,
+		Accounts:      services.repository,
+		Sessions:      sessionStore,
+		SecondFactors: services.secondFactors,
+		WebAuthn:      webAuthn,
+		AccessRules:   accessrule.NewRepository(database),
+		Geolocator:    services.geolocator,
+		Audit:         recorder,
+		Database:      database,
+	})
 }
 
 type sessionPruner interface {

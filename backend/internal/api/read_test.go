@@ -64,8 +64,8 @@ type readFixture struct {
 
 func newReadFixture(testContext *testing.T, services Services) readFixture {
 	testContext.Helper()
-	handler := newTestHandlerWithServices(testContext, services)
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, services, "")
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return readFixture{handler: handler, cookie: cookie}
 }
 
@@ -397,8 +397,8 @@ func TestHealthMarksOnlyTheConfiguredMachineAsSelf(testContext *testing.T) {
 		"machines list -o json": `[{"machineId":"dashboard","ipAddress":"10.0.0.3","isValidated":true,"last_heartbeat":null},` +
 			`{"machineId":"watcher","ipAddress":"10.0.0.4","isValidated":true,"last_heartbeat":"2026-10-31T10:01:00Z"}]`,
 	}, nil)
-	handler := newTestHandlerWithMachineID(testContext, services, "dashboard")
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, services, "dashboard")
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	request := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/health", nil)
 	request.AddCookie(cookie)
 	recorder := httptest.NewRecorder()

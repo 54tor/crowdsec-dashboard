@@ -21,12 +21,12 @@ type selfBanFixture struct {
 func newSelfBanFixture(testContext *testing.T, trustedProxyCIDRs []*net.IPNet) selfBanFixture {
 	testContext.Helper()
 	decisions := &fakeDecisions{}
+	sessions := authtest.NewSessionStore(time.Hour, time.Now)
 	handler := newHandler(config.Config{SessionTTL: time.Hour, TrustedProxyCIDRs: trustedProxyCIDRs}, http.NotFoundHandler(), 0, Services{
-		Decisions:     decisions,
-		Sessions:      authtest.NewSessionStore(time.Hour, time.Now),
-		Authenticator: authtest.NewAuthenticator(map[string]string{testAccountName: testPassword}),
+		Decisions: decisions,
+		Sessions:  sessions,
 	})
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return selfBanFixture{handler: handler, cookie: cookie, decisions: decisions}
 }
 

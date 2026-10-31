@@ -20,8 +20,10 @@ const (
 )
 
 type apiFailure struct {
-	status int
-	code   string
+	status             int
+	code               string
+	retryAfter         string
+	clearsPendingLogin bool
 }
 
 func (failure apiFailure) failed() bool {
@@ -29,6 +31,12 @@ func (failure apiFailure) failed() bool {
 }
 
 func (failure apiFailure) write(responseWriter http.ResponseWriter) {
+	if failure.retryAfter != "" {
+		responseWriter.Header().Set("Retry-After", failure.retryAfter)
+	}
+	if failure.clearsPendingLogin {
+		http.SetCookie(responseWriter, pendingLoginCookie("", -1))
+	}
 	writeError(responseWriter, failure.status, failure.code)
 }
 

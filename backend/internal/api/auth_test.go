@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 const (
 	testPassword    = "correct horse"
 	testAccountName = "admin"
+	testAccountID   = int64(1)
 )
 
 func newTestHandler(testContext *testing.T) http.Handler {
@@ -27,6 +29,13 @@ func newTestHandlerWithServices(testContext *testing.T, services Services) http.
 }
 
 func newTestHandlerWithMachineID(testContext *testing.T, services Services, machineID string) http.Handler {
+	handler, _ := newTestHandlerAndSessions(testContext, services, machineID)
+	return handler
+}
+
+// newTestHandlerAndSessions wires the session double and, unless the test
+// supplies its own, a fake login service that knows testAccountName.
+func newTestHandlerAndSessions(testContext *testing.T, services Services, machineID string) (http.Handler, *authtest.SessionStore) {
 	testContext.Helper()
 	authenticator := authtest.NewAuthenticator(map[string]string{testAccountName: testPassword})
 	sessions := authtest.NewSessionStore(time.Hour, time.Now)
@@ -37,8 +46,21 @@ func newTestHandlerWithMachineID(testContext *testing.T, services Services, mach
 		return authenticator.IdentityByID(accountID)
 	})
 	services.Sessions = sessions
-	services.Authenticator = authenticator
-	return newHandler(config.Config{SessionTTL: time.Hour, LAPIMachineID: machineID}, http.NotFoundHandler(), 0, services)
+	if services.Login == nil {
+		services.Login = newFakeLoginService(authenticator)
+	}
+	return newHandler(config.Config{SessionTTL: time.Hour, LAPIMachineID: machineID}, http.NotFoundHandler(), 0, services), sessions
+}
+
+// newAuthenticatedCookie opens a session directly in the double, so tests of
+// authenticated routes do not depend on the two-step login.
+func newAuthenticatedCookie(testContext *testing.T, sessions *authtest.SessionStore, accountID int64) *http.Cookie {
+	testContext.Helper()
+	sessionToken, createError := sessions.Create(context.Background(), accountID)
+	if createError != nil {
+		testContext.Fatalf("create session: %v", createError)
+	}
+	return &http.Cookie{Name: auth.CookieName, Value: sessionToken}
 }
 
 func loginBody(password string) string {
@@ -54,22 +76,28 @@ func postLogin(handler http.Handler, body string) *httptest.ResponseRecorder {
 	return recorder
 }
 
-func TestLoginSetsHardenedCookie(testContext *testing.T) {
-	recorder := postLogin(newTestHandler(testContext), loginBody(testPassword))
+func TestPasswordAloneNeverSetsSessionCookie(testContext *testing.T) {
+	handler := newTestHandler(testContext)
 
-	if recorder.Code != http.StatusOK {
-		testContext.Fatalf("expected 200, got %d", recorder.Code)
+	recorder := postLogin(handler, loginBody(testPassword))
+
+	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"status":"second_factor_required","methods":["totp","recovery_code"]}` {
+		testContext.Fatalf("unexpected response %d %q", recorder.Code, recorder.Body.String())
 	}
 	cookies := recorder.Result().Cookies()
-	if len(cookies) != 1 {
-		testContext.Fatalf("expected one cookie, got %d", len(cookies))
+	if len(cookies) != 1 || cookies[0].Name != pendingLoginCookieName {
+		testContext.Fatalf("expected only the pending_login cookie, got %+v", cookies)
 	}
-	sessionCookie := cookies[0]
-	if !sessionCookie.HttpOnly || !sessionCookie.Secure || sessionCookie.SameSite != http.SameSiteStrictMode || sessionCookie.Path != "/" {
-		testContext.Errorf("cookie not hardened: %+v", sessionCookie)
+	pendingCookie := cookies[0]
+	if !pendingCookie.HttpOnly || !pendingCookie.Secure || pendingCookie.SameSite != http.SameSiteStrictMode || pendingCookie.Path != "/api/auth" || pendingCookie.MaxAge != 300 {
+		testContext.Errorf("pending cookie not hardened: %+v", pendingCookie)
 	}
-	if sessionCookie.MaxAge != 3600 {
-		testContext.Errorf("expected Max-Age 3600, got %d", sessionCookie.MaxAge)
+	meRequest := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/auth/me", nil)
+	meRequest.AddCookie(&http.Cookie{Name: auth.CookieName, Value: pendingCookie.Value})
+	meRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(meRecorder, meRequest)
+	if meRecorder.Code != http.StatusUnauthorized {
+		testContext.Errorf("the pending identifier must never work as a session, got %d", meRecorder.Code)
 	}
 }
 
@@ -147,10 +175,10 @@ func TestForgedForwardedForFromUntrustedPeerDoesNotBypassRateLimit(testContext *
 
 func TestLoginReturns429WhenArgonSlotsAreBusy(testContext *testing.T) {
 	handlers := &authHandlers{
-		authenticator: authtest.NewAuthenticator(nil),
-		sessions:      authtest.NewSessionStore(time.Hour, time.Now),
-		limiter:       auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
-		hashSlots:     make(chan struct{}, 1),
+		loginService: newFakeLoginService(authtest.NewAuthenticator(nil)),
+		sessions:     authtest.NewSessionStore(time.Hour, time.Now),
+		limiter:      auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
+		hashSlots:    make(chan struct{}, 1),
 	}
 	handlers.hashSlots <- struct{}{}
 	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(loginBody("x")))
@@ -177,8 +205,8 @@ func TestCrossOriginRejectionIsJSON(testContext *testing.T) {
 }
 
 func TestAuthenticatedUnknownApiRouteReturnsJSON404(testContext *testing.T) {
-	handler := newTestHandler(testContext)
-	sessionCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, Services{}, "")
+	sessionCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	request := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/anything", nil)
 	request.AddCookie(sessionCookie)
 	recorder := httptest.NewRecorder()
@@ -202,8 +230,8 @@ func TestMeReturns401WhenNoSession(testContext *testing.T) {
 }
 
 func TestMeReturns200ThenLogoutRevokesSession(testContext *testing.T) {
-	handler := newTestHandler(testContext)
-	sessionCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, Services{}, "")
+	sessionCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 
 	meRequest := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/auth/me", nil)
 	meRequest.AddCookie(sessionCookie)

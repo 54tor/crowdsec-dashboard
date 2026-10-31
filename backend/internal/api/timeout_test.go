@@ -17,8 +17,8 @@ func (runner *deadlineRunner) Run(_ context.Context, argv []string) ([]byte, err
 }
 
 func TestSlowCscliCallMapsTo504Timeout(testContext *testing.T) {
-	handler := newTestHandlerWithServices(testContext, NewServices(nil, &deadlineRunner{}, ""))
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, &deadlineRunner{}, ""), "")
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	fixture := writeFixture{handler: handler, cookie: cookie}
 
 	for _, route := range []struct{ method, path, body string }{
@@ -48,8 +48,8 @@ func TestEveryCommandTimeoutIsBelowItsRouteWriteDeadline(testContext *testing.T)
 
 func TestSelfMachineCannotBeDeleted(testContext *testing.T) {
 	runner := &outputRunner{}
-	handler := newTestHandlerWithMachineID(testContext, NewServices(nil, runner, ""), "dashboard-self")
-	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
+	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, runner, ""), "dashboard-self")
+	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	fixture := writeFixture{handler: handler, cookie: cookie}
 
 	selfRecorder := fixture.send(http.MethodDelete, "/api/machines/dashboard-self", `{"confirm":"dashboard-self"}`, true)
