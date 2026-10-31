@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/auth/authtest"
 )
 
@@ -100,5 +101,32 @@ func TestFailWithMakesEveryOperationFail(testContext *testing.T) {
 
 	if !errors.Is(createError, injectedFailure) || !errors.Is(lookupError, injectedFailure) {
 		testContext.Errorf("expected injected failure, got %v %v", createError, lookupError)
+	}
+}
+
+func TestLookupResolvesTheIdentityOfTheSessionAccount(testContext *testing.T) {
+	authenticator := authtest.NewAuthenticator(map[string]string{"bob": "secret-one", "carol": "secret-two"})
+	store := authtest.NewSessionStore(time.Hour, time.Now)
+	store.ResolveIdentitiesWith(authenticator.IdentityByID)
+	bobIdentity, _ := authenticator.Authenticate(context.Background(), "bob", "secret-one")
+	carolIdentity, _ := authenticator.Authenticate(context.Background(), "carol", "secret-two")
+	carolToken, _ := store.Create(context.Background(), carolIdentity.AccountID)
+
+	resolvedIdentity, found, lookupError := store.Lookup(context.Background(), carolToken)
+
+	if lookupError != nil || !found || resolvedIdentity != carolIdentity || bobIdentity.AccountID == carolIdentity.AccountID {
+		testContext.Errorf("unexpected identity %+v for %+v (found=%v, error=%v)", resolvedIdentity, carolIdentity, found, lookupError)
+	}
+}
+
+func TestLookupFailsWhenTheAccountNoLongerResolves(testContext *testing.T) {
+	store := authtest.NewSessionStore(time.Hour, time.Now)
+	store.ResolveIdentitiesWith(func(int64) (auth.AccountIdentity, bool) { return auth.AccountIdentity{}, false })
+	token, _ := store.Create(context.Background(), 5)
+
+	_, found, lookupError := store.Lookup(context.Background(), token)
+
+	if lookupError != nil || found {
+		testContext.Errorf("a session of a deleted account must not validate, got found=%v error=%v", found, lookupError)
 	}
 }

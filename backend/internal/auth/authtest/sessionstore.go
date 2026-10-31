@@ -18,9 +18,11 @@ const (
 )
 
 type sessionRecord struct {
-	identity auth.AccountIdentity
-	expiry   time.Time
+	accountID int64
+	expiry    time.Time
 }
+
+type IdentityResolver func(accountID int64) (auth.AccountIdentity, bool)
 
 type SessionStore struct {
 	mutex             sync.Mutex
@@ -28,10 +30,17 @@ type SessionStore struct {
 	now               func() time.Time
 	recordByTokenHash map[[sha256.Size]byte]sessionRecord
 	failure           error
+	resolveIdentity   IdentityResolver
 }
 
 func NewSessionStore(ttl time.Duration, now func() time.Time) *SessionStore {
 	return &SessionStore{ttl: ttl, now: now, recordByTokenHash: make(map[[sha256.Size]byte]sessionRecord)}
+}
+
+func (store *SessionStore) ResolveIdentitiesWith(resolver IdentityResolver) {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	store.resolveIdentity = resolver
 }
 
 func (store *SessionStore) FailWith(failure error) {
@@ -50,8 +59,7 @@ func (store *SessionStore) Create(_ context.Context, accountID int64) (string, e
 	rand.Read(tokenBytes)
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 	store.pruneExpired()
-	identity := auth.AccountIdentity{AccountID: accountID, AccountName: AccountName, AccountRole: AccountRole}
-	store.recordByTokenHash[sha256.Sum256([]byte(token))] = sessionRecord{identity: identity, expiry: store.now().Add(store.ttl)}
+	store.recordByTokenHash[sha256.Sum256([]byte(token))] = sessionRecord{accountID: accountID, expiry: store.now().Add(store.ttl)}
 	return token, nil
 }
 
@@ -70,7 +78,8 @@ func (store *SessionStore) Lookup(_ context.Context, token string) (auth.Account
 		delete(store.recordByTokenHash, tokenHash)
 		return auth.AccountIdentity{}, false, nil
 	}
-	return record.identity, true, nil
+	identity, accountExists := store.identityOf(record.accountID)
+	return identity, accountExists, nil
 }
 
 func (store *SessionStore) Destroy(_ context.Context, token string) error {
@@ -90,7 +99,7 @@ func (store *SessionStore) DestroyAllForAccount(_ context.Context, accountID int
 		return store.failure
 	}
 	for tokenHash, record := range store.recordByTokenHash {
-		if record.identity.AccountID == accountID {
+		if record.accountID == accountID {
 			delete(store.recordByTokenHash, tokenHash)
 		}
 	}
@@ -104,4 +113,11 @@ func (store *SessionStore) pruneExpired() {
 			delete(store.recordByTokenHash, tokenHash)
 		}
 	}
+}
+
+func (store *SessionStore) identityOf(accountID int64) (auth.AccountIdentity, bool) {
+	if store.resolveIdentity == nil {
+		return auth.AccountIdentity{AccountID: accountID, AccountName: AccountName, AccountRole: AccountRole}, true
+	}
+	return store.resolveIdentity(accountID)
 }
