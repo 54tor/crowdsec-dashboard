@@ -81,8 +81,18 @@ services:
     pids_limit: 128
     cpus: 0.5
     read_only: true
+    tmpfs:
+      - /run:exec,nosuid,nodev,mode=0755
+      - /tmp:noexec,nosuid,nodev,mode=1777
     cap_drop: [ALL]
-    security_opt: [no-new-privileges]
+    cap_add: [KILL, SETGID, SETUID]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
     env_file: .env.local
     depends_on:
       postgres:
@@ -95,6 +105,8 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       CROWDSEC_CONF_DIR: /etc/crowdsec
       TRUSTED_PROXY_CIDRS: ""
+      S6_READ_ONLY_ROOT: "1"
+      WAIT_FOR_NETWORK: "false"
     volumes:
       - crowdsec-config:/etc/crowdsec:ro
     ports:

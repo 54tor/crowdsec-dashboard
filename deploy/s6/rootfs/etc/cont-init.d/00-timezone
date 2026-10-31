@@ -1,0 +1,13 @@
+#!/command/with-contenv bash
+set -euo pipefail
+
+TZ_VALUE="${TZ:-UTC}"
+ZONEINFO_PATH="/usr/share/zoneinfo/${TZ_VALUE}"
+
+if [ -f "${ZONEINFO_PATH}" ]; then
+    if ! { ln -sf "${ZONEINFO_PATH}" /etc/localtime && printf '%s\n' "${TZ_VALUE}" > /etc/timezone; } 2> /dev/null; then
+        echo "timezone: /etc is read-only, keeping the image configuration (TZ=${TZ_VALUE} stays exported)" >&2
+    fi
+else
+    echo "timezone '${TZ_VALUE}' not found, keeping existing configuration" >&2
+fi

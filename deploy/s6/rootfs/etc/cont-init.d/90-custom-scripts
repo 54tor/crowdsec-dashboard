@@ -1,0 +1,28 @@
+#!/command/with-contenv bash
+
+set -euo pipefail
+
+custom_dir="/custom-scripts.d"
+
+mkdir -p "${custom_dir}" 2> /dev/null || true
+
+shopt -s nullglob
+scripts=("${custom_dir}"/*)
+
+if [[ ${#scripts[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+for script in "${scripts[@]}"; do
+    if [[ ! -f "${script}" ]]; then
+        continue
+    fi
+
+    if [[ ! -x "${script}" ]]; then
+        echo "[custom-scripts] skipping ${script} (not executable)"
+        continue
+    fi
+
+    echo "[custom-scripts] running ${script}"
+    "${script}"
+done

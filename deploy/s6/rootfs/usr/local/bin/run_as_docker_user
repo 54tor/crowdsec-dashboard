@@ -1,0 +1,9 @@
+#!/command/with-contenv bash
+
+set -euo pipefail
+
+docker_user_home="$(getent passwd docker-user | cut -d: -f6)"
+
+exec env HOME="${docker_user_home}" \
+    XDG_CONFIG_HOME="${docker_user_home}/.config" \
+    s6-setuidgid docker-user "$@"

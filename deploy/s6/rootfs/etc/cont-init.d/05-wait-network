@@ -1,0 +1,41 @@
+#!/command/with-contenv bash
+
+set -euo pipefail
+
+is_truthy() {
+    case "${1:-}" in
+        1|true|TRUE|yes|YES|on|ON) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_truthy "${WAIT_FOR_NETWORK:-true}" || exit 0
+
+host="${WAIT_FOR_NETWORK_HOST:-1.1.1.1}"
+port="${WAIT_FOR_NETWORK_PORT:-443}"
+timeout_s="${WAIT_FOR_NETWORK_TIMEOUT:-15}"
+interval="${WAIT_FOR_NETWORK_INTERVAL:-1}"
+if ! [[ "${timeout_s}" =~ ^[0-9]+$ ]]; then
+    echo "[wait-network] invalid WAIT_FOR_NETWORK_TIMEOUT=${timeout_s}; using 15." >&2
+    timeout_s=15
+fi
+if ! [[ "${interval}" =~ ^[0-9]+$ ]]; then
+    echo "[wait-network] invalid WAIT_FOR_NETWORK_INTERVAL=${interval}; using 1." >&2
+    interval=1
+fi
+
+echo "[wait-network] waiting up to ${timeout_s}s for ${host}:${port}..."
+deadline=$(( $(date +%s) + timeout_s ))
+# shellcheck disable=SC2016
+until timeout 3 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "${host}" "${port}" 2>/dev/null; do
+    if [ "$(date +%s)" -ge "${deadline}" ]; then
+        echo "[wait-network] timeout waiting for ${host}:${port}" >&2
+        if is_truthy "${WAIT_FOR_NETWORK_STRICT:-0}"; then
+            exit 1
+        fi
+        echo "[wait-network] continuing without confirmed connectivity." >&2
+        exit 0
+    fi
+    sleep "${interval}"
+done
+echo "[wait-network] ${host}:${port} reachable"

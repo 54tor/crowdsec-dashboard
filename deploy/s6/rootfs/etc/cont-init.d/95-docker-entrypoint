@@ -1,0 +1,28 @@
+#!/command/with-contenv bash
+
+set -euo pipefail
+
+entrypoint_dir="/docker-entrypoint.d"
+
+mkdir -p "${entrypoint_dir}" 2> /dev/null || true
+
+shopt -s nullglob
+scripts=("${entrypoint_dir}"/*)
+
+if [[ ${#scripts[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+for script in "${scripts[@]}"; do
+    if [[ ! -f "${script}" ]]; then
+        continue
+    fi
+
+    if [[ ! -x "${script}" ]]; then
+        echo "[docker-entrypoint] skipping ${script} (not executable)"
+        continue
+    fi
+
+    echo "[docker-entrypoint] running ${script}"
+    "${script}"
+done

@@ -1,0 +1,40 @@
+#!/command/with-contenv bash
+
+set -euo pipefail
+
+USER_NAME="docker-user"
+DEFAULT_UID="10000"
+DEFAULT_GID="10000"
+TARGET_UID="${DOCKER_USER_UID:-$DEFAULT_UID}"
+TARGET_GID="${DOCKER_USER_GID:-$DEFAULT_GID}"
+
+log() {
+    printf '[docker-user] %s\n' "$1"
+}
+
+if getent group "${USER_NAME}" >/dev/null; then
+    current_gid="$(getent group "${USER_NAME}" | cut -d: -f3)"
+    if [[ "${current_gid}" != "${TARGET_GID}" ]]; then
+        log "Updating group ${USER_NAME} GID ${current_gid} -> ${TARGET_GID}"
+        groupmod -o -g "${TARGET_GID}" "${USER_NAME}"
+    fi
+else
+    log "Creating group ${USER_NAME} with GID ${TARGET_GID}"
+    groupadd -g "${TARGET_GID}" "${USER_NAME}"
+fi
+
+if getent passwd "${USER_NAME}" >/dev/null; then
+    current_uid="$(id -u "${USER_NAME}")"
+    current_gid="$(id -g "${USER_NAME}")"
+    if [[ "${current_uid}" != "${TARGET_UID}" ]] || [[ "${current_gid}" != "${TARGET_GID}" ]]; then
+        log "Updating user ${USER_NAME} UID ${current_uid} -> ${TARGET_UID}, GID ${current_gid} -> ${TARGET_GID}"
+        usermod -o -u "${TARGET_UID}" -g "${TARGET_GID}" "${USER_NAME}"
+        home_dir="$(getent passwd "${USER_NAME}" | cut -d: -f6)"
+        if [[ -n "${home_dir}" && -d "${home_dir}" ]]; then
+            chown -R "${TARGET_UID}:${TARGET_GID}" "${home_dir}"
+        fi
+    fi
+else
+    log "Creating user ${USER_NAME} with UID ${TARGET_UID} / GID ${TARGET_GID}"
+    useradd -u "${TARGET_UID}" -g "${TARGET_GID}" -M -s /bin/bash "${USER_NAME}"
+fi

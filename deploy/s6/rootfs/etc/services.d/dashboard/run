@@ -1,0 +1,6 @@
+#!/command/with-contenv bash
+
+set -euo pipefail
+
+exec 2>&1
+exec /usr/local/bin/run_as_docker_user /usr/local/bin/dashboard

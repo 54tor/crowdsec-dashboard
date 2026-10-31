@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+
+set -euo pipefail
+
+service_exit_code="${1:-0}"
+signal_number="${2:-0}"
+
+if [[ "${service_exit_code}" -eq 256 ]]; then
+    container_exit_code=$(( 128 + signal_number ))
+else
+    container_exit_code="${service_exit_code}"
+fi
+
+printf '[dashboard] exited with code %s\n' "${container_exit_code}"
+printf '%s\n' "${container_exit_code}" > /run/s6-linux-init-container-results/exitcode
+exec /run/s6/basedir/bin/halt
