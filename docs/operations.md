@@ -185,9 +185,9 @@ started as root so the init scripts can run; the hardening and its reasons are i
   `GeoLite2 updates are disabled`; the dashboard then runs without country rules. The database is
   stored in the `geoip-data` volume as `GeoLite2-Country.mmdb`, with the frequency of
   `GEOIPUPDATE_FREQUENCY_HOURS`.
-- **First download**: at start, when the cron entry exists and the database file is missing, the
-  cron service launches one update immediately, in the background. If the database file already
-  exists but is empty or corrupt, no immediate update runs: the first fetch waits for the next
+- **First download**: at start, when the cron entry exists and the database file is missing or
+  empty, the cron service launches one update immediately, in the background. If the database file
+  is not empty but corrupt, no immediate update runs: the first fetch waits for the next
   scheduled run (minute 17 of the scheduled hour). Delete the bad file and restart to fetch at
   once. The dashboard keeps ignoring an unreadable file and logs `geolocation database ... is not
   readable yet`; country rules are refused meanwhile. It also logs a warning when the database is

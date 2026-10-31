@@ -412,6 +412,15 @@ initial_fetch_runs_only_when_database_missing() {
     printf '17 3 */1 * * %s\n' "${expected_cron_command}" > "${case_directory}/cron.d/geoipupdate"
     : > "${case_directory}/geoip/GeoLite2-Country.mmdb"
     run_cron_service "${case_directory}" > /dev/null
+    if ! wait_for_file "${case_directory}/records/run_as_docker_user.argv" 50; then
+        report_failure "${test_name}" "no initial fetch within 5 s while the database file is empty"
+        return
+    fi
+
+    case_directory="$(new_case_directory)"
+    printf '17 3 */1 * * %s\n' "${expected_cron_command}" > "${case_directory}/cron.d/geoipupdate"
+    printf 'database' > "${case_directory}/geoip/GeoLite2-Country.mmdb"
+    run_cron_service "${case_directory}" > /dev/null
     if wait_for_file "${case_directory}/records/run_as_docker_user.argv" 10; then
         report_failure "${test_name}" "initial fetch ran although the database exists"
         return
@@ -430,7 +439,7 @@ cron_service_strips_root_field() {
     local test_name="cron_service_strips_root_field"
     local case_directory exit_code
     case_directory="$(new_case_directory)"
-    : > "${case_directory}/geoip/GeoLite2-Country.mmdb"
+    printf 'database' > "${case_directory}/geoip/GeoLite2-Country.mmdb"
     {
         printf '17 */6 * * * %s\n' "${expected_cron_command}"
         printf '@daily root /usr/local/bin/other-job\n'

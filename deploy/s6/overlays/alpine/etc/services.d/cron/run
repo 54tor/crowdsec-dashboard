@@ -51,7 +51,7 @@ mkdir -p "${work_dir}"
     done
 } > "${cron_file}"
 
-if [ -f "${cron_directory}/geoipupdate" ] && [ ! -e "${geoip_directory}/GeoLite2-Country.mmdb" ]; then
+if [ -f "${cron_directory}/geoipupdate" ] && [ ! -s "${geoip_directory}/GeoLite2-Country.mmdb" ]; then
     (run_as_docker_user /usr/local/bin/geoipupdate-once &)
 fi
 
