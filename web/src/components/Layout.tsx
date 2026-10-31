@@ -11,7 +11,7 @@ import { NAV_ITEMS } from '@/routes'
 
 export function Layout() {
   const { t } = useTranslation()
-  const { logout } = useAuth()
+  const { accountName, logout } = useAuth()
   const [logoutError, setLogoutError] = useState<{ failure: unknown } | null>(null)
 
   async function requestLogout() {
@@ -35,6 +35,7 @@ export function Layout() {
         <div className="flex flex-wrap items-center justify-between gap-2 p-3">
           <span className="text-sm font-semibold">{t('app.title')}</span>
           <div className="flex items-center gap-2">
+            {accountName && <span className="max-w-32 truncate text-sm text-muted-foreground">{accountName}</span>}
             <LanguageSwitch />
             <LogoutButton onLogout={requestLogout} />
           </div>

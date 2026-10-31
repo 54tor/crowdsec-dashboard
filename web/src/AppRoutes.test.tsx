@@ -16,6 +16,17 @@ async function triggerUnauthenticatedDataCalls(callCount: number): Promise<void>
 }
 
 const UNAUTHENTICATED = { status: 401, body: { error: 'unauthenticated' } }
+const ENROLLMENT_CLOSED = { status: 200, body: { enrollment_required: false } }
+const ENROLLMENT_OPEN = { status: 200, body: { enrollment_required: true } }
+const AUTHENTICATED_ALICE = {
+  status: 200,
+  body: { status: 'authenticated', account_name: 'alice', account_role: 'admin' },
+}
+
+async function fillLoginForm(user: ReturnType<typeof userEvent.setup>, password: string) {
+  await user.type(await screen.findByLabelText(en.login.accountName), 'alice')
+  await user.type(screen.getByLabelText(en.login.password), password)
+}
 
 describe('app routing and auth', () => {
   beforeEach(async () => {
@@ -68,7 +79,7 @@ describe('app routing and auth', () => {
     const user = userEvent.setup()
     const { visitedPaths } = renderApp('/login')
     for (let expiryNumber = 1; expiryNumber <= 2; expiryNumber += 1) {
-      await user.type(await screen.findByLabelText(en.login.password), 'correct horse')
+      await fillLoginForm(user, 'correct horse')
       await user.click(screen.getByRole('button', { name: en.login.submit }))
       expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
       await triggerUnauthenticatedDataCalls(1)
@@ -84,7 +95,7 @@ describe('app routing and auth', () => {
     })
     const user = userEvent.setup()
     const { queryClient } = renderApp('/login')
-    await user.type(await screen.findByLabelText(en.login.password), 'correct horse')
+    await fillLoginForm(user, 'correct horse')
     await user.click(screen.getByRole('button', { name: en.login.submit }))
     expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
     expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
@@ -116,7 +127,7 @@ describe('app routing and auth', () => {
     })
     const user = userEvent.setup()
     renderApp('/login')
-    await user.type(await screen.findByLabelText(en.login.password), 'wrong')
+    await fillLoginForm(user, 'wrong')
     await user.click(screen.getByRole('button', { name: en.login.submit }))
     const expectedMessage = en.errors[errorCode as keyof typeof en.errors]
     expect(await screen.findByRole('alert')).toHaveTextContent(expectedMessage)
@@ -142,7 +153,7 @@ describe('app routing and auth', () => {
     })
     const user = userEvent.setup()
     renderApp('/login')
-    await user.type(await screen.findByLabelText(en.login.password), 'correct horse')
+    await fillLoginForm(user, 'correct horse')
     await user.click(screen.getByRole('button', { name: en.login.submit }))
 
     expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
@@ -161,5 +172,127 @@ describe('app routing and auth', () => {
     renderApp('/hub')
     expect(await screen.findByRole('heading', { name: en.nav.hub })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: en.nav.hub })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('sendsAccountNameAndPasswordOnLogin', async () => {
+    const fetchMock = stubFetch({
+      'GET /api/auth/status': ENROLLMENT_CLOSED,
+      'GET /api/auth/me': UNAUTHENTICATED,
+      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+    })
+    const user = userEvent.setup()
+    renderApp('/login')
+    const accountNameInput = await screen.findByLabelText(en.login.accountName)
+    expect(accountNameInput).toHaveAttribute('autocomplete', 'username')
+    expect(screen.getByLabelText(en.login.password)).toHaveAttribute('autocomplete', 'current-password')
+    await fillLoginForm(user, 'correct horse')
+    await user.click(screen.getByRole('button', { name: en.login.submit }))
+    await screen.findByRole('heading', { name: en.nav.alerts })
+    const loginCall = fetchMock.mock.calls.find(([requestedPath]) => requestedPath === '/api/auth/login')
+    expect(JSON.parse(String(loginCall?.[1]?.body))).toEqual({
+      account_name: 'alice',
+      password: 'correct horse',
+    })
+  })
+
+  it('translatesDatabaseUnavailableWithoutLoggingOut', async () => {
+    stubFetch({
+      'GET /api/auth/status': ENROLLMENT_CLOSED,
+      'GET /api/auth/me': AUTHENTICATED_ALICE,
+      'GET /api/alerts': { status: 503, body: { error: 'database_unavailable' } },
+    })
+    const { visitedPaths, countSessionExpiredNotifications } = renderApp('/decisions')
+    expect(await screen.findByRole('heading', { name: en.nav.decisions })).toBeInTheDocument()
+    await triggerUnauthenticatedDataCalls(2)
+    expect(visitedPaths).toEqual(['/decisions'])
+    expect(countSessionExpiredNotifications()).toBe(0)
+  })
+
+  it('showsDatabaseUnavailableOnLoginFailure', async () => {
+    stubFetch({
+      'GET /api/auth/status': ENROLLMENT_CLOSED,
+      'GET /api/auth/me': UNAUTHENTICATED,
+      'POST /api/auth/login': { status: 503, body: { error: 'database_unavailable' } },
+    })
+    const user = userEvent.setup()
+    const { countSessionExpiredNotifications } = renderApp('/login')
+    await fillLoginForm(user, 'correct horse')
+    await user.click(screen.getByRole('button', { name: en.login.submit }))
+    const alertElement = await screen.findByRole('alert')
+    expect(alertElement).toHaveTextContent(en.errors.database_unavailable)
+    expect(alertElement).toHaveFocus()
+    expect(countSessionExpiredNotifications()).toBe(1)
+  })
+
+  it('exposesTheAccountNameFromMeInTheLayout', async () => {
+    stubFetch({ 'GET /api/auth/me': AUTHENTICATED_ALICE })
+    renderApp('/hub')
+    expect(await screen.findByText('alice')).toBeInTheDocument()
+  })
+
+  it('redirectsLoginToEnrollWhenEnrollmentIsRequired', async () => {
+    stubFetch({ 'GET /api/auth/status': ENROLLMENT_OPEN, 'GET /api/auth/me': UNAUTHENTICATED })
+    const { visitedPaths } = renderApp('/login')
+    expect(await screen.findByRole('heading', { name: en.enroll.title })).toBeInTheDocument()
+    expect(visitedPaths).toEqual(['/login', '/enroll'])
+    expect(screen.queryByRole('button', { name: en.login.submit })).not.toBeInTheDocument()
+  })
+
+  it('redirectsEnrollToLoginWhenEnrollmentIsClosed', async () => {
+    stubFetch({ 'GET /api/auth/status': ENROLLMENT_CLOSED, 'GET /api/auth/me': UNAUTHENTICATED })
+    const { visitedPaths } = renderApp('/enroll')
+    expect(await screen.findByRole('heading', { name: en.login.title })).toBeInTheDocument()
+    expect(visitedPaths).toEqual(['/enroll', '/login'])
+  })
+
+  it('enrollSendsTokenAccountNameAndPasswordThenLogsIn', async () => {
+    let hasSession = false
+    const fetchMock = stubFetch({
+      'GET /api/auth/status': ENROLLMENT_OPEN,
+      'GET /api/auth/me': () => (hasSession ? AUTHENTICATED_ALICE : UNAUTHENTICATED),
+      'POST /api/auth/enroll': () => {
+        hasSession = true
+        return { status: 200, body: { status: 'ok' } }
+      },
+    })
+    const user = userEvent.setup()
+    renderApp('/enroll')
+    const tokenInput = await screen.findByLabelText(en.enroll.token)
+    expect(tokenInput).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByLabelText(en.login.accountName)).toHaveAttribute('autocomplete', 'username')
+    expect(screen.getByLabelText(en.login.password)).toHaveAttribute('autocomplete', 'new-password')
+    expect(screen.getByLabelText(en.login.password)).toHaveAttribute('type', 'password')
+    const enrollmentToken = 'a'.repeat(43)
+    await user.click(tokenInput)
+    await user.paste(`  ${enrollmentToken}\n`)
+    await user.type(screen.getByLabelText(en.login.accountName), 'alice')
+    await user.type(screen.getByLabelText(en.login.password), 'correct horse battery')
+    await user.click(screen.getByRole('button', { name: en.enroll.submit }))
+    expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
+    const enrollCall = fetchMock.mock.calls.find(([requestedPath]) => requestedPath === '/api/auth/enroll')
+    expect(JSON.parse(String(enrollCall?.[1]?.body))).toEqual({
+      token: enrollmentToken,
+      account_name: 'alice',
+      password: 'correct horse battery',
+    })
+  })
+
+  it('enrollTranslatesInvalidEnrollmentToken', async () => {
+    stubFetch({
+      'GET /api/auth/status': ENROLLMENT_OPEN,
+      'GET /api/auth/me': UNAUTHENTICATED,
+      'POST /api/auth/enroll': { status: 403, body: { error: 'invalid_enrollment_token' } },
+    })
+    const user = userEvent.setup()
+    renderApp('/enroll')
+    await user.type(await screen.findByLabelText(en.enroll.token), 'wrong')
+    await user.type(screen.getByLabelText(en.login.accountName), 'alice')
+    await user.type(screen.getByLabelText(en.login.password), 'correct horse battery')
+    await user.click(screen.getByRole('button', { name: en.enroll.submit }))
+    const alertElement = await screen.findByRole('alert')
+    expect(alertElement).toHaveTextContent(en.errors.invalid_enrollment_token)
+    expect(alertElement).toHaveFocus()
+    await setLanguage('fr')
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(fr.errors.invalid_enrollment_token))
   })
 })

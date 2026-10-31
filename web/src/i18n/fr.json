@@ -26,15 +26,23 @@
   },
   "login": {
     "title": "Connexion",
-    "description": "Saisissez le mot de passe du tableau de bord.",
+    "description": "Saisissez votre nom de compte et votre mot de passe.",
+    "accountName": "Nom du compte",
     "password": "Mot de passe",
     "submit": "Se connecter",
     "submitting": "Connexion…"
   },
+  "enroll": {
+    "title": "Créer le premier compte",
+    "description": "Collez le jeton d'enrôlement affiché dans les journaux du tableau de bord, puis choisissez le nom et le mot de passe (12 à 128 caractères) du compte administrateur.",
+    "token": "Jeton d'enrôlement",
+    "submit": "Créer le compte",
+    "submitting": "Création…"
+  },
   "logout": "Se déconnecter",
   "errors": {
     "unauthenticated": "Votre session a expiré. Veuillez vous reconnecter.",
-    "invalid_credentials": "Mot de passe incorrect.",
+    "invalid_credentials": "Nom de compte ou mot de passe incorrect.",
     "too_many_attempts": "Trop de tentatives. Réessayez plus tard.",
     "cross_origin": "Requête bloquée : les requêtes inter-origines sont interdites.",
     "not_found": "Ressource introuvable.",
@@ -54,7 +62,11 @@
     "file_too_large": "Le fichier est trop volumineux pour être affiché.",
     "config_unavailable": "Les fichiers de configuration sont indisponibles.",
     "invalid_name": "Utilisez des lettres, chiffres, points, tirets ou underscores (64 caractères maximum), en commençant par une lettre ou un chiffre.",
-    "refresh": "Actualiser les données"
+    "refresh": "Actualiser les données",
+    "invalid_account_name": "Le nom de compte doit comporter 1 à 64 caractères : minuscules, chiffres, points, tirets ou tirets bas, en commençant par une lettre ou un chiffre.",
+    "invalid_password_length": "Le mot de passe doit comporter 12 à 128 caractères.",
+    "invalid_enrollment_token": "Le jeton d'enrôlement est invalide.",
+    "database_unavailable": "La base de données est indisponible. Réessayez dans un instant."
   },
   "filters": {
     "label": "Filtres",

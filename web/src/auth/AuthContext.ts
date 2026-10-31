@@ -2,7 +2,9 @@ import { createContext } from 'react'
 
 export interface AuthState {
   isAuthenticated: boolean
-  login(password: string): Promise<void>
+  accountName: string | null
+  login(accountName: string, password: string): Promise<void>
+  enroll(enrollmentToken: string, accountName: string, password: string): Promise<void>
   logout(): Promise<void>
 }
 

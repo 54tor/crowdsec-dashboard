@@ -13,7 +13,7 @@ function collectKeyPaths(node: unknown, prefix = ''): string[] {
 
 const KNOWN_ERROR_CODES = [
   'unauthenticated', 'invalid_credentials', 'too_many_attempts', 'cross_origin', 'not_found',
-  'invalid_request', 'invalid_target', 'invalid_duration', 'invalid_reason', 'confirmation_required',
+  'invalid_request', 'invalid_account_name', 'invalid_password_length', 'invalid_enrollment_token', 'database_unavailable', 'invalid_target', 'invalid_duration', 'invalid_reason', 'confirmation_required',
   'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'self_account', 'network', 'unknown',
 ]
 

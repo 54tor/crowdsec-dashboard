@@ -26,15 +26,23 @@
   },
   "login": {
     "title": "Sign in",
-    "description": "Enter the dashboard password.",
+    "description": "Enter your account name and password.",
+    "accountName": "Account name",
     "password": "Password",
     "submit": "Sign in",
     "submitting": "Signing in…"
   },
+  "enroll": {
+    "title": "Create the first account",
+    "description": "Paste the enrolment token printed in the dashboard logs, then choose the administrator account name and password (12 to 128 characters).",
+    "token": "Enrolment token",
+    "submit": "Create the account",
+    "submitting": "Creating…"
+  },
   "logout": "Log out",
   "errors": {
     "unauthenticated": "Your session has expired. Please sign in again.",
-    "invalid_credentials": "Incorrect password.",
+    "invalid_credentials": "Incorrect account name or password.",
     "too_many_attempts": "Too many attempts. Please try again later.",
     "cross_origin": "Request blocked: cross-origin requests are not allowed.",
     "not_found": "Resource not found.",
@@ -54,7 +62,11 @@
     "file_too_large": "The file is too large to display.",
     "config_unavailable": "The configuration files are unavailable.",
     "invalid_name": "Use letters, digits, dots, dashes or underscores (64 characters at most), starting with a letter or digit.",
-    "refresh": "Refresh data"
+    "refresh": "Refresh data",
+    "invalid_account_name": "The account name must be 1 to 64 characters: lowercase letters, digits, dots, dashes or underscores, starting with a letter or digit.",
+    "invalid_password_length": "The password must be 12 to 128 characters long.",
+    "invalid_enrollment_token": "The enrolment token is invalid.",
+    "database_unavailable": "The database is unavailable. Please try again shortly."
   },
   "filters": {
     "label": "Filters",

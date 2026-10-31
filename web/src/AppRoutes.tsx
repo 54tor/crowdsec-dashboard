@@ -4,6 +4,7 @@ import { AuthProvider } from '@/auth/AuthProvider'
 import { ProtectedRoute } from '@/auth/ProtectedRoute'
 import { Layout } from '@/components/Layout'
 import { ReloadRequiredProvider } from '@/hooks/ReloadRequiredProvider'
+import { Enroll } from '@/pages/Enroll'
 import { Login } from '@/pages/Login'
 import { Placeholder } from '@/pages/Placeholder'
 import { Alerts } from '@/pages/Alerts'
@@ -36,6 +37,7 @@ export function AppRoutes() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/enroll" element={<Enroll />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<ReloadRequiredProvider />}>
             <Route element={<Layout />}>

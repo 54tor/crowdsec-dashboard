@@ -3,13 +3,20 @@ import { useEffect, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError, apiFetch, resetUnauthenticatedGuard, setUnauthenticatedHandler } from '@/api/client'
 import { AuthContext, type AuthState } from './AuthContext'
+import { ENROLLMENT_STATUS_QUERY_KEY } from './useEnrollmentStatus'
 
 const SESSION_QUERY_KEY = ['session']
 
-async function fetchSessionState(): Promise<boolean> {
+interface SessionIdentity {
+  accountName: string | null
+}
+
+type SessionState = SessionIdentity | false
+
+async function fetchSessionState(): Promise<SessionState> {
   try {
-    await apiFetch('/api/auth/me')
-    return true
+    const meResponse = await apiFetch<{ account_name?: string }>('/api/auth/me')
+    return { accountName: meResponse.account_name ?? null }
   } catch (sessionError) {
     if (sessionError instanceof ApiError && sessionError.code === 'unauthenticated') {
       return false
@@ -30,11 +37,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const authState = useMemo<AuthState>(
     () => ({
-      isAuthenticated: sessionQuery.data === true,
-      async login(password) {
-        await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) })
+      isAuthenticated: Boolean(sessionQuery.data),
+      accountName: sessionQuery.data ? sessionQuery.data.accountName : null,
+      async login(accountName, password) {
+        await apiFetch('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ account_name: accountName, password }),
+        })
         resetUnauthenticatedGuard()
-        queryClient.setQueryData(SESSION_QUERY_KEY, true)
+        queryClient.setQueryData(SESSION_QUERY_KEY, { accountName } satisfies SessionIdentity as SessionState)
+      },
+      async enroll(enrollmentToken, accountName, password) {
+        await apiFetch('/api/auth/enroll', {
+          method: 'POST',
+          body: JSON.stringify({ token: enrollmentToken, account_name: accountName, password }),
+        })
+        resetUnauthenticatedGuard()
+        queryClient.setQueryData(ENROLLMENT_STATUS_QUERY_KEY, { enrollment_required: false })
+        queryClient.setQueryData(SESSION_QUERY_KEY, { accountName } satisfies SessionIdentity as SessionState)
       },
       async logout() {
         try {
