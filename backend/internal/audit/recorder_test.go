@@ -118,3 +118,7 @@ func TestRecordOrLogSwallowsDatabaseFailure(testContext *testing.T) {
 		testContext.Fatalf("expected an audit log line, got %q", logOutput.String())
 	}
 }
+
+func TestRecordOrLogToleratesNilRecorder(testContext *testing.T) {
+	RecordOrLog(context.Background(), nil, 1, ActionLoginSuccess, "alice", "")
+}

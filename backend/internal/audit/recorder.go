@@ -66,6 +66,9 @@ func sanitizeTarget(target string) string {
 }
 
 func RecordOrLog(ctx context.Context, recorder Recorder, accountID int64, action Action, target, clientIP string) {
+	if recorder == nil {
+		return
+	}
 	if recordError := recorder.Record(ctx, accountID, action, target, clientIP); recordError != nil {
 		log.Printf("audit: record %s: %v", action, recordError)
 	}
