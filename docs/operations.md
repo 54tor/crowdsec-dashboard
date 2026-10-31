@@ -12,7 +12,7 @@
 | Hub operations | `update`, `upgrade`, `install` and `remove` can take up to 120 s (others 30 s); the HTTP write deadline is extended to match. Other requests have a 60 s write deadline. |
 | Reload | "Reload CrowdSec" sends `SIGHUP` to process 1 of the CrowdSec container, so CrowdSec must be PID 1 (true for the official image). Hub changes need it to take effect; the banner "CrowdSec must be reloaded" appears on the Hub page after a change and is kept in the browser tab only, it disappears on a page reload. Counters of the Metrics page restart at zero after a reload. |
 | Metrics | Needs Prometheus enabled in CrowdSec, otherwise "Metrics are unavailable" ([configuration.md](configuration.md#prometheus-for-the-metrics-page)). Only the acquisition and parser tables are shown. |
-| Contact status | A bouncer or machine is "stale" after more than 5 minutes without contact. The dashboard's own machine account never sends a heartbeat and always looks stale. |
+| Contact status | A bouncer or machine is "stale" after more than 5 minutes without contact. The dashboard's own machine account never sends a heartbeat: it is flagged "This dashboard" and never shown as stale. |
 | Health page | One failing source does not blank the page: the response lists it in `degraded` (`version`, `bouncers`, `machines`) and shows the others. |
 | Sessions | In memory, 12 h by default, lost at restart. One replica only. |
 
@@ -30,6 +30,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `invalid_target`, `invalid_duration`, `invalid_reason` | 400 | Ban form: not an IP/CIDR (or range wider than /8 IPv4, /32 IPv6), duration not like `24h`, reason over 200 characters or with control characters. |
 | `confirmation_required` | 400 | A delete request did not repeat the target in `confirm`. |
 | `self_account` | 409 | You tried to delete the dashboard's own LAPI machine. |
+| `self_ban` | 409 | The ban target is, or its range contains, the address you are connected from (as seen by the dashboard; behind a proxy, set `TRUSTED_PROXY_CIDRS`). Ask another admin or use `cscli decisions add` on the host. |
 | `not_found` | 404 | Unknown API route or configuration file not on the allowlist. |
 | `file_too_large` | 413 | A configuration file is over 256 KiB. |
 | `config_unavailable` | 500 | `CROWDSEC_CONF_DIR` is missing or unreadable. Check the read-only mount. |

@@ -2,12 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/netip"
 	"strconv"
 	"unicode"
 	"unicode/utf8"
 
+	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
 )
@@ -19,7 +21,10 @@ const (
 	minIPv6BanPrefixBits = 32
 )
 
-type decisionHandlers struct{ service DecisionService }
+type decisionHandlers struct {
+	service      DecisionService
+	trustedCIDRs []*net.IPNet
+}
 
 type banRequest struct {
 	IP       string `json:"ip"`
@@ -40,6 +45,25 @@ func banScope(target string) (string, bool) {
 		minimumBits = minIPv4BanPrefixBits
 	}
 	return "range", prefix.Bits() >= minimumBits
+}
+
+func targetContainsClient(target string, clientAddress string) bool {
+	client, clientError := netip.ParseAddr(clientAddress)
+	if clientError != nil {
+		return false
+	}
+	client = client.Unmap()
+	if address, addressError := netip.ParseAddr(target); addressError == nil {
+		return address.Unmap() == client
+	}
+	prefix, prefixError := netip.ParsePrefix(target)
+	if prefixError != nil {
+		return false
+	}
+	if prefix.Addr().Is4In6() {
+		prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+	}
+	return prefix.Contains(client)
 }
 
 func validReason(reason string) bool {
@@ -72,6 +96,10 @@ func (handlers decisionHandlers) add(responseWriter http.ResponseWriter, request
 	}
 	if !validReason(ban.Reason) {
 		writeError(responseWriter, http.StatusBadRequest, "invalid_reason")
+		return
+	}
+	if targetContainsClient(ban.IP, auth.ClientIP(request, handlers.trustedCIDRs)) {
+		writeError(responseWriter, http.StatusConflict, "self_ban")
 		return
 	}
 	newDecision := lapi.NewDecision{Target: ban.IP, Scope: scope, Type: "ban", Duration: ban.Duration, Reason: ban.Reason}

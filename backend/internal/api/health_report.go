@@ -9,7 +9,10 @@ type healthReport struct {
 	Degraded []string  `json:"degraded"`
 }
 
-type healthReportHandlers struct{ platform Platform }
+type healthReportHandlers struct {
+	platform      Platform
+	selfMachineID string
+}
 
 func (handlers healthReportHandlers) get(responseWriter http.ResponseWriter, request *http.Request) {
 	report := healthReport{Bouncers: []Bouncer{}, Machines: []Machine{}, Degraded: []string{}}
@@ -28,6 +31,9 @@ func (handlers healthReportHandlers) get(responseWriter http.ResponseWriter, req
 	if machinesError != nil {
 		report.Degraded = append(report.Degraded, "machines")
 	} else {
+		for machineIndex := range machines {
+			machines[machineIndex].Self = handlers.selfMachineID != "" && machines[machineIndex].MachineID == handlers.selfMachineID
+		}
 		report.Machines = machines
 	}
 	writeJSON(responseWriter, http.StatusOK, report)

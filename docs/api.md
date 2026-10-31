@@ -30,7 +30,7 @@ number of entries fetched (at most 100), `may_be_truncated` is true when the win
 |---|---|---|---|---|
 | GET | `/api/alerts` | yes | page of alerts: `id, created_at, machine_id, scenario, message, events_count, start_at, stop_at, simulated, source{scope,value,ip,range,cn,as_name,as_number}, decisions[]` (always an array) | 400, 502 `lapi_unavailable`, `lapi_error` |
 | GET | `/api/decisions` | yes | page of active decisions: `id, alert_id, origin, type, scope, value, duration, until, scenario, simulated` | 400, 502 |
-| GET | `/api/health` | yes | `{"version", "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type}], "degraded":[...]}`; `degraded` lists sources that failed (`version`, `bouncers`, `machines`) | none: failures are reported in `degraded` |
+| GET | `/api/health` | yes | `{"version", "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}], "degraded":[...]}`; `self` is true only for the machine whose id equals `LAPI_MACHINE_ID` (always present, false otherwise); `degraded` lists sources that failed (`version`, `bouncers`, `machines`) | none: failures are reported in `degraded` |
 | GET | `/api/metrics` | yes | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
 | GET | `/api/config/files` | yes | `{"files":["acquis.yaml", ...]}` | 500 `config_unavailable` |
 | GET | `/api/config/files/{name...}` | yes | `{"name","content"}` with secrets redacted | 404 `not_found`, 413 `file_too_large`, 500 |
@@ -40,7 +40,7 @@ number of entries fetched (at most 100), `may_be_truncated` is true when the win
 
 | Method | Path | Auth | Body | Success response | Errors |
 |---|---|---|---|---|---|
-| POST | `/api/decisions` | yes | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 502 |
+| POST | `/api/decisions` | yes | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 502 |
 | DELETE | `/api/decisions/{id}` | yes | `{"confirm":"<id>"}` | `200 {"status":"deleted"}` | 400 `confirmation_required`, `invalid_request`; 502 |
 | DELETE | `/api/alerts/{id}` | yes | `{"confirm":"<id>"}` | `200 {"status":"deleted"}` | 400; 502 `cscli_failed` |
 | POST | `/api/bouncers` | yes | `{"name"}` | `200 {"name","key"}`, `Cache-Control: no-store` | 400 `invalid_request`; 502; 504 |

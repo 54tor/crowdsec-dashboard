@@ -77,7 +77,12 @@ so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 
 - Deleting an alert, decision, bouncer, machine or hub collection requires a JSON body
   `{"confirm": "<same value as the path>"}`; otherwise 400 `confirmation_required`. The UI asks the
-  user to retype the value. Deleting the dashboard's own machine account answers 409 `self_account`.
+  user to retype the value (for an unban, the IP or range of the decision; the request still carries the decision id). Deleting the dashboard's own machine account answers 409 `self_account`.
+- `POST /api/decisions` refuses with 409 `self_ban` a ban whose target is, or whose range contains, the
+  client address of the request, before calling the LAPI. It is a safety net, not a security control:
+  the address is the one resolved with the same rule as the login rate limiter, and an address that
+  cannot be parsed is not blocked. Behind a reverse proxy it only works if `TRUSTED_PROXY_CIDRS` is
+  set; otherwise the proxy's own address is what is compared.
 - A new bouncer key and a new machine password are returned once, in the creation response, and are
   not stored or logged. The UI clears them when the dialog closes and cannot be closed while the
   request is pending.

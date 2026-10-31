@@ -24,6 +24,7 @@ type Machine struct {
 	Version       string  `json:"version"`
 	IsValidated   bool    `json:"is_validated"`
 	AuthType      string  `json:"auth_type"`
+	Self          bool    `json:"self"`
 }
 
 type rawBouncer struct {

@@ -267,7 +267,7 @@ func TestHealthProjectsOnlyTheFieldsTheUINeeds(testContext *testing.T) {
 		}
 	}
 	expectedBody := `{"version":"v1.6.4","bouncers":[{"name":"fw","type":"firewall","version":"0.0.30","ip_address":"10.0.0.2","last_pull":"2026-10-31T10:00:00Z","revoked":false,"auth_type":"api-key"}],` +
-		`"machines":[{"machine_id":"watcher","ip_address":"10.0.0.3","last_heartbeat":"2026-10-31T10:01:00Z","version":"v1.6.4","is_validated":true,"auth_type":"password"}],"degraded":[]}`
+		`"machines":[{"machine_id":"watcher","ip_address":"10.0.0.3","last_heartbeat":"2026-10-31T10:01:00Z","version":"v1.6.4","is_validated":true,"auth_type":"password","self":false}],"degraded":[]}`
 	if strings.TrimSpace(recorder.Body.String()) != expectedBody {
 		testContext.Errorf("expected %s, got %q", expectedBody, recorder.Body.String())
 	}
@@ -387,5 +387,45 @@ func TestConfigFilesRejectCredentialsAndTraversal(testContext *testing.T) {
 		if strings.Contains(recorder.Body.String(), "hunter2") {
 			testContext.Errorf("%s leaked a secret", rejectedPath)
 		}
+	}
+}
+
+func TestHealthMarksOnlyTheConfiguredMachineAsSelf(testContext *testing.T) {
+	services := newPlatformServices(map[string]string{
+		"version":               "version: v1.6.4\n",
+		"bouncers list -o json": "[]",
+		"machines list -o json": `[{"machineId":"dashboard","ipAddress":"10.0.0.3","isValidated":true,"last_heartbeat":null},` +
+			`{"machineId":"watcher","ipAddress":"10.0.0.4","isValidated":true,"last_heartbeat":"2026-10-31T10:01:00Z"}]`,
+	}, nil)
+	handler := newTestHandlerWithMachineID(testContext, services, "dashboard")
+	cookie := postLogin(handler, `{"password":"`+testPassword+`"}`).Result().Cookies()[0]
+	request := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/health", nil)
+	request.AddCookie(cookie)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	var decoded struct {
+		Machines []map[string]any `json:"machines"`
+	}
+	if decodeError := json.Unmarshal(recorder.Body.Bytes(), &decoded); decodeError != nil {
+		testContext.Fatal(decodeError)
+	}
+	if len(decoded.Machines) != 2 || decoded.Machines[0]["self"] != true || decoded.Machines[1]["self"] != false {
+		testContext.Errorf("unexpected machines %+v", decoded.Machines)
+	}
+}
+
+func TestHealthNeverMarksAMachineAsSelfWhenNoMachineIDIsConfigured(testContext *testing.T) {
+	fixture := newReadFixture(testContext, newPlatformServices(map[string]string{
+		"version":               "version: v1.6.4\n",
+		"bouncers list -o json": "[]",
+		"machines list -o json": `[{"machineId":"","isValidated":true}]`,
+	}, nil))
+
+	recorder := fixture.get("/api/health", true)
+
+	if !strings.Contains(recorder.Body.String(), `"self":false`) {
+		testContext.Errorf("unexpected body %q", recorder.Body.String())
 	}
 }
