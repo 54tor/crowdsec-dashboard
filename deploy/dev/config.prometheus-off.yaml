@@ -1,0 +1,3 @@
+# Merged over config.yaml by CrowdSec (config.yaml.local).
+prometheus:
+  enabled: false

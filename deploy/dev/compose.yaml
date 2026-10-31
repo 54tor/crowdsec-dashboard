@@ -1,0 +1,97 @@
+# Disposable development stack: a throwaway CrowdSec, the socket proxy and the dashboard.
+# Use ./up.sh to start it (it generates .env.local, registers the dashboard machine and
+# prints the generated admin password once). Tear down with:
+#   docker compose -p csdash-dev down -v --remove-orphans
+name: csdash-dev
+
+services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: csdash-dev-crowdsec
+    restart: "no"
+    mem_limit: 768m
+    cpus: 1.0
+    environment:
+      COLLECTIONS: crowdsecurity/linux
+      DISABLE_ONLINE_API: "true"
+    volumes:
+      - ./acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      # The image enables Prometheus by default; the real instance has it off, so do we.
+      # up.sh metrics switches this to config.prometheus-on.yaml.
+      - ${CROWDSEC_LOCAL_CONFIG:-./config.prometheus-off.yaml}:/etc/crowdsec/config.yaml.local:ro
+      - crowdsec-config:/etc/crowdsec
+      - crowdsec-data:/var/lib/crowdsec/data
+      - dev-logs:/var/log/dev
+    networks: [core, egress]
+
+  socket-proxy:
+    image: wollomatic/socket-proxy:1
+    container_name: csdash-dev-socket-proxy
+    restart: "no"
+    user: "65534:${DOCKER_GID:?run up.sh first}"
+    mem_limit: 64m
+    cpus: 0.25
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    command:
+      - -loglevel=debug
+      - -listenip=0.0.0.0
+      - -allowfrom=csdash-dev-dashboard
+      - -allowGET=(/v[0-9.]+)?/exec/[0-9a-f]{64}/json
+      - -allowPOST=(/v[0-9.]+)?/(containers/csdash-dev-crowdsec/exec|exec/[0-9a-f]{64}/start)
+      - -shutdowngracetime=5
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [core]
+
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    image: csdash-dev-dashboard:local
+    container_name: csdash-dev-dashboard
+    restart: "no"
+    mem_limit: 128m
+    cpus: 0.5
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    env_file: .env.local
+    environment:
+      LISTEN_ADDR: ":8080"
+      LAPI_URL: http://csdash-dev-crowdsec:8080
+      LAPI_MACHINE_ID: dashboard-dev
+      CROWDSEC_CONTAINER: csdash-dev-crowdsec
+      DOCKER_HOST: tcp://socket-proxy:2375
+      CROWDSEC_CONF_DIR: /etc/crowdsec
+      TRUSTED_PROXY_CIDRS: ""
+    volumes:
+      - crowdsec-config:/etc/crowdsec:ro
+    ports:
+      - "127.0.0.1:18080:8080"
+    networks: [core, egress]
+
+  # Not started by default. Shares the dashboard network namespace (same source IP) so
+  # check-proxy.sh can prove what the socket proxy lets the dashboard do.
+  probe:
+    profiles: [probe]
+    image: curlimages/curl:latest
+    container_name: csdash-dev-probe
+    network_mode: "container:csdash-dev-dashboard"
+    mem_limit: 32m
+    cpus: 0.25
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    entrypoint: ["sleep", "infinity"]
+
+volumes:
+  crowdsec-config:
+  crowdsec-data:
+  dev-logs:
+
+networks:
+  core:
+    internal: true
+  egress: {}

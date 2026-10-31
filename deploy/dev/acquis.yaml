@@ -1,0 +1,5 @@
+# Dummy datasource so that CrowdSec starts; nothing writes to it.
+filenames:
+  - /var/log/dev/*.log
+labels:
+  type: syslog
