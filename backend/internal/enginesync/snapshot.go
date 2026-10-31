@@ -1,0 +1,66 @@
+package enginesync
+
+import (
+	"strings"
+	"time"
+)
+
+const (
+	copyScenarioPrefix = "sync/"
+	copyOrigin         = "dashboard-sync"
+)
+
+type ReadState int
+
+const (
+	ReadComplete ReadState = iota + 1
+	ReadIncomplete
+	ReadFailed
+)
+
+type Ban struct {
+	ID        int64
+	Target    Target
+	Remaining time.Duration
+	Origin    string
+	Scenario  string
+	MachineID string
+	Simulated bool
+}
+
+type Snapshot struct {
+	Engine             string
+	State              ReadState
+	DashboardMachineID string
+	Bans               []Ban
+}
+
+type classifiedSnapshot struct {
+	Snapshot
+	natives []Ban
+	copies  []Ban
+}
+
+func classify(snapshot Snapshot) classifiedSnapshot {
+	classified := classifiedSnapshot{Snapshot: snapshot}
+	for _, ban := range snapshot.Bans {
+		if isCopyOf(ban, snapshot.DashboardMachineID) {
+			classified.copies = append(classified.copies, ban)
+		} else {
+			classified.natives = append(classified.natives, ban)
+		}
+	}
+	return classified
+}
+
+func isCopyOf(ban Ban, dashboardMachineID string) bool {
+	return dashboardMachineID != "" && ban.MachineID == dashboardMachineID && strings.HasPrefix(ban.Scenario, copyScenarioPrefix)
+}
+
+func copySource(existingCopy Ban) string {
+	return strings.TrimPrefix(existingCopy.Scenario, copyScenarioPrefix)
+}
+
+func (ban Ban) isActive() bool {
+	return !ban.Simulated && ban.Remaining > 0
+}
