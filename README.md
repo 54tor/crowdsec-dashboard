@@ -11,7 +11,7 @@ binary that embeds the React front end.
 
 It is not:
 
-- a multi-user or role-based tool: there is one shared admin password;
+- a role-based tool: every account is an administrator for now;
 - a replacement for the CrowdSec Console: no history beyond what the LAPI keeps, no community
   blocklist (CAPI) decisions, no charts of past metrics;
 - a configuration editor: configuration files are shown read-only, with secrets redacted;
@@ -63,14 +63,14 @@ Every destructive action asks you to retype the target, and the server checks it
   `cscli` command (see [docs/security.md](docs/security.md)). The dashboard never mounts the Docker
   socket: it talks to a filtering proxy.
 - Configuration files are read from a read-only mount of the CrowdSec configuration volume.
-- Nothing is stored by the dashboard. Sessions live in memory.
+- Accounts and sessions are stored in PostgreSQL (hashed); schema migrations run at every start.
 
 ## Quick start
 
 1. Copy `deploy/compose.example.yaml` next to your CrowdSec stack and adapt container names and
    networks (the dashboard needs to reach the LAPI and the socket proxy).
-2. Create the LAPI machine account of the dashboard and the admin password hash, then fill
-   `deploy/dashboard.env.example` (copy to `dashboard.env`, mode 0600): see
+2. Create the LAPI machine account of the dashboard, then fill `deploy/dashboard.env.example` (copy to
+   `dashboard.env`, mode 0600) and `deploy/postgres.env.example` (copy to `postgres.env`): see
    [docs/configuration.md](docs/configuration.md).
 3. Set `DOCKER_GID` to the group of the Docker socket, then start:
 
@@ -79,13 +79,15 @@ Every destructive action asks you to retype the target, and the server checks it
    docker compose -f compose.example.yaml up -d --build
    ```
 
-4. Put a TLS reverse proxy in front of `dashboard:8080` and set `TRUSTED_PROXY_CIDRS` to its single
+4. Read the enrolment token in the dashboard log (`docker logs`), open `/enroll` and create the first
+   account: see [docs/operations.md](docs/operations.md#first-start-and-enrolment).
+5. Put a TLS reverse proxy in front of `dashboard:8080` and set `TRUSTED_PROXY_CIDRS` to its single
    address. The session cookie is `Secure`: sign-in only works over HTTPS, or over
    `http://127.0.0.1` / `http://localhost` in browsers that treat these as secure contexts.
 
 ## Documentation
 
-- [docs/configuration.md](docs/configuration.md): environment variables, password hash, machine account, Prometheus
+- [docs/configuration.md](docs/configuration.md): environment variables, database, machine account, Prometheus
 - [docs/security.md](docs/security.md): threat model, protections and their limits
 - [docs/operations.md](docs/operations.md): known limits, troubleshooting by error code, backup
 - [docs/api.md](docs/api.md): HTTP API reference

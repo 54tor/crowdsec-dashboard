@@ -5,12 +5,14 @@
 ```
 backend/                 Go module "crowdsec-dashboard" (Go 1.26)
   cmd/dashboard/         HTTP server entry point
-  cmd/hashpassword/      reads a password on stdin, prints its argon2id hash
   internal/api/          router, handlers, services (one file per resource)
-  internal/auth/         sessions, login rate limiter, client IP resolution
+  internal/accounts/     account repository and first-account enrolment
+  internal/auth/         authentication, session middleware, login rate limiter, client IP resolution
   internal/config/       environment variable loading and validation
   internal/confread/     allowlisted, redacted reading of configuration files
   internal/cscli/        command allowlist, field validation, Docker exec runner
+  internal/sessions/     session store in PostgreSQL (hashed tokens, pruning)
+  internal/store/        database connection, goose migrations (`migrations/*.sql`)
   internal/lapi/         LAPI client (machine login, alerts, decisions)
   internal/webui/        embeds the built front end (dist/) and serves the SPA
 web/                     Vite + React + TypeScript front end, Tailwind, TanStack Query, i18next
@@ -26,10 +28,16 @@ therefore needs a built front end to serve the UI (the folder only has to exist 
 ## Tests
 
 ```
-cd backend && go test -count=1 -p 4 ./...
+deploy/dev/test-db.sh up        # throwaway PostgreSQL, prints TEST_DATABASE_URL=...
+cd backend && TEST_DATABASE_URL=... go vet ./... && TEST_DATABASE_URL=... go test -count=1 -p 4 ./...
+deploy/dev/test-db.sh down      # stops it and removes its volume
 cd web && npm test           # vitest, jsdom
 cd web && npm run typecheck && npm run lint
 ```
+
+Tests that need PostgreSQL (store, sessions, accounts, API) read `TEST_DATABASE_URL`; each test gets
+its own schema. Without that variable they are skipped, so a plain `go test` still passes but does
+not cover the database code. `test-db.sh` uses its own compose project `csdash-test-db`.
 
 Keep `-p 4` on shared machines. Backend tests use fake services and the frozen CrowdSec outputs under
 `deploy/dev/fixtures`; web tests stub `fetch` (`web/src/test/fetchStub.ts`) and render whole pages.
@@ -42,8 +50,9 @@ Front end with hot reload, proxying `/api` to a locally running backend on `:808
 cd web && npm install && npm run dev
 ```
 
-Back end: export the variables of [configuration.md](configuration.md) (at least
-`ADMIN_PASSWORD_HASH`) and `cd backend && go run ./cmd/dashboard`. The session cookie is `Secure`,
+Back end: export the variables of [configuration.md](configuration.md) (at least `DATABASE_URL`,
+for example the URL printed by `test-db.sh up` or a PostgreSQL of your own) and
+`cd backend && go run ./cmd/dashboard`. The first start logs the enrolment token; open `/enroll`. The session cookie is `Secure`,
 so use `http://localhost` or `http://127.0.0.1`.
 
 ## Dev stack
@@ -61,8 +70,9 @@ cd deploy/dev
 docker compose -p csdash-dev down -v --remove-orphans
 ```
 
-The first `up.sh` generates the git-ignored `.env.local` (random machine password, admin password hash)
-and prints the admin password once. The dashboard is on `http://127.0.0.1:18080` only.
+The first `up.sh` generates the git-ignored `.env.local` (random machine and database passwords). It
+prints the enrolment token of the first account (read from the dashboard log) and the address to
+enrol at, `http://127.0.0.1:18080/enroll`; once an account exists it says so instead. The dashboard is on `http://127.0.0.1:18080` only.
 Writing log lines to `/var/log/dev/*.log` in the CrowdSec container feeds the Metrics page.
 Only touch your own `csdash-dev` project when other stacks run on the same Docker host.
 

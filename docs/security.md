@@ -2,15 +2,34 @@
 
 ## Model in one paragraph
 
-One shared admin password protects a web UI that can ban addresses, create credentials and run
+Named accounts, stored in PostgreSQL, protect a web UI that can ban addresses, create credentials and run
 `cscli` in the CrowdSec container. The dashboard is a single trusted process: its Go code decides
 which commands may run. Treat the dashboard as having the same power as whoever can reach the Docker
 socket (see [Limits](#honest-limits)).
 
+## Accounts and enrolment
+
+- An account has a name (`^[a-z0-9][a-z0-9._-]{0,63}$`) and a password of 12 to 128 characters,
+  stored as an argon2id hash (library default parameters) in PostgreSQL. The plain password is never
+  kept.
+- The first account is created by enrolment. While no account exists, the dashboard generates a
+  random token at start, writes it once to its log and keeps it in memory only; it is never in an
+  API response or in the database. `POST /api/auth/enroll` needs this token, the new account name and
+  password. **Whoever can read the logs while no account exists can create the first (admin) account**:
+  protect the logs and enrol promptly after the first start.
+- A restart while no account exists generates a new token and invalidates the previous one. Once the
+  first account exists, enrolment is closed for good: the route answers 404 and the old token is
+  useless. Two simultaneous enrolments with the right token create one account (a PostgreSQL advisory
+  lock); the other gets 404, as enrolment is then closed.
+- A wrong or missing token answers 403 `invalid_enrollment_token`, is compared in constant time and
+  is limited per client like login.
+
 ## Login
 
-- The password is verified against an argon2id hash (library default parameters). The hash is the
-  only secret stored; the plain password is never kept.
+- Login takes an account name and a password. An unknown account and a wrong password cost the same
+  time and answer the same 401 `invalid_credentials`, so accounts cannot be enumerated.
+- If PostgreSQL is unreachable, login and authenticated requests answer 503 `database_unavailable`,
+  never 401 (which would sign the user out of the interface).
 - Rate limits, applied to every login attempt, successful ones included:
   - per client, 5 attempts per minute (burst of 5, one more every 12 s); the client key is the IPv4
     address or the IPv6 `/64` prefix, so rotating addresses inside a /64 does not help;
@@ -25,8 +44,11 @@ socket (see [Limits](#honest-limits)).
 ## Sessions
 
 - A session token is 32 random bytes. The server keeps only its SHA-256 digest, with an expiry, in
-  memory. Lifetime is fixed (`SESSION_TTL`, default 12 h), not extended by activity.
-- Restarting the process logs everyone out. Logout destroys the server-side session.
+  the `session` table of PostgreSQL. Lifetime is fixed (`SESSION_TTL`, default 12 h), not extended
+  by activity; expired rows are pruned every hour.
+- Sessions survive a dashboard restart. Logout destroys the server-side session, "log out
+  everywhere" (`POST /api/auth/logout-all`) destroys all sessions of the account, and deleting an
+  account removes its sessions (cascade).
 - Cookie `session`: `HttpOnly`, `Secure`, `SameSite=Strict`, path `/`. Because of `Secure`, serve the
   dashboard over HTTPS (browsers also accept `http://127.0.0.1` and `localhost`).
 
@@ -111,13 +133,14 @@ would not show an admin.
   it with untrusted workloads.
 - The proxy blocks everything else (other containers, images, networks, container creation), so the
   blast radius is the CrowdSec container and the dashboard's own LAPI account, not the whole host.
-- No audit log, no per-user identity, no two-factor authentication.
-- Sessions are lost on restart, and the session store and rate limiter are per process (one replica).
+- No audit log yet, no two-factor authentication, no IP or country allowlist: these come in later
+  lots. All accounts created so far are administrators.
+- The login rate limiter is per process (one replica).
 
 ## Exposure advice
 
 - Put it behind a TLS reverse proxy; do not publish the container port.
 - Restrict who can reach it: IP allowlist at the proxy, or a VPN, in addition to the password.
-- Use a long random admin password; the hash is the only thing to protect in `dashboard.env`
-  (mode 0600), together with `LAPI_MACHINE_PASSWORD`.
+- Use a long random password (12 characters minimum). Protect `dashboard.env` and `postgres.env`
+  (mode 0600): they hold the database password and `LAPI_MACHINE_PASSWORD`.
 - Set `TRUSTED_PROXY_CIDRS` to the proxy's single address (see [configuration.md](configuration.md)).

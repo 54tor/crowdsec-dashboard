@@ -1,7 +1,9 @@
 # HTTP API
 
-JSON over HTTP, served by the same process as the UI. Every route except `healthz` and `login`
-needs the `session` cookie (set by login) and answers 401 `unauthenticated` without it. Errors are
+JSON over HTTP, served by the same process as the UI. Every route except `healthz`, `auth/status`,
+`auth/enroll`, `auth/login` and `auth/logout` needs the `session` cookie (set by login or enrolment)
+and answers 401 `unauthenticated` without it. When PostgreSQL is unreachable, authentication-related
+routes answer 503 `database_unavailable`. Errors are
 `{"error": "<code>"}`; codes are explained in [operations.md](operations.md#troubleshooting).
 Unsafe methods from another origin are refused with 403 `cross_origin`. All responses carry the
 security headers described in [security.md](security.md#headers-and-content-security-policy).
@@ -13,10 +15,16 @@ path. Bodies of the bouncer, machine and hub creation routes reject unknown fiel
 
 | Method | Path | Auth | Body | Success response | Errors |
 |---|---|---|---|---|---|
-| GET | `/api/healthz` | no | none | `200 {"status":"ok"}` | none |
-| POST | `/api/auth/login` | no | `{"password"}` (max 1 KiB) | `200 {"status":"ok"}` and `Set-Cookie: session` | 400 `invalid_request`, 401 `invalid_credentials`, 429 `too_many_attempts` |
-| POST | `/api/auth/logout` | no | none | `200 {"status":"ok"}`, cookie cleared | none |
-| GET | `/api/auth/me` | yes | none | `200 {"status":"authenticated"}` | 401 |
+| GET | `/api/healthz` | no | none | `200 {"status":"ok","database":"ok"}` | 503 `{"status":"degraded","database":"unavailable"}` when the database does not answer a 2 s ping |
+| GET | `/api/auth/status` | no | none | `200 {"enrollment_required": <bool>}`, true while no account exists | 503 `database_unavailable` |
+| POST | `/api/auth/enroll` | no | `{"token","account_name","password"}` (max 1 KiB) | `200 {"status":"ok"}` and `Set-Cookie: session`; creates the first (admin) account | 400 `invalid_request`, 400 `invalid_account_name` (not `^[a-z0-9][a-z0-9._-]{0,63}$`), 400 `invalid_password_length` (not 12 to 128 characters), 403 `invalid_enrollment_token`, 404 `not_found` (enrolment closed: an account exists, including when a concurrent enrolment won), 429 `too_many_attempts`, 503 `database_unavailable` |
+| POST | `/api/auth/login` | no | `{"account_name","password"}` (max 1 KiB) | `200 {"status":"ok"}` and `Set-Cookie: session` | 400 `invalid_request`, 401 `invalid_credentials` (unknown account and wrong password are indistinguishable), 429 `too_many_attempts`, 503 `database_unavailable` |
+| POST | `/api/auth/logout` | no | none | `200 {"status":"ok"}`, session destroyed, cookie cleared | 503 `database_unavailable` |
+| POST | `/api/auth/logout-all` | yes | none | `200 {"status":"ok"}`, every session of the account destroyed, cookie cleared | 401, 503 `database_unavailable` |
+| GET | `/api/auth/me` | yes | none | `200 {"status":"authenticated","account_name","account_role"}` | 401, 503 `database_unavailable` |
+
+The enrolment token is the one logged at start while no account exists ([operations.md](operations.md#first-start-and-enrolment)).
+Login and enrolment share the per-client and global rate limits described in [security.md](security.md#login).
 
 ## Read
 

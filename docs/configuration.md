@@ -1,14 +1,15 @@
 # Configuration
 
 The dashboard is configured only through environment variables, read once at start. Secrets belong
-in a file with mode 0600 passed as `env_file` (see `deploy/dashboard.env.example`). Single-quote the
-argon2id hash in that file: it contains `$`, which compose would otherwise expand.
+in a file with mode 0600 passed as `env_file` (see `deploy/dashboard.env.example`). The PostgreSQL
+service reads its own file (`deploy/postgres.env.example`). Single-quote values that contain `$` in
+these files, which compose would otherwise expand.
 
 ## Environment variables
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ADMIN_PASSWORD_HASH` | none, required | argon2id encoded hash of the admin password. The process refuses to start when it is empty or not a valid argon2id hash. |
+| `DATABASE_URL` | none, required | PostgreSQL connection URL, `postgres://` or `postgresql://`, for example `postgres://dashboard:<password>@postgres:5432/dashboard`. Percent-encode special characters of the password. The process refuses to start when it is empty, has another scheme, or the database is unreachable. The value is never logged. |
 | `SESSION_TTL` | `12h` | Lifetime of a session, a Go duration (`30m`, `12h`). Must be positive. Fixed lifetime from login, not extended by activity. |
 | `LISTEN_ADDR` | `:8080` | Address the HTTP server listens on. |
 | `LAPI_URL` | none | Base URL of the CrowdSec local API, for example `http://crowdsec:8080`. |
@@ -28,11 +29,22 @@ argon2id hash in that file: it contains `$`, which compose would otherwise expan
 | `CONFIG_IMPORT_ENABLED` | `false` | Allows importing configuration files from a bundle. |
 | `CONFIG_IMPORT_DIR` | none | Absolute, clean path of the directory the import may write to, at least two components deep (`/` and top-level directories such as `/etc` are refused). Required when `CONFIG_IMPORT_ENABLED` is `true`. |
 
-`ADMIN_PASSWORD_HASH`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS` and
+`DATABASE_URL`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS` and
 `CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,
 Docker and configuration variables have no default and no start-time check: a
 wrong value shows up as an error code on the pages that need it (see
 [operations.md](operations.md#troubleshooting)).
+
+## Accounts and the database
+
+Accounts and sessions live in PostgreSQL. There is no admin password in the configuration any more:
+`ADMIN_PASSWORD_HASH` and the `hashpassword` command were removed, and a leftover `ADMIN_PASSWORD_HASH`
+is ignored. The first account is created from the web interface with a one-time token written to the
+dashboard log (see [operations.md](operations.md#first-start-and-enrolment)).
+
+At every start the dashboard applies the pending schema migrations before it serves requests; a
+failed migration stops the start. Back up the database before upgrading to a new version (see
+[operations.md](operations.md#postgresql)).
 
 ## Peers file
 
@@ -64,21 +76,6 @@ exclude:
 - `exclude`: optional CIDRs that are never shared.
 - At least one and at most 16 peers, one YAML document, no two peers with the same URL, file at most 64 KiB, regular file only. Unknown fields are refused, and the
   start fails on any error. Error messages name the peer and the field, never the password or the URL.
-
-## Admin password hash
-
-Read the password silently so it stays out of the shell history and the process list, then hash it
-with the helper shipped in the image (no Go toolchain needed):
-
-```
-read -rs -p 'Admin password: ' admin_password; echo
-docker run --rm -i --entrypoint /hashpassword crowdsec-dashboard:latest <<< "$admin_password"
-unset admin_password
-```
-
-From a source checkout: `(cd backend && go run ./cmd/hashpassword) <<< "$admin_password"`. The helper
-reads the first line of stdin and prints the hash (argon2id library default parameters). Put the
-printed value, single-quoted, in `ADMIN_PASSWORD_HASH`.
 
 ## LAPI machine account
 
