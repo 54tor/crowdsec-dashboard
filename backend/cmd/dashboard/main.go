@@ -50,6 +50,7 @@ func main() {
 		log.Fatalf("startup: %v", accountsError)
 	}
 	accountServices.keyring = keyring
+	accountServices.geolocator = openGeolocator(loadedConfig.GeoIPDatabaseFile, time.Now, log.Printf)
 	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
 
 	services := api.NewServices(

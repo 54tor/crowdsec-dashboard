@@ -8,6 +8,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"crowdsec-dashboard/internal/accounts"
+	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store"
 )
@@ -23,10 +24,31 @@ type accountServices struct {
 	repository *accounts.Repository
 	enrollment *accounts.Enrollment
 	keyring    *secrets.Keyring
+	geolocator geo.Geolocator
 }
 
 func loadSecretsKeyring(keyFilePath string) (*secrets.Keyring, error) {
 	return secrets.LoadKeyring(keyFilePath)
+}
+
+const (
+	geoFallbackTimeout = 2 * time.Second
+	staleDatabaseAge   = 45 * 24 * time.Hour
+)
+
+func openGeolocator(databasePath string, now func() time.Time, logLine logFunction) geo.Geolocator {
+	if databasePath == "" {
+		logLine("GEOIP_DATABASE_FILE is not set: country rules are unavailable")
+		return geo.NewChain(geoFallbackTimeout, geo.Unavailable{})
+	}
+	database := geo.NewMaxMindFile(databasePath, now)
+	if !database.Available() {
+		logLine("geolocation database %s is not readable yet: country rules are refused until it appears", databasePath)
+	}
+	if databaseAge, isKnown := database.DatabaseAge(); isKnown && databaseAge > staleDatabaseAge {
+		logLine("geolocation database is %d days old: check the update schedule", int(databaseAge.Hours()/24))
+	}
+	return geo.NewChain(geoFallbackTimeout, database)
 }
 
 type logFunction func(format string, arguments ...any)

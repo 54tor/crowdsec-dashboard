@@ -230,3 +230,19 @@ func TestLoadRefusesIPAddressAsWebAuthnRPID(testContext *testing.T) {
 		testContext.Errorf("expected an IP address RP ID to be refused, got %v", loadError)
 	}
 }
+
+func TestLoadAcceptsEmptyGeoIPDatabaseFile(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL}))
+
+	if loadError != nil || loadedConfig.GeoIPDatabaseFile != "" {
+		testContext.Fatalf("empty GEOIP_DATABASE_FILE must disable geolocation, got %q, %v", loadedConfig.GeoIPDatabaseFile, loadError)
+	}
+}
+
+func TestLoadReadsGeoIPDatabaseFile(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL, "GEOIP_DATABASE_FILE": "/var/lib/geoip/GeoLite2-Country.mmdb"}))
+
+	if loadError != nil || loadedConfig.GeoIPDatabaseFile != "/var/lib/geoip/GeoLite2-Country.mmdb" {
+		testContext.Fatalf("got %q, %v", loadedConfig.GeoIPDatabaseFile, loadError)
+	}
+}

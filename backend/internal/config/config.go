@@ -18,6 +18,7 @@ type Config struct {
 	ListenAddr          string
 	DatabaseURL         string
 	SecretsKeyFile      string
+	GeoIPDatabaseFile   string
 	SessionTTL          time.Duration
 	LAPIURL             string
 	LAPIMachineID       string
@@ -80,6 +81,7 @@ func Load(getenv func(string) string) (Config, error) {
 		ListenAddr:          listenAddr,
 		DatabaseURL:         databaseURL,
 		SecretsKeyFile:      secretsKeyFile,
+		GeoIPDatabaseFile:   getenv("GEOIP_DATABASE_FILE"),
 		SessionTTL:          sessionTTL,
 		LAPIURL:             getenv("LAPI_URL"),
 		LAPIMachineID:       getenv("LAPI_MACHINE_ID"),
