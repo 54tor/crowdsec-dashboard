@@ -14,6 +14,8 @@ import (
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/sessions"
+	"crowdsec-dashboard/internal/store"
 	"crowdsec-dashboard/internal/webui"
 )
 
@@ -30,13 +32,32 @@ func main() {
 		log.Fatal(loadError)
 	}
 
+	startupContext, cancelStartup := context.WithTimeout(context.Background(), startupTimeout)
+	database, openError := store.Open(startupContext, loadedConfig.DatabaseURL)
+	if openError != nil {
+		log.Fatalf("database: %v", openError)
+	}
+	defer database.Close()
+	accountServices, accountsError := initialiseAccounts(startupContext, database, log.Printf)
+	cancelStartup()
+	if accountsError != nil {
+		log.Fatalf("startup: %v", accountsError)
+	}
+	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
+
+	services := api.NewServices(
+		lapi.NewClient(loadedConfig.LAPIURL, loadedConfig.LAPIMachineID, loadedConfig.LAPIMachinePassword, nil),
+		cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer),
+		loadedConfig.ConfDir,
+	)
+	services.Authenticator = accountServices.repository
+	services.Enrollment = accountServices.enrollment
+	services.Sessions = sessionStore
+	services.Database = database
+
 	server := &http.Server{
-		Addr: loadedConfig.ListenAddr,
-		Handler: api.NewHandler(loadedConfig, webui.Handler(), api.NewServices(
-			lapi.NewClient(loadedConfig.LAPIURL, loadedConfig.LAPIMachineID, loadedConfig.LAPIMachinePassword, nil),
-			cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer),
-			loadedConfig.ConfDir,
-		)),
+		Addr:              loadedConfig.ListenAddr,
+		Handler:           api.NewHandler(loadedConfig, webui.Handler(), services),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      api.DefaultWriteTimeout,
@@ -45,6 +66,8 @@ func main() {
 
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()
+
+	go pruneSessionsPeriodically(signalContext, sessionStore, sessionPruneInterval, log.Printf)
 
 	shutdownDone := make(chan struct{})
 	go func() {

@@ -22,6 +22,17 @@ const (
 
 func New(testContext *testing.T) *bun.DB {
 	testContext.Helper()
+	database := NewUnmigrated(testContext)
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	if migrateError := store.Migrate(ctx, database); migrateError != nil {
+		testContext.Fatalf("migrate: %v", migrateError)
+	}
+	return database
+}
+
+func NewUnmigrated(testContext *testing.T) *bun.DB {
+	testContext.Helper()
 
 	baseURL := os.Getenv(databaseURLVariable)
 	if baseURL == "" {
@@ -51,10 +62,6 @@ func New(testContext *testing.T) *bun.DB {
 		testContext.Fatalf("open scoped connection: %v", scopedError)
 	}
 	testContext.Cleanup(func() { database.Close() })
-
-	if migrateError := store.Migrate(ctx, database); migrateError != nil {
-		testContext.Fatalf("migrate: %v", migrateError)
-	}
 	return database
 }
 
