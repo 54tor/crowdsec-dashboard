@@ -1,0 +1,4 @@
+Deployment files. Dockerfile builds the dashboard image from the repository root
+(docker build -f deploy/Dockerfile .). compose.example.yaml and dashboard.env.example are the
+production example. dev/ holds the disposable stack (dev/up.sh, dev/seed.sh, dev/check-proxy.sh).
+The full documentation comes with the README at the repository root.

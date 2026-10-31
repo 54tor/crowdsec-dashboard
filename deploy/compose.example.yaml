@@ -1,0 +1,88 @@
+# Production example. Adapt names, networks and paths; keep the security settings.
+#
+# Secrets never live in this file: copy dashboard.env.example to dashboard.env (mode 0600)
+# and fill it in. Single-quote the argon2id hash there, compose would otherwise expand its "$".
+name: crowdsec-dashboard
+
+services:
+  # The CrowdSec you already run. Shown only so the example is self-contained: keep your own
+  # service and only make sure that its container_name matches CROWDSEC_CONTAINER below and
+  # that it shares the "crowdsec" network with the dashboard.
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    volumes:
+      - crowdsec-config:/etc/crowdsec
+      - crowdsec-data:/var/lib/crowdsec/data
+    networks: [crowdsec]
+
+  # The only component that talks to the Docker socket. It exposes three calls and denies
+  # everything else: create an exec on the CrowdSec container, start an exec, inspect an exec.
+  # Replace 'crowdsec' in the POST rule if your container has another name.
+  socket-proxy:
+    image: wollomatic/socket-proxy:1
+    container_name: crowdsec-dashboard-socket-proxy
+    restart: unless-stopped
+    # 65534 = nobody; DOCKER_GID is the group that owns /var/run/docker.sock (stat -c %g /var/run/docker.sock).
+    user: "65534:${DOCKER_GID:?set DOCKER_GID to the gid of the docker socket}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    mem_limit: 64m
+    command:
+      - -listenip=0.0.0.0
+      # Only the dashboard container may call the proxy.
+      - -allowfrom=dashboard
+      # Exec inspect: GET /exec/<64 hex>/json (optionally prefixed by /v1.NN).
+      - -allowGET=(/v[0-9.]+)?/exec/[0-9a-f]{64}/json
+      # Exec create on the CrowdSec container, and exec start.
+      - -allowPOST=(/v[0-9.]+)?/(containers/crowdsec/exec|exec/[0-9a-f]{64}/start)
+      - -shutdowngracetime=5
+    volumes:
+      # Read-only mount of the socket; the filtering above is what restricts the API.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-proxy]
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: crowdsec-dashboard:latest
+    container_name: dashboard
+    restart: unless-stopped
+    # ADMIN_PASSWORD_HASH, LAPI_MACHINE_PASSWORD: see dashboard.env.example.
+    env_file: dashboard.env
+    environment:
+      LISTEN_ADDR: ":8080"
+      SESSION_TTL: 12h
+      LAPI_URL: http://crowdsec:8080
+      LAPI_MACHINE_ID: dashboard
+      CROWDSEC_CONTAINER: crowdsec
+      # The dashboard never sees the Docker socket, only the filtering proxy.
+      DOCKER_HOST: tcp://socket-proxy:2375
+      CROWDSEC_CONF_DIR: /etc/crowdsec
+      # Addresses of your reverse proxy: X-Forwarded-For is trusted only from there.
+      TRUSTED_PROXY_CIDRS: 172.30.0.0/24
+    volumes:
+      - crowdsec-config:/etc/crowdsec:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    mem_limit: 128m
+    # No published port: the TLS reverse proxy joins the "web" network and forwards to dashboard:8080.
+    expose: ["8080"]
+    networks: [crowdsec, docker-proxy, web]
+
+volumes:
+  crowdsec-config:
+  crowdsec-data:
+
+networks:
+  crowdsec: {}
+  docker-proxy:
+    internal: true
+  web:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
