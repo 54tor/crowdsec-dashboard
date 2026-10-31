@@ -39,11 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async logout() {
         try {
           await apiFetch('/api/auth/logout', { method: 'POST' })
-        } finally {
-          resetUnauthenticatedGuard()
-          queryClient.removeQueries({ predicate: (cachedQuery) => cachedQuery.queryKey[0] !== SESSION_QUERY_KEY[0] })
-          queryClient.setQueryData(SESSION_QUERY_KEY, false)
+        } catch (logoutError) {
+          const isSessionAlreadyGone = logoutError instanceof ApiError && logoutError.code === 'unauthenticated'
+          if (!isSessionAlreadyGone) {
+            throw logoutError
+          }
         }
+        resetUnauthenticatedGuard()
+        queryClient.removeQueries({ predicate: (cachedQuery) => cachedQuery.queryKey[0] !== SESSION_QUERY_KEY[0] })
+        queryClient.setQueryData(SESSION_QUERY_KEY, false)
       },
     }),
     [queryClient, sessionQuery.data],

@@ -45,6 +45,19 @@ describe('apiFetch', () => {
     await expect(apiFetch('/api/x')).rejects.toMatchObject({ code: 'unknown', status: 500 })
   })
 
+  it('mapsNonJsonTooManyRequestsToTooManyAttempts', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('slow down', { status: 429 })))
+    await expect(apiFetch('/api/auth/login', { method: 'POST' })).rejects.toMatchObject({
+      code: 'too_many_attempts',
+      status: 429,
+    })
+  })
+
+  it('throwsApiErrorWhenSuccessBodyIsNotJson', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>', { status: 200 })))
+    await expect(apiFetch('/api/x')).rejects.toMatchObject({ name: 'ApiError', code: 'unknown', status: 200 })
+  })
+
   it('returnsParsedJsonOnSuccess', async () => {
     stubFetch({ 'GET /api/auth/me': { status: 200, body: { status: 'ok' } } })
     await expect(apiFetch('/api/auth/me')).resolves.toEqual({ status: 'ok' })

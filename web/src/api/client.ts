@@ -32,15 +32,16 @@ function notifyUnauthenticatedOnce(): void {
 }
 
 async function readErrorCode(response: Response): Promise<string> {
+  const fallbackCode = response.status === 429 ? 'too_many_attempts' : 'unknown'
   try {
     const body: unknown = await response.json()
     if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
       return body.error
     }
   } catch {
-    return 'unknown'
+    return fallbackCode
   }
-  return 'unknown'
+  return fallbackCode
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -64,5 +65,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (response.status === 204) {
     return undefined as T
   }
-  return (await response.json()) as T
+  try {
+    return (await response.json()) as T
+  } catch {
+    throw new ApiError('unknown', response.status)
+  }
 }

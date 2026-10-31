@@ -1,4 +1,3 @@
-import { useMutation } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router'
@@ -14,15 +13,24 @@ export function Login() {
   const { t } = useTranslation()
   const { isAuthenticated, login } = useAuth()
   const [password, setPassword] = useState('')
-  const loginMutation = useMutation({ mutationFn: login })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loginError, setLoginError] = useState<{ failure: unknown } | null>(null)
 
   if (isAuthenticated) {
     return <Navigate to="/alerts" replace />
   }
 
-  function submitLogin(submitEvent: FormEvent<HTMLFormElement>) {
+  async function submitLogin(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
-    loginMutation.mutate(password)
+    setIsSubmitting(true)
+    setLoginError(null)
+    try {
+      await login(password)
+    } catch (loginFailure) {
+      setLoginError({ failure: loginFailure })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -50,13 +58,13 @@ export function Login() {
                 onChange={(changeEvent) => setPassword(changeEvent.target.value)}
               />
             </div>
-            {loginMutation.isError && (
+            {loginError && (
               <p role="alert" className="text-sm text-destructive">
-                {errorMessage(loginMutation.error)}
+                {errorMessage(loginError.failure)}
               </p>
             )}
-            <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
-              {loginMutation.isPending ? t('login.submitting') : t('login.submit')}
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? t('login.submitting') : t('login.submit')}
             </Button>
           </form>
         </CardContent>

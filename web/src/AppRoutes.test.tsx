@@ -1,12 +1,18 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resetUnauthenticatedGuard } from '@/api/client'
+import { apiFetch, resetUnauthenticatedGuard } from '@/api/client'
 import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { initI18n, setLanguage } from '@/i18n'
 import { stubFetch } from '@/test/fetchStub'
 import { renderApp } from '@/test/renderApp'
+
+async function triggerUnauthenticatedDataCalls(callCount: number): Promise<void> {
+  await act(async () => {
+    await Promise.allSettled(Array.from({ length: callCount }, () => apiFetch('/api/alerts')))
+  })
+}
 
 const UNAUTHENTICATED = { status: 401, body: { error: 'unauthenticated' } }
 
@@ -22,19 +28,76 @@ describe('app routing and auth', () => {
   })
 
   it('sendsVisitorWithoutSessionToLoginExactlyOnce', async () => {
-    const fetchMock = stubFetch({ 'GET /api/auth/me': UNAUTHENTICATED })
-    renderApp('/alerts')
+    stubFetch({ 'GET /api/auth/me': UNAUTHENTICATED, 'GET /api/alerts': UNAUTHENTICATED })
+    const { visitedPaths, countSessionExpiredNotifications } = renderApp('/alerts')
     expect(await screen.findByRole('heading', { name: en.login.title })).toBeInTheDocument()
-    const meCalls = fetchMock.mock.calls.filter(([requestedPath]) => requestedPath === '/api/auth/me')
-    expect(meCalls).toHaveLength(1)
+    await triggerUnauthenticatedDataCalls(3)
+    expect(visitedPaths).toEqual(['/alerts', '/login'])
+    expect(countSessionExpiredNotifications()).toBe(1)
   })
 
   it('doesNotLoopWhenLoginPageItselfGetsUnauthenticated', async () => {
-    const fetchMock = stubFetch({ 'GET /api/auth/me': UNAUTHENTICATED })
-    renderApp('/login')
+    stubFetch({ 'GET /api/auth/me': UNAUTHENTICATED, 'GET /api/alerts': UNAUTHENTICATED })
+    const { visitedPaths, countSessionExpiredNotifications } = renderApp('/login')
     expect(await screen.findByRole('heading', { name: en.login.title })).toBeInTheDocument()
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(1)
+    await triggerUnauthenticatedDataCalls(3)
+    expect(visitedPaths).toEqual(['/login'])
+    expect(countSessionExpiredNotifications()).toBe(1)
+  })
+
+  it('redirectsToLoginWhenSessionExpiresMidSession', async () => {
+    stubFetch({
+      'GET /api/auth/me': { status: 200, body: { status: 'ok' } },
+      'GET /api/alerts': UNAUTHENTICATED,
+    })
+    const { visitedPaths, countSessionExpiredNotifications } = renderApp('/decisions')
+    expect(await screen.findByRole('heading', { name: en.nav.decisions })).toBeInTheDocument()
+    await triggerUnauthenticatedDataCalls(3)
+    expect(await screen.findByRole('heading', { name: en.login.title })).toBeInTheDocument()
+    expect(visitedPaths).toEqual(['/decisions', '/login'])
+    expect(countSessionExpiredNotifications()).toBe(1)
+  })
+
+  it('guardIsResetByLoginSoLaterExpiryRedirectsAgain', async () => {
+    stubFetch({
+      'GET /api/auth/me': UNAUTHENTICATED,
+      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+      'GET /api/alerts': UNAUTHENTICATED,
+    })
+    const user = userEvent.setup()
+    const { visitedPaths } = renderApp('/login')
+    for (let expiryNumber = 1; expiryNumber <= 2; expiryNumber += 1) {
+      await user.type(await screen.findByLabelText(en.login.password), 'correct horse')
+      await user.click(screen.getByRole('button', { name: en.login.submit }))
+      expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
+      await triggerUnauthenticatedDataCalls(1)
+      expect(await screen.findByRole('heading', { name: en.login.title })).toBeInTheDocument()
+    }
+    expect(visitedPaths).toEqual(['/login', '/alerts', '/login', '/alerts', '/login'])
+  })
+
+  it('doesNotKeepThePasswordInTheMutationCache', async () => {
+    stubFetch({
+      'GET /api/auth/me': UNAUTHENTICATED,
+      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+    })
+    const user = userEvent.setup()
+    const { queryClient } = renderApp('/login')
+    await user.type(await screen.findByLabelText(en.login.password), 'correct horse')
+    await user.click(screen.getByRole('button', { name: en.login.submit }))
+    expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
+  })
+
+  it('staysLoggedInAndShowsNetworkErrorWhenLogoutRequestFails', async () => {
+    const fetchMock = stubFetch({ 'GET /api/auth/me': { status: 200, body: { status: 'ok' } } })
+    const user = userEvent.setup()
+    renderApp('/alerts')
+    await screen.findByRole('heading', { name: en.nav.alerts })
+    fetchMock.mockRejectedValueOnce(new TypeError('offline'))
+    await user.click(screen.getByRole('button', { name: en.logout }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.network)
+    expect(screen.getByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
   })
 
   it.each([

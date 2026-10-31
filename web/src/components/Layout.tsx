@@ -1,15 +1,27 @@
 import { LogOut } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '@/auth/useAuth'
 import { LanguageSwitch } from '@/components/LanguageSwitch'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { errorMessage } from '@/i18n'
 import { NAV_ITEMS } from '@/routes'
 
 export function Layout() {
   const { t } = useTranslation()
   const { logout } = useAuth()
+  const [logoutError, setLogoutError] = useState<{ failure: unknown } | null>(null)
+
+  async function requestLogout() {
+    setLogoutError(null)
+    try {
+      await logout()
+    } catch (logoutFailure) {
+      setLogoutError({ failure: logoutFailure })
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground md:flex-row">
@@ -24,7 +36,7 @@ export function Layout() {
           <span className="text-sm font-semibold">{t('app.title')}</span>
           <div className="flex items-center gap-2">
             <LanguageSwitch />
-            <LogoutButton onLogout={logout} />
+            <LogoutButton onLogout={requestLogout} />
           </div>
         </div>
         <nav aria-label={t('nav.label')} className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-3">
@@ -45,6 +57,11 @@ export function Layout() {
         </nav>
       </aside>
       <main id="main-content" className="min-w-0 flex-1 p-4 md:p-6">
+        {logoutError && (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            {errorMessage(logoutError.failure)}
+          </p>
+        )}
         <Outlet />
       </main>
     </div>
