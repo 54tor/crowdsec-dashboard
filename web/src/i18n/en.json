@@ -117,7 +117,11 @@
     "pending_login_expired": "Your sign-in attempt has expired. Please start again.",
     "access_denied": "Access denied.",
     "second_factor_setup_not_allowed": "A second factor cannot be set up from here. Contact an administrator.",
-    "too_many_pending_logins": "Too many sign-ins in progress. Please try again shortly."
+    "too_many_pending_logins": "Too many sign-ins in progress. Please try again shortly.",
+    "invalid_access_rule": "Enter a valid IP address, CIDR or two-letter country code. Rules that match everything are refused.",
+    "access_rule_exists": "This rule already exists.",
+    "would_lock_out_current_client": "Refused: this change would lock out your current connection. Add a rule that covers your address first.",
+    "geolocation_unavailable": "The GeoLite2 database is not available, so country rules cannot be managed right now."
   },
   "filters": {
     "label": "Filters",
@@ -333,5 +337,29 @@
       "description": "Description",
       "actions": "Actions"
     }
+  },
+  "accountSecurity": {
+    "title": "Account security",
+    "explanation": "Access allowlist: with no rule, you can sign in from anywhere. As soon as a rule exists, every sign-in that matches none of the rules is refused.",
+    "geoNotice": "Country rules require the GeoLite2 database to be available on the server; without it they cannot be added.",
+    "clientAddress": "Your current address: {{address}}",
+    "emptyAllowsAll": "No rule yet: sign-in is allowed from anywhere.",
+    "tableCaption": "Access allowlist rules",
+    "columns": {
+      "kind": "Type",
+      "value": "Value",
+      "actions": "Actions"
+    },
+    "kinds": {
+      "ip": "IP address or CIDR",
+      "country": "Country"
+    },
+    "addTitle": "Add a rule",
+    "kindLabel": "Rule type",
+    "valueLabel": "IP address, CIDR or ISO country code",
+    "add": "Add rule",
+    "deleteAria": "Delete {{value}}",
+    "deleteTitle": "Delete this rule",
+    "deleteDescription": "Sign-ins that only this rule allowed will be refused. The change is refused if it would lock out your current connection."
   }
 }

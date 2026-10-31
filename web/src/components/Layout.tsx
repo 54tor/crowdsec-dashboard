@@ -1,7 +1,7 @@
 import { LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, Outlet } from 'react-router'
+import { Link, NavLink, Outlet } from 'react-router'
 import { useAuth } from '@/auth/useAuth'
 import { LanguageSwitch } from '@/components/LanguageSwitch'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,11 @@ export function Layout() {
         <div className="flex flex-wrap items-center justify-between gap-2 p-3">
           <span className="text-sm font-semibold">{t('app.title')}</span>
           <div className="flex items-center gap-2">
-            {accountName && <span className="max-w-32 truncate text-sm text-muted-foreground">{accountName}</span>}
+            {accountName && (
+              <Link to="/account/security" className="max-w-32 truncate text-sm text-muted-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+                {accountName}
+              </Link>
+            )}
             <LanguageSwitch />
             <LogoutButton onLogout={requestLogout} />
           </div>

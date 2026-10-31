@@ -7,6 +7,7 @@ import { ReloadRequiredProvider } from '@/hooks/ReloadRequiredProvider'
 import { Enroll } from '@/pages/Enroll'
 import { Login } from '@/pages/Login'
 import { Placeholder } from '@/pages/Placeholder'
+import { AccountSecurity } from '@/pages/AccountSecurity'
 import { Alerts } from '@/pages/Alerts'
 import { Bouncers } from '@/pages/Bouncers'
 import { Config } from '@/pages/Config'
@@ -45,6 +46,7 @@ export function AppRoutes() {
               {NAV_ITEMS.map((navItem) => (
                 <Route key={navItem.path} path={navItem.path} element={pageFor(navItem.path, navItem.labelKey)} />
               ))}
+              <Route path="/account/security" element={<AccountSecurity />} />
             </Route>
           </Route>
         </Route>

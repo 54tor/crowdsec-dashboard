@@ -117,7 +117,11 @@
     "pending_login_expired": "Votre tentative de connexion a expiré. Veuillez recommencer.",
     "access_denied": "Accès refusé.",
     "second_factor_setup_not_allowed": "Un second facteur ne peut pas être configuré ici. Contactez un administrateur.",
-    "too_many_pending_logins": "Trop de connexions en cours. Réessayez dans un instant."
+    "too_many_pending_logins": "Trop de connexions en cours. Réessayez dans un instant.",
+    "invalid_access_rule": "Saisissez une adresse IP, un CIDR ou un code pays à deux lettres valides. Les règles qui couvrent tout sont refusées.",
+    "access_rule_exists": "Cette règle existe déjà.",
+    "would_lock_out_current_client": "Refusé : cette modification vous exclurait de votre connexion actuelle. Ajoutez d'abord une règle qui couvre votre adresse.",
+    "geolocation_unavailable": "La base GeoLite2 n'est pas disponible : les règles par pays ne peuvent pas être gérées pour le moment."
   },
   "filters": {
     "label": "Filtres",
@@ -333,5 +337,29 @@
       "description": "Description",
       "actions": "Actions"
     }
+  },
+  "accountSecurity": {
+    "title": "Sécurité du compte",
+    "explanation": "Liste blanche d'accès : sans règle, la connexion est permise de partout. Dès qu'une règle existe, toute connexion qui ne correspond à aucune règle est refusée.",
+    "geoNotice": "Les règles par pays exigent que la base GeoLite2 soit disponible sur le serveur ; sans elle, elles ne peuvent pas être ajoutées.",
+    "clientAddress": "Votre adresse actuelle : {{address}}",
+    "emptyAllowsAll": "Aucune règle : la connexion est permise de partout.",
+    "tableCaption": "Règles de la liste blanche d'accès",
+    "columns": {
+      "kind": "Type",
+      "value": "Valeur",
+      "actions": "Actions"
+    },
+    "kinds": {
+      "ip": "Adresse IP ou CIDR",
+      "country": "Pays"
+    },
+    "addTitle": "Ajouter une règle",
+    "kindLabel": "Type de règle",
+    "valueLabel": "Adresse IP, CIDR ou code pays ISO",
+    "add": "Ajouter la règle",
+    "deleteAria": "Supprimer {{value}}",
+    "deleteTitle": "Supprimer cette règle",
+    "deleteDescription": "Les connexions que seule cette règle autorisait seront refusées. La modification est refusée si elle vous excluait de votre connexion actuelle."
   }
 }
