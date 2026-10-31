@@ -26,7 +26,7 @@ argon2id hash in that file: it contains `$`, which compose would otherwise expan
 | `SYNC_PEERS_FILE` | none | Path of the peers file (see below). Required when `SYNC_ENABLED` is `true`. |
 | `SHARE_EXCLUDE_CIDRS` | empty | Comma-separated CIDRs that are never shared with other engines, for example `203.0.113.0/24`. An invalid entry stops the start. |
 | `CONFIG_IMPORT_ENABLED` | `false` | Allows importing configuration files from a bundle. |
-| `CONFIG_IMPORT_DIR` | none | Absolute, clean path of the directory the import may write to. Required when `CONFIG_IMPORT_ENABLED` is `true`. |
+| `CONFIG_IMPORT_DIR` | none | Absolute, clean path of the directory the import may write to, at least two components deep (`/` and top-level directories such as `/etc` are refused). Required when `CONFIG_IMPORT_ENABLED` is `true`. |
 
 `ADMIN_PASSWORD_HASH`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS` and
 `CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,
@@ -60,9 +60,9 @@ exclude:
 - `url`: absolute, `https` unless `allow_insecure_http: true` is set for that peer; no credentials,
   query or fragment in it.
 - `machine_id` and `password` (at least 8 characters): the LAPI machine account of the peer.
-- `public_ips`: optional addresses other engines see this peer under, added to the exclusions.
+- `public_ips`: optional addresses other engines see this peer under, added to the exclusions (IPv4-mapped IPv6 forms are converted to IPv4, zones are refused).
 - `exclude`: optional CIDRs that are never shared.
-- At most 16 peers, file at most 64 KiB, regular file only. Unknown fields are refused, and the
+- At least one and at most 16 peers, one YAML document, no two peers with the same URL, file at most 64 KiB, regular file only. Unknown fields are refused, and the
   start fails on any error. Error messages name the peer and the field, never the password or the URL.
 
 ## Admin password hash

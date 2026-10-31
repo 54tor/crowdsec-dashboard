@@ -1,0 +1,30 @@
+package netparse
+
+import (
+	"errors"
+	"net/netip"
+)
+
+const ipv4MappedPrefixBits = 96
+
+func ParseAddr(rawAddress string) (netip.Addr, error) {
+	address, parseError := netip.ParseAddr(rawAddress)
+	if parseError != nil {
+		return netip.Addr{}, errors.New("invalid IP address")
+	}
+	if address.Zone() != "" {
+		return netip.Addr{}, errors.New("IPv6 zones are not allowed")
+	}
+	return address.Unmap(), nil
+}
+
+func ParsePrefix(rawPrefix string) (netip.Prefix, error) {
+	prefix, parseError := netip.ParsePrefix(rawPrefix)
+	if parseError != nil {
+		return netip.Prefix{}, errors.New("invalid CIDR")
+	}
+	if prefix.Addr().Is4In6() && prefix.Bits() >= ipv4MappedPrefixBits {
+		prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-ipv4MappedPrefixBits)
+	}
+	return prefix.Masked(), nil
+}

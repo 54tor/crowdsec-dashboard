@@ -4,6 +4,7 @@ import "sync"
 
 type Lock struct {
 	mutex  sync.Mutex
+	held   bool
 	holder string
 	token  uint64
 }
@@ -15,9 +16,10 @@ func New() *Lock {
 func (operationLock *Lock) TryAcquire(name string) (func(), bool) {
 	operationLock.mutex.Lock()
 	defer operationLock.mutex.Unlock()
-	if operationLock.holder != "" {
+	if operationLock.held {
 		return nil, false
 	}
+	operationLock.held = true
 	operationLock.holder = name
 	operationLock.token++
 	acquiredToken := operationLock.token
@@ -27,7 +29,8 @@ func (operationLock *Lock) TryAcquire(name string) (func(), bool) {
 func (operationLock *Lock) release(acquiredToken uint64) {
 	operationLock.mutex.Lock()
 	defer operationLock.mutex.Unlock()
-	if operationLock.token == acquiredToken {
+	if operationLock.held && operationLock.token == acquiredToken {
+		operationLock.held = false
 		operationLock.holder = ""
 	}
 }

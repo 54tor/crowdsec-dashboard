@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/netip"
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 
+	"crowdsec-dashboard/internal/netparse"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -21,6 +24,7 @@ const (
 )
 
 var (
+	defaultPorts    = map[string]string{"https": "443", "http": "80"}
 	peerNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 	yamlLinePattern = regexp.MustCompile(`line (\d+)`)
 )
@@ -29,7 +33,7 @@ type Peer struct {
 	Name              string
 	URL               string
 	MachineID         string
-	Password          string
+	Password          string `json:"-"`
 	AllowInsecureHTTP bool
 	PublicIPs         []netip.Addr
 }
@@ -48,7 +52,7 @@ type peerEntry struct {
 	Name              string   `yaml:"name"`
 	URL               string   `yaml:"url"`
 	MachineID         string   `yaml:"machine_id"`
-	Password          string   `yaml:"password"`
+	Password          string   `yaml:"password" json:"-"`
 	AllowInsecureHTTP bool     `yaml:"allow_insecure_http"`
 	PublicIPs         []string `yaml:"public_ips"`
 }
@@ -97,7 +101,14 @@ func decodePeersDocument(content []byte) (peersDocument, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 	decodeError := decoder.Decode(&document)
-	if decodeError == nil || errors.Is(decodeError, io.EOF) {
+	if errors.Is(decodeError, io.EOF) {
+		return peersDocument{}, errors.New("peers file is empty: field peers is required")
+	}
+	if decodeError == nil {
+		var extraDocument any
+		if !errors.Is(decoder.Decode(&extraDocument), io.EOF) {
+			return peersDocument{}, errors.New("peers file must contain a single YAML document")
+		}
 		return document, nil
 	}
 	lineMatch := yamlLinePattern.FindStringSubmatch(decodeError.Error())
@@ -108,25 +119,34 @@ func decodePeersDocument(content []byte) (peersDocument, error) {
 }
 
 func buildPeerSet(document peersDocument) (PeerSet, error) {
+	if len(document.Peers) == 0 {
+		return PeerSet{}, errors.New("peers file: field peers must list at least one peer")
+	}
 	if len(document.Peers) > maxPeers {
 		return PeerSet{}, fmt.Errorf("peers file lists more than %d peers", maxPeers)
 	}
 	peerSet := PeerSet{}
 	seenNames := make(map[string]bool, len(document.Peers))
+	seenURLs := make(map[string]string, len(document.Peers))
 	for peerIndex, entry := range document.Peers {
 		peer, peerError := validatePeer(peerIndex, entry, seenNames)
 		if peerError != nil {
 			return PeerSet{}, peerError
 		}
+		urlKey := normalizedURLKey(peer.URL)
+		if otherName, duplicated := seenURLs[urlKey]; duplicated {
+			return PeerSet{}, fmt.Errorf("peers %q and %q: url is the same", otherName, peer.Name)
+		}
+		seenURLs[urlKey] = peer.Name
 		seenNames[peer.Name] = true
 		peerSet.Peers = append(peerSet.Peers, peer)
 	}
 	for _, rawPrefix := range document.Exclude {
-		prefix, parseError := netip.ParsePrefix(rawPrefix)
+		prefix, parseError := netparse.ParsePrefix(rawPrefix)
 		if parseError != nil {
 			return PeerSet{}, errors.New("exclude contains an invalid CIDR")
 		}
-		peerSet.Exclude = append(peerSet.Exclude, prefix.Masked())
+		peerSet.Exclude = append(peerSet.Exclude, prefix)
 	}
 	return peerSet, nil
 }
@@ -185,11 +205,20 @@ func validatePeerURL(entry peerEntry) error {
 func parsePublicIPs(rawAddresses []string) ([]netip.Addr, error) {
 	var addresses []netip.Addr
 	for _, rawAddress := range rawAddresses {
-		address, parseError := netip.ParseAddr(rawAddress)
+		address, parseError := netparse.ParseAddr(rawAddress)
 		if parseError != nil {
 			return nil, parseError
 		}
 		addresses = append(addresses, address)
 	}
 	return addresses, nil
+}
+
+func normalizedURLKey(rawURL string) string {
+	parsedURL, _ := url.Parse(rawURL)
+	port := parsedURL.Port()
+	if port == "" {
+		port = defaultPorts[parsedURL.Scheme]
+	}
+	return parsedURL.Scheme + "://" + net.JoinHostPort(strings.ToLower(parsedURL.Hostname()), port) + strings.TrimRight(parsedURL.EscapedPath(), "/")
 }

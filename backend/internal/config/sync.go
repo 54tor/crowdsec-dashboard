@@ -8,16 +8,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"crowdsec-dashboard/internal/netparse"
 )
 
 const (
-	defaultSyncInterval   = 5 * time.Minute
-	minimumSyncInterval   = time.Minute
-	defaultSyncMaxChanges = 500
-	maximumSyncMaxChanges = 100000
-	defaultSyncReadLimit  = 5000
-	minimumSyncReadLimit  = 100
-	maximumSyncReadLimit  = 50000
+	minimumImportDirComponents = 2
+	defaultSyncInterval        = 5 * time.Minute
+	minimumSyncInterval        = time.Minute
+	defaultSyncMaxChanges      = 500
+	maximumSyncMaxChanges      = 100000
+	defaultSyncReadLimit       = 5000
+	minimumSyncReadLimit       = 100
+	maximumSyncReadLimit       = 50000
 )
 
 type syncSettings struct {
@@ -65,13 +68,16 @@ func loadSyncSettings(getenv func(string) string) (syncSettings, error) {
 
 	settings.ImportDir = getenv("CONFIG_IMPORT_DIR")
 	if settings.ImportEnabled && !isCleanAbsolutePath(settings.ImportDir) {
-		return syncSettings{}, errors.New("CONFIG_IMPORT_DIR must be a clean absolute path when CONFIG_IMPORT_ENABLED is true")
+		return syncSettings{}, errors.New("CONFIG_IMPORT_DIR must be a clean absolute path of at least two components (never / or a top-level directory) when CONFIG_IMPORT_ENABLED is true")
 	}
 	return settings, nil
 }
 
 func isCleanAbsolutePath(path string) bool {
-	return path != "" && filepath.IsAbs(path) && filepath.Clean(path) == path
+	if path == "" || !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return false
+	}
+	return len(strings.Split(strings.Trim(path, "/"), "/")) >= minimumImportDirComponents
 }
 
 func parseBool(getenv func(string) string, name string, defaultValue bool) (bool, error) {
@@ -117,11 +123,11 @@ func parsePrefixes(rawValue string) ([]netip.Prefix, error) {
 		if rawPrefix == "" {
 			continue
 		}
-		prefix, parseError := netip.ParsePrefix(rawPrefix)
+		prefix, parseError := netparse.ParsePrefix(rawPrefix)
 		if parseError != nil {
 			return nil, fmt.Errorf("SHARE_EXCLUDE_CIDRS entry %q is invalid", rawPrefix)
 		}
-		prefixes = append(prefixes, prefix.Masked())
+		prefixes = append(prefixes, prefix)
 	}
 	return prefixes, nil
 }

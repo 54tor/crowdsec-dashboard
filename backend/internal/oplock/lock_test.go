@@ -76,3 +76,28 @@ func TestLockConcurrentAcquireHasSingleWinner(testContext *testing.T) {
 		testContext.Fatalf("expected exactly one winner, got %d", winnerCount.Load())
 	}
 }
+
+func TestLockEmptyNameStillHolds(testContext *testing.T) {
+	operationLock := New()
+
+	releaseFirst, firstAcquired := operationLock.TryAcquire("")
+	if !firstAcquired {
+		testContext.Fatal("first acquire must succeed")
+	}
+	_, secondAcquired := operationLock.TryAcquire("import")
+	if secondAcquired {
+		testContext.Fatal("an empty name must still hold the lock")
+	}
+
+	releaseFirst()
+	releaseSecond, thirdAcquired := operationLock.TryAcquire("")
+	if !thirdAcquired {
+		testContext.Fatal("acquire after release must succeed")
+	}
+	releaseFirst()
+	_, fourthAcquired := operationLock.TryAcquire("import")
+	if fourthAcquired {
+		testContext.Fatal("a stale release must not free a later holder")
+	}
+	releaseSecond()
+}

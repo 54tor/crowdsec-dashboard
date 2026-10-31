@@ -48,16 +48,8 @@ func TestConfigRejectsIntervalBelowOneMinute(testContext *testing.T) {
 }
 
 func TestSyncBounds(testContext *testing.T) {
-	rejectedCases := map[string]string{
-		"SYNC_MAX_CHANGES": "0",
-	}
-	for variableName, rawValue := range rejectedCases {
-		_, loadError := Load(syncEnvironment(map[string]string{variableName: rawValue}))
-		if loadError == nil {
-			testContext.Errorf("expected an error for %s=%s", variableName, rawValue)
-		}
-	}
 	invalidValues := []map[string]string{
+		{"SYNC_MAX_CHANGES": "0"},
 		{"SYNC_MAX_CHANGES": "100001"},
 		{"SYNC_MAX_CHANGES": "abc"},
 		{"SYNC_READ_LIMIT": "99"},
@@ -115,7 +107,7 @@ func TestConfigImportRequiresDirWhenEnabled(testContext *testing.T) {
 	if loadError == nil {
 		testContext.Fatal("expected an error when CONFIG_IMPORT_DIR is missing")
 	}
-	for _, badDirectory := range []string{"relative/dir", "/etc/crowdsec/../shadow", "/etc/crowdsec/", "/etc//crowdsec"} {
+	for _, badDirectory := range []string{"relative/dir", "/", "//", "/etc", "/etc/", "/etc/crowdsec/../shadow", "/etc/crowdsec/", "/etc//crowdsec"} {
 		_, loadError = Load(syncEnvironment(map[string]string{
 			"CONFIG_IMPORT_ENABLED": "true", "CONFIG_IMPORT_DIR": badDirectory,
 		}))
@@ -131,5 +123,19 @@ func TestConfigImportRequiresDirWhenEnabled(testContext *testing.T) {
 	}
 	if strings.Contains(loadedConfig.ConfigImportDir, "..") {
 		testContext.Fatal("directory must stay clean")
+	}
+}
+
+func TestShareExcludeCIDRsTolerantSeparatorsAndNormalization(testContext *testing.T) {
+	loadedConfig, loadError := Load(syncEnvironment(map[string]string{
+		"SHARE_EXCLUDE_CIDRS": " ,\t203.0.113.5/24 , ,::ffff:198.51.100.0/120,",
+	}))
+	if loadError != nil {
+		testContext.Fatalf("unexpected error: %v", loadError)
+	}
+	if len(loadedConfig.ShareExcludeCIDRs) != 2 ||
+		loadedConfig.ShareExcludeCIDRs[0].String() != "203.0.113.0/24" ||
+		loadedConfig.ShareExcludeCIDRs[1].String() != "198.51.100.0/24" {
+		testContext.Fatalf("unexpected prefixes %v", loadedConfig.ShareExcludeCIDRs)
 	}
 }

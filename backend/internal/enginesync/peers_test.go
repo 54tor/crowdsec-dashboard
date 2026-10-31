@@ -1,6 +1,10 @@
 package enginesync
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,7 +46,7 @@ func TestLoadPeersParsesValidFile(testContext *testing.T) {
 		testContext.Fatalf("unexpected error: %v", loadError)
 	}
 	if len(peerSet.Peers) != 2 || peerSet.Peers[0].Name != "edge-1" || peerSet.Peers[0].Password != "peer-secret-password" {
-		testContext.Fatalf("unexpected peers %+v", peerSet.Peers)
+		testContext.Fatalf("unexpected peers: %d, first %q", len(peerSet.Peers), peerSet.Peers[0].Name)
 	}
 	if len(peerSet.Peers[0].PublicIPs) != 2 || peerSet.Peers[0].PublicIPs[0].String() != "203.0.113.10" {
 		testContext.Fatalf("unexpected public ips %v", peerSet.Peers[0].PublicIPs)
@@ -208,5 +212,153 @@ func TestLoadPeersErrorNeverEchoesPassword(testContext *testing.T) {
 				testContext.Errorf("%s: error leaks %q: %v", caseName, forbidden, loadError)
 			}
 		}
+	}
+}
+
+func TestPeerFormattingNeverPrintsPassword(testContext *testing.T) {
+	secretPassword := "hunter2-very-secret"
+	peer := Peer{Name: "edge-1", URL: "https://operator:urlsecret@one.example.com", MachineID: "dashboard", Password: secretPassword}
+	type wrapper struct {
+		Inner Peer
+		Peers []Peer
+	}
+	outputs := map[string]string{
+		"%v":       fmt.Sprintf("%v", peer),
+		"%+v":      fmt.Sprintf("%+v", peer),
+		"%#v":      fmt.Sprintf("%#v", peer),
+		"%s":       fmt.Sprintf("%s", peer),
+		"pointer":  fmt.Sprintf("%+v", &peer),
+		"slice":    fmt.Sprintf("%+v", []Peer{peer}),
+		"wrapper":  fmt.Sprintf("%+v", wrapper{Inner: peer, Peers: []Peer{peer}}),
+		"entry":    fmt.Sprintf("%+v", peerEntry{Name: "edge-1", Password: secretPassword}),
+		"document": fmt.Sprintf("%+v", peersDocument{Peers: []peerEntry{{Password: secretPassword}}}),
+		"peer set": fmt.Sprintf("%+v", PeerSet{Peers: []Peer{peer}}),
+	}
+	var logBuffer bytes.Buffer
+	slog.New(slog.NewTextHandler(&logBuffer, nil)).Info("peer", "peer", peer)
+	outputs["slog text"] = logBuffer.String()
+	var jsonLogBuffer bytes.Buffer
+	slog.New(slog.NewJSONHandler(&jsonLogBuffer, nil)).Info("peer", "peer", peer)
+	outputs["slog json"] = jsonLogBuffer.String()
+	peerJSON, peerJSONError := json.Marshal(peer)
+	if peerJSONError != nil {
+		testContext.Fatalf("marshal peer: %v", peerJSONError)
+	}
+	outputs["json"] = string(peerJSON)
+	wrapperJSON, wrapperJSONError := json.Marshal(wrapper{Inner: peer, Peers: []Peer{peer}})
+	if wrapperJSONError != nil {
+		testContext.Fatalf("marshal wrapper: %v", wrapperJSONError)
+	}
+	outputs["json wrapper"] = string(wrapperJSON)
+
+	for outputName, output := range outputs {
+		for _, forbidden := range []string{secretPassword, "urlsecret", "operator"} {
+			if strings.Contains(output, forbidden) {
+				testContext.Errorf("%s leaks %q: %s", outputName, forbidden, output)
+			}
+		}
+	}
+	if !strings.Contains(outputs["%+v"], "[REDACTED]") {
+		testContext.Errorf("expected a redaction marker, got %s", outputs["%+v"])
+	}
+}
+
+func TestLoadPeersRejectsMultiDocument(testContext *testing.T) {
+	content := validPeersYAML + "---\npeers: []\n"
+	_, loadError := LoadPeers(writePeersFile(testContext, content))
+	if loadError == nil {
+		testContext.Fatal("expected an error for several YAML documents")
+	}
+}
+
+func TestLoadPeersRejectsEmptyAndZeroPeers(testContext *testing.T) {
+	for _, content := range []string{"", "   \n", "peers: null\n", "peers: []\n", "exclude: [203.0.113.0/24]\n"} {
+		_, loadError := LoadPeers(writePeersFile(testContext, content))
+		if loadError == nil {
+			testContext.Errorf("expected an error for %q", content)
+			continue
+		}
+		if !strings.Contains(loadError.Error(), "peers") {
+			testContext.Errorf("error must cite the peers field: %v", loadError)
+		}
+	}
+}
+
+func TestLoadPeersRejectsDuplicateYAMLKeys(testContext *testing.T) {
+	content := "peers:\n  - name: edge-1\n    name: edge-2\n    url: https://one.example.com\n    machine_id: dashboard\n    password: long-enough-password\n"
+	_, loadError := LoadPeers(writePeersFile(testContext, content))
+	if loadError == nil {
+		testContext.Fatal("expected an error for a duplicated key")
+	}
+}
+
+func TestLoadPeersFollowsSymlink(testContext *testing.T) {
+	targetPath := writePeersFile(testContext, validPeersYAML)
+	linkPath := filepath.Join(testContext.TempDir(), "link.yaml")
+	if symlinkError := os.Symlink(targetPath, linkPath); symlinkError != nil {
+		testContext.Fatalf("symlink: %v", symlinkError)
+	}
+	_, loadError := LoadPeers(linkPath)
+	if loadError != nil {
+		testContext.Fatalf("a symlinked peers file must load: %v", loadError)
+	}
+}
+
+func TestLoadPeersSizeBoundary(testContext *testing.T) {
+	base := validPeersYAML + "# "
+	exactContent := base + strings.Repeat("x", 64*1024-len(base)-1) + "\n"
+	if len(exactContent) != 64*1024 {
+		testContext.Fatalf("fixture size %d", len(exactContent))
+	}
+	_, exactError := LoadPeers(writePeersFile(testContext, exactContent))
+	if exactError != nil {
+		testContext.Errorf("exactly 64 KiB must be accepted: %v", exactError)
+	}
+	_, oversizeError := LoadPeers(writePeersFile(testContext, exactContent+"x"))
+	if oversizeError == nil {
+		testContext.Error("64 KiB + 1 must be refused")
+	}
+}
+
+func TestLoadPeersAcceptsIPv6URL(testContext *testing.T) {
+	_, loadError := LoadPeers(writePeersFile(testContext, peerYAML("edge-1", "https://[2001:db8::1]:8443", "")))
+	if loadError != nil {
+		testContext.Fatalf("unexpected error: %v", loadError)
+	}
+}
+
+func TestLoadPeersNormalizesAddresses(testContext *testing.T) {
+	content := peerYAML("edge-1", "https://one.example.com", "    public_ips: ['::ffff:203.0.113.5']\n") + "exclude: ['::ffff:203.0.113.0/120']\n"
+	peerSet, loadError := LoadPeers(writePeersFile(testContext, content))
+	if loadError != nil {
+		testContext.Fatalf("unexpected error: %v", loadError)
+	}
+	if peerSet.Peers[0].PublicIPs[0].String() != "203.0.113.5" || peerSet.Exclude[0].String() != "203.0.113.0/24" {
+		testContext.Fatalf("addresses must be unmapped: %v %v", peerSet.Peers[0].PublicIPs, peerSet.Exclude)
+	}
+}
+
+func TestLoadPeersRejectsIPv6Zone(testContext *testing.T) {
+	_, loadError := LoadPeers(writePeersFile(testContext, peerYAML("edge-1", "https://one.example.com", "    public_ips: ['fe80::1%eth0']\n")))
+	if loadError == nil {
+		testContext.Fatal("expected an error for a zoned address")
+	}
+}
+
+func TestLoadPeersRejectsDuplicateURLs(testContext *testing.T) {
+	content := peerYAML("edge-1", "https://One.Example.com/", "") +
+		"  - name: edge-2\n    url: https://one.example.com:443\n    machine_id: dashboard\n    password: long-enough-password\n"
+	_, loadError := LoadPeers(writePeersFile(testContext, content))
+	if loadError == nil {
+		testContext.Fatal("expected an error for the same url under two names")
+	}
+	if !strings.Contains(loadError.Error(), "edge-1") || !strings.Contains(loadError.Error(), "edge-2") {
+		testContext.Errorf("error must cite both peers: %v", loadError)
+	}
+	distinct := peerYAML("edge-1", "https://one.example.com:8443", "") +
+		"  - name: edge-2\n    url: https://one.example.com\n    machine_id: dashboard\n    password: long-enough-password\n"
+	_, distinctError := LoadPeers(writePeersFile(testContext, distinct))
+	if distinctError != nil {
+		testContext.Errorf("different ports are different urls: %v", distinctError)
 	}
 }
