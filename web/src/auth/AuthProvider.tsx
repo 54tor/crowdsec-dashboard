@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError, apiFetch, resetUnauthenticatedGuard, setUnauthenticatedHandler } from '@/api/client'
+import { completeSetup } from '@/api/secondFactorApi'
 import { Button } from '@/components/ui/button'
 import { AuthContext, type AuthState } from './AuthContext'
 import { ENROLLMENT_STATUS_QUERY_KEY } from './useEnrollmentStatus'
@@ -29,6 +30,7 @@ async function fetchSessionState(): Promise<SessionState> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const { t } = useTranslation()
+  const pendingAccountName = useRef<string | null>(null)
   const sessionQuery = useQuery({ queryKey: SESSION_QUERY_KEY, queryFn: fetchSessionState })
 
   useEffect(() => {
@@ -49,13 +51,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.setQueryData(SESSION_QUERY_KEY, { accountName } satisfies SessionIdentity as SessionState)
       },
       async enroll(enrollmentToken, accountName, password) {
-        await apiFetch('/api/auth/enroll', {
+        const enrollResponse = await apiFetch<{ methods: string[] }>('/api/auth/enroll', {
           method: 'POST',
           body: JSON.stringify({ token: enrollmentToken, account_name: accountName, password }),
         })
+        pendingAccountName.current = accountName
+        return { methods: enrollResponse.methods }
+      },
+      async completeEnrollment(enrollmentToken) {
+        await completeSetup({ basePath: '/api/auth/enroll', extraBody: { token: enrollmentToken } })
         resetUnauthenticatedGuard()
         queryClient.setQueryData(ENROLLMENT_STATUS_QUERY_KEY, { enrollment_required: false })
-        queryClient.setQueryData(SESSION_QUERY_KEY, { accountName } satisfies SessionIdentity as SessionState)
+        queryClient.setQueryData(SESSION_QUERY_KEY, {
+          accountName: pendingAccountName.current,
+        } satisfies SessionIdentity as SessionState)
       },
       async logout() {
         try {

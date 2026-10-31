@@ -5,8 +5,14 @@ import { LabelledInput } from '@/components/LabelledInput'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/auth/useAuth'
 
+export interface EnrollmentProgress {
+  token: string
+  methods: string[]
+}
+
 export interface EnrollStepProps {
-  onComplete(): void
+  progress: EnrollmentProgress
+  onComplete(progress?: EnrollmentProgress): void
 }
 
 export function EnrollAccountStep({ onComplete }: EnrollStepProps) {
@@ -23,8 +29,9 @@ export function EnrollAccountStep({ onComplete }: EnrollStepProps) {
     setIsSubmitting(true)
     setEnrollError(null)
     try {
-      await enroll(enrollmentToken.trim(), accountName.trim(), password)
-      onComplete()
+      const trimmedToken = enrollmentToken.trim()
+      const { methods } = await enroll(trimmedToken, accountName.trim(), password)
+      onComplete({ token: trimmedToken, methods })
     } catch (enrollFailure) {
       setEnrollError({ failure: enrollFailure })
     } finally {

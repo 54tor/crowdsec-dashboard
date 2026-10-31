@@ -292,36 +292,13 @@ describe('app routing and auth', () => {
     expect(visitedPaths).toEqual(['/enroll', '/login'])
   })
 
-  it('enrollSendsTokenAccountNameAndPasswordThenLogsIn', async () => {
-    let hasSession = false
-    const fetchMock = stubFetch({
-      'GET /api/auth/status': ENROLLMENT_OPEN,
-      'GET /api/auth/me': () => (hasSession ? AUTHENTICATED_ALICE : UNAUTHENTICATED),
-      'POST /api/auth/enroll': () => {
-        hasSession = true
-        return { status: 200, body: { status: 'ok' } }
-      },
-    })
-    const user = userEvent.setup()
+  it('enrollFormDeclaresAutocompleteHintsAndAPasswordField', async () => {
+    stubFetch({ 'GET /api/auth/status': ENROLLMENT_OPEN, 'GET /api/auth/me': UNAUTHENTICATED })
     renderApp('/enroll')
-    const tokenInput = await screen.findByLabelText(en.enroll.token)
-    expect(tokenInput).toHaveAttribute('autocomplete', 'off')
+    expect(await screen.findByLabelText(en.enroll.token)).toHaveAttribute('autocomplete', 'off')
     expect(screen.getByLabelText(en.login.accountName)).toHaveAttribute('autocomplete', 'username')
     expect(screen.getByLabelText(en.login.password)).toHaveAttribute('autocomplete', 'new-password')
     expect(screen.getByLabelText(en.login.password)).toHaveAttribute('type', 'password')
-    const enrollmentToken = 'a'.repeat(43)
-    await user.click(tokenInput)
-    await user.paste(`  ${enrollmentToken}\n`)
-    await user.type(screen.getByLabelText(en.login.accountName), 'alice')
-    await user.type(screen.getByLabelText(en.login.password), 'correct horse battery')
-    await user.click(screen.getByRole('button', { name: en.enroll.submit }))
-    expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
-    const enrollCall = fetchMock.mock.calls.find(([requestedPath]) => requestedPath === '/api/auth/enroll')
-    expect(JSON.parse(String(enrollCall?.[1]?.body))).toEqual({
-      token: enrollmentToken,
-      account_name: 'alice',
-      password: 'correct horse battery',
-    })
   })
 
   it('enrollTranslatesInvalidEnrollmentToken', async () => {

@@ -38,7 +38,33 @@
     "description": "Collez le jeton d'enrôlement affiché dans les journaux du tableau de bord, puis choisissez le nom et le mot de passe (12 à 128 caractères) du compte administrateur.",
     "token": "Jeton d'enrôlement",
     "submit": "Créer le compte",
-    "submitting": "Création…"
+    "submitting": "Création…",
+    "secondFactor": {
+      "title": "Ajouter un second facteur",
+      "description": "La connexion exigera ce second facteur après votre mot de passe.",
+      "methodTotp": "Application d'authentification",
+      "methodWebauthn": "Clé de sécurité ou passkey",
+      "totpIntro": "Scannez le QR code avec une application d'authentification, puis saisissez le code à 6 chiffres qu'elle affiche.",
+      "qrLabel": "QR code à scanner avec votre application d'authentification",
+      "secretLabel": "Ou saisissez cette clé manuellement",
+      "codeLabel": "Code à 6 chiffres",
+      "confirm": "Valider le code",
+      "confirming": "Vérification…",
+      "loadingTotp": "Préparation de l'authentificateur…",
+      "webauthnRegistering": "En attente de votre clé de sécurité…"
+    },
+    "recoveryCodes": {
+      "title": "Conservez vos codes de secours",
+      "description": "Chaque code ne sert qu'une fois si vous perdez votre second facteur. Ils ne sont affichés que maintenant : rangez-les en lieu sûr.",
+      "loading": "Génération des codes de secours…",
+      "listLabel": "Codes de secours",
+      "copy": "Copier les codes",
+      "copied": "Copié",
+      "download": "Télécharger en fichier texte",
+      "acknowledge": "J'ai enregistré ces codes",
+      "finish": "Terminer",
+      "finishing": "Finalisation…"
+    }
   },
   "logout": "Se déconnecter",
   "errors": {
@@ -67,7 +93,14 @@
     "invalid_account_name": "Le nom de compte doit comporter 1 à 64 caractères : minuscules, chiffres, points, tirets ou tirets bas, en commençant par une lettre ou un chiffre.",
     "invalid_password_length": "Le mot de passe doit comporter 12 à 128 caractères.",
     "invalid_enrollment_token": "Le jeton d'enrôlement est invalide.",
-    "database_unavailable": "La base de données est indisponible. Réessayez dans un instant."
+    "database_unavailable": "La base de données est indisponible. Réessayez dans un instant.",
+    "invalid_code": "Le code est incorrect ou a expiré.",
+    "webauthn_failed": "La clé de sécurité n'a pas pu être enregistrée.",
+    "webauthn_unsupported": "Ce navigateur ne gère pas les clés de sécurité. Utilisez plutôt une application d'authentification.",
+    "webauthn_disabled": "Les clés de sécurité ne sont pas activées sur ce serveur.",
+    "second_factor_required": "Validez un second facteur avant de continuer.",
+    "enrollment_not_started": "Créez d'abord le compte.",
+    "second_factor_unavailable": "Le service de second facteur est indisponible. Réessayez dans un instant."
   },
   "filters": {
     "label": "Filtres",

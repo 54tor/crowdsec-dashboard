@@ -38,7 +38,33 @@
     "description": "Paste the enrolment token printed in the dashboard logs, then choose the administrator account name and password (12 to 128 characters).",
     "token": "Enrolment token",
     "submit": "Create the account",
-    "submitting": "Creating…"
+    "submitting": "Creating…",
+    "secondFactor": {
+      "title": "Add a second factor",
+      "description": "Sign-in will require this second factor after your password.",
+      "methodTotp": "Authenticator app",
+      "methodWebauthn": "Security key or passkey",
+      "totpIntro": "Scan the QR code with an authenticator app, then enter the 6-digit code it shows.",
+      "qrLabel": "QR code to scan with your authenticator app",
+      "secretLabel": "Or enter this key manually",
+      "codeLabel": "6-digit code",
+      "confirm": "Confirm the code",
+      "confirming": "Checking…",
+      "loadingTotp": "Preparing the authenticator…",
+      "webauthnRegistering": "Waiting for your security key…"
+    },
+    "recoveryCodes": {
+      "title": "Save your recovery codes",
+      "description": "Each code can be used once if you lose your second factor. They are shown only now: store them somewhere safe.",
+      "loading": "Generating the recovery codes…",
+      "listLabel": "Recovery codes",
+      "copy": "Copy the codes",
+      "copied": "Copied",
+      "download": "Download as a text file",
+      "acknowledge": "I have saved these codes",
+      "finish": "Finish",
+      "finishing": "Finishing…"
+    }
   },
   "logout": "Log out",
   "errors": {
@@ -67,7 +93,14 @@
     "invalid_account_name": "The account name must be 1 to 64 characters: lowercase letters, digits, dots, dashes or underscores, starting with a letter or digit.",
     "invalid_password_length": "The password must be 12 to 128 characters long.",
     "invalid_enrollment_token": "The enrolment token is invalid.",
-    "database_unavailable": "The database is unavailable. Please try again shortly."
+    "database_unavailable": "The database is unavailable. Please try again shortly.",
+    "invalid_code": "The code is incorrect or has expired.",
+    "webauthn_failed": "The security key could not be registered.",
+    "webauthn_unsupported": "This browser does not support security keys. Use an authenticator app instead.",
+    "webauthn_disabled": "Security keys are not enabled on this server.",
+    "second_factor_required": "Confirm a second factor before continuing.",
+    "enrollment_not_started": "Create the account first.",
+    "second_factor_unavailable": "The second factor service is unavailable. Please try again shortly."
   },
   "filters": {
     "label": "Filters",
