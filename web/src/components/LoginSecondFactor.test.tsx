@@ -311,6 +311,94 @@ describe('two-step login', () => {
       expect(countCalls(fetchMock, '/api/auth/login/setup/totp')).toBe(1)
     })
 
+    const TOTP_BEGIN = {
+      status: 200,
+      body: { secret: 'JBSWY3DPEHPK3PXP', otpauth_url: 'otpauth://totp/dashboard:alice?secret=JBSWY3DPEHPK3PXP' },
+    }
+    const SETUP_ROUTES: RouteTable = {
+      'POST /api/auth/login/setup/totp': TOTP_BEGIN,
+      'POST /api/auth/login/setup/totp/confirm': OK,
+      'POST /api/auth/login/setup/recovery-codes': { status: 200, body: { recovery_codes: RECOVERY_CODES } },
+    }
+    const DATABASE_DOWN = { status: 503, body: { error: 'database_unavailable' } }
+
+    async function startSetup(overrides: RouteTable, loginResponse = SETUP_REQUIRED) {
+      stubFetch(routes({ 'POST /api/auth/login': loginResponse, ...SETUP_ROUTES, ...overrides }))
+      const user = userEvent.setup()
+      renderApp('/login')
+      await submitPassword(user)
+      return user
+    }
+
+    async function confirmTotpCode(user: ReturnType<typeof userEvent.setup>) {
+      await user.type(await screen.findByLabelText(en.enroll.secondFactor.codeLabel), '123456')
+      await user.click(screen.getByRole('button', { name: en.enroll.secondFactor.confirm }))
+    }
+
+    async function expectBackAtPasswordWithExpiry() {
+      expect(await screen.findByLabelText(en.login.password)).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent(en.errors.pending_login_expired)
+    }
+
+    it('returnsToThePasswordStepWhenTotpBeginExpired', async () => {
+      await startSetup({ 'POST /api/auth/login/setup/totp': PENDING_EXPIRED })
+      await expectBackAtPasswordWithExpiry()
+    })
+
+    it('returnsToThePasswordStepWhenTotpConfirmExpired', async () => {
+      const user = await startSetup({ 'POST /api/auth/login/setup/totp/confirm': PENDING_EXPIRED })
+      await confirmTotpCode(user)
+      await expectBackAtPasswordWithExpiry()
+    })
+
+    it('returnsToThePasswordStepWhenTheRecoveryCodesFetchExpired', async () => {
+      const user = await startSetup({ 'POST /api/auth/login/setup/recovery-codes': PENDING_EXPIRED })
+      await confirmTotpCode(user)
+      await expectBackAtPasswordWithExpiry()
+    })
+
+    it('returnsToThePasswordStepWhenWebauthnRegistrationExpired', async () => {
+      installCredentials({ create: vi.fn() })
+      await startSetup(
+        { 'POST /api/auth/login/setup/webauthn/options': PENDING_EXPIRED },
+        { status: 200, body: { status: 'second_factor_setup_required', methods: ['totp', 'webauthn'] } },
+      ).then(async (user) => {
+        await user.click(await screen.findByRole('button', { name: en.enroll.secondFactor.methodWebauthn }))
+      })
+      await expectBackAtPasswordWithExpiry()
+    })
+
+    it('staysInTheStepWhenTotpBeginHitsAnUnavailableDatabase', async () => {
+      await startSetup({ 'POST /api/auth/login/setup/totp': DATABASE_DOWN })
+      expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.database_unavailable)
+      expect(screen.queryByLabelText(en.login.password)).not.toBeInTheDocument()
+    })
+
+    it('staysInTheStepWhenTotpConfirmHitsAnUnavailableDatabase', async () => {
+      const user = await startSetup({ 'POST /api/auth/login/setup/totp/confirm': DATABASE_DOWN })
+      await confirmTotpCode(user)
+      expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.database_unavailable)
+      expect(screen.queryByLabelText(en.login.password)).not.toBeInTheDocument()
+    })
+
+    it('staysInTheStepWhenTheRecoveryCodesFetchHitsAnUnavailableDatabase', async () => {
+      const user = await startSetup({ 'POST /api/auth/login/setup/recovery-codes': DATABASE_DOWN })
+      await confirmTotpCode(user)
+      expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.database_unavailable)
+      expect(screen.queryByLabelText(en.login.password)).not.toBeInTheDocument()
+    })
+
+    it('staysInTheStepWhenWebauthnRegistrationHitsAnUnavailableDatabase', async () => {
+      installCredentials({ create: vi.fn() })
+      const user = await startSetup(
+        { 'POST /api/auth/login/setup/webauthn/options': DATABASE_DOWN },
+        { status: 200, body: { status: 'second_factor_setup_required', methods: ['totp', 'webauthn'] } },
+      )
+      await user.click(await screen.findByRole('button', { name: en.enroll.secondFactor.methodWebauthn }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.database_unavailable)
+      expect(screen.queryByLabelText(en.login.password)).not.toBeInTheDocument()
+    })
+
     it('returnsToThePasswordStepWhenCompletingAfterExpiry', async () => {
       stubFetch(
         routes({

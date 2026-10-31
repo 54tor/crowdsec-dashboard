@@ -13,13 +13,14 @@ interface SecondFactorStepProps {
   flow: SecondFactorFlow
   methods: string[]
   onConfirmed(): void
+  onFailure?(failure: unknown): boolean
 }
 
 function isKnownMethod(method: string): method is SecondFactorMethod {
   return method === 'totp' || method === 'webauthn'
 }
 
-export function SecondFactorStep({ flow, methods, onConfirmed }: SecondFactorStepProps) {
+export function SecondFactorStep({ flow, methods, onConfirmed, onFailure }: SecondFactorStepProps) {
   const { t } = useTranslation()
   const offeredMethods = methods.filter(isKnownMethod)
   const [chosenMethod, setChosenMethod] = useState<SecondFactorMethod | null>(
@@ -38,7 +39,7 @@ export function SecondFactorStep({ flow, methods, onConfirmed }: SecondFactorSte
       await confirmWebAuthn(flow, credential)
       onConfirmed()
     } catch (registrationFailure) {
-      setFailure({ cause: registrationFailure })
+      if (!onFailure?.(registrationFailure)) setFailure({ cause: registrationFailure })
     } finally {
       setIsRegistering(false)
     }
@@ -66,7 +67,7 @@ export function SecondFactorStep({ flow, methods, onConfirmed }: SecondFactorSte
           )}
         </div>
       )}
-      {chosenMethod === 'totp' && <TotpEnrollment flow={flow} onConfirmed={onConfirmed} />}
+      {chosenMethod === 'totp' && <TotpEnrollment flow={flow} onConfirmed={onConfirmed} onFailure={onFailure} />}
       {failure && <FormError failure={failure.cause} />}
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { LOGIN_SETUP_FLOW } from '@/api/loginApi'
 import { RecoveryCodesStep } from '@/components/RecoveryCodesStep'
 import { SecondFactorStep } from '@/components/SecondFactorStep'
@@ -14,20 +14,24 @@ export function LoginSetup({ methods, onRestart }: LoginSetupProps) {
   const { completeLoginSetup } = useAuth()
   const [isSecondFactorConfirmed, setIsSecondFactorConfirmed] = useState(false)
 
-  async function finishSetup() {
-    try {
-      await completeLoginSetup()
-    } catch (completeFailure) {
-      if (isLoginRestartFailure(completeFailure)) {
-        onRestart(completeFailure)
-        return
-      }
-      throw completeFailure
-    }
-  }
+  const handleFailure = useCallback(
+    (failure: unknown) => {
+      if (!isLoginRestartFailure(failure)) return false
+      onRestart(failure)
+      return true
+    },
+    [onRestart],
+  )
 
   if (!isSecondFactorConfirmed) {
-    return <SecondFactorStep flow={LOGIN_SETUP_FLOW} methods={methods} onConfirmed={() => setIsSecondFactorConfirmed(true)} />
+    return (
+      <SecondFactorStep
+        flow={LOGIN_SETUP_FLOW}
+        methods={methods}
+        onConfirmed={() => setIsSecondFactorConfirmed(true)}
+        onFailure={handleFailure}
+      />
+    )
   }
-  return <RecoveryCodesStep flow={LOGIN_SETUP_FLOW} onFinish={finishSetup} />
+  return <RecoveryCodesStep flow={LOGIN_SETUP_FLOW} onFinish={completeLoginSetup} onFailure={handleFailure} />
 }

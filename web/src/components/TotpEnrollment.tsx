@@ -1,5 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { beginTotp, confirmTotp, type SecondFactorFlow, type TotpEnrollmentDetails } from '@/api/secondFactorApi'
 import { FormError } from '@/components/FormError'
@@ -9,14 +9,23 @@ import { Button } from '@/components/ui/button'
 interface TotpEnrollmentProps {
   flow: SecondFactorFlow
   onConfirmed(): void
+  onFailure?(failure: unknown): boolean
 }
 
-export function TotpEnrollment({ flow, onConfirmed }: TotpEnrollmentProps) {
+export function TotpEnrollment({ flow, onConfirmed, onFailure }: TotpEnrollmentProps) {
   const { t } = useTranslation()
   const [details, setDetails] = useState<TotpEnrollmentDetails | null>(null)
   const [code, setCode] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [failure, setFailure] = useState<{ cause: unknown } | null>(null)
+  const onFailureReference = useRef(onFailure)
+  useEffect(() => {
+    onFailureReference.current = onFailure
+  })
+
+  function reportFailure(cause: unknown) {
+    if (!onFailureReference.current?.(cause)) setFailure({ cause })
+  }
 
   useEffect(() => {
     let isCancelled = false
@@ -25,7 +34,7 @@ export function TotpEnrollment({ flow, onConfirmed }: TotpEnrollmentProps) {
         if (!isCancelled) setDetails(beginResponse)
       },
       (beginFailure) => {
-        if (!isCancelled) setFailure({ cause: beginFailure })
+        if (!isCancelled) reportFailure(beginFailure)
       },
     )
     return () => {
@@ -41,7 +50,7 @@ export function TotpEnrollment({ flow, onConfirmed }: TotpEnrollmentProps) {
       await confirmTotp(flow, code.trim())
       onConfirmed()
     } catch (confirmFailure) {
-      setFailure({ cause: confirmFailure })
+      reportFailure(confirmFailure)
     } finally {
       setIsSubmitting(false)
     }

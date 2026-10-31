@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { fetchRecoveryCodes, type SecondFactorFlow } from '@/api/secondFactorApi'
 import { FormError } from '@/components/FormError'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 interface RecoveryCodesStepProps {
   flow: SecondFactorFlow
   onFinish(): Promise<void>
+  onFailure?(failure: unknown): boolean
 }
 
 const DOWNLOAD_FILE_NAME = 'recovery-codes.txt'
@@ -21,13 +22,21 @@ function downloadAsTextFile(text: string): void {
   URL.revokeObjectURL(downloadUrl)
 }
 
-export function RecoveryCodesStep({ flow, onFinish }: RecoveryCodesStepProps) {
+export function RecoveryCodesStep({ flow, onFinish, onFailure }: RecoveryCodesStepProps) {
   const { t } = useTranslation()
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
   const [isAcknowledged, setIsAcknowledged] = useState(false)
   const [hasCopied, setHasCopied] = useState(false)
   const [isFinishing, setIsFinishing] = useState(false)
   const [failure, setFailure] = useState<{ cause: unknown } | null>(null)
+  const onFailureReference = useRef(onFailure)
+  useEffect(() => {
+    onFailureReference.current = onFailure
+  })
+
+  function reportFailure(cause: unknown) {
+    if (!onFailureReference.current?.(cause)) setFailure({ cause })
+  }
 
   useEffect(() => {
     let isCancelled = false
@@ -36,7 +45,7 @@ export function RecoveryCodesStep({ flow, onFinish }: RecoveryCodesStepProps) {
         if (!isCancelled) setRecoveryCodes(fetchedCodes)
       },
       (fetchFailure) => {
-        if (!isCancelled) setFailure({ cause: fetchFailure })
+        if (!isCancelled) reportFailure(fetchFailure)
       },
     )
     return () => {
@@ -59,7 +68,7 @@ export function RecoveryCodesStep({ flow, onFinish }: RecoveryCodesStepProps) {
     try {
       await onFinish()
     } catch (finishFailure) {
-      setFailure({ cause: finishFailure })
+      reportFailure(finishFailure)
       setIsFinishing(false)
     }
   }
