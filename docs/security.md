@@ -321,7 +321,7 @@ accepted to supervise the dashboard and `geoipupdate` in one container. Mitigati
   |---|---|
   | `SETUID`, `SETGID` | `s6-setuidgid` drops to `docker-user`; without them the dashboard does not start (`s6-applyuidgid: fatal: unable to setuid`) |
   | `KILL` | root (`s6-supervise`) signals the dashboard on stop; without it `docker stop` ends with exit 137 and no clean shutdown |
-  | `CHOWN`, `DAC_READ_SEARCH` | the compose secret is root-owned with mode 0600 from the host: root needs `DAC_READ_SEARCH` to read it and `CHOWN` to hand the copy and the GeoLite2 volume to `docker-user`; either one alone fails |
+  | `CHOWN`, `DAC_READ_SEARCH` | the compose secret keeps the host owner and mode (owned by the host user, mode 0600), so it is not readable by `docker-user`: root needs `DAC_READ_SEARCH` to read it and `CHOWN` to hand the copy and the GeoLite2 volume to `docker-user`; either one alone fails |
 
   `DAC_OVERRIDE` and `FOWNER` are not needed.
 - The hook directories `/custom-scripts.d` and `/docker-entrypoint.d` are root-owned in the image and

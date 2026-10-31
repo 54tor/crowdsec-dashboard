@@ -66,8 +66,8 @@ install -d -m 0700 secrets && (umask 077; openssl rand -base64 32 > secrets/dash
 The example compose passes it as the compose secret `dashboard-secrets-key`, mounted at
 `/run/secrets/dashboard-secrets-key`. At every start the `25-secrets-key` init script copies it to
 `/run/dashboard-secrets/key` (a tmpfs directory, mode 0700, file 0400, owned by `docker-user`), which
-is the path `SECRETS_KEY_FILE` points to. The dashboard cannot read the compose secret itself, which
-is root-owned. The init script fails, and the container stops, when the secret is missing or empty.
+is the path `SECRETS_KEY_FILE` points to. The dashboard cannot read the compose secret itself: it keeps
+the host owner and mode (owned by the host user, mode 0600), so it is not readable by `docker-user`. The init script fails, and the container stops, when the secret is missing or empty.
 The key is identified by its `key_id`, the first 16 hex characters of its SHA-256, stored with each
 encrypted secret.
 

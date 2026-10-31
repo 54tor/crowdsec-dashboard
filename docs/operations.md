@@ -253,9 +253,16 @@ DELETE FROM credential WHERE credential_kind IN ('totp', 'webauthn')
    AND credential_account_id = (SELECT account_id FROM account WHERE account_name = '<account name>');
 DELETE FROM recovery_code WHERE recovery_code_account_id =
   (SELECT account_id FROM account WHERE account_name = '<account name>');
+UPDATE account SET account_webauthn_user_handle = NULL WHERE account_name = '<account name>';
 UPDATE account SET account_second_factor_setup_until = now() + interval '1 day'
  WHERE account_name = '<account name>';
 ```
+
+The `account_webauthn_user_handle` line matters for an account that had a passkey: the handle is
+unique and a new enrolment generates a new one, which is stored only over an empty handle; without
+the reset, enrolling a passkey again fails and rolls back (503). The procedure does not clear the
+lock: an account whose attempts are exhausted answers 423 `account_locked` at the password step until
+the lock expires, so run [Unlocking an account](#unlocking-an-account) too if needed.
 
 ## Backup and restore
 
