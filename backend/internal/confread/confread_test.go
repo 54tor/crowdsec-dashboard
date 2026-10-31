@@ -169,3 +169,41 @@ func TestReadRedactsSecretValues(testContext *testing.T) {
 		}
 	}
 }
+
+func TestReadRejectsCredentialsFilesCaseInsensitively(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "parsers/s01-parse/my-whitelist_CREDENTIALS.yaml", "password: hunter2\n")
+	writeConfFile(testContext, confDir, "acquis.d/Prod_Credentials.yaml", "password: hunter2\n")
+
+	for _, rejectedName := range []string{"parsers/s01-parse/my-whitelist_CREDENTIALS.yaml", "acquis.d/Prod_Credentials.yaml"} {
+		if _, readError := Read(confDir, rejectedName); !errors.Is(readError, ErrNotAllowed) {
+			testContext.Errorf("%s: expected ErrNotAllowed, got %v", rejectedName, readError)
+		}
+	}
+	listedNames, _ := List(confDir)
+	if len(listedNames) != 0 {
+		testContext.Errorf("nothing should be listed, got %v", listedNames)
+	}
+}
+
+func TestSymlinksInsideTheDirectoryAreNeitherServedNorListed(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "config.yaml", "name: real\n")
+	writeConfFile(testContext, confDir, "other/extra.yaml", "name: extra\n")
+	if symlinkError := os.Symlink("config.yaml", filepath.Join(confDir, "profiles.yaml")); symlinkError != nil {
+		testContext.Fatal(symlinkError)
+	}
+	if symlinkError := os.Symlink("other", filepath.Join(confDir, "acquis.d")); symlinkError != nil {
+		testContext.Fatal(symlinkError)
+	}
+
+	for _, refusedName := range []string{"profiles.yaml", "acquis.d/extra.yaml"} {
+		if _, readError := Read(confDir, refusedName); !errors.Is(readError, ErrNotAllowed) {
+			testContext.Errorf("%s: expected ErrNotAllowed, got %v", refusedName, readError)
+		}
+	}
+	listedNames, listError := List(confDir)
+	if listError != nil || !slices.Equal(listedNames, []string{"config.yaml"}) {
+		testContext.Errorf("expected only config.yaml, got %v %v", listedNames, listError)
+	}
+}

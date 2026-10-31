@@ -28,10 +28,10 @@ func (handlers alertReadHandlers) list(responseWriter http.ResponseWriter, reque
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, page[lapi.Alert]{
-		Items:     slicePage(window, query),
-		Page:      query.Page,
-		PerPage:   query.PerPage,
-		Total:     len(window),
-		Truncated: len(window) >= alertWindowSize,
+		Items:          slicePage(window, query),
+		Page:           query.Page,
+		PerPage:        query.PerPage,
+		WindowSize:     len(window),
+		MayBeTruncated: len(window) >= alertWindowSize,
 	})
 }

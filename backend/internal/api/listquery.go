@@ -1,6 +1,7 @@
 package api
 
 import (
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -12,6 +13,7 @@ import (
 const (
 	defaultPerPage = 50
 	maxPerPage     = 100
+	maxPage        = 10000
 )
 
 var scenarioPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:-]{0,127}$`)
@@ -25,26 +27,26 @@ type listQuery struct {
 }
 
 type page[T any] struct {
-	Items     []T  `json:"items"`
-	Page      int  `json:"page"`
-	PerPage   int  `json:"per_page"`
-	Total     int  `json:"total"`
-	Truncated bool `json:"truncated"`
+	Items          []T  `json:"items"`
+	Page           int  `json:"page"`
+	PerPage        int  `json:"per_page"`
+	WindowSize     int  `json:"window_size"`
+	MayBeTruncated bool `json:"may_be_truncated"`
 }
 
-func parsePositive(values url.Values, key string, fallback int) (int, bool) {
+func parseBounded(values url.Values, key string, fallback, upperBound int) (int, bool) {
 	rawValue := values.Get(key)
 	if rawValue == "" {
 		return fallback, true
 	}
 	parsed, parseError := strconv.Atoi(rawValue)
-	return parsed, parseError == nil && parsed >= 1
+	return parsed, parseError == nil && parsed >= 1 && parsed <= upperBound
 }
 
 func parseListQuery(request *http.Request) (listQuery, bool) {
 	values := request.URL.Query()
-	pageNumber, pageValid := parsePositive(values, "page", 1)
-	perPage, perPageValid := parsePositive(values, "per_page", defaultPerPage)
+	pageNumber, pageValid := parseBounded(values, "page", 1, maxPage)
+	perPage, perPageValid := parseBounded(values, "per_page", defaultPerPage, math.MaxInt)
 	query := listQuery{
 		Page:     pageNumber,
 		PerPage:  min(perPage, maxPerPage),
@@ -60,9 +62,12 @@ func parseListQuery(request *http.Request) (listQuery, bool) {
 }
 
 func slicePage[T any](window []T, query listQuery) []T {
+	if query.Page-1 > len(window)/query.PerPage {
+		return []T{}
+	}
 	start := (query.Page - 1) * query.PerPage
 	if start >= len(window) {
 		return []T{}
 	}
-	return window[start:min(start+query.PerPage, len(window))]
+	return window[start : min(len(window)-start, query.PerPage)+start]
 }

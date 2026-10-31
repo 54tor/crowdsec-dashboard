@@ -13,7 +13,6 @@ type Bouncer struct {
 	Version   string  `json:"version"`
 	IPAddress string  `json:"ip_address"`
 	LastPull  *string `json:"last_pull"`
-	Valid     bool    `json:"valid"`
 	Revoked   bool    `json:"revoked"`
 	AuthType  string  `json:"auth_type"`
 }
@@ -33,7 +32,6 @@ type rawBouncer struct {
 	Version   string  `json:"version"`
 	IPAddress string  `json:"ip_address"`
 	LastPull  *string `json:"last_pull"`
-	Valid     bool    `json:"valid"`
 	Revoked   bool    `json:"revoked"`
 	AuthType  string  `json:"auth_type"`
 }

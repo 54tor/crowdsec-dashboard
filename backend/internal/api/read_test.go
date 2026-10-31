@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -35,11 +36,12 @@ func (fake *fakeAlertLister) ListAlerts(_ context.Context, filter lapi.AlertFilt
 type fakeDecisionLister struct {
 	receivedFilters []lapi.DecisionFilter
 	decisions       []lapi.Decision
+	mayBeTruncated  bool
 }
 
-func (fake *fakeDecisionLister) ListDecisions(_ context.Context, filter lapi.DecisionFilter) ([]lapi.Decision, error) {
+func (fake *fakeDecisionLister) ListDecisions(_ context.Context, filter lapi.DecisionFilter) (lapi.DecisionList, error) {
 	fake.receivedFilters = append(fake.receivedFilters, filter)
-	return append([]lapi.Decision(nil), fake.decisions...), nil
+	return lapi.DecisionList{Decisions: append([]lapi.Decision(nil), fake.decisions...), MayBeTruncated: fake.mayBeTruncated}, nil
 }
 
 type scriptedRunner struct {
@@ -118,8 +120,8 @@ func TestAlertsPerPageIsCapped(testContext *testing.T) {
 	if decoded.PerPage != 100 || len(decoded.Items) != 100 {
 		testContext.Errorf("expected per_page 100 and 100 items, got %d and %d", decoded.PerPage, len(decoded.Items))
 	}
-	if !decoded.Truncated {
-		testContext.Error("a full window must be flagged truncated")
+	if !decoded.MayBeTruncated {
+		testContext.Error("a full window must be flagged as possibly truncated")
 	}
 	for _, receivedFilter := range lister.receivedFilters {
 		if receivedFilter.Limit <= 0 || receivedFilter.Limit > 100 {
@@ -135,7 +137,7 @@ func TestAlertsPagesSliceTheCappedWindow(testContext *testing.T) {
 	secondPage := decodePage(testContext, fixture.get("/api/alerts?page=2&per_page=50", true))
 	beyondWindow := decodePage(testContext, fixture.get("/api/alerts?page=3&per_page=50", true))
 
-	if len(secondPage.Items) != 20 || secondPage.Items[0]["id"] != float64(51) || secondPage.Total != 70 || secondPage.Truncated {
+	if len(secondPage.Items) != 20 || secondPage.Items[0]["id"] != float64(51) || secondPage.WindowSize != 70 || secondPage.MayBeTruncated {
 		testContext.Errorf("unexpected second page: %+v", secondPage)
 	}
 	if len(beyondWindow.Items) != 0 {
@@ -169,26 +171,52 @@ func TestAlertsMapUpstreamFailureWithoutLeakingText(testContext *testing.T) {
 	expectError(testContext, fixture.get("/api/alerts", true), http.StatusBadGateway, "lapi_unavailable")
 }
 
-func TestDecisionsAreFilteredAndPaginated(testContext *testing.T) {
-	lister := &fakeDecisionLister{}
+func TestDecisionsForwardFiltersAndPaginateTheWindow(testContext *testing.T) {
+	lister := &fakeDecisionLister{mayBeTruncated: true}
 	for decisionNumber := 1; decisionNumber <= 120; decisionNumber++ {
-		scenario := "crowdsecurity/ssh-bf"
-		if decisionNumber%2 == 0 {
-			scenario = "crowdsecurity/http-probing"
-		}
-		lister.decisions = append(lister.decisions, lapi.Decision{ID: int64(decisionNumber), Scenario: scenario})
+		lister.decisions = append(lister.decisions, lapi.Decision{ID: int64(decisionNumber), AlertID: 7, Scenario: "crowdsecurity/ssh-bf"})
 	}
 	fixture := newReadFixture(testContext, Services{DecisionReader: lister})
 
-	filteredPage := decodePage(testContext, fixture.get("/api/decisions?scenario=crowdsecurity/ssh-bf&per_page=1000&ip=203.0.113.9", true))
+	secondPage := decodePage(testContext, fixture.get("/api/decisions?scenario=crowdsecurity/ssh-bf&per_page=1000&page=2&ip=203.0.113.0/24&since=24h", true))
 
-	if filteredPage.Total != 60 || len(filteredPage.Items) != 60 || filteredPage.PerPage != 100 {
-		testContext.Errorf("unexpected page: total %d items %d per_page %d", filteredPage.Total, len(filteredPage.Items), filteredPage.PerPage)
+	if secondPage.WindowSize != 120 || len(secondPage.Items) != 20 || secondPage.PerPage != 100 || !secondPage.MayBeTruncated {
+		testContext.Errorf("unexpected page: %+v", secondPage)
 	}
-	if lister.receivedFilters[0].IP != "203.0.113.9" {
-		testContext.Errorf("ip filter not forwarded: %+v", lister.receivedFilters[0])
+	receivedFilter := lister.receivedFilters[0]
+	if receivedFilter.IP != "203.0.113.0/24" || receivedFilter.Scenario != "crowdsecurity/ssh-bf" || receivedFilter.Since != "24h" || receivedFilter.Limit != 100 {
+		testContext.Errorf("filters not forwarded: %+v", receivedFilter)
 	}
 	expectError(testContext, fixture.get("/api/decisions?page=0", true), http.StatusBadRequest, "invalid_request")
+}
+
+func TestPageParametersCannotOverflowTheSlicing(testContext *testing.T) {
+	alertFixture := newReadFixture(testContext, Services{AlertReader: &fakeAlertLister{alerts: makeAlerts(5)}, DecisionReader: &fakeDecisionLister{}})
+
+	for _, overflowingQuery := range []string{"page=100000000000000000&per_page=100", "page=9223372036854775807&per_page=100", "page=10001"} {
+		expectError(testContext, alertFixture.get("/api/alerts?"+overflowingQuery, true), http.StatusBadRequest, "invalid_request")
+		expectError(testContext, alertFixture.get("/api/decisions?"+overflowingQuery, true), http.StatusBadRequest, "invalid_request")
+	}
+	expectError(testContext, alertFixture.get("/api/alerts?per_page=99999999999999999999", true), http.StatusBadRequest, "invalid_request")
+	hugePerPage := decodePage(testContext, alertFixture.get("/api/alerts?per_page=9223372036854775807", true))
+	if hugePerPage.PerPage != 100 || len(hugePerPage.Items) != 5 {
+		testContext.Errorf("unexpected page: %+v", hugePerPage)
+	}
+	lastPage := decodePage(testContext, alertFixture.get("/api/alerts?page=10000&per_page=100", true))
+	if lastPage.Items == nil || len(lastPage.Items) != 0 || lastPage.Page != 10000 {
+		testContext.Errorf("expected a stable empty page, got %+v", lastPage)
+	}
+}
+
+func TestSlicePageIsOverflowProof(testContext *testing.T) {
+	window := []int{1, 2, 3}
+
+	for _, extremePage := range []int{math.MaxInt, math.MaxInt / 2, math.MaxInt/100 + 2} {
+		obtained := slicePage(window, listQuery{Page: extremePage, PerPage: 100})
+		if obtained == nil || len(obtained) != 0 {
+			testContext.Errorf("page %d: expected empty slice, got %v", extremePage, obtained)
+		}
+	}
 }
 
 func newPlatformServices(outputsByCommand map[string]string, failingCommands map[string]bool) Services {
@@ -210,31 +238,27 @@ func TestHealthReturnsEmptyListsWhenCscliPrintsNull(testContext *testing.T) {
 	}
 }
 
-func TestHealthNeverExposesSecretFields(testContext *testing.T) {
+func TestHealthProjectsOnlyTheFieldsTheUINeeds(testContext *testing.T) {
 	fixture := newReadFixture(testContext, newPlatformServices(map[string]string{
 		"version": "version: v1.6.4\n",
-		"bouncers list -o json": `[{"id":1,"name":"fw","api_key":"BOUNCER-SECRET-KEY","ip_address":"10.0.0.2","type":"firewall","version":"0.0.30",` +
-			`"last_pull":"2026-10-31T10:00:00Z","valid":true,"revoked":false,"auth_type":"api-key","created_at":"x"}]`,
-		"machines list -o json": `[{"machineId":"watcher","password":"MACHINE-SECRET-PASSWORD","ipAddress":"10.0.0.3","last_heartbeat":"2026-10-31T10:01:00Z",` +
-			`"version":"v1.6.4","isValidated":true,"auth_type":"password","token":"MACHINE-SECRET-TOKEN"}]`,
+		"bouncers list -o json": `[{"auth_type":"api-key","auto_created":false,"created_at":"2026-10-01T10:00:00Z","ip_address":"10.0.0.2",` +
+			`"last_pull":"2026-10-31T10:00:00Z","name":"fw","os":"debian/12","revoked":false,"type":"firewall","updated_at":"2026-10-31T10:00:00Z","version":"0.0.30"}]`,
+		"machines list -o json": `[{"auth_type":"password","created_at":"2026-10-01T10:00:00Z","datasources":{"file":3},"features":["a"],"ipAddress":"10.0.0.3",` +
+			`"isValidated":true,"last_heartbeat":"2026-10-31T10:01:00Z","last_push":"2026-10-31T10:02:00Z","machineId":"watcher","os":"debian/12",` +
+			`"updated_at":"2026-10-31T10:02:00Z","version":"v1.6.4"}]`,
 	}, nil))
 
 	recorder := fixture.get("/api/health", true)
 
-	for _, secret := range []string{"BOUNCER-SECRET-KEY", "MACHINE-SECRET-PASSWORD", "MACHINE-SECRET-TOKEN", "created_at", "api_key"} {
-		if strings.Contains(recorder.Body.String(), secret) {
-			testContext.Errorf("%q leaked in %q", secret, recorder.Body.String())
+	for _, droppedKey := range []string{"created_at", "updated_at", "datasources", "features", "last_push", "auto_created", "os", "valid\""} {
+		if strings.Contains(recorder.Body.String(), droppedKey) {
+			testContext.Errorf("%q must not be exposed: %q", droppedKey, recorder.Body.String())
 		}
 	}
-	var decoded healthReport
-	if decodeError := json.Unmarshal(recorder.Body.Bytes(), &decoded); decodeError != nil {
-		testContext.Fatal(decodeError)
-	}
-	if len(decoded.Bouncers) != 1 || decoded.Bouncers[0].Name != "fw" || decoded.Bouncers[0].LastPull == nil || !decoded.Bouncers[0].Valid {
-		testContext.Errorf("unexpected bouncers: %+v", decoded.Bouncers)
-	}
-	if len(decoded.Machines) != 1 || decoded.Machines[0].MachineID != "watcher" || decoded.Machines[0].IPAddress != "10.0.0.3" || !decoded.Machines[0].IsValidated {
-		testContext.Errorf("unexpected machines: %+v", decoded.Machines)
+	expectedBody := `{"version":"v1.6.4","bouncers":[{"name":"fw","type":"firewall","version":"0.0.30","ip_address":"10.0.0.2","last_pull":"2026-10-31T10:00:00Z","revoked":false,"auth_type":"api-key"}],` +
+		`"machines":[{"machine_id":"watcher","ip_address":"10.0.0.3","last_heartbeat":"2026-10-31T10:01:00Z","version":"v1.6.4","is_validated":true,"auth_type":"password"}],"degraded":[]}`
+	if strings.TrimSpace(recorder.Body.String()) != expectedBody {
+		testContext.Errorf("expected %s, got %q", expectedBody, recorder.Body.String())
 	}
 }
 
@@ -284,7 +308,7 @@ func TestMetricsProjectsAcquisitionAndParsers(testContext *testing.T) {
 
 	recorder := fixture.get("/api/metrics", true)
 
-	expectedBody := `{"acquisition":[{"source":"file:/var/log/auth.log","lines_read":636,"parsed":0,"unparsed":636},` +
+	expectedBody := `{"available":true,"acquisition":[{"source":"file:/var/log/auth.log","lines_read":636,"parsed":0,"unparsed":636},` +
 		`{"source":"file:/var/log/nginx/access.log","lines_read":24,"parsed":24,"unparsed":0}],` +
 		`"parsers":[{"name":"crowdsecurity/syslog-logs","hits":10,"parsed":9,"unparsed":1}]}`
 	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != expectedBody {
@@ -292,16 +316,24 @@ func TestMetricsProjectsAcquisitionAndParsers(testContext *testing.T) {
 	}
 }
 
-func TestMetricsToleratesNullAndMapsCscliFailure(testContext *testing.T) {
-	nullFixture := newReadFixture(testContext, newPlatformServices(map[string]string{"metrics -o json": "null"}, nil))
-	failingFixture := newReadFixture(testContext, newPlatformServices(nil, map[string]bool{"metrics -o json": true}))
+func TestMetricsToleratesNull(testContext *testing.T) {
+	fixture := newReadFixture(testContext, newPlatformServices(map[string]string{"metrics -o json": "null"}, nil))
 
-	nullRecorder := nullFixture.get("/api/metrics", true)
+	recorder := fixture.get("/api/metrics", true)
 
-	if strings.TrimSpace(nullRecorder.Body.String()) != `{"acquisition":[],"parsers":[]}` {
-		testContext.Errorf("unexpected body %q", nullRecorder.Body.String())
+	if strings.TrimSpace(recorder.Body.String()) != `{"available":true,"acquisition":[],"parsers":[]}` {
+		testContext.Errorf("unexpected body %q", recorder.Body.String())
 	}
-	expectError(testContext, failingFixture.get("/api/metrics", true), http.StatusBadGateway, "cscli_failed")
+}
+
+func TestMetricsReportUnavailableWhenCscliFails(testContext *testing.T) {
+	fixture := newReadFixture(testContext, newPlatformServices(nil, map[string]bool{"metrics -o json": true}))
+
+	recorder := fixture.get("/api/metrics", true)
+
+	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"available":false,"reason":"unavailable"}` {
+		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
+	}
 }
 
 func newConfigServices(testContext *testing.T) Services {

@@ -27,6 +27,7 @@ type ParserMetric struct {
 }
 
 type Metrics struct {
+	Available   bool                `json:"available"`
 	Acquisition []AcquisitionMetric `json:"acquisition"`
 	Parsers     []ParserMetric      `json:"parsers"`
 }
@@ -37,7 +38,7 @@ type rawMetrics struct {
 }
 
 func projectMetrics(raw rawMetrics) Metrics {
-	metrics := Metrics{Acquisition: []AcquisitionMetric{}, Parsers: []ParserMetric{}}
+	metrics := Metrics{Available: true, Acquisition: []AcquisitionMetric{}, Parsers: []ParserMetric{}}
 	for _, source := range slices.Sorted(maps.Keys(raw.Acquisition)) {
 		counters := raw.Acquisition[source]
 		metrics.Acquisition = append(metrics.Acquisition, AcquisitionMetric{
@@ -74,7 +75,7 @@ type metricsHandlers struct{ platform Platform }
 func (handlers metricsHandlers) get(responseWriter http.ResponseWriter, request *http.Request) {
 	metrics, metricsError := handlers.platform.Metrics(request.Context())
 	if metricsError != nil {
-		writeUpstreamError(responseWriter, metricsError)
+		writeJSON(responseWriter, http.StatusOK, map[string]any{"available": false, "reason": "unavailable"})
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, metrics)

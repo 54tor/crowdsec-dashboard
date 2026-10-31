@@ -52,6 +52,17 @@ func NewClient(baseURL, machineID, machinePassword string, httpClient *http.Clie
 }
 
 func (client *Client) ListAlerts(ctx context.Context, filter AlertFilter) ([]Alert, error) {
+	alerts := []Alert{}
+	if err := client.authorizedRequest(ctx, http.MethodGet, "/v1/alerts", alertQuery(filter), nil, &alerts); err != nil {
+		return nil, err
+	}
+	if alerts == nil {
+		alerts = []Alert{}
+	}
+	return alerts, nil
+}
+
+func alertQuery(filter AlertFilter) url.Values {
 	query := url.Values{}
 	query.Set("limit", strconv.Itoa(capAlertLimit(filter.Limit)))
 	setIfNotEmpty(query, "since", filter.Since)
@@ -62,32 +73,56 @@ func (client *Client) ListAlerts(ctx context.Context, filter AlertFilter) ([]Ale
 	if filter.HasActiveDecision != nil {
 		query.Set("has_active_decision", strconv.FormatBool(*filter.HasActiveDecision))
 	}
-	alerts := []Alert{}
-	if err := client.authorizedRequest(ctx, http.MethodGet, "/v1/alerts", query, nil, &alerts); err != nil {
-		return nil, err
-	}
-	if alerts == nil {
-		alerts = []Alert{}
-	}
-	return alerts, nil
+	return query
 }
 
-func (client *Client) ListDecisions(ctx context.Context, filter DecisionFilter) ([]Decision, error) {
-	query := url.Values{}
-	setIfNotEmpty(query, "ip", filter.IP)
-	setIfNotEmpty(query, "range", filter.Range)
-	setIfNotEmpty(query, "scope", filter.Scope)
-	setIfNotEmpty(query, "value", filter.Value)
-	setIfNotEmpty(query, "type", filter.Type)
-	setIfNotEmpty(query, "origin", filter.Origin)
+func (client *Client) ListDecisions(ctx context.Context, filter DecisionFilter) (DecisionList, error) {
+	alertFilter := AlertFilter{
+		Limit:             filter.Limit,
+		Since:             filter.Since,
+		Scenario:          filter.Scenario,
+		Origin:            filter.Origin,
+		HasActiveDecision: new(bool),
+	}
+	*alertFilter.HasActiveDecision = true
+	rangeValue := filter.Range
+	if _, prefixError := netip.ParsePrefix(filter.IP); prefixError == nil {
+		rangeValue = filter.IP
+	} else {
+		alertFilter.IP = filter.IP
+	}
+	query := alertQuery(alertFilter)
+	setIfNotEmpty(query, "range", rangeValue)
+	alerts := []Alert{}
+	if err := client.authorizedRequest(ctx, http.MethodGet, "/v1/alerts", query, nil, &alerts); err != nil {
+		return DecisionList{}, err
+	}
+	return DecisionList{
+		Decisions:      flattenDecisions(alerts, filter),
+		MayBeTruncated: len(alerts) >= capAlertLimit(filter.Limit),
+	}, nil
+}
+
+func flattenDecisions(alerts []Alert, filter DecisionFilter) []Decision {
 	decisions := []Decision{}
-	if err := client.authorizedRequest(ctx, http.MethodGet, "/v1/decisions", query, nil, &decisions); err != nil {
-		return nil, err
+	for _, alert := range alerts {
+		for _, decision := range alert.Decisions {
+			decision.AlertID = alert.ID
+			if decision.Scenario == "" {
+				decision.Scenario = alert.Scenario
+			}
+			if decisionMatches(decision, filter) {
+				decisions = append(decisions, decision)
+			}
+		}
 	}
-	if decisions == nil {
-		decisions = []Decision{}
-	}
-	return decisions, nil
+	return decisions
+}
+
+func decisionMatches(decision Decision, filter DecisionFilter) bool {
+	return (filter.Type == "" || decision.Type == filter.Type) &&
+		(filter.Scope == "" || strings.EqualFold(decision.Scope, filter.Scope)) &&
+		(filter.Value == "" || decision.Value == filter.Value)
 }
 
 func (client *Client) AddDecision(ctx context.Context, newDecision NewDecision) error {

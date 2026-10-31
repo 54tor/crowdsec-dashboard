@@ -23,6 +23,7 @@ type fakeLAPI struct {
 	lastMethod     atomic.Value
 	lastPath       atomic.Value
 	lastBody       atomic.Value
+	alertsBody     atomic.Value
 }
 
 func newFakeLAPI(testing *testing.T) (*fakeLAPI, *Client) {
@@ -47,6 +48,10 @@ func (fake *fakeLAPI) ServeHTTP(responseWriter http.ResponseWriter, request *htt
 		_ = json.NewEncoder(responseWriter).Encode(map[string]any{"code": 200, "token": token, "expire": "2099-01-01T00:00:00Z"})
 		return
 	}
+	if request.Method == http.MethodGet && request.URL.Path == "/v1/decisions" {
+		http.Error(responseWriter, `{"message":"access forbidden"}`, http.StatusForbidden)
+		return
+	}
 	fake.alertCount.Add(1)
 	fake.lastQuery.Store(map[string][]string(request.URL.Query()))
 	fake.lastMethod.Store(request.Method)
@@ -58,6 +63,12 @@ func (fake *fakeLAPI) ServeHTTP(responseWriter http.ResponseWriter, request *htt
 	if request.Header.Get("Authorization") != expectedHeader {
 		http.Error(responseWriter, `{"message":"expired"}`, http.StatusUnauthorized)
 		return
+	}
+	if request.Method == http.MethodGet && request.URL.Path == "/v1/alerts" {
+		if body, configured := fake.alertsBody.Load().(string); configured {
+			responseWriter.Write([]byte(body))
+			return
+		}
 	}
 	responseWriter.Write([]byte(`null`))
 }
@@ -185,14 +196,77 @@ func TestListAlertsEscapesFilterValues(testing *testing.T) {
 	}
 }
 
-func TestListDecisionsSendsFilter(testing *testing.T) {
+const alertsWithDecisionsBody = `[
+ {"id":7,"scenario":"crowdsecurity/ssh-bf","source":{"scope":"Ip","value":"203.0.113.9"},
+  "decisions":[{"id":11,"origin":"crowdsec","type":"ban","scope":"Ip","value":"203.0.113.9","duration":"3h","until":"2026-10-31T13:00:00Z"},
+               {"id":12,"origin":"cscli","type":"ban","scope":"Ip","value":"203.0.113.10","duration":"1h","scenario":"manual/dashboard"}]},
+ {"id":8,"scenario":"crowdsecurity/http-probing","decisions":null},
+ {"id":9,"scenario":"crowdsecurity/nginx","decisions":[{"id":13,"origin":"crowdsec","type":"captcha","scope":"Ip","value":"198.51.100.4","duration":"1h"}]}
+]`
+
+func TestListDecisionsUsesAlertsRouteAndFlattensDecisions(testing *testing.T) {
 	fake, client := newFakeLAPI(testing)
-	if _, err := client.ListDecisions(context.Background(), DecisionFilter{IP: "1.2.3.4", Type: "ban"}); err != nil {
-		testing.Fatalf("unexpected error: %v", err)
+	fake.alertsBody.Store(alertsWithDecisionsBody)
+
+	decisionList, listError := client.ListDecisions(context.Background(), DecisionFilter{IP: "203.0.113.9", Scenario: "crowdsecurity/ssh-bf", Since: "24h", Type: "ban"})
+
+	if listError != nil {
+		testing.Fatalf("unexpected error: %v", listError)
 	}
 	queryValues := fake.lastQuery.Load().(map[string][]string)
-	if fake.lastPath.Load() != "/v1/decisions" || queryValues["ip"][0] != "1.2.3.4" || queryValues["type"][0] != "ban" {
+	if fake.lastPath.Load() != "/v1/alerts" || queryValues["has_active_decision"][0] != "true" || queryValues["limit"][0] != "100" {
 		testing.Fatalf("unexpected request: %v %v", fake.lastPath.Load(), queryValues)
+	}
+	if queryValues["ip"][0] != "203.0.113.9" || queryValues["scenario"][0] != "crowdsecurity/ssh-bf" || queryValues["since"][0] != "24h" {
+		testing.Fatalf("filters not forwarded: %v", queryValues)
+	}
+	decisions := decisionList.Decisions
+	if len(decisions) != 2 {
+		testing.Fatalf("expected 2 ban decisions, got %+v", decisions)
+	}
+	if decisions[0].ID != 11 || decisions[0].AlertID != 7 || decisions[0].Scenario != "crowdsecurity/ssh-bf" {
+		testing.Errorf("parent alert not carried: %+v", decisions[0])
+	}
+	if decisions[1].Scenario != "manual/dashboard" {
+		testing.Errorf("decision scenario must win over the alert one: %+v", decisions[1])
+	}
+}
+
+func TestListDecisionsFlagsAFullAlertWindow(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+	fullWindow := make([]string, 100)
+	for position := range fullWindow {
+		fullWindow[position] = `{"id":1,"scenario":"s","decisions":[]}`
+	}
+	fake.alertsBody.Store("[" + strings.Join(fullWindow, ",") + "]")
+
+	decisionList, listError := client.ListDecisions(context.Background(), DecisionFilter{})
+
+	if listError != nil || !decisionList.MayBeTruncated {
+		testing.Fatalf("a full alert window must be flagged: %+v %v", decisionList, listError)
+	}
+}
+
+func TestListDecisionsSendsCIDRAsRangeParameter(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+
+	if _, listError := client.ListDecisions(context.Background(), DecisionFilter{IP: "203.0.113.0/24"}); listError != nil {
+		testing.Fatalf("unexpected error: %v", listError)
+	}
+
+	queryValues := fake.lastQuery.Load().(map[string][]string)
+	if queryValues["range"][0] != "203.0.113.0/24" || len(queryValues["ip"]) != 0 {
+		testing.Fatalf("expected range parameter only: %v", queryValues)
+	}
+}
+
+func TestListDecisionsReturnsEmptySliceOnNull(testing *testing.T) {
+	_, client := newFakeLAPI(testing)
+
+	decisionList, listError := client.ListDecisions(context.Background(), DecisionFilter{})
+
+	if listError != nil || decisionList.Decisions == nil || len(decisionList.Decisions) != 0 || decisionList.MayBeTruncated {
+		testing.Fatalf("expected empty non-nil slice, got %+v %v", decisionList, listError)
 	}
 }
 
@@ -322,7 +396,7 @@ func TestServerErrorAndRedirectAreHandled(testing *testing.T) {
 			responseWriter.Write([]byte(`{"token":"tok","expire":"2099-01-01T00:00:00Z"}`))
 			return
 		}
-		if request.URL.Path == "/v1/decisions" {
+		if request.URL.Query().Get("has_active_decision") != "" {
 			http.Redirect(responseWriter, request, "/elsewhere", http.StatusFound)
 			return
 		}

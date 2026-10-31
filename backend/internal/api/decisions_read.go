@@ -3,13 +3,12 @@ package api
 import (
 	"context"
 	"net/http"
-	"slices"
 
 	"crowdsec-dashboard/internal/lapi"
 )
 
 type DecisionLister interface {
-	ListDecisions(ctx context.Context, filter lapi.DecisionFilter) ([]lapi.Decision, error)
+	ListDecisions(ctx context.Context, filter lapi.DecisionFilter) (lapi.DecisionList, error)
 }
 
 type decisionReadHandlers struct{ lister DecisionLister }
@@ -20,20 +19,17 @@ func (handlers decisionReadHandlers) list(responseWriter http.ResponseWriter, re
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	decisions, listError := handlers.lister.ListDecisions(request.Context(), lapi.DecisionFilter{IP: query.IP})
+	filter := lapi.DecisionFilter{IP: query.IP, Scenario: query.Scenario, Since: query.Since, Limit: alertWindowSize}
+	window, listError := handlers.lister.ListDecisions(request.Context(), filter)
 	if listError != nil {
 		writeUpstreamError(responseWriter, listError)
 		return
 	}
-	if query.Scenario != "" {
-		decisions = slices.DeleteFunc(decisions, func(decision lapi.Decision) bool {
-			return decision.Scenario != query.Scenario
-		})
-	}
 	writeJSON(responseWriter, http.StatusOK, page[lapi.Decision]{
-		Items:   slicePage(decisions, query),
-		Page:    query.Page,
-		PerPage: query.PerPage,
-		Total:   len(decisions),
+		Items:          slicePage(window.Decisions, query),
+		Page:           query.Page,
+		PerPage:        query.PerPage,
+		WindowSize:     len(window.Decisions),
+		MayBeTruncated: window.MayBeTruncated,
 	})
 }

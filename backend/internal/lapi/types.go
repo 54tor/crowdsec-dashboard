@@ -45,6 +45,7 @@ type Source struct {
 
 type Decision struct {
 	ID        int64  `json:"id"`
+	AlertID   int64  `json:"alert_id"`
 	Origin    string `json:"origin"`
 	Type      string `json:"type"`
 	Scope     string `json:"scope"`
@@ -80,12 +81,15 @@ type AlertFilter struct {
 }
 
 type DecisionFilter struct {
-	IP     string
-	Range  string
-	Scope  string
-	Value  string
-	Type   string
-	Origin string
+	IP       string
+	Range    string
+	Scope    string
+	Value    string
+	Type     string
+	Origin   string
+	Scenario string
+	Since    string
+	Limit    int
 }
 
 type NewDecision struct {
@@ -94,4 +98,9 @@ type NewDecision struct {
 	Type     string
 	Duration string
 	Reason   string
+}
+
+type DecisionList struct {
+	Decisions      []Decision
+	MayBeTruncated bool
 }
