@@ -176,15 +176,6 @@ func (client *Client) DeleteDecision(ctx context.Context, decisionID int64) erro
 	return client.authorizedRequest(ctx, http.MethodDelete, path, nil, nil, nil)
 }
 
-func (client *Client) DeleteDecisionsByIP(ctx context.Context, ip string) error {
-	if !isValidTarget(ip) {
-		return ErrInvalidTarget
-	}
-	query := url.Values{}
-	query.Set("ip", ip)
-	return client.authorizedRequest(ctx, http.MethodDelete, "/v1/decisions", query, nil, nil)
-}
-
 func isValidTarget(target string) bool {
 	if target == "" || len(target) > maxTargetLength {
 		return false

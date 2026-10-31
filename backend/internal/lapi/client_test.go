@@ -309,13 +309,6 @@ func TestDeleteDecisionCalls(testing *testing.T) {
 	if fake.lastMethod.Load() != "DELETE" || fake.lastPath.Load() != "/v1/decisions/42" {
 		testing.Fatalf("unexpected request %v %v", fake.lastMethod.Load(), fake.lastPath.Load())
 	}
-	if err := client.DeleteDecisionsByIP(context.Background(), "1.2.3.4"); err != nil {
-		testing.Fatalf("unexpected error: %v", err)
-	}
-	queryValues := fake.lastQuery.Load().(map[string][]string)
-	if fake.lastPath.Load() != "/v1/decisions" || queryValues["ip"][0] != "1.2.3.4" || len(queryValues) != 1 {
-		testing.Fatalf("unexpected request %v %v", fake.lastPath.Load(), queryValues)
-	}
 }
 
 func assertNoNetworkCall(testing *testing.T, fake *fakeLAPI) {
@@ -323,17 +316,6 @@ func assertNoNetworkCall(testing *testing.T, fake *fakeLAPI) {
 	if fake.loginCount.Load() != 0 || fake.alertCount.Load() != 0 {
 		testing.Fatalf("expected zero requests, got logins=%d others=%d", fake.loginCount.Load(), fake.alertCount.Load())
 	}
-}
-
-func TestDeleteDecisionsByIPRejectsEmptyAndInvalidTargetWithoutNetworkCall(testing *testing.T) {
-	fake, client := newFakeLAPI(testing)
-	invalidTargets := []string{"", "1.2.3.4/33", "not-an-ip", "1.2.3.4&x=1", "fe80::1%eth0", strings.Repeat("1", 300)}
-	for _, invalidTarget := range invalidTargets {
-		if err := client.DeleteDecisionsByIP(context.Background(), invalidTarget); !errors.Is(err, ErrInvalidTarget) {
-			testing.Fatalf("target %q: expected ErrInvalidTarget, got %v", invalidTarget, err)
-		}
-	}
-	assertNoNetworkCall(testing, fake)
 }
 
 func TestAddDecisionRejectsInvalidTargetWithoutNetworkCall(testing *testing.T) {
