@@ -17,7 +17,7 @@
 | Sessions | Stored in PostgreSQL, 12 h by default, kept across restarts. The login rate limiter is per process: one replica only. |
 | Pending logins | The state between the password step and the second factor (5 minutes, 5 attempts, bound to the client address) is in memory: a restart makes everybody in mid-login start again. The first-account enrolment state is also in memory, with no expiry, and is lost at restart. |
 | Second factor | TOTP always; WebAuthn only with `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS`. Factors cannot be changed or reset from the interface yet. |
-| Access allowlist | No rule means no restriction; any rule means deny by default. Country rules need the GeoLite2 database, otherwise they never match. No minimum prefix length except zero. |
+| Access allowlist | No rule means no restriction; any rule means deny by default. Country rules need the GeoLite2 database, otherwise they never match. No minimum prefix length except zero. Checked at sign-in only: existing sessions are not cut off. |
 | Audit log | Written to `audit_event`; no page, no retention, and some events are not recorded yet ([security.md](security.md#audit-log)). |
 
 ## Troubleshooting
@@ -227,6 +227,18 @@ DELETE FROM access_rule WHERE access_rule_account_id =
 ```
 
 The lock-out guard of the interface does not apply to SQL.
+
+### Revoking every session
+
+Access rules are checked at sign-in only: an existing session, including a stolen one, keeps working
+from any address until it expires (`SESSION_TTL`, 12 h by default). After adding a rule because of a
+suspected compromise, revoke the account's sessions: with a session of the account, call
+`POST /api/auth/logout-all` (the interface has no button for it yet); otherwise:
+
+```sql
+DELETE FROM session WHERE session_account_id =
+  (SELECT account_id FROM account WHERE account_name = '<account name>');
+```
 
 ### Reopening the setup window
 

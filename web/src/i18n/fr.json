@@ -340,7 +340,7 @@
   },
   "accountSecurity": {
     "title": "Sécurité du compte",
-    "explanation": "Liste blanche d'accès : sans règle, la connexion est permise de partout. Dès qu'une règle existe, toute connexion qui ne correspond à aucune règle est refusée.",
+    "explanation": "Liste blanche d'accès : sans règle, la connexion est permise de partout. Dès qu'une règle existe, toute connexion qui ne correspond à aucune règle est refusée. Les règles ne sont vérifiées qu'à la connexion : les sessions déjà ouvertes restent valides jusqu'à leur expiration.",
     "geoNotice": "Les règles par pays exigent que la base GeoLite2 soit disponible sur le serveur ; sans elle, elles ne peuvent pas être ajoutées.",
     "clientAddress": "Votre adresse actuelle : {{address}}",
     "emptyAllowsAll": "Aucune règle : la connexion est permise de partout.",

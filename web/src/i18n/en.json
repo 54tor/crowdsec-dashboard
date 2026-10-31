@@ -340,7 +340,7 @@
   },
   "accountSecurity": {
     "title": "Account security",
-    "explanation": "Access allowlist: with no rule, you can sign in from anywhere. As soon as a rule exists, every sign-in that matches none of the rules is refused.",
+    "explanation": "Access allowlist: with no rule, you can sign in from anywhere. As soon as a rule exists, every sign-in that matches none of the rules is refused. Rules are checked at sign-in only: sessions already open stay valid until they expire.",
     "geoNotice": "Country rules require the GeoLite2 database to be available on the server; without it they cannot be added.",
     "clientAddress": "Your current address: {{address}}",
     "emptyAllowsAll": "No rule yet: sign-in is allowed from anywhere.",

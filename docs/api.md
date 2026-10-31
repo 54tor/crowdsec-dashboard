@@ -96,6 +96,8 @@ stored as a CIDR) or `country` (two letters, stored upper case).
 
 Deleting the last rule turns the allowlist off. The two 409 lock-out answers mean that, with the
 change applied, the caller's current address would not be admitted.
+Rules are checked at sign-in only: a change never ends an existing session, from any address; use
+`POST /api/auth/logout-all` to revoke them.
 
 ## Read
 

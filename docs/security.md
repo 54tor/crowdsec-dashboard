@@ -170,8 +170,14 @@ Each account can restrict where it signs in from, with IP/CIDR rules and country
   when the resulting rule set would not admit the address you are connected from, evaluated inside a
   transaction with the account row locked. The address is the one resolved like the login rate
   limiter (`TRUSTED_PROXY_CIDRS`): behind a proxy without it, the proxy's own address is what is
-  protected. The guard covers the current session's address only: other sessions and other
-  addresses can be cut off.
+  protected. The guard covers the current session's address only: a later sign-in from another
+  address can be refused.
+- **Rules apply at sign-in only.** They are evaluated once, when the login completes; a session that
+  already exists is never checked against them. Adding or tightening a rule therefore does not cut
+  off any existing session, including a stolen one: it keeps working from any address until it
+  expires (`SESSION_TTL`, 12 h by default) or is revoked. After a suspected compromise, add the rule
+  and then revoke the sessions (`POST /api/auth/logout-all` with a session of the account, or by SQL:
+  [Revoking every session](operations.md#revoking-every-session)).
 - Country rules need a GeoLite2 Country database (`GEOIP_DATABASE_FILE`). With no database, an
   unreadable one, or an address the database does not know, a country rule never matches: the login
   is refused unless an IP rule matches (fail closed). Adding a country rule while no database is
