@@ -16,6 +16,7 @@ function machine(machineId: string, lastHeartbeat: string | null) {
     version: 'v1.7.3',
     is_validated: true,
     auth_type: 'password',
+    self: false,
   }
 }
 
@@ -53,6 +54,25 @@ describe('health page', () => {
     expect(within(staleRow).getByText(en.health.stale)).toBeInTheDocument()
     expect(within(freshRow).queryByText(en.health.stale)).not.toBeInTheDocument()
     expect(within(freshRow).getByText(en.health.ok)).toBeInTheDocument()
+  })
+
+  it('marksTheDashboardOwnMachineWithoutStaleOrNeverWording', async () => {
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      'GET /api/health': {
+        status: 200,
+        body: makeHealth({ machines: [{ ...machine('dashboard-machine', null), self: true }, machine('other-machine', '2020-01-01T00:00:00Z')] }),
+      },
+    })
+    renderApp('/health')
+
+    const selfRow = (await screen.findByText('dashboard-machine')).closest('tr') as HTMLElement
+    const otherRow = screen.getByText('other-machine').closest('tr') as HTMLElement
+    expect(within(selfRow).getByText(en.health.self)).toBeInTheDocument()
+    expect(within(selfRow).queryByText(en.health.stale)).not.toBeInTheDocument()
+    expect(within(selfRow).queryByText(en.health.never)).not.toBeInTheDocument()
+    expect(within(otherRow).queryByText(en.health.self)).not.toBeInTheDocument()
+    expect(within(otherRow).getByText(en.health.stale)).toBeInTheDocument()
   })
 
   it('showsVersionAndMarksRevokedBouncer', async () => {

@@ -14,6 +14,7 @@ export interface ConfirmDeleteDialogProps {
   title: string
   description: string
   target: string
+  confirmValue?: string
   submitLabel: string
   request: (confirm: string) => Promise<unknown>
   onDeleted: () => void
@@ -22,7 +23,7 @@ export interface ConfirmDeleteDialogProps {
   onClose: () => void
 }
 
-function ConfirmDeleteForm({ title, description, target, submitLabel, request, onDeleted, onFailed, onClose, reportPending }: Omit<ConfirmDeleteDialogProps, 'open' | 'trigger' | 'onOpen'> & { reportPending: (isPending: boolean) => void }) {
+function ConfirmDeleteForm({ title, description, target, confirmValue, submitLabel, request, onDeleted, onFailed, onClose, reportPending }: Omit<ConfirmDeleteDialogProps, 'open' | 'trigger' | 'onOpen'> & { reportPending: (isPending: boolean) => void }) {
   const { t } = useTranslation()
   const [typedTarget, setTypedTarget] = useState('')
   const deletion = useMutation({ mutationFn: request, onSuccess: onDeleted, onError: onFailed })
@@ -32,7 +33,7 @@ function ConfirmDeleteForm({ title, description, target, submitLabel, request, o
   function submit(submitEvent: FormEvent) {
     submitEvent.preventDefault()
     if (isMatching && !deletion.isPending) {
-      deletion.mutate(typedTarget)
+      deletion.mutate(confirmValue ?? typedTarget)
     }
   }
 
@@ -74,6 +75,7 @@ export function ConfirmDeleteDialog(props: ConfirmDeleteDialogProps) {
           title={props.title}
           description={props.description}
           target={props.target}
+          confirmValue={props.confirmValue}
           submitLabel={props.submitLabel}
           request={props.request}
           onDeleted={props.onDeleted}

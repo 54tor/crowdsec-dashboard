@@ -48,6 +48,7 @@
     "cscli_failed": "The cscli command failed.",
     "cscli_timeout": "The cscli command timed out.",
     "self_account": "You cannot act on the dashboard's own account.",
+    "self_ban": "You cannot ban the address you are connected from. Ask another administrator or use cscli on the host.",
     "network": "Network error. Check your connection.",
     "unknown": "An unexpected error occurred.",
     "file_too_large": "The file is too large to display.",
@@ -116,7 +117,7 @@
     "unban": "Unban",
     "unbanAria": "Unban {{target}}",
     "unbanTitle": "Unban {{target}}",
-    "unbanDescription": "The decision {{id}} will be deleted and the target will no longer be blocked."
+    "unbanDescription": "The decision {{id}} will be deleted and the target will no longer be blocked. Retype the address or range {{target}} below to confirm."
   },
   "chart": {
     "label": "Alerts per hour chart",
@@ -142,6 +143,7 @@
       "status": "Status",
       "auth": "Authentication"
     },
+    "self": "This dashboard",
     "never": "Never",
     "stale": "No contact for more than 5 minutes",
     "ok": "Active",
@@ -234,6 +236,7 @@
     "validateAria": "Validate {{name}}",
     "deleteAria": "Delete {{name}}",
     "deleteTitle": "Delete machine {{name}}",
+    "selfDeleteReason": "This is the dashboard's own account, protected against deletion.",
     "deleteDescription": "The machine {{name}} will lose access to the CrowdSec local API."
   },
   "hub": {

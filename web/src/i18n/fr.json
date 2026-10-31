@@ -48,6 +48,7 @@
     "cscli_failed": "La commande cscli a échoué.",
     "cscli_timeout": "La commande cscli a expiré.",
     "self_account": "Vous ne pouvez pas agir sur le compte du tableau de bord lui-même.",
+    "self_ban": "Vous ne pouvez pas bannir l'adresse depuis laquelle vous êtes connecté. Demandez à un autre administrateur ou utilisez cscli sur l'hôte.",
     "network": "Erreur réseau. Vérifiez votre connexion.",
     "unknown": "Une erreur inattendue s'est produite.",
     "file_too_large": "Le fichier est trop volumineux pour être affiché.",
@@ -116,7 +117,7 @@
     "unban": "Débannir",
     "unbanAria": "Débannir {{target}}",
     "unbanTitle": "Débannir {{target}}",
-    "unbanDescription": "La décision {{id}} sera supprimée et la cible ne sera plus bloquée."
+    "unbanDescription": "La décision {{id}} sera supprimée et la cible ne sera plus bloquée. Retapez l'adresse ou la plage {{target}} ci-dessous pour confirmer."
   },
   "chart": {
     "label": "Graphique des alertes par heure",
@@ -142,6 +143,7 @@
       "status": "État",
       "auth": "Authentification"
     },
+    "self": "Ce dashboard",
     "never": "Jamais",
     "stale": "Aucun contact depuis plus de 5 minutes",
     "ok": "Actif",
@@ -234,6 +236,7 @@
     "validateAria": "Valider {{name}}",
     "deleteAria": "Supprimer {{name}}",
     "deleteTitle": "Supprimer la machine {{name}}",
+    "selfDeleteReason": "Compte propre du dashboard, protégé contre la suppression.",
     "deleteDescription": "La machine {{name}} perdra l'accès à l'API locale CrowdSec."
   },
   "hub": {

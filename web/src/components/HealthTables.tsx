@@ -36,16 +36,25 @@ export function MachinesTable({ machines, now, actions }: { machines: Machine[];
   const { t } = useTranslation()
   const columns = useMemo<DataTableColumn<Machine>[]>(
     () => [
-      { key: 'name', header: t('health.columns.name'), cell: (machine) => machine.machine_id },
+      {
+        key: 'name',
+        header: t('health.columns.name'),
+        cell: (machine) => (
+          <span className="flex flex-wrap items-center gap-1">
+            {machine.machine_id}
+            {machine.self && <Badge variant="outline">{t('health.self')}</Badge>}
+          </span>
+        ),
+      },
       { key: 'version', header: t('health.columns.version'), cell: (machine) => machine.version },
       { key: 'ip', header: t('health.columns.ip'), cell: (machine) => machine.ip_address },
-      { key: 'lastContact', header: t('health.columns.lastContact'), cell: (machine) => <AgeCell isoDate={machine.last_heartbeat} now={now} /> },
+      { key: 'lastContact', header: t('health.columns.lastContact'), cell: (machine) => (machine.self ? '—' : <AgeCell isoDate={machine.last_heartbeat} now={now} />) },
       {
         key: 'status',
         header: t('health.columns.status'),
         cell: (machine) => (
           <span className="flex flex-wrap gap-1">
-            <ContactStatus lastContact={machine.last_heartbeat} now={now} />
+            <ContactStatus lastContact={machine.self ? new Date(now).toISOString() : machine.last_heartbeat} now={now} />
             <Badge variant="outline">{machine.is_validated ? t('health.validated') : t('health.notValidated')}</Badge>
           </span>
         ),

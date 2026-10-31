@@ -6,6 +6,7 @@ import { CreateSecretDialog } from '@/components/CreateSecretDialog'
 import { HealthPageSection } from '@/components/HealthPageSection'
 import { MachinesTable } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
+import { Button } from '@/components/ui/button'
 import { ValidateMachineButton } from '@/components/ValidateMachineButton'
 import { HEALTH_QUERY_KEY } from '@/hooks/useReadResources'
 
@@ -17,15 +18,28 @@ export function Machines() {
       cell: (machine: Machine) => (
         <div className="flex flex-wrap items-start gap-2">
           {!machine.is_validated && <ValidateMachineButton machineId={machine.machine_id} />}
-          <RowDeleteAction
-            buttonLabel={t('common.delete')}
-            ariaLabel={t('machines.deleteAria', { name: machine.machine_id })}
-            title={t('machines.deleteTitle', { name: machine.machine_id })}
-            description={t('machines.deleteDescription', { name: machine.machine_id })}
-            target={machine.machine_id}
-            request={(confirm) => deleteMachine(machine.machine_id, confirm)}
-            invalidates={[HEALTH_QUERY_KEY]}
-          />
+          {machine.self ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled
+              aria-label={`${t('machines.deleteAria', { name: machine.machine_id })}: ${t('machines.selfDeleteReason')}`}
+              title={t('machines.selfDeleteReason')}
+            >
+              {t('common.delete')}
+            </Button>
+          ) : (
+            <RowDeleteAction
+              buttonLabel={t('common.delete')}
+              ariaLabel={t('machines.deleteAria', { name: machine.machine_id })}
+              title={t('machines.deleteTitle', { name: machine.machine_id })}
+              description={t('machines.deleteDescription', { name: machine.machine_id })}
+              target={machine.machine_id}
+              request={(confirm) => deleteMachine(machine.machine_id, confirm)}
+              invalidates={[HEALTH_QUERY_KEY]}
+            />
+          )}
         </div>
       ),
     }),

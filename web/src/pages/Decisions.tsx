@@ -48,8 +48,9 @@ export function Decisions() {
             buttonLabel={t('decisions.unban')}
             ariaLabel={t('decisions.unbanAria', { target: decision.value })}
             title={t('decisions.unbanTitle', { target: decision.value })}
-            description={t('decisions.unbanDescription', { id: decision.id })}
-            target={String(decision.id)}
+            description={t('decisions.unbanDescription', { id: decision.id, target: decision.value })}
+            target={decision.value}
+            confirmValue={String(decision.id)}
             request={(confirm) => deleteDecision(String(decision.id), confirm)}
             invalidates={[['decisions']]}
           />

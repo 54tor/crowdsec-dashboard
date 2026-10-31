@@ -51,6 +51,21 @@ describe('machines page', () => {
     expect(JSON.stringify(queryClient.getMutationCache().getAll())).not.toContain(FAKE_PASSWORD)
   })
 
+  it('selfMachineShowsBadgeNoStaleAndDisabledDelete', async () => {
+    const machines = [makeMachine({ machine_id: 'dashboard-machine', last_heartbeat: null, self: true }), makeMachine({ machine_id: 'machine-two' })]
+    stubFetch(machineRoutes({ 'GET /api/health': { status: 200, body: makeHealth({ machines }) } }))
+    renderApp('/machines')
+
+    const selfRow = (await screen.findByText('dashboard-machine')).closest('tr') as HTMLElement
+    expect(within(selfRow).getByText(en.health.self)).toBeInTheDocument()
+    expect(within(selfRow).queryByText(en.health.stale)).not.toBeInTheDocument()
+    expect(within(selfRow).queryByText(en.health.never)).not.toBeInTheDocument()
+    const deleteButton = within(selfRow).getByRole('button', { name: 'Delete dashboard-machine: ' + en.machines.selfDeleteReason })
+    expect(deleteButton).toBeDisabled()
+    expect(deleteButton).toHaveAttribute('title', en.machines.selfDeleteReason)
+    expect(screen.getByRole('button', { name: 'Delete machine-two' })).toBeEnabled()
+  })
+
   it('selfAccountDeletionShowsTranslatedExplanation', async () => {
     stubFetch(machineRoutes({ 'DELETE /api/machines/machine-one': { status: 409, body: { error: 'self_account' } } }))
     const user = userEvent.setup()

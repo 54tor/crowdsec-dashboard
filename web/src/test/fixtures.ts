@@ -77,6 +77,7 @@ export function makeMachine(overrides: Partial<Machine> = {}): Machine {
     version: 'v1.7.3',
     is_validated: true,
     auth_type: 'password',
+    self: false,
     ...overrides,
   }
 }

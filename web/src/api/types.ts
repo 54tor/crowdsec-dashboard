@@ -60,6 +60,7 @@ export interface Machine {
   version: string
   is_validated: boolean
   auth_type: string
+  self: boolean
 }
 
 export type DegradedPart = 'version' | 'bouncers' | 'machines'

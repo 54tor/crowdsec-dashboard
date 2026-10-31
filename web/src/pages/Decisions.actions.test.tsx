@@ -26,7 +26,7 @@ describe('decision actions', () => {
   beforeEach(prepareEnglishApp)
   afterEach(() => vi.unstubAllGlobals())
 
-  it('deleteStaysDisabledUntilTargetRetyped', async () => {
+  it('unbanStaysDisabledUntilTheIpIsRetypedExactly', async () => {
     stubFetch(decisionRoutes())
     const user = userEvent.setup()
     renderApp('/decisions')
@@ -34,12 +34,16 @@ describe('decision actions', () => {
     await user.click(await screen.findByRole('button', { name: 'Unban 203.0.113.7' }))
     const dialog = await screen.findByRole('dialog')
     const confirmButton = within(dialog).getByRole('button', { name: en.decisions.unban })
-    const confirmInput = within(dialog).getByLabelText('Type 10 to confirm')
+    const confirmInput = within(dialog).getByLabelText('Type 203.0.113.7 to confirm')
 
     expect(confirmButton).toBeDisabled()
-    await user.type(confirmInput, '1')
+    await user.type(confirmInput, '203.0.113')
     expect(confirmButton).toBeDisabled()
-    await user.type(confirmInput, '0')
+    await user.clear(confirmInput)
+    await user.type(confirmInput, '10')
+    expect(confirmButton).toBeDisabled()
+    await user.clear(confirmInput)
+    await user.type(confirmInput, '203.0.113.7')
     expect(confirmButton).toBeEnabled()
     await user.type(confirmInput, '0')
     expect(confirmButton).toBeDisabled()
@@ -52,7 +56,7 @@ describe('decision actions', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Unban 203.0.113.7' }))
     const dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByLabelText('Type 10 to confirm'), '10')
+    await user.type(within(dialog).getByLabelText('Type 203.0.113.7 to confirm'), '203.0.113.7')
     await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -84,11 +88,23 @@ describe('decision actions', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Unban 203.0.113.7' }))
     const dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByLabelText('Type 10 to confirm'), '10')
+    await user.type(within(dialog).getByLabelText('Type 203.0.113.7 to confirm'), '203.0.113.7')
     await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(en.errors.lapi_unavailable)
     expect(within(dialog).getByRole('button', { name: en.decisions.unban })).toBeEnabled()
+  })
+
+  it('banDialogShowsSelfBanErrorTranslated', async () => {
+    stubFetch(decisionRoutes({ 'POST /api/decisions': { status: 409, body: { error: 'self_ban' } } }))
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    const dialog = await openBanDialog(user)
+    await user.type(within(dialog).getByLabelText(en.ban.ip), '198.51.100.7')
+    await user.click(within(dialog).getByRole('button', { name: en.ban.submit }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(en.errors.self_ban)
   })
 
   it('banDialogShowsApiErrorTranslated', async () => {
@@ -165,7 +181,7 @@ describe('decision actions', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Unban 203.0.113.7' }))
     const dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByLabelText('Type 10 to confirm'), '10')
+    await user.type(within(dialog).getByLabelText('Type 203.0.113.7 to confirm'), '203.0.113.7')
     await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
     await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/10')).toHaveLength(1))
 
