@@ -129,3 +129,15 @@ func TestParsesFrozenCredentialOutputs(testContext *testing.T) {
 		testContext.Errorf("machine output: %q (%v)", machinePassword, passwordError)
 	}
 }
+
+func TestProjectHubItemsFromFrozenCollectionsList(testContext *testing.T) {
+	items, projectionError := projectHubItems(readFrozenFixture(testContext, "collections-list.json"))
+	if projectionError != nil || len(items) != 3 {
+		testContext.Fatalf("unexpected result %+v (%v)", items, projectionError)
+	}
+	for _, item := range items {
+		if item.Type != "collections" || item.Status != "enabled" || item.LocalVersion == "" {
+			testContext.Errorf("unexpected projection %+v", item)
+		}
+	}
+}

@@ -3,6 +3,10 @@
 docs/superpowers
 **/node_modules
 web/dist
+**/.env
+**/.env.*
+deploy/dashboard.env
 deploy/dev/.env.local
+*.log
 backend/internal/webui/dist/*
 !backend/internal/webui/dist/.gitkeep

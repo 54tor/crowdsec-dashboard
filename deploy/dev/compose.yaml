@@ -10,6 +10,7 @@ services:
     container_name: csdash-dev-crowdsec
     restart: "no"
     mem_limit: 768m
+    pids_limit: 256
     cpus: 1.0
     environment:
       COLLECTIONS: crowdsecurity/linux
@@ -30,6 +31,7 @@ services:
     restart: "no"
     user: "65534:${DOCKER_GID:?run up.sh first}"
     mem_limit: 64m
+    pids_limit: 64
     cpus: 0.25
     read_only: true
     cap_drop: [ALL]
@@ -53,6 +55,7 @@ services:
     container_name: csdash-dev-dashboard
     restart: "no"
     mem_limit: 128m
+    pids_limit: 128
     cpus: 0.5
     read_only: true
     cap_drop: [ALL]
@@ -80,6 +83,7 @@ services:
     container_name: csdash-dev-probe
     network_mode: "container:csdash-dev-dashboard"
     mem_limit: 32m
+    pids_limit: 32
     cpus: 0.25
     read_only: true
     cap_drop: [ALL]

@@ -63,7 +63,6 @@ crowdsec sh -c "
   rm -f /tmp/seed-alerts.json
 "
 
-
 # A bouncer that has pulled once, so that last_pull, ip_address, type and version are filled.
 bouncer_name=dev-firewall-bouncer
 crowdsec cscli bouncers delete "$bouncer_name" >/dev/null 2>&1 || true

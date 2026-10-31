@@ -15,7 +15,7 @@ proxy=http://socket-proxy:2375
 failures=0
 
 status_of() {
-  docker exec csdash-dev-probe curl -s -o /dev/null -w '%{http_code}' "$@"
+  docker exec csdash-dev-probe curl -m 5 -s -o /dev/null -w '%{http_code}' "$@"
 }
 
 expect() {
