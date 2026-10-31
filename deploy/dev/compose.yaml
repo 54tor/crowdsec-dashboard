@@ -54,7 +54,7 @@ services:
     image: csdash-dev-dashboard:local
     container_name: csdash-dev-dashboard
     restart: "no"
-    mem_limit: 128m
+    mem_limit: 256m
     pids_limit: 128
     cpus: 0.5
     read_only: true

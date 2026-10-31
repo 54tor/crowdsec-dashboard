@@ -32,6 +32,11 @@ services:
     security_opt: [no-new-privileges]
     mem_limit: 64m
     pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     command:
       - -listenip=0.0.0.0
       # Only the dashboard container may call the proxy.
@@ -67,24 +72,37 @@ services:
       # X-Forwarded-For is believed only when the TCP peer is inside this list, and the client
       # address it carries drives the per-IP login rate limit. List ONLY the reverse proxy,
       # as a single address: trusting the whole subnet would let any other container on the
-      # "web" network forge the header and dodge the limiter. Give the proxy a fixed
-      # ipv4_address (see the reverse-proxy example below) and use that /32 here.
-      # IPv6 variant: TRUSTED_PROXY_CIDRS: fd00:30::10/128
+      # "web" network forge the header and dodge the limiter. The proxy already exists and
+      # "web" is ITS network (declared external below), so use the address the proxy has on it:
+      # docker inspect -f '{{ (index .NetworkSettings.Networks "reverse-proxy-net").IPAddress }}' <proxy>
+      # Pin it in the proxy's own compose (ipv4_address) so that it survives recreation, and use
+      # that /32 here. IPv6 variant: TRUSTED_PROXY_CIDRS: fd00:30::10/128
       TRUSTED_PROXY_CIDRS: 172.30.0.10/32
     volumes:
       - crowdsec-config:/etc/crowdsec:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges]
-    mem_limit: 128m
+    # One argon2id verification allocates 64 MiB and logins are serialized: 256m leaves headroom.
+    mem_limit: 256m
     pids_limit: 128
-    # No published port: the TLS reverse proxy joins the "web" network and forwards to dashboard:8080.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    # No published port: the TLS reverse proxy shares the "web" network and forwards to dashboard:8080.
     expose: ["8080"]
     networks: [crowdsec, docker-proxy, web]
 
   # Example of the TLS reverse proxy you already run, with the fixed address trusted above.
   # reverse-proxy:
   #   image: traefik:latest
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: 10m
+  #       max-file: "3"
   #   networks:
   #     web:
   #       ipv4_address: 172.30.0.10
@@ -97,7 +115,8 @@ networks:
   crowdsec: {}
   docker-proxy:
     internal: true
+  # The existing network of your reverse proxy, created by the proxy's own compose project.
+  # Rename it to match (docker network ls) and keep "external: true".
   web:
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
+    external: true
+    name: reverse-proxy-net

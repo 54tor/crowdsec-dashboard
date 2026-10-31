@@ -95,6 +95,27 @@ func TestLoginIsRateLimitedPerClientIP(testContext *testing.T) {
 	if recorder.Code != http.StatusTooManyRequests || strings.TrimSpace(recorder.Body.String()) != `{"error":"too_many_attempts"}` {
 		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
 	}
+	if recorder.Header().Get("Retry-After") != "60" {
+		testContext.Errorf("expected Retry-After 60, got %q", recorder.Header().Get("Retry-After"))
+	}
+}
+
+func TestRateLimitedLoginCarriesRetryAfter(testContext *testing.T) {
+	handler := newTestHandler(testContext)
+	var lastRecorder *httptest.ResponseRecorder
+	for attemptNumber := 1; attemptNumber <= 6; attemptNumber++ {
+		lastRecorder = postLogin(handler, `{"password":"nope"}`)
+	}
+
+	if lastRecorder.Code != http.StatusTooManyRequests || lastRecorder.Header().Get("Retry-After") != "60" {
+		testContext.Errorf("expected 429 with Retry-After 60, got %d %q", lastRecorder.Code, lastRecorder.Header().Get("Retry-After"))
+	}
+}
+
+func TestOnlyOnePasswordHashRunsAtATime(testContext *testing.T) {
+	if concurrentPasswordHashes != 1 {
+		testContext.Errorf("expected a single argon2id slot, got %d", concurrentPasswordHashes)
+	}
 }
 
 func TestForgedForwardedForFromUntrustedPeerDoesNotBypassRateLimit(testContext *testing.T) {

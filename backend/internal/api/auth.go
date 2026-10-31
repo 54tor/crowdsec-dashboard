@@ -13,8 +13,9 @@ const (
 	maxLoginBodyBytes        = 1024
 	loginAttemptsPerIP       = 5
 	loginAttemptsGlobal      = 30
-	concurrentPasswordHashes = 2
+	concurrentPasswordHashes = 1
 	loginFailureMinimumWait  = 500 * time.Millisecond
+	loginRetryAfterSeconds   = "60"
 )
 
 type authHandlers struct {
@@ -33,7 +34,7 @@ type loginRequest struct {
 
 func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request *http.Request) {
 	if !handlers.limiter.Allow(auth.ClientIP(request, handlers.trustedCIDRs)) {
-		writeError(responseWriter, http.StatusTooManyRequests, "too_many_attempts")
+		writeTooManyAttempts(responseWriter)
 		return
 	}
 	var credentials loginRequest
@@ -46,7 +47,7 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 	case handlers.hashSlots <- struct{}{}:
 		defer func() { <-handlers.hashSlots }()
 	default:
-		writeError(responseWriter, http.StatusTooManyRequests, "too_many_attempts")
+		writeTooManyAttempts(responseWriter)
 		return
 	}
 	attemptStart := time.Now()
@@ -65,6 +66,11 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 		SameSite: http.SameSiteStrictMode,
 	})
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func writeTooManyAttempts(responseWriter http.ResponseWriter) {
+	responseWriter.Header().Set("Retry-After", loginRetryAfterSeconds)
+	writeError(responseWriter, http.StatusTooManyRequests, "too_many_attempts")
 }
 
 func (handlers *authHandlers) logout(responseWriter http.ResponseWriter, request *http.Request) {
