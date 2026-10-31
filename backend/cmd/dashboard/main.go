@@ -1,13 +1,26 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"crowdsec-dashboard/internal/api"
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/webui"
+)
+
+const (
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 15 * time.Second
+	writeTimeout      = 60 * time.Second
+	idleTimeout       = 120 * time.Second
+	shutdownTimeout   = 10 * time.Second
 )
 
 func main() {
@@ -16,10 +29,29 @@ func main() {
 		log.Fatal(loadError)
 	}
 
-	router := http.NewServeMux()
-	router.Handle("GET /api/healthz", api.HealthHandler())
-	router.Handle("/", webui.Handler())
+	server := &http.Server{
+		Addr:              loadedConfig.ListenAddr,
+		Handler:           api.NewHandler(loadedConfig, webui.Handler()),
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+
+	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+
+	go func() {
+		<-signalContext.Done()
+		shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancelShutdown()
+		if shutdownError := server.Shutdown(shutdownContext); shutdownError != nil {
+			log.Printf("shutdown: %v", shutdownError)
+		}
+	}()
 
 	log.Printf("listening on %s", loadedConfig.ListenAddr)
-	log.Fatal(http.ListenAndServe(loadedConfig.ListenAddr, router))
+	if serveError := server.ListenAndServe(); !errors.Is(serveError, http.ErrServerClosed) {
+		log.Fatal(serveError)
+	}
 }
