@@ -57,31 +57,45 @@ func (repository *Repository) Count(ctx context.Context) (int, error) {
 }
 
 func (repository *Repository) CreateWithPasswordHash(ctx context.Context, accountName, passwordHash, role string) (int64, error) {
+	var accountID int64
+	transactionError := repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
+		var insertError error
+		accountID, insertError = insertPasswordAccount(ctx, transaction, accountName, passwordHash, role)
+		return insertError
+	})
+	if transactionError != nil {
+		return 0, transactionError
+	}
+	return accountID, nil
+}
+
+func insertPasswordAccount(ctx context.Context, transaction bun.Tx, accountName, passwordHash, role string) (int64, error) {
 	if validationError := ValidateAccountName(accountName); validationError != nil {
 		return 0, validationError
 	}
 
 	var accountID int64
-	transactionError := repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
-		insertAccountError := transaction.NewRaw(
-			"INSERT INTO account (account_name, account_role) VALUES (?, ?) RETURNING account_id",
-			accountName, role,
-		).Scan(ctx, &accountID)
-		if insertAccountError != nil {
-			return insertAccountError
-		}
-		_, insertCredentialError := transaction.ExecContext(ctx,
-			"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_hash) VALUES (?, ?, ?)",
-			accountID, passwordCredentialKind, passwordHash,
-		)
-		return insertCredentialError
-	})
-	if transactionError != nil {
-		var postgresError *pgconn.PgError
-		if errors.As(transactionError, &postgresError) && postgresError.Code == uniqueViolationCode {
-			return 0, ErrAccountExists
-		}
-		return 0, fmt.Errorf("create account: %w", transactionError)
+	insertAccountError := transaction.NewRaw(
+		"INSERT INTO account (account_name, account_role) VALUES (?, ?) RETURNING account_id",
+		accountName, role,
+	).Scan(ctx, &accountID)
+	if insertAccountError != nil {
+		return 0, wrapInsertError(insertAccountError)
+	}
+	_, insertCredentialError := transaction.ExecContext(ctx,
+		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_hash) VALUES (?, ?, ?)",
+		accountID, passwordCredentialKind, passwordHash,
+	)
+	if insertCredentialError != nil {
+		return 0, wrapInsertError(insertCredentialError)
 	}
 	return accountID, nil
+}
+
+func wrapInsertError(insertError error) error {
+	var postgresError *pgconn.PgError
+	if errors.As(insertError, &postgresError) && postgresError.Code == uniqueViolationCode {
+		return ErrAccountExists
+	}
+	return fmt.Errorf("create account: %w", insertError)
 }
