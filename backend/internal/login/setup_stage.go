@@ -43,10 +43,10 @@ func (service *Service) CompleteSetup(ctx context.Context, pendingID string, cli
 	}
 
 	transactionError := service.dependencies.Database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
-		if saveError := service.dependencies.SecondFactors.SaveSetup(ctx, transaction, pending.AccountID, pending.Setup); saveError != nil {
-			return saveError
+		if closeError := service.dependencies.Accounts.CloseSecondFactorSetup(ctx, transaction, pending.AccountID); closeError != nil {
+			return closeError
 		}
-		return service.dependencies.Accounts.CloseSecondFactorSetup(ctx, transaction, pending.AccountID)
+		return service.dependencies.SecondFactors.SaveSetup(ctx, transaction, pending.AccountID, pending.Setup)
 	})
 	if transactionError != nil && !errors.Is(transactionError, accounts.ErrSecondFactorSetupClosed) {
 		lease.Release()

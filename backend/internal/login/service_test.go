@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/accounts"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/geo"
@@ -418,6 +420,12 @@ func TestSetupCannotBeUsedFromSecondFactorStage(testContext *testing.T) {
 
 func completeTOTPSetup(testContext *testing.T, fixture *loginFixture, pendingID string) (auth.AccountIdentity, error) {
 	testContext.Helper()
+	prepareTOTPSetup(testContext, fixture, pendingID)
+	return fixture.service.CompleteSetup(context.Background(), pendingID, clientAddress)
+}
+
+func prepareTOTPSetup(testContext *testing.T, fixture *loginFixture, pendingID string) {
+	testContext.Helper()
 	setup, accountName, setupError := fixture.service.Setup(pendingID, clientAddress)
 	if setupError != nil {
 		testContext.Fatal(setupError)
@@ -426,7 +434,6 @@ func completeTOTPSetup(testContext *testing.T, fixture *loginFixture, pendingID 
 	if _, codesError := setup.RecoveryCodes(); codesError != nil {
 		testContext.Fatal(codesError)
 	}
-	return fixture.service.CompleteSetup(context.Background(), pendingID, clientAddress)
 }
 
 func TestCompleteSetupRequiresConfirmedFactor(testContext *testing.T) {
@@ -498,12 +505,40 @@ func TestConcurrentSetupCompletionsEnrolOnce(testContext *testing.T) {
 	fixture.openSetupWindow(testContext, legacyAccountID, "infinity")
 	firstLogin := fixture.beginOrFail(testContext, "alice")
 	secondLogin := fixture.beginOrFail(testContext, "alice")
+	prepareTOTPSetup(testContext, fixture, firstLogin.PendingID)
+	prepareTOTPSetup(testContext, fixture, secondLogin.PendingID)
+	pendingIDs := []string{firstLogin.PendingID, secondLogin.PendingID}
+	completionErrors := make([]error, len(pendingIDs))
+	var waitGroup sync.WaitGroup
+	startSignal := make(chan struct{})
 
-	_, firstError := completeTOTPSetup(testContext, fixture, firstLogin.PendingID)
-	_, secondError := completeTOTPSetup(testContext, fixture, secondLogin.PendingID)
+	for completionIndex, pendingID := range pendingIDs {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			<-startSignal
+			_, completionErrors[completionIndex] = fixture.service.CompleteSetup(context.Background(), pendingID, clientAddress)
+		}()
+	}
+	close(startSignal)
+	waitGroup.Wait()
 
-	if firstError != nil || secondError == nil {
-		testContext.Errorf("only one setup may complete for a window, got %v / %v", firstError, secondError)
+	successCount, closedCount := 0, 0
+	for _, completionError := range completionErrors {
+		switch {
+		case completionError == nil:
+			successCount++
+		case errors.Is(completionError, accounts.ErrSecondFactorSetupClosed):
+			closedCount++
+		}
+	}
+	if successCount != 1 || closedCount != 1 {
+		testContext.Errorf("expected one success and one closed window, got %v", completionErrors)
+	}
+	var credentialCount int
+	if countError := fixture.database.NewRaw(`SELECT count(*) FROM credential WHERE credential_account_id = ? AND credential_kind = 'totp'`, legacyAccountID).
+		Scan(context.Background(), &credentialCount); countError != nil || credentialCount != 1 {
+		testContext.Errorf("expected exactly one totp credential, got %d (%v)", credentialCount, countError)
 	}
 }
 
