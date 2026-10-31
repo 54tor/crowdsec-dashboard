@@ -10,10 +10,11 @@ import (
 var ErrInvalidField = errors.New("invalid cscli field")
 
 var (
-	namePattern     = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
-	hubNamePattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}(/[a-zA-Z0-9][a-zA-Z0-9._-]{0,63})?$`)
-	idPattern       = regexp.MustCompile(`^[0-9]{1,10}$`)
-	durationPattern = regexp.MustCompile(`^[0-9]{1,4}[smhd]$`)
+	namePattern        = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
+	bouncerNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._@-]{0,63}$`)
+	hubNamePattern     = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}(/[a-zA-Z0-9][a-zA-Z0-9._-]{0,63})?$`)
+	idPattern          = regexp.MustCompile(`^[0-9]{1,10}$`)
+	durationPattern    = regexp.MustCompile(`^[0-9]{1,4}[smhd]$`)
 )
 
 const maxTargetLength = 43
@@ -30,10 +31,11 @@ func matching(pattern *regexp.Regexp) validator {
 }
 
 var (
-	validateName     = matching(namePattern)
-	validateHubName  = matching(hubNamePattern)
-	validateID       = matching(idPattern)
-	validateDuration = matching(durationPattern)
+	validateName        = matching(namePattern)
+	validateBouncerName = matching(bouncerNamePattern)
+	validateHubName     = matching(hubNamePattern)
+	validateID          = matching(idPattern)
+	validateDuration    = matching(durationPattern)
 )
 
 func validateTarget(value string) error {

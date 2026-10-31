@@ -433,3 +433,37 @@ func TestAdminWritesRejectCrossOrigin(testContext *testing.T) {
 		testContext.Error("nothing may run on cross-origin requests")
 	}
 }
+
+func TestDeleteBouncerAcceptsAtSignInName(testContext *testing.T) {
+	fixture := newAdminFixture(testContext, nil, nil)
+
+	recorder := fixture.send(http.MethodDelete, "/api/bouncers/cs-fw@203.0.113.7", `{"confirm":"cs-fw@203.0.113.7"}`, true)
+
+	if recorder.Code != http.StatusOK {
+		testContext.Fatalf("unexpected %d %q", recorder.Code, recorder.Body.String())
+	}
+	lastArgv := fixture.runner.argvCalls[len(fixture.runner.argvCalls)-1]
+	if strings.Join(lastArgv, "|") != "cscli|bouncers|delete|cs-fw@203.0.113.7" {
+		testContext.Errorf("unexpected argv %v", lastArgv)
+	}
+}
+
+func TestDeleteBouncerRejectsLeadingDashOrAtSign(testContext *testing.T) {
+	fixture := newAdminFixture(testContext, nil, nil)
+
+	for _, rejectedName := range []string{"--x@y", "@x", "fe80::1"} {
+		recorder := fixture.send(http.MethodDelete, "/api/bouncers/"+rejectedName, `{"confirm":"`+rejectedName+`"}`, true)
+		expectError(testContext, recorder, http.StatusBadRequest, "invalid_request")
+	}
+	if len(fixture.runner.argvCalls) != 0 {
+		testContext.Errorf("cscli must not run, got %v", fixture.runner.argvCalls)
+	}
+}
+
+func TestAtSignIsRefusedForMachineNames(testContext *testing.T) {
+	fixture := newAdminFixture(testContext, nil, nil)
+
+	recorder := fixture.send(http.MethodDelete, "/api/machines/m@203.0.113.7", `{"confirm":"m@203.0.113.7"}`, true)
+
+	expectError(testContext, recorder, http.StatusBadRequest, "invalid_request")
+}

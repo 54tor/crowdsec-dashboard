@@ -147,6 +147,10 @@ func TestInvalidNamesAndIdsAreRejected(t *testing.T) {
 		{"bouncers_add", "name", "-x"},
 		{"bouncers_add", "name", "a b"},
 		{"bouncers_add", "name", strings.Repeat("a", 65)},
+		{"bouncers_delete", "name", "--x@y"},
+		{"bouncers_delete", "name", "@x"},
+		{"bouncers_delete", "name", "fe80::1"},
+		{"machines_delete", "name", "m@203.0.113.7"},
 		{"machines_delete", "name", ""},
 		{"alerts_delete", "id", "12345678901"},
 		{"alerts_delete", "id", "-1"},
@@ -230,5 +234,15 @@ func TestDecodeListDecodesItems(t *testing.T) {
 	}
 	if _, err := DecodeList[item]([]byte(`{not json`)); err == nil {
 		t.Fatal("expected error on invalid JSON")
+	}
+}
+
+func TestBouncerNameAcceptsAtSignAfterFirstCharacter(t *testing.T) {
+	runner := &recordingRunner{}
+
+	_, err := Execute(context.Background(), runner, "bouncers_delete", map[string]string{"name": "cs-fw@203.0.113.7"})
+
+	if err != nil || !reflect.DeepEqual(runner.receivedArgv, []string{"cscli", "bouncers", "delete", "cs-fw@203.0.113.7"}) {
+		t.Fatalf("unexpected result: %v %v", err, runner.receivedArgv)
 	}
 }
