@@ -1,8 +1,37 @@
 package lapi
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
-var ErrLAPIUnavailable = errors.New("lapi unavailable")
+var (
+	ErrLAPIUnavailable = errors.New("lapi unavailable")
+	ErrInvalidTarget   = errors.New("lapi: invalid target")
+	ErrNotFound        = errors.New("lapi: not found")
+	ErrBadRequest      = errors.New("lapi: bad request")
+	ErrForbidden       = errors.New("lapi: forbidden")
+)
+
+type StatusError struct {
+	Code int
+}
+
+func (statusError *StatusError) Error() string {
+	return fmt.Sprintf("lapi: unexpected status %d", statusError.Code)
+}
+
+func (statusError *StatusError) Is(target error) bool {
+	switch statusError.Code {
+	case 404:
+		return target == ErrNotFound
+	case 400, 422:
+		return target == ErrBadRequest
+	case 403:
+		return target == ErrForbidden
+	}
+	return false
+}
 
 type Source struct {
 	Scope    string `json:"scope"`

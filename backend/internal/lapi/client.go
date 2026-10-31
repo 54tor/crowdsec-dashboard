@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 )
 
 const (
+	maxTargetLength  = 43
 	maxAlertLimit    = 100
 	maxResponseBytes = 8 << 20
 	defaultTimeout   = 15 * time.Second
@@ -34,7 +36,12 @@ type Client struct {
 
 func NewClient(baseURL, machineID, machinePassword string, httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: defaultTimeout}
+		httpClient = &http.Client{
+			Timeout: defaultTimeout,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 	return &Client{
 		baseURL:         strings.TrimRight(baseURL, "/"),
@@ -84,6 +91,9 @@ func (client *Client) ListDecisions(ctx context.Context, filter DecisionFilter) 
 }
 
 func (client *Client) AddDecision(ctx context.Context, newDecision NewDecision) error {
+	if !isValidTarget(newDecision.Target) {
+		return ErrInvalidTarget
+	}
 	now := time.Now().UTC().Format(alertTimeLayout)
 	alert := map[string]any{
 		"scenario":         manualScenario,
@@ -114,14 +124,31 @@ func (client *Client) AddDecision(ctx context.Context, newDecision NewDecision) 
 }
 
 func (client *Client) DeleteDecision(ctx context.Context, decisionID int64) error {
+	if decisionID <= 0 {
+		return ErrInvalidTarget
+	}
 	path := "/v1/decisions/" + strconv.FormatInt(decisionID, 10)
 	return client.authorizedRequest(ctx, http.MethodDelete, path, nil, nil, nil)
 }
 
 func (client *Client) DeleteDecisionsByIP(ctx context.Context, ip string) error {
+	if !isValidTarget(ip) {
+		return ErrInvalidTarget
+	}
 	query := url.Values{}
 	query.Set("ip", ip)
 	return client.authorizedRequest(ctx, http.MethodDelete, "/v1/decisions", query, nil, nil)
+}
+
+func isValidTarget(target string) bool {
+	if target == "" || len(target) > maxTargetLength {
+		return false
+	}
+	if address, err := netip.ParseAddr(target); err == nil {
+		return address.Zone() == ""
+	}
+	_, err := netip.ParsePrefix(target)
+	return err == nil
 }
 
 func capAlertLimit(requested int) int {
@@ -167,7 +194,7 @@ func decodeResponse(status int, responseBody []byte, out any) error {
 		return ErrLAPIUnavailable
 	}
 	if status < 200 || status > 299 {
-		return fmt.Errorf("lapi: unexpected status %d", status)
+		return &StatusError{Code: status}
 	}
 	if out == nil || len(bytes.TrimSpace(responseBody)) == 0 {
 		return nil

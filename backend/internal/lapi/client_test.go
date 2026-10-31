@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -232,11 +233,138 @@ func TestDeleteDecisionCalls(testing *testing.T) {
 	if fake.lastMethod.Load() != "DELETE" || fake.lastPath.Load() != "/v1/decisions/42" {
 		testing.Fatalf("unexpected request %v %v", fake.lastMethod.Load(), fake.lastPath.Load())
 	}
-	if err := client.DeleteDecisionsByIP(context.Background(), "1.2.3.4&x=1"); err != nil {
+	if err := client.DeleteDecisionsByIP(context.Background(), "1.2.3.4"); err != nil {
 		testing.Fatalf("unexpected error: %v", err)
 	}
 	queryValues := fake.lastQuery.Load().(map[string][]string)
-	if fake.lastPath.Load() != "/v1/decisions" || queryValues["ip"][0] != "1.2.3.4&x=1" || len(queryValues) != 1 {
+	if fake.lastPath.Load() != "/v1/decisions" || queryValues["ip"][0] != "1.2.3.4" || len(queryValues) != 1 {
 		testing.Fatalf("unexpected request %v %v", fake.lastPath.Load(), queryValues)
+	}
+}
+
+func assertNoNetworkCall(testing *testing.T, fake *fakeLAPI) {
+	testing.Helper()
+	if fake.loginCount.Load() != 0 || fake.alertCount.Load() != 0 {
+		testing.Fatalf("expected zero requests, got logins=%d others=%d", fake.loginCount.Load(), fake.alertCount.Load())
+	}
+}
+
+func TestDeleteDecisionsByIPRejectsEmptyAndInvalidTargetWithoutNetworkCall(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+	invalidTargets := []string{"", "1.2.3.4/33", "not-an-ip", "1.2.3.4&x=1", "fe80::1%eth0", strings.Repeat("1", 300)}
+	for _, invalidTarget := range invalidTargets {
+		if err := client.DeleteDecisionsByIP(context.Background(), invalidTarget); !errors.Is(err, ErrInvalidTarget) {
+			testing.Fatalf("target %q: expected ErrInvalidTarget, got %v", invalidTarget, err)
+		}
+	}
+	assertNoNetworkCall(testing, fake)
+}
+
+func TestAddDecisionRejectsInvalidTargetWithoutNetworkCall(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+	for _, invalidTarget := range []string{"", "1.2.3.4/33", "garbage"} {
+		err := client.AddDecision(context.Background(), NewDecision{Target: invalidTarget, Scope: "ip", Type: "ban", Duration: "1h"})
+		if !errors.Is(err, ErrInvalidTarget) {
+			testing.Fatalf("target %q: expected ErrInvalidTarget, got %v", invalidTarget, err)
+		}
+	}
+	assertNoNetworkCall(testing, fake)
+}
+
+func TestDeleteDecisionRejectsNonPositiveIDWithoutNetworkCall(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+	for _, invalidID := range []int64{0, -1} {
+		if err := client.DeleteDecision(context.Background(), invalidID); !errors.Is(err, ErrInvalidTarget) {
+			testing.Fatalf("id %d: expected ErrInvalidTarget, got %v", invalidID, err)
+		}
+	}
+	assertNoNetworkCall(testing, fake)
+}
+
+func TestClientErrorStatusesMapToTypedErrors(testing *testing.T) {
+	statusCases := []struct {
+		status   int
+		sentinel error
+	}{
+		{http.StatusNotFound, ErrNotFound},
+		{http.StatusBadRequest, ErrBadRequest},
+		{http.StatusUnprocessableEntity, ErrBadRequest},
+		{http.StatusForbidden, ErrForbidden},
+		{http.StatusTeapot, nil},
+	}
+	for _, statusCase := range statusCases {
+		server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+			if request.URL.Path == "/v1/watchers/login" {
+				responseWriter.Write([]byte(`{"token":"tok","expire":"2099-01-01T00:00:00Z"}`))
+				return
+			}
+			http.Error(responseWriter, "body-must-not-leak", statusCase.status)
+		}))
+		client := NewClient(server.URL, "machine-1", testPassword, server.Client())
+		err := client.DeleteDecision(context.Background(), 7)
+		server.Close()
+		var statusError *StatusError
+		if !errors.As(err, &statusError) || statusError.Code != statusCase.status {
+			testing.Fatalf("status %d: expected StatusError, got %v", statusCase.status, err)
+		}
+		if statusCase.sentinel != nil && !errors.Is(err, statusCase.sentinel) {
+			testing.Fatalf("status %d: expected sentinel %v", statusCase.status, statusCase.sentinel)
+		}
+		if errors.Is(err, ErrLAPIUnavailable) || strings.Contains(err.Error(), "body-must-not-leak") {
+			testing.Fatalf("status %d: wrong error %v", statusCase.status, err)
+		}
+	}
+}
+
+func TestServerErrorAndRedirectAreHandled(testing *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v1/watchers/login" {
+			responseWriter.Write([]byte(`{"token":"tok","expire":"2099-01-01T00:00:00Z"}`))
+			return
+		}
+		if request.URL.Path == "/v1/decisions" {
+			http.Redirect(responseWriter, request, "/elsewhere", http.StatusFound)
+			return
+		}
+		http.Error(responseWriter, "boom", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL, "machine-1", testPassword, nil)
+	if _, err := client.ListAlerts(context.Background(), AlertFilter{}); !errors.Is(err, ErrLAPIUnavailable) {
+		testing.Fatalf("expected ErrLAPIUnavailable on 500, got %v", err)
+	}
+	var statusError *StatusError
+	if _, err := client.ListDecisions(context.Background(), DecisionFilter{}); !errors.As(err, &statusError) || statusError.Code != http.StatusFound {
+		testing.Fatalf("expected StatusError 302, got %v", err)
+	}
+}
+
+func TestConcurrentExpiredTokenTriggersSingleRelogin(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+	if _, err := client.ListAlerts(context.Background(), AlertFilter{}); err != nil {
+		testing.Fatalf("unexpected error: %v", err)
+	}
+	loginsBefore := fake.loginCount.Load()
+	fake.validToken.Store("rotated-server-side")
+	const concurrentCalls = 20
+	var waitGroup sync.WaitGroup
+	callErrors := make(chan error, concurrentCalls)
+	for callIndex := 0; callIndex < concurrentCalls; callIndex++ {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			_, err := client.ListAlerts(context.Background(), AlertFilter{})
+			callErrors <- err
+		}()
+	}
+	waitGroup.Wait()
+	close(callErrors)
+	for callError := range callErrors {
+		if callError != nil {
+			testing.Fatalf("every call must succeed, got %v", callError)
+		}
+	}
+	if extraLogins := fake.loginCount.Load() - loginsBefore; extraLogins != 1 {
+		testing.Fatalf("expected exactly one extra login, got %d", extraLogins)
 	}
 }
