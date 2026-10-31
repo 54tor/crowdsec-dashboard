@@ -16,7 +16,7 @@ path. Bodies of the bouncer, machine and hub creation routes reject unknown fiel
 | Method | Path | Auth | Body | Success response | Errors |
 |---|---|---|---|---|---|
 | GET | `/api/healthz` | no | none | `200 {"status":"ok","database":"ok"}` | 503 `{"status":"degraded","database":"unavailable"}` when the database does not answer a 2 s ping |
-| GET | `/api/auth/status` | no | none | `200 {"enrollment_required": <bool>}`, true while no account exists | 503 `database_unavailable` |
+| GET | `/api/auth/status` | no | none | `200 {"enrollment_required": <bool>}`, true while an enrolment token is open (answered from memory, no database access) | none |
 | POST | `/api/auth/enroll` | no | `{"token","account_name","password"}` (max 1 KiB) | `200 {"status":"ok"}` and `Set-Cookie: session`; creates the first (admin) account | 400 `invalid_request`, 400 `invalid_account_name` (not `^[a-z0-9][a-z0-9._-]{0,63}$`), 400 `invalid_password_length` (not 12 to 128 characters), 403 `invalid_enrollment_token`, 404 `not_found` (enrolment closed: an account exists, including when a concurrent enrolment won), 429 `too_many_attempts`, 503 `database_unavailable` |
 | POST | `/api/auth/login` | no | `{"account_name","password"}` (max 1 KiB) | `200 {"status":"ok"}` and `Set-Cookie: session` | 400 `invalid_request`, 401 `invalid_credentials` (unknown account and wrong password are indistinguishable), 429 `too_many_attempts`, 503 `database_unavailable` |
 | POST | `/api/auth/logout` | no | none | `200 {"status":"ok"}`, session destroyed, cookie cleared | 503 `database_unavailable` |

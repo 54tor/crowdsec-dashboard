@@ -4,8 +4,7 @@
 #   ./up.sh metrics    CrowdSec with the Prometheus listener enabled
 #   ./up.sh peer       also start the disposable second engine peer-a (peer/compose.override.yaml),
 #                      reachable inside the stack as http://peer-a:8080 (see spike.sh)
-# On first run it generates .env.local (git-ignored) with random secrets and prints
-# the database password. The enrolment token of the first account is read from the dashboard
+# On first run it generates .env.local (git-ignored) with random secrets. The enrolment token of the first account is read from the dashboard
 # logs and printed once the dashboard is up. Re-running keeps the existing secrets.
 set -euo pipefail
 

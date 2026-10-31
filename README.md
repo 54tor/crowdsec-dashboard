@@ -63,7 +63,7 @@ Every destructive action asks you to retype the target, and the server checks it
   `cscli` command (see [docs/security.md](docs/security.md)). The dashboard never mounts the Docker
   socket: it talks to a filtering proxy.
 - Configuration files are read from a read-only mount of the CrowdSec configuration volume.
-- Accounts and sessions are stored in PostgreSQL (hashed); schema migrations run at every start.
+- Accounts and sessions are stored in PostgreSQL (passwords and session tokens are hashed); schema migrations run at every start.
 
 ## Quick start
 
