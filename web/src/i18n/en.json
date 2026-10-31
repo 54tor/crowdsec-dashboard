@@ -1,5 +1,8 @@
 {
-  "app": { "title": "CrowdSec dashboard", "skipToContent": "Skip to content" },
+  "app": {
+    "title": "CrowdSec dashboard",
+    "skipToContent": "Skip to content"
+  },
   "nav": {
     "label": "Main navigation",
     "alerts": "Alerts",
@@ -11,8 +14,15 @@
     "machines": "Machines",
     "hub": "Hub"
   },
-  "common": { "loading": "Loading…", "comingSoon": "This page is coming soon." },
-  "language": { "label": "Language", "fr": "Français", "en": "English" },
+  "common": {
+    "loading": "Loading…",
+    "comingSoon": "This page is coming soon."
+  },
+  "language": {
+    "label": "Language",
+    "fr": "Français",
+    "en": "English"
+  },
   "login": {
     "title": "Sign in",
     "description": "Enter the dashboard password.",
@@ -38,6 +48,124 @@
     "cscli_timeout": "The cscli command timed out.",
     "self_account": "You cannot act on the dashboard's own account.",
     "network": "Network error. Check your connection.",
-    "unknown": "An unexpected error occurred."
+    "unknown": "An unexpected error occurred.",
+    "file_too_large": "The file is too large to display.",
+    "config_unavailable": "The configuration files are unavailable."
+  },
+  "filters": {
+    "label": "Filters",
+    "scenario": "Scenario",
+    "ip": "IP address or CIDR",
+    "since": "Since",
+    "sincePlaceholder": "e.g. 24h",
+    "scenarioInvalid": "Invalid scenario name.",
+    "ipInvalid": "Enter a valid IPv4, IPv6 or CIDR.",
+    "sinceInvalid": "Use a number followed by s, m, h or d (e.g. 24h)."
+  },
+  "list": {
+    "truncated": "Only the most recent {{count}} entries are shown; older entries are not displayed.",
+    "windowInfo": "{{count}} entries in the current window",
+    "pageOf": "Page {{page}} of {{total}}",
+    "previous": "Previous",
+    "next": "Next",
+    "pagination": "Pagination",
+    "scrollRegion": "{{name}} (scrollable)",
+    "empty": "Nothing to show for these filters.",
+    "loading": "Loading data",
+    "yes": "Yes",
+    "no": "No",
+    "unknown": "Unknown"
+  },
+  "alerts": {
+    "title": "Alerts",
+    "caption": "Alerts reported by CrowdSec",
+    "chartTitle": "Alerts per hour",
+    "columns": {
+      "createdAt": "Date",
+      "scenario": "Scenario",
+      "source": "Source",
+      "machine": "Machine",
+      "events": "Events",
+      "decisions": "Decisions",
+      "message": "Message"
+    },
+    "simulated": "Simulated"
+  },
+  "decisions": {
+    "title": "Decisions",
+    "caption": "Active decisions",
+    "communityNotice": "Decisions from the community blocklist (CAPI) are not included here.",
+    "columns": {
+      "value": "Target",
+      "scope": "Scope",
+      "type": "Type",
+      "origin": "Origin",
+      "scenario": "Scenario",
+      "expires": "Expires",
+      "simulated": "Simulated"
+    }
+  },
+  "chart": {
+    "label": "Alerts per hour chart",
+    "empty": "No alerts in this window.",
+    "summary": "{{count}} alerts, {{hours}} active hours",
+    "hour": "Hour",
+    "count": "Alerts",
+    "seriesName": "Alerts"
+  },
+  "health": {
+    "title": "Health",
+    "version": "CrowdSec version",
+    "bouncersCaption": "Bouncers",
+    "machinesCaption": "Machines",
+    "noBouncers": "No bouncers registered.",
+    "noMachines": "No machines registered.",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "version": "Version",
+      "ip": "IP address",
+      "lastContact": "Last contact",
+      "status": "Status",
+      "auth": "Authentication"
+    },
+    "never": "Never",
+    "stale": "No contact for more than 5 minutes",
+    "ok": "Active",
+    "revoked": "Revoked",
+    "validated": "Validated",
+    "notValidated": "Not validated",
+    "degradedTitle": "Some information could not be retrieved",
+    "degraded": {
+      "version": "The CrowdSec version could not be read.",
+      "bouncers": "The bouncer list could not be read.",
+      "machines": "The machine list could not be read."
+    }
+  },
+  "metrics": {
+    "title": "Metrics",
+    "unavailableTitle": "Metrics are unavailable",
+    "unavailable": "cscli could not read the metrics. Prometheus must be enabled in CrowdSec's config.yaml (prometheus section) for this page to work.",
+    "acquisitionCaption": "Acquisition",
+    "parsersCaption": "Parsers",
+    "empty": "No metrics reported yet.",
+    "columns": {
+      "source": "Source",
+      "linesRead": "Lines read",
+      "parsed": "Parsed",
+      "unparsed": "Unparsed",
+      "parser": "Parser",
+      "hits": "Hits"
+    }
+  },
+  "config": {
+    "title": "Configuration",
+    "files": "Files",
+    "filesNote": "Hub whitelists installed as symlinks are not listed.",
+    "redactionNote": "Values that look like secrets are redacted.",
+    "noFiles": "No readable configuration files.",
+    "select": "Select a file to view it.",
+    "viewer": "Content of {{name}}",
+    "loading": "Loading file…"
   }
 }

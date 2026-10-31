@@ -1,5 +1,8 @@
 {
-  "app": { "title": "Tableau de bord CrowdSec", "skipToContent": "Aller au contenu" },
+  "app": {
+    "title": "Tableau de bord CrowdSec",
+    "skipToContent": "Aller au contenu"
+  },
   "nav": {
     "label": "Navigation principale",
     "alerts": "Alertes",
@@ -11,8 +14,15 @@
     "machines": "Machines",
     "hub": "Hub"
   },
-  "common": { "loading": "Chargement…", "comingSoon": "Cette page arrive bientôt." },
-  "language": { "label": "Langue", "fr": "Français", "en": "English" },
+  "common": {
+    "loading": "Chargement…",
+    "comingSoon": "Cette page arrive bientôt."
+  },
+  "language": {
+    "label": "Langue",
+    "fr": "Français",
+    "en": "English"
+  },
   "login": {
     "title": "Connexion",
     "description": "Saisissez le mot de passe du tableau de bord.",
@@ -38,6 +48,124 @@
     "cscli_timeout": "La commande cscli a expiré.",
     "self_account": "Vous ne pouvez pas agir sur le compte du tableau de bord lui-même.",
     "network": "Erreur réseau. Vérifiez votre connexion.",
-    "unknown": "Une erreur inattendue s'est produite."
+    "unknown": "Une erreur inattendue s'est produite.",
+    "file_too_large": "Le fichier est trop volumineux pour être affiché.",
+    "config_unavailable": "Les fichiers de configuration sont indisponibles."
+  },
+  "filters": {
+    "label": "Filtres",
+    "scenario": "Scénario",
+    "ip": "Adresse IP ou CIDR",
+    "since": "Depuis",
+    "sincePlaceholder": "ex. 24h",
+    "scenarioInvalid": "Nom de scénario invalide.",
+    "ipInvalid": "Saisissez une IPv4, IPv6 ou un CIDR valide.",
+    "sinceInvalid": "Utilisez un nombre suivi de s, m, h ou d (ex. 24h)."
+  },
+  "list": {
+    "truncated": "Seules les {{count}} entrées les plus récentes sont affichées ; les plus anciennes ne le sont pas.",
+    "windowInfo": "{{count}} entrées dans la fenêtre courante",
+    "pageOf": "Page {{page}} sur {{total}}",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "pagination": "Pagination",
+    "scrollRegion": "{{name}} (défilable)",
+    "empty": "Rien à afficher pour ces filtres.",
+    "loading": "Chargement des données",
+    "yes": "Oui",
+    "no": "Non",
+    "unknown": "Inconnu"
+  },
+  "alerts": {
+    "title": "Alertes",
+    "caption": "Alertes signalées par CrowdSec",
+    "chartTitle": "Alertes par heure",
+    "columns": {
+      "createdAt": "Date",
+      "scenario": "Scénario",
+      "source": "Source",
+      "machine": "Machine",
+      "events": "Événements",
+      "decisions": "Décisions",
+      "message": "Message"
+    },
+    "simulated": "Simulée"
+  },
+  "decisions": {
+    "title": "Décisions",
+    "caption": "Décisions actives",
+    "communityNotice": "Les décisions de la liste de blocage communautaire (CAPI) ne sont pas incluses ici.",
+    "columns": {
+      "value": "Cible",
+      "scope": "Portée",
+      "type": "Type",
+      "origin": "Origine",
+      "scenario": "Scénario",
+      "expires": "Expire",
+      "simulated": "Simulée"
+    }
+  },
+  "chart": {
+    "label": "Graphique des alertes par heure",
+    "empty": "Aucune alerte dans cette fenêtre.",
+    "summary": "{{count}} alertes, {{hours}} heures actives",
+    "hour": "Heure",
+    "count": "Alertes",
+    "seriesName": "Alertes"
+  },
+  "health": {
+    "title": "Santé",
+    "version": "Version de CrowdSec",
+    "bouncersCaption": "Bouncers",
+    "machinesCaption": "Machines",
+    "noBouncers": "Aucun bouncer enregistré.",
+    "noMachines": "Aucune machine enregistrée.",
+    "columns": {
+      "name": "Nom",
+      "type": "Type",
+      "version": "Version",
+      "ip": "Adresse IP",
+      "lastContact": "Dernier contact",
+      "status": "État",
+      "auth": "Authentification"
+    },
+    "never": "Jamais",
+    "stale": "Aucun contact depuis plus de 5 minutes",
+    "ok": "Actif",
+    "revoked": "Révoqué",
+    "validated": "Validée",
+    "notValidated": "Non validée",
+    "degradedTitle": "Certaines informations n'ont pas pu être récupérées",
+    "degraded": {
+      "version": "La version de CrowdSec n'a pas pu être lue.",
+      "bouncers": "La liste des bouncers n'a pas pu être lue.",
+      "machines": "La liste des machines n'a pas pu être lue."
+    }
+  },
+  "metrics": {
+    "title": "Métriques",
+    "unavailableTitle": "Métriques indisponibles",
+    "unavailable": "cscli n'a pas pu lire les métriques. Prometheus doit être activé dans le config.yaml de CrowdSec (section prometheus) pour que cette page fonctionne.",
+    "acquisitionCaption": "Acquisition",
+    "parsersCaption": "Parseurs",
+    "empty": "Aucune métrique remontée pour l'instant.",
+    "columns": {
+      "source": "Source",
+      "linesRead": "Lignes lues",
+      "parsed": "Analysées",
+      "unparsed": "Non analysées",
+      "parser": "Parseur",
+      "hits": "Occurrences"
+    }
+  },
+  "config": {
+    "title": "Configuration",
+    "files": "Fichiers",
+    "filesNote": "Les listes blanches du hub installées sous forme de liens symboliques ne sont pas listées.",
+    "redactionNote": "Les valeurs qui ressemblent à des secrets sont masquées.",
+    "noFiles": "Aucun fichier de configuration lisible.",
+    "select": "Sélectionnez un fichier pour l'afficher.",
+    "viewer": "Contenu de {{name}}",
+    "loading": "Chargement du fichier…"
   }
 }
