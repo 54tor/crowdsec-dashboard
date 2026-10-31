@@ -21,13 +21,14 @@ const (
 )
 
 type authHandlers struct {
-	authenticator auth.Authenticator
-	sessionTTL    time.Duration
-	trustedCIDRs  []*net.IPNet
-	sessions      auth.SessionStore
-	limiter       *auth.LoginLimiter
-	failureWait   time.Duration
-	hashSlots     chan struct{}
+	authenticator       auth.Authenticator
+	sessionTTL          time.Duration
+	trustedCIDRs        []*net.IPNet
+	sessions            auth.SessionStore
+	limiter             *auth.LoginLimiter
+	secondFactorLimiter *auth.LoginLimiter
+	failureWait         time.Duration
+	hashSlots           chan struct{}
 }
 
 type loginRequest struct {

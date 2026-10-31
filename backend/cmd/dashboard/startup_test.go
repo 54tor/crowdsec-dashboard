@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/pquerna/otp/totp"
 
 	"crowdsec-dashboard/internal/accounts"
+	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store/storetest"
 )
 
@@ -26,7 +31,7 @@ func TestStartupLogsEnrollmentTokenOnEmptyDatabase(testContext *testing.T) {
 	database := storetest.NewUnmigrated(testContext)
 	sink := &capturedLog{}
 
-	services, startupError := initialiseAccounts(context.Background(), database, sink.printf)
+	services, startupError := initialiseAccounts(context.Background(), database, newTestKeyring(testContext), sink.printf)
 	if startupError != nil {
 		testContext.Fatalf("startup: %v", startupError)
 	}
@@ -48,9 +53,46 @@ func TestStartupLogsEnrollmentTokenOnEmptyDatabase(testContext *testing.T) {
 	if len(loggedToken) < 40 {
 		testContext.Fatalf("no token found in %q", sink.lines[0])
 	}
-	_, completeError := services.enrollment.Complete(context.Background(), loggedToken, "admin", "a-long-enough-password")
-	if completeError != nil {
+	if startError := services.enrollment.Start(context.Background(), loggedToken, "admin", "a-long-enough-password"); startError != nil {
+		testContext.Fatalf("logged token must start enrollment: %v", startError)
+	}
+	confirmTOTPAndRecoveryCodes(testContext, services.enrollment, loggedToken)
+	if _, completeError := services.enrollment.Complete(context.Background(), loggedToken); completeError != nil {
 		testContext.Errorf("logged token must complete enrollment: %v", completeError)
+	}
+}
+
+func newTestKeyring(testContext *testing.T) *secrets.Keyring {
+	testContext.Helper()
+	keyring, keyringError := secrets.NewKeyring(bytes.Repeat([]byte{7}, 32))
+	if keyringError != nil {
+		testContext.Fatal(keyringError)
+	}
+	return keyring
+}
+
+// confirmTOTPAndRecoveryCodes performs the second factor steps the enrollment
+// wizard drives between Start and Complete.
+func confirmTOTPAndRecoveryCodes(testContext *testing.T, enrollment *accounts.Enrollment, token string) {
+	testContext.Helper()
+	setup, accountName, setupError := enrollment.Setup(token)
+	if setupError != nil {
+		testContext.Fatalf("setup: %v", setupError)
+	}
+	totpEnrollment, beginError := setup.BeginTOTP(accountName)
+	if beginError != nil {
+		testContext.Fatal(beginError)
+	}
+	confirmedAt := time.Now()
+	confirmedCode, codeError := totp.GenerateCode(totpEnrollment.Secret, confirmedAt)
+	if codeError != nil {
+		testContext.Fatal(codeError)
+	}
+	if confirmError := setup.ConfirmTOTP(confirmedCode, confirmedAt); confirmError != nil {
+		testContext.Fatal(confirmError)
+	}
+	if _, codesError := setup.RecoveryCodes(); codesError != nil {
+		testContext.Fatal(codesError)
 	}
 }
 
@@ -62,7 +104,7 @@ func TestStartupLogsNoTokenWhenAccountExists(testContext *testing.T) {
 	}
 	sink := &capturedLog{}
 
-	if _, startupError := initialiseAccounts(context.Background(), database, sink.printf); startupError != nil {
+	if _, startupError := initialiseAccounts(context.Background(), database, newTestKeyring(testContext), sink.printf); startupError != nil {
 		testContext.Fatalf("startup: %v", startupError)
 	}
 
@@ -74,7 +116,7 @@ func TestStartupLogsNoTokenWhenAccountExists(testContext *testing.T) {
 func TestStartupAppliesPendingMigrations(testContext *testing.T) {
 	database := storetest.NewUnmigrated(testContext)
 
-	if _, startupError := initialiseAccounts(context.Background(), database, (&capturedLog{}).printf); startupError != nil {
+	if _, startupError := initialiseAccounts(context.Background(), database, newTestKeyring(testContext), (&capturedLog{}).printf); startupError != nil {
 		testContext.Fatalf("startup: %v", startupError)
 	}
 
@@ -113,5 +155,19 @@ func TestStartupRefusesInvalidSecretsKey(testContext *testing.T) {
 	}
 	if _, missingError := loadSecretsKeyring(filepath.Join(testContext.TempDir(), "absent.key")); missingError == nil {
 		testContext.Error("a missing key file must be refused")
+	}
+}
+
+func TestOpenWebAuthnIsDisabledWithoutRelyingParty(testContext *testing.T) {
+	disabledWebAuthn, disabledError := openWebAuthn("", nil)
+	if disabledError != nil || disabledWebAuthn != nil {
+		testContext.Errorf("expected webauthn disabled, got %v %v", disabledWebAuthn, disabledError)
+	}
+	enabledWebAuthn, enabledError := openWebAuthn("localhost", []string{"http://localhost:18080"})
+	if enabledError != nil || enabledWebAuthn == nil {
+		testContext.Errorf("expected webauthn enabled, got %v", enabledError)
+	}
+	if _, invalidError := openWebAuthn("example.com", []string{"https://other.example.net"}); invalidError == nil {
+		testContext.Error("an origin outside the relying party must be refused")
 	}
 }

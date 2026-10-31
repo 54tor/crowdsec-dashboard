@@ -45,12 +45,15 @@ func main() {
 		log.Fatalf("database: %v", openError)
 	}
 	defer database.Close()
-	accountServices, accountsError := initialiseAccounts(startupContext, database, log.Printf)
+	accountServices, accountsError := initialiseAccounts(startupContext, database, keyring, log.Printf)
 	cancelStartup()
 	if accountsError != nil {
 		log.Fatalf("startup: %v", accountsError)
 	}
-	accountServices.keyring = keyring
+	webAuthn, webAuthnError := openWebAuthn(loadedConfig.WebAuthnRPID, loadedConfig.WebAuthnRPOrigins)
+	if webAuthnError != nil {
+		log.Fatalf("webauthn: %v", webAuthnError)
+	}
 	accountServices.geolocator = openGeolocator(loadedConfig.GeoIPDatabaseFile, time.Now, log.Printf)
 	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
 
@@ -66,6 +69,7 @@ func main() {
 	services.Audit = audit.NewPostgresRecorder(database)
 	services.Geolocator = accountServices.geolocator
 	services.AccessRules = accessrule.NewRepository(database)
+	services.WebAuthn = webAuthn
 
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,

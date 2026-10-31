@@ -84,3 +84,20 @@ func TestSetupConfirmedFactorYieldsStableRecoveryCodesAndReady(testContext *test
 		testContext.Error("expected ready")
 	}
 }
+
+func TestSetupConfirmedMethodsListsOnlyConfirmedFactors(testContext *testing.T) {
+	setup := &Setup{}
+	enrollment, _ := setup.BeginTOTP("alice")
+	if methodsBeforeConfirm := setup.ConfirmedMethods(); len(methodsBeforeConfirm) != 0 {
+		testContext.Fatalf("expected no confirmed method, got %v", methodsBeforeConfirm)
+	}
+	if confirmError := setup.ConfirmTOTP(codeAt(testContext, enrollment.Secret, referenceInstant), referenceInstant); confirmError != nil {
+		testContext.Fatal(confirmError)
+	}
+
+	confirmedMethods := setup.ConfirmedMethods()
+
+	if len(confirmedMethods) != 1 || confirmedMethods[0] != "totp" {
+		testContext.Errorf("expected [totp], got %v", confirmedMethods)
+	}
+}

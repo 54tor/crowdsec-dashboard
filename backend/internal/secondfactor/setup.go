@@ -82,6 +82,19 @@ func (setup *Setup) Ready() bool {
 	return setup.hasConfirmedFactor() && setup.recoveryCodes != nil
 }
 
+func (setup *Setup) ConfirmedMethods() []string {
+	setup.mutex.Lock()
+	defer setup.mutex.Unlock()
+	var confirmedMethods []string
+	if setup.totpConfirmed {
+		confirmedMethods = append(confirmedMethods, totpKind)
+	}
+	if setup.webAuthnCredential != nil {
+		confirmedMethods = append(confirmedMethods, webauthnKind)
+	}
+	return confirmedMethods
+}
+
 func (setup *Setup) hasConfirmedFactor() bool {
 	return setup.totpConfirmed || setup.webAuthnCredential != nil
 }

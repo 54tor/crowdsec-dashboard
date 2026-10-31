@@ -11,7 +11,6 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/uptrace/bun"
 
-	"crowdsec-dashboard/internal/accounts"
 	"crowdsec-dashboard/internal/store/storetest"
 )
 
@@ -213,7 +212,7 @@ func newWebAuthnFixture(testContext *testing.T) webAuthnFixture {
 func (fixture webAuthnFixture) enroll(testContext *testing.T, accountName string, initialCounter uint32) webAuthnAccount {
 	testContext.Helper()
 	ctx := context.Background()
-	accountID, createError := accounts.NewRepository(fixture.database).CreateWithPasswordHash(ctx, accountName, "hash", "admin")
+	accountID, createError := createTestAccount(ctx, fixture.database, accountName)
 	if createError != nil {
 		testContext.Fatal(createError)
 	}

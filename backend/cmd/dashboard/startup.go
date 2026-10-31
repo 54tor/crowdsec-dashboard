@@ -9,6 +9,7 @@ import (
 
 	"crowdsec-dashboard/internal/accounts"
 	"crowdsec-dashboard/internal/geo"
+	"crowdsec-dashboard/internal/secondfactor"
 	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store"
 )
@@ -53,12 +54,19 @@ func openGeolocator(databasePath string, now func() time.Time, logLine logFuncti
 
 type logFunction func(format string, arguments ...any)
 
-func initialiseAccounts(ctx context.Context, database *bun.DB, logLine logFunction) (accountServices, error) {
+func openWebAuthn(rpID string, rpOrigins []string) (*secondfactor.WebAuthn, error) {
+	if rpID == "" {
+		return nil, nil
+	}
+	return secondfactor.NewWebAuthn(rpID, rpOrigins)
+}
+
+func initialiseAccounts(ctx context.Context, database *bun.DB, keyring *secrets.Keyring, logLine logFunction) (accountServices, error) {
 	if migrateError := store.Migrate(ctx, database); migrateError != nil {
 		return accountServices{}, migrateError
 	}
 	repository := accounts.NewRepository(database)
-	enrollment := accounts.NewEnrollment(repository)
+	enrollment := accounts.NewEnrollment(repository, secondfactor.NewRepository(database, keyring))
 	token, isOpened, openError := enrollment.Open(ctx)
 	if openError != nil {
 		return accountServices{}, fmt.Errorf("open enrollment: %w", openError)
@@ -66,7 +74,7 @@ func initialiseAccounts(ctx context.Context, database *bun.DB, logLine logFuncti
 	if isOpened {
 		logLine("no account yet: open %s and enroll the first account with token %s", enrollmentPath, token)
 	}
-	return accountServices{repository: repository, enrollment: enrollment}, nil
+	return accountServices{repository: repository, enrollment: enrollment, keyring: keyring}, nil
 }
 
 type sessionPruner interface {

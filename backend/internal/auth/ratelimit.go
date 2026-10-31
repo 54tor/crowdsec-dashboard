@@ -24,13 +24,16 @@ type LoginLimiter struct {
 }
 
 func NewLoginLimiter(attemptsPerMinutePerIP, attemptsPerMinuteGlobal int) *LoginLimiter {
-	return &LoginLimiter{
+	limiter := &LoginLimiter{
 		limit:       rate.Every(time.Minute / time.Duration(attemptsPerMinutePerIP)),
 		burst:       attemptsPerMinutePerIP,
 		limiterByIP: make(map[string]*rate.Limiter),
-		global:      rate.NewLimiter(rate.Every(time.Minute/time.Duration(attemptsPerMinuteGlobal)), attemptsPerMinuteGlobal),
 		lastSweep:   time.Now(),
 	}
+	if attemptsPerMinuteGlobal > 0 {
+		limiter.global = rate.NewLimiter(rate.Every(time.Minute/time.Duration(attemptsPerMinuteGlobal)), attemptsPerMinuteGlobal)
+	}
+	return limiter
 }
 
 func (limiter *LoginLimiter) Allow(ip string) bool {
@@ -49,7 +52,7 @@ func (limiter *LoginLimiter) Allow(ip string) bool {
 	if !clientLimiter.Allow() {
 		return false
 	}
-	return limiter.global.Allow()
+	return limiter.global == nil || limiter.global.Allow()
 }
 
 func (limiter *LoginLimiter) sweepIfDue() {

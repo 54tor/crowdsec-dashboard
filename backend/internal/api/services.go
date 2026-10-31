@@ -8,6 +8,7 @@ import (
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/secondfactor"
 )
 
 type DecisionService interface {
@@ -37,6 +38,7 @@ type Services struct {
 	Audit          audit.Recorder
 	Geolocator     geo.Geolocator
 	AccessRules    AccessRuleService
+	WebAuthn       *secondfactor.WebAuthn
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {

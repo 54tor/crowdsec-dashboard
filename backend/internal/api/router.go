@@ -16,21 +16,29 @@ func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services
 func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration, services Services) http.Handler {
 	requireSession := auth.RequireSession(services.Sessions)
 	handlers := &authHandlers{
-		authenticator: services.Authenticator,
-		sessionTTL:    loadedConfig.SessionTTL,
-		trustedCIDRs:  loadedConfig.TrustedProxyCIDRs,
-		sessions:      services.Sessions,
-		limiter:       auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
-		failureWait:   failureWait,
-		hashSlots:     make(chan struct{}, concurrentPasswordHashes),
+		authenticator:       services.Authenticator,
+		sessionTTL:          loadedConfig.SessionTTL,
+		trustedCIDRs:        loadedConfig.TrustedProxyCIDRs,
+		sessions:            services.Sessions,
+		limiter:             auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
+		secondFactorLimiter: auth.NewLoginLimiter(secondFactorAttemptsPerIP, 0),
+		failureWait:         failureWait,
+		hashSlots:           make(chan struct{}, concurrentPasswordHashes),
 	}
 
 	longWrite := extendWriteDeadline(cscli.HubMutationTimeout)
 	router := http.NewServeMux()
 	router.Handle("GET /api/healthz", HealthHandler(services.Database))
-	enrollment := enrollmentHandlers{enrollment: services.Enrollment, auth: handlers}
+	enrollment := enrollmentHandlers{enrollment: services.Enrollment, auth: handlers, recorder: services.Audit, webAuthn: services.WebAuthn}
+	enrollmentFactors := enrollment.setupHandlers()
 	router.HandleFunc("GET /api/auth/status", enrollment.status)
 	router.HandleFunc("POST /api/auth/enroll", enrollment.enroll)
+	router.HandleFunc("POST /api/auth/enroll/totp", enrollmentFactors.beginTOTP)
+	router.HandleFunc("POST /api/auth/enroll/totp/confirm", enrollmentFactors.confirmTOTP)
+	router.HandleFunc("POST /api/auth/enroll/webauthn/options", enrollmentFactors.beginWebAuthn)
+	router.HandleFunc("POST /api/auth/enroll/webauthn/confirm", enrollmentFactors.confirmWebAuthn)
+	router.HandleFunc("POST /api/auth/enroll/recovery-codes", enrollmentFactors.recoveryCodes)
+	router.HandleFunc("POST /api/auth/enroll/complete", enrollment.complete)
 	router.HandleFunc("POST /api/auth/login", handlers.login)
 	router.HandleFunc("POST /api/auth/logout", handlers.logout)
 	router.Handle("POST /api/auth/logout-all", requireSession(http.HandlerFunc(handlers.logoutAll)))

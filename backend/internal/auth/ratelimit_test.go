@@ -1,6 +1,9 @@
 package auth
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestLoginLimiterBlocksSixthAttemptInOneMinute(testContext *testing.T) {
 	limiter := NewLoginLimiter(5, 1000)
@@ -58,5 +61,21 @@ func TestGlobalLoginLimiterBlocksAcrossIPs(testContext *testing.T) {
 	}
 	if limiter.Allow("198.51.100.4") {
 		testContext.Error("global budget must block a fourth distinct IP")
+	}
+}
+
+func TestSecondFactorLimiterHasNoGlobalBucket(testContext *testing.T) {
+	limiter := NewLoginLimiter(30, 0)
+
+	for clientIndex := 1; clientIndex <= 40; clientIndex++ {
+		clientIP := fmt.Sprintf("198.51.100.%d", clientIndex)
+		for attemptNumber := 1; attemptNumber <= 30; attemptNumber++ {
+			if !limiter.Allow(clientIP) {
+				testContext.Fatalf("client %s attempt %d must be allowed without a global bucket", clientIP, attemptNumber)
+			}
+		}
+	}
+	if limiter.Allow("198.51.100.1") {
+		testContext.Error("the per-IP bucket must still apply")
 	}
 }

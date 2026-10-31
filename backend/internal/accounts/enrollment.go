@@ -12,6 +12,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/secondfactor"
 )
 
 const (
@@ -21,18 +22,28 @@ const (
 )
 
 var (
-	ErrEnrollmentClosed = errors.New("enrollment is closed")
-	ErrEnrollmentToken  = errors.New("invalid enrollment token")
+	ErrEnrollmentClosed       = errors.New("enrollment is closed")
+	ErrEnrollmentToken        = errors.New("invalid enrollment token")
+	ErrEnrollmentNotStarted   = errors.New("enrollment account step not done")
+	ErrSecondFactorIncomplete = errors.New("second factor and recovery codes are not confirmed")
 )
+
+type pendingEnrollment struct {
+	accountName  string
+	passwordHash string
+	setup        *secondfactor.Setup
+}
 
 type Enrollment struct {
 	repository *Repository
+	factors    *secondfactor.Repository
 	mutex      sync.Mutex
 	token      []byte
+	pending    *pendingEnrollment
 }
 
-func NewEnrollment(repository *Repository) *Enrollment {
-	return &Enrollment{repository: repository}
+func NewEnrollment(repository *Repository, factors *secondfactor.Repository) *Enrollment {
+	return &Enrollment{repository: repository, factors: factors}
 }
 
 func (enrollment *Enrollment) Required(_ context.Context) (bool, error) {
@@ -49,6 +60,7 @@ func (enrollment *Enrollment) Open(ctx context.Context) (string, bool, error) {
 	isRequired := accountCount == 0
 	enrollment.mutex.Lock()
 	defer enrollment.mutex.Unlock()
+	enrollment.pending = nil
 	if !isRequired {
 		enrollment.token = nil
 		return "", false, nil
@@ -62,9 +74,7 @@ func (enrollment *Enrollment) Open(ctx context.Context) (string, bool, error) {
 	return encodedToken, true, nil
 }
 
-func (enrollment *Enrollment) checkToken(candidateToken string) error {
-	enrollment.mutex.Lock()
-	defer enrollment.mutex.Unlock()
+func (enrollment *Enrollment) checkTokenLocked(candidateToken string) error {
 	if enrollment.token == nil {
 		return ErrEnrollmentClosed
 	}
@@ -74,22 +84,66 @@ func (enrollment *Enrollment) checkToken(candidateToken string) error {
 	return nil
 }
 
+func (enrollment *Enrollment) checkToken(candidateToken string) error {
+	enrollment.mutex.Lock()
+	defer enrollment.mutex.Unlock()
+	return enrollment.checkTokenLocked(candidateToken)
+}
+
+func (enrollment *Enrollment) pendingFor(candidateToken string) (*pendingEnrollment, error) {
+	enrollment.mutex.Lock()
+	defer enrollment.mutex.Unlock()
+	if tokenError := enrollment.checkTokenLocked(candidateToken); tokenError != nil {
+		return nil, tokenError
+	}
+	if enrollment.pending == nil {
+		return nil, ErrEnrollmentNotStarted
+	}
+	return enrollment.pending, nil
+}
+
 func (enrollment *Enrollment) forgetToken() {
 	enrollment.mutex.Lock()
 	defer enrollment.mutex.Unlock()
 	enrollment.token = nil
+	enrollment.pending = nil
 }
 
-func (enrollment *Enrollment) Complete(ctx context.Context, candidateToken, accountName, password string) (auth.AccountIdentity, error) {
+func (enrollment *Enrollment) Start(_ context.Context, candidateToken, accountName, password string) error {
 	if tokenError := enrollment.checkToken(candidateToken); tokenError != nil {
-		return auth.AccountIdentity{}, tokenError
+		return tokenError
 	}
 	if nameError := ValidateAccountName(accountName); nameError != nil {
-		return auth.AccountIdentity{}, nameError
+		return nameError
 	}
 	passwordHash, hashError := HashPassword(password)
 	if hashError != nil {
-		return auth.AccountIdentity{}, hashError
+		return hashError
+	}
+	enrollment.mutex.Lock()
+	defer enrollment.mutex.Unlock()
+	if tokenError := enrollment.checkTokenLocked(candidateToken); tokenError != nil {
+		return tokenError
+	}
+	enrollment.pending = &pendingEnrollment{accountName: accountName, passwordHash: passwordHash, setup: &secondfactor.Setup{}}
+	return nil
+}
+
+func (enrollment *Enrollment) Setup(candidateToken string) (*secondfactor.Setup, string, error) {
+	pending, pendingError := enrollment.pendingFor(candidateToken)
+	if pendingError != nil {
+		return nil, "", pendingError
+	}
+	return pending.setup, pending.accountName, nil
+}
+
+func (enrollment *Enrollment) Complete(ctx context.Context, candidateToken string) (auth.AccountIdentity, error) {
+	pending, pendingError := enrollment.pendingFor(candidateToken)
+	if pendingError != nil {
+		return auth.AccountIdentity{}, pendingError
+	}
+	if !pending.setup.Ready() {
+		return auth.AccountIdentity{}, ErrSecondFactorIncomplete
 	}
 
 	var accountID int64
@@ -105,8 +159,11 @@ func (enrollment *Enrollment) Complete(ctx context.Context, candidateToken, acco
 			return ErrEnrollmentClosed
 		}
 		var insertError error
-		accountID, insertError = insertPasswordAccount(ctx, transaction, accountName, passwordHash, enrollmentAccountRole)
-		return insertError
+		accountID, insertError = insertPasswordAccount(ctx, transaction, pending.accountName, pending.passwordHash, enrollmentAccountRole)
+		if insertError != nil {
+			return insertError
+		}
+		return enrollment.factors.SaveSetup(ctx, transaction, accountID, pending.setup)
 	})
 	if errors.Is(transactionError, ErrEnrollmentClosed) {
 		enrollment.forgetToken()
@@ -116,5 +173,5 @@ func (enrollment *Enrollment) Complete(ctx context.Context, candidateToken, acco
 		return auth.AccountIdentity{}, fmt.Errorf("complete enrollment: %w", transactionError)
 	}
 	enrollment.forgetToken()
-	return auth.AccountIdentity{AccountID: accountID, AccountName: accountName, AccountRole: enrollmentAccountRole}, nil
+	return auth.AccountIdentity{AccountID: accountID, AccountName: pending.accountName, AccountRole: enrollmentAccountRole}, nil
 }

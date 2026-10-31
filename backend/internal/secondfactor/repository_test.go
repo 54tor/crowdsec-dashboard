@@ -12,7 +12,6 @@ import (
 
 	"github.com/uptrace/bun"
 
-	"crowdsec-dashboard/internal/accounts"
 	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store/storetest"
 )
@@ -34,10 +33,20 @@ func newKeyring(testContext *testing.T) *secrets.Keyring {
 	return keyring
 }
 
+// createTestAccount inserts a bare account row with raw SQL. The accounts package
+// imports secondfactor, so importing it here would be an import cycle in tests.
+func createTestAccount(ctx context.Context, database *bun.DB, accountName string) (int64, error) {
+	var accountID int64
+	insertError := database.NewRaw(
+		"INSERT INTO account (account_name, account_role) VALUES (?, 'admin') RETURNING account_id", accountName,
+	).Scan(ctx, &accountID)
+	return accountID, insertError
+}
+
 func enrollAccount(testContext *testing.T, database *bun.DB, repository *Repository, accountName string) (int64, string, []string) {
 	testContext.Helper()
 	ctx := context.Background()
-	accountID, createError := accounts.NewRepository(database).CreateWithPasswordHash(ctx, accountName, "hash", "admin")
+	accountID, createError := createTestAccount(ctx, database, accountName)
 	if createError != nil {
 		testContext.Fatal(createError)
 	}
@@ -125,7 +134,7 @@ func TestVerifyTOTPRejectsReplayedStep(testContext *testing.T) {
 func TestVerifyTOTPFailsWhenCiphertextCopiedToOtherAccount(testContext *testing.T) {
 	fixture := newEnrolledFixture(testContext)
 	ctx := context.Background()
-	otherAccountID, createError := accounts.NewRepository(fixture.database).CreateWithPasswordHash(ctx, "bob", "hash", "admin")
+	otherAccountID, createError := createTestAccount(ctx, fixture.database, "bob")
 	if createError != nil {
 		testContext.Fatal(createError)
 	}
@@ -185,7 +194,7 @@ func TestConsumeRecoveryCodeRejectsOtherAccountsCode(testContext *testing.T) {
 func TestMethodsListsEnrolledFactors(testContext *testing.T) {
 	fixture := newEnrolledFixture(testContext)
 	ctx := context.Background()
-	bareAccountID, createError := accounts.NewRepository(fixture.database).CreateWithPasswordHash(ctx, "carol", "hash", "admin")
+	bareAccountID, createError := createTestAccount(ctx, fixture.database, "carol")
 	if createError != nil {
 		testContext.Fatal(createError)
 	}

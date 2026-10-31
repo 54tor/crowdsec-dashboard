@@ -6,19 +6,35 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"crowdsec-dashboard/internal/accounts"
+	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/secondfactor"
 )
 
 type EnrollmentService interface {
 	Required(ctx context.Context) (bool, error)
-	Complete(ctx context.Context, token, accountName, password string) (auth.AccountIdentity, error)
+	Start(ctx context.Context, token, accountName, password string) error
+	Setup(token string) (*secondfactor.Setup, string, error)
+	Complete(ctx context.Context, token string) (auth.AccountIdentity, error)
 }
 
 type enrollmentHandlers struct {
 	enrollment EnrollmentService
 	auth       *authHandlers
+	recorder   audit.Recorder
+	webAuthn   *secondfactor.WebAuthn
+}
+
+type enrollmentTokenRequest struct {
+	Token string `json:"token"`
+}
+
+type enrollmentStepResponse struct {
+	Status  string   `json:"status"`
+	Methods []string `json:"methods"`
 }
 
 type enrollRequest struct {
@@ -59,26 +75,96 @@ func (handlers enrollmentHandlers) enroll(responseWriter http.ResponseWriter, re
 		writeTooManyAttempts(responseWriter)
 		return
 	}
-	identity, completeError := handlers.enrollment.Complete(request.Context(), submission.Token, submission.AccountName, submission.Password)
-	if completeError != nil {
-		writeEnrollmentError(responseWriter, completeError)
+	if startError := handlers.enrollment.Start(request.Context(), submission.Token, submission.AccountName, submission.Password); startError != nil {
+		enrollmentFailure(startError).write(responseWriter)
 		return
 	}
+	writeJSON(responseWriter, http.StatusOK, enrollmentStepResponse{Status: "second_factor_required", Methods: handlers.methods()})
+}
+
+func (handlers enrollmentHandlers) methods() []string {
+	if handlers.webAuthn == nil {
+		return []string{"totp"}
+	}
+	return []string{"totp", "webauthn"}
+}
+
+func (handlers enrollmentHandlers) resolveSetup(request *http.Request) (*secondfactor.Setup, string, apiFailure) {
+	token, failure := decodeEnrollmentToken(request)
+	if failure.failed() {
+		return nil, "", failure
+	}
+	setup, accountName, setupError := handlers.enrollment.Setup(token)
+	if setupError != nil {
+		return nil, "", enrollmentFailure(setupError)
+	}
+	return setup, accountName, apiFailure{}
+}
+
+func decodeEnrollmentToken(request *http.Request) (string, apiFailure) {
+	var submission enrollmentTokenRequest
+	if decodeError := json.NewDecoder(request.Body).Decode(&submission); decodeError != nil || submission.Token == "" {
+		return "", invalidRequestFailure
+	}
+	return submission.Token, apiFailure{}
+}
+
+func (handlers enrollmentHandlers) setupHandlers() secondFactorSetupHandlers {
+	return secondFactorSetupHandlers{
+		resolveSetup: handlers.resolveSetup,
+		webAuthn:     handlers.webAuthn,
+		limiter:      handlers.auth.secondFactorLimiter,
+		trustedCIDRs: handlers.auth.trustedCIDRs,
+		now:          time.Now,
+	}
+}
+
+func (handlers enrollmentHandlers) complete(responseWriter http.ResponseWriter, request *http.Request) {
+	clientIP := auth.ClientIP(request, handlers.auth.trustedCIDRs)
+	if !handlers.auth.secondFactorLimiter.Allow(clientIP) {
+		writeTooManyAttempts(responseWriter)
+		return
+	}
+	request.Body = http.MaxBytesReader(responseWriter, request.Body, maxLoginBodyBytes)
+	token, failure := decodeEnrollmentToken(request)
+	if failure.failed() {
+		failure.write(responseWriter)
+		return
+	}
+	setup, _, setupError := handlers.enrollment.Setup(token)
+	if setupError != nil {
+		enrollmentFailure(setupError).write(responseWriter)
+		return
+	}
+	enrolledMethods := setup.ConfirmedMethods()
+	identity, completeError := handlers.enrollment.Complete(request.Context(), token)
+	if completeError != nil {
+		enrollmentFailure(completeError).write(responseWriter)
+		return
+	}
+	for _, enrolledMethod := range enrolledMethods {
+		audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionSecondFactorEnrolled, enrolledMethod, clientIP)
+	}
+	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionEnrollmentCompleted, identity.AccountName, clientIP)
 	handlers.auth.openSession(responseWriter, request, identity)
 }
 
-func writeEnrollmentError(responseWriter http.ResponseWriter, completeError error) {
+func enrollmentFailure(enrollmentError error) apiFailure {
 	switch {
-	case errors.Is(completeError, accounts.ErrEnrollmentClosed):
-		writeError(responseWriter, http.StatusNotFound, "not_found")
-	case errors.Is(completeError, accounts.ErrEnrollmentToken):
-		writeError(responseWriter, http.StatusForbidden, "invalid_enrollment_token")
-	case errors.Is(completeError, accounts.ErrInvalidAccountName):
-		writeError(responseWriter, http.StatusBadRequest, "invalid_account_name")
-	case errors.Is(completeError, accounts.ErrPasswordLength):
-		writeError(responseWriter, http.StatusBadRequest, "invalid_password_length")
+	case errors.Is(enrollmentError, accounts.ErrEnrollmentClosed):
+		return apiFailure{status: http.StatusNotFound, code: "not_found"}
+	case errors.Is(enrollmentError, accounts.ErrEnrollmentToken):
+		return apiFailure{status: http.StatusForbidden, code: "invalid_enrollment_token"}
+	case errors.Is(enrollmentError, accounts.ErrEnrollmentNotStarted):
+		return apiFailure{status: http.StatusConflict, code: "enrollment_not_started"}
+	case errors.Is(enrollmentError, accounts.ErrSecondFactorIncomplete):
+		return apiFailure{status: http.StatusConflict, code: "second_factor_required"}
+	case errors.Is(enrollmentError, accounts.ErrInvalidAccountName):
+		return apiFailure{status: http.StatusBadRequest, code: "invalid_account_name"}
+	case errors.Is(enrollmentError, accounts.ErrPasswordLength):
+		return apiFailure{status: http.StatusBadRequest, code: "invalid_password_length"}
 	default:
-		log.Printf("complete enrollment: %v", completeError)
-		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
+		log.Printf("enrollment: %v", enrollmentError)
+		return apiFailure{status: http.StatusServiceUnavailable, code: "database_unavailable"}
 	}
 }
