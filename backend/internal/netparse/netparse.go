@@ -5,7 +5,11 @@ import (
 	"net/netip"
 )
 
-const ipv4MappedPrefixBits = 96
+const (
+	ipv4MappedPrefixBits = 96
+	minIPv4BanPrefixBits = 8
+	minIPv6BanPrefixBits = 32
+)
 
 func ParseAddr(rawAddress string) (netip.Addr, error) {
 	address, parseError := netip.ParseAddr(rawAddress)
@@ -27,4 +31,11 @@ func ParsePrefix(rawPrefix string) (netip.Prefix, error) {
 		prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-ipv4MappedPrefixBits)
 	}
 	return prefix.Masked(), nil
+}
+
+func MeetsBanPrefixFloor(prefix netip.Prefix) bool {
+	if prefix.Addr().Is4() {
+		return prefix.Bits() >= minIPv4BanPrefixBits
+	}
+	return prefix.Bits() >= minIPv6BanPrefixBits
 }

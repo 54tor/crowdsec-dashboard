@@ -12,13 +12,12 @@ import (
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/netparse"
 )
 
 const (
-	maxBanBodyBytes      = 4096
-	maxReasonLength      = 200
-	minIPv4BanPrefixBits = 8
-	minIPv6BanPrefixBits = 32
+	maxBanBodyBytes = 4096
+	maxReasonLength = 200
 )
 
 type decisionHandlers struct {
@@ -40,11 +39,7 @@ func banScope(target string) (string, bool) {
 	if prefixError != nil {
 		return "", false
 	}
-	minimumBits := minIPv6BanPrefixBits
-	if prefix.Addr().Is4() {
-		minimumBits = minIPv4BanPrefixBits
-	}
-	return "range", prefix.Bits() >= minimumBits
+	return "range", netparse.MeetsBanPrefixFloor(prefix)
 }
 
 func targetContainsClient(target string, clientAddress string) bool {

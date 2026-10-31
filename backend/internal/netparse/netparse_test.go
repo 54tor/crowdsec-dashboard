@@ -1,6 +1,9 @@
 package netparse
 
-import "testing"
+import (
+	"net/netip"
+	"testing"
+)
 
 func TestParseAddrUnmapsAndRejectsZones(testContext *testing.T) {
 	unmapped, unmapError := ParseAddr("::ffff:203.0.113.5")
@@ -32,5 +35,22 @@ func TestParsePrefixMasksAndUnmaps(testContext *testing.T) {
 	}
 	if _, invalidError := ParsePrefix("nope"); invalidError == nil {
 		testContext.Error("an invalid prefix must be refused")
+	}
+}
+
+func TestMeetsBanPrefixFloorAppliesManualBanLimits(testContext *testing.T) {
+	cases := map[string]bool{
+		"11.0.0.0/8":      true,
+		"11.0.0.0/7":      false,
+		"203.0.113.7/32":  true,
+		"2001:db8::/32":   true,
+		"2001:db8::/31":   false,
+		"0.0.0.0/0":       false,
+		"2001:db8::1/128": true,
+	}
+	for rawPrefix, expected := range cases {
+		if obtained := MeetsBanPrefixFloor(netip.MustParsePrefix(rawPrefix)); obtained != expected {
+			testContext.Errorf("%s: expected %v, got %v", rawPrefix, expected, obtained)
+		}
 	}
 }
