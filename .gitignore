@@ -1,0 +1,5 @@
+node_modules/
+.superpowers/
+docs/superpowers/
+backend/internal/webui/dist/*
+!backend/internal/webui/dist/.gitkeep
