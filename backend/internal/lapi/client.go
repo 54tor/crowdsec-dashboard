@@ -30,6 +30,7 @@ type Client struct {
 	machineID       string
 	machinePassword string
 	httpClient      *http.Client
+	now             func() time.Time
 	tokenMutex      sync.Mutex
 	token           string
 }
@@ -48,6 +49,7 @@ func NewClient(baseURL, machineID, machinePassword string, httpClient *http.Clie
 		machineID:       machineID,
 		machinePassword: machinePassword,
 		httpClient:      httpClient,
+		now:             time.Now,
 	}
 }
 
@@ -98,12 +100,12 @@ func (client *Client) ListDecisions(ctx context.Context, filter DecisionFilter) 
 		return DecisionList{}, err
 	}
 	return DecisionList{
-		Decisions:      flattenDecisions(alerts, filter),
+		Decisions:      flattenDecisions(alerts, filter, client.now()),
 		MayBeTruncated: len(alerts) >= capAlertLimit(filter.Limit),
 	}, nil
 }
 
-func flattenDecisions(alerts []Alert, filter DecisionFilter) []Decision {
+func flattenDecisions(alerts []Alert, filter DecisionFilter, now time.Time) []Decision {
 	decisions := []Decision{}
 	for _, alert := range alerts {
 		for _, decision := range alert.Decisions {
@@ -111,12 +113,20 @@ func flattenDecisions(alerts []Alert, filter DecisionFilter) []Decision {
 			if decision.Scenario == "" {
 				decision.Scenario = alert.Scenario
 			}
-			if decisionMatches(decision, filter) {
+			if !isExpired(decision, now) && decisionMatches(decision, filter) {
 				decisions = append(decisions, decision)
 			}
 		}
 	}
 	return decisions
+}
+
+func isExpired(decision Decision, now time.Time) bool {
+	if strings.HasPrefix(decision.Duration, "-") {
+		return true
+	}
+	until, parseError := time.Parse(time.RFC3339, decision.Until)
+	return parseError == nil && until.Before(now)
 }
 
 func decisionMatches(decision Decision, filter DecisionFilter) bool {

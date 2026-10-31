@@ -6,17 +6,15 @@ import (
 )
 
 const (
-	redactedMarker  = "[REDACTED]"
-	sensitiveNames  = `password|passwd|token|secret|api_key|apikey|key|authorization|bearer|credential|dsn`
-	blockIndicators = `^[|>][+-]?[0-9]?[+-]?$`
+	redactedMarker = "[REDACTED]"
+	sensitiveNames = `password|passwd|token|secret|api_key|apikey|key|authorization|bearer|credential|dsn`
 )
 
 var (
-	urlCredentialsPattern = regexp.MustCompile(`(://)[^/\s:@]*:[^/\s@]*@`)
+	urlCredentialsPattern = regexp.MustCompile(`(://)[^/\s]*@`)
 	bearerPattern         = regexp.MustCompile(`(?i)(bearer[ \t]+)[^\s"',}]+`)
 	sensitiveLinePattern  = regexp.MustCompile(`(?i)^([ \t]*(?:-[ \t]+)?["']?[^\n:#"']*(?:` + sensitiveNames + `)[^\n:#"']*["']?[ \t]*:[ \t]*)(.*)$`)
 	inlineEntryPattern    = regexp.MustCompile(`(?i)([{,][ \t]*["']?[^\s:,{}"']*(?:` + sensitiveNames + `)[^\s:,{}"']*["']?[ \t]*:[ \t]*)("[^"]*"|'[^']*'|[^,}]*)`)
-	blockIndicatorPattern = regexp.MustCompile(blockIndicators)
 )
 
 func leadingIndent(line string) int {
@@ -47,11 +45,7 @@ func redactLine(line string) (redacted string, blockIndent int) {
 	if match == nil {
 		return inlineEntryPattern.ReplaceAllString(line, "${1}"+redactedMarker), -1
 	}
-	value := strings.TrimSpace(match[2])
-	if value == "" || blockIndicatorPattern.MatchString(value) {
-		return line, keyIndent(match[1])
-	}
-	return match[1] + redactedMarker, -1
+	return strings.TrimRight(match[1], " \t") + " " + redactedMarker, keyIndent(match[1])
 }
 
 func redactSecrets(content []byte) []byte {
@@ -67,10 +61,7 @@ func redactSecrets(content []byte) []byte {
 		}
 		redacted, openedBlock := redactLine(line)
 		output = append(output, redacted)
-		if openedBlock >= 0 {
-			output = append(output, strings.Repeat(" ", openedBlock+2)+redactedMarker)
-			blockIndent = openedBlock
-		}
+		blockIndent = openedBlock
 	}
 	return []byte(strings.Join(output, "\n"))
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"maps"
 	"net/http"
 	"slices"
@@ -75,6 +76,7 @@ type metricsHandlers struct{ platform Platform }
 func (handlers metricsHandlers) get(responseWriter http.ResponseWriter, request *http.Request) {
 	metrics, metricsError := handlers.platform.Metrics(request.Context())
 	if metricsError != nil {
+		log.Printf("metrics unavailable: %v", metricsError)
 		writeJSON(responseWriter, http.StatusOK, map[string]any{"available": false, "reason": "unavailable"})
 		return
 	}

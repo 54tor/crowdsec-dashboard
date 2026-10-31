@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const testPassword = "s3cret-machine-password"
@@ -440,5 +441,26 @@ func TestConcurrentExpiredTokenTriggersSingleRelogin(testing *testing.T) {
 	}
 	if extraLogins := fake.loginCount.Load() - loginsBefore; extraLogins != 1 {
 		testing.Fatalf("expected exactly one extra login, got %d", extraLogins)
+	}
+}
+
+func TestFlattenDecisionsDropsExpiredDecisions(testing *testing.T) {
+	fixedNow := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	alerts := []Alert{{ID: 7, Scenario: "crowdsecurity/ssh-bf", Decisions: []Decision{
+		{ID: 1, Duration: "2h59m", Until: "2026-10-31T15:00:00Z"},
+		{ID: 2, Duration: "-3m", Until: "2026-10-31T11:57:00Z"},
+		{ID: 3, Duration: "5m", Until: "2026-10-31T11:00:00Z"},
+		{ID: 4, Duration: "-1h"},
+		{ID: 5, Duration: "1h"},
+	}}}
+
+	decisions := flattenDecisions(alerts, DecisionFilter{}, fixedNow)
+
+	keptIdentifiers := []int64{}
+	for _, decision := range decisions {
+		keptIdentifiers = append(keptIdentifiers, decision.ID)
+	}
+	if len(keptIdentifiers) != 2 || keptIdentifiers[0] != 1 || keptIdentifiers[1] != 5 {
+		testing.Fatalf("expected decisions 1 and 5, got %v", keptIdentifiers)
 	}
 }
