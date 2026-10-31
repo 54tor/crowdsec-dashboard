@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	validAccountName = "alice"
-	validPassword    = "correct horse battery"
-	roleAdmin        = "admin"
-	timingTolerance  = 3.0
+	validAccountName   = "alice"
+	validPassword      = "correct horse battery"
+	roleAdmin          = "admin"
+	timingTolerance    = 3.0
+	firstCallTolerance = 1.6
 )
 
 func newRepositoryWithAccount(testContext *testing.T) *Repository {
@@ -29,6 +30,35 @@ func newRepositoryWithAccount(testContext *testing.T) *Repository {
 		testContext.Fatal(createError)
 	}
 	return repository
+}
+
+func TestFirstUnknownAccountAuthenticateCostsLikeAWrongPassword(testContext *testing.T) {
+	repository := newRepositoryWithAccount(testContext)
+	measureAuthenticate(testContext, repository, validAccountName)
+
+	wrongPasswordDuration := measureAuthenticate(testContext, repository, validAccountName)
+	unknownAccountDuration := measureAuthenticate(testContext, repository, "nobody")
+
+	ratio := float64(unknownAccountDuration) / float64(wrongPasswordDuration)
+	if ratio < 1/timingTolerance || ratio > timingTolerance {
+		testContext.Errorf("unknown account took %v, wrong password %v", unknownAccountDuration, wrongPasswordDuration)
+	}
+	secondUnknownAccountDuration := measureAuthenticate(testContext, repository, "nobody")
+	firstCallOverhead := float64(unknownAccountDuration) / float64(secondUnknownAccountDuration)
+	if firstCallOverhead > firstCallTolerance {
+		testContext.Errorf("first unknown call took %v, second %v", unknownAccountDuration, secondUnknownAccountDuration)
+	}
+}
+
+func measureAuthenticate(testContext *testing.T, repository *Repository, accountName string) time.Duration {
+	testContext.Helper()
+	startTime := time.Now()
+	_, authenticateError := repository.Authenticate(context.Background(), accountName, "wrong password value")
+	elapsedDuration := time.Since(startTime)
+	if !errors.Is(authenticateError, auth.ErrInvalidCredentials) {
+		testContext.Fatalf("expected ErrInvalidCredentials, got %v", authenticateError)
+	}
+	return elapsedDuration
 }
 
 func TestAuthenticateReturnsIdentityForValidPassword(testContext *testing.T) {
@@ -74,25 +104,6 @@ func TestAuthenticateReturnsDistinctErrorWhenDatabaseIsClosed(testContext *testi
 	if authenticateError == nil || errors.Is(authenticateError, auth.ErrInvalidCredentials) {
 		testContext.Errorf("expected infrastructure error, got %v", authenticateError)
 	}
-}
-
-func TestAuthenticateUnknownAccountStillVerifiesAHash(testContext *testing.T) {
-	repository := newRepositoryWithAccount(testContext)
-	repository.Authenticate(context.Background(), validAccountName, "warm up value")
-
-	wrongPasswordDuration := measureAuthenticate(repository, validAccountName)
-	unknownAccountDuration := measureAuthenticate(repository, "nobody")
-
-	ratio := float64(unknownAccountDuration) / float64(wrongPasswordDuration)
-	if ratio < 1/timingTolerance || ratio > timingTolerance {
-		testContext.Errorf("unknown account took %v, wrong password %v", unknownAccountDuration, wrongPasswordDuration)
-	}
-}
-
-func measureAuthenticate(repository *Repository, accountName string) time.Duration {
-	startTime := time.Now()
-	repository.Authenticate(context.Background(), accountName, "wrong password value")
-	return time.Since(startTime)
 }
 
 func TestCreateRefusesDuplicateName(testContext *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/alexedwards/argon2id"
 
@@ -14,13 +13,13 @@ import (
 
 const dummyPasswordSource = "dummy password for constant-time unknown account verification"
 
-var dummyPasswordHash = sync.OnceValue(func() string {
+var dummyPasswordHash = func() string {
 	encodedHash, hashError := argon2id.CreateHash(dummyPasswordSource, argon2id.DefaultParams)
 	if hashError != nil {
 		panic(hashError)
 	}
 	return encodedHash
-})
+}()
 
 type accountCredentialRow struct {
 	AccountID   int64  `bun:"account_id"`
@@ -39,7 +38,7 @@ func (repository *Repository) Authenticate(ctx context.Context, accountName, pas
 	).Scan(ctx, &credentialRow)
 
 	if errors.Is(queryError, sql.ErrNoRows) {
-		auth.VerifyPassword(dummyPasswordHash(), password)
+		auth.VerifyPassword(dummyPasswordHash, password)
 		return auth.AccountIdentity{}, auth.ErrInvalidCredentials
 	}
 	if queryError != nil {
