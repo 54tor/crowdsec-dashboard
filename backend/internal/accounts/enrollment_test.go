@@ -280,3 +280,24 @@ func TestErrorsNeverContainTokenOrPassword(testContext *testing.T) {
 		}
 	}
 }
+
+func TestRequiredAnswersFromMemoryAndFollowsTheTokenLifecycle(testContext *testing.T) {
+	enrollment, _ := newEnrollment(testContext)
+
+	requiredBeforeOpen, _ := enrollment.Required(context.Background())
+	if requiredBeforeOpen {
+		testContext.Error("enrollment must not be required before Open, even on an empty database")
+	}
+	token := openToken(testContext, enrollment)
+	requiredAfterOpen, _ := enrollment.Required(context.Background())
+	if !requiredAfterOpen {
+		testContext.Error("enrollment must be required while a token is open")
+	}
+	if _, completeError := enrollment.Complete(context.Background(), token, enrollmentAccountName, enrollmentPassword); completeError != nil {
+		testContext.Fatal(completeError)
+	}
+	requiredAfterComplete, requiredError := enrollment.Required(context.Background())
+	if requiredError != nil || requiredAfterComplete {
+		testContext.Errorf("enrollment must be closed after Complete, got %v %v", requiredAfterComplete, requiredError)
+	}
+}

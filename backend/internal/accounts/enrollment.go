@@ -35,19 +35,18 @@ func NewEnrollment(repository *Repository) *Enrollment {
 	return &Enrollment{repository: repository}
 }
 
-func (enrollment *Enrollment) Required(ctx context.Context) (bool, error) {
-	accountCount, countError := enrollment.repository.Count(ctx)
-	if countError != nil {
-		return false, fmt.Errorf("count accounts: %w", countError)
-	}
-	return accountCount == 0, nil
+func (enrollment *Enrollment) Required(_ context.Context) (bool, error) {
+	enrollment.mutex.Lock()
+	defer enrollment.mutex.Unlock()
+	return enrollment.token != nil, nil
 }
 
 func (enrollment *Enrollment) Open(ctx context.Context) (string, bool, error) {
-	isRequired, requiredError := enrollment.Required(ctx)
-	if requiredError != nil {
-		return "", false, requiredError
+	accountCount, countError := enrollment.repository.Count(ctx)
+	if countError != nil {
+		return "", false, fmt.Errorf("count accounts: %w", countError)
 	}
+	isRequired := accountCount == 0
 	enrollment.mutex.Lock()
 	defer enrollment.mutex.Unlock()
 	if !isRequired {
