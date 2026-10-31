@@ -53,11 +53,14 @@ var pendingLoginExpiredFailure = apiFailure{status: http.StatusUnauthorized, cod
 
 func loginFailure(loginError error, invalidFactorCode string, now time.Time) apiFailure {
 	var lockedError login.AccountLockedError
+	var webAuthnProtocolError *protocol.Error
 	switch {
 	case errors.Is(loginError, login.ErrPendingLoginInvalid), errors.Is(loginError, login.ErrWrongStage):
 		return pendingLoginExpiredFailure
 	case errors.Is(loginError, login.ErrSecondFactorInvalid):
 		return apiFailure{status: http.StatusUnauthorized, code: invalidFactorCode}
+	case errors.Is(loginError, secondfactor.ErrWebAuthnFailed), errors.As(loginError, &webAuthnProtocolError):
+		return apiFailure{status: http.StatusUnauthorized, code: webAuthnFailedError}
 	case errors.As(loginError, &lockedError):
 		return apiFailure{status: http.StatusLocked, code: "account_locked", retryAfter: retryAfterSeconds(lockedError.Until, now), clearsPendingLogin: true}
 	case errors.Is(loginError, login.ErrAccessDenied):

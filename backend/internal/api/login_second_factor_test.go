@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -34,12 +35,13 @@ const (
 // single use, IP binding and stage checks behave as in production; password
 // checks come from authtest and every other outcome is injected by the test.
 type fakeLoginService struct {
-	authenticator *authtest.Authenticator
-	pending       *login.PendingStore
-	beginFailure  error
-	verifyFailure error
-	setupStage    bool
-	denyAccess    bool
+	authenticator          *authtest.Authenticator
+	pending                *login.PendingStore
+	beginFailure           error
+	verifyFailure          error
+	webAuthnOptionsFailure error
+	setupStage             bool
+	denyAccess             bool
 }
 
 func newFakeLoginService(authenticator *authtest.Authenticator) *fakeLoginService {
@@ -123,6 +125,9 @@ func (service *fakeLoginService) WebAuthnOptions(_ context.Context, pendingID st
 	defer lease.Release()
 	if lease.Pending().Stage != login.StageSecondFactor {
 		return nil, login.ErrWrongStage
+	}
+	if service.webAuthnOptionsFailure != nil {
+		return nil, service.webAuthnOptionsFailure
 	}
 	return &protocol.CredentialAssertion{}, nil
 }
@@ -651,4 +656,39 @@ func TestPendingLoginIsBoundToTheClientIPBehindTrustedProxy(testContext *testing
 
 	requireErrorBody(testContext, otherClientRecorder, http.StatusUnauthorized, "pending_login_expired", "other client behind the proxy")
 	requireStatus(testContext, sameClientRecorder, http.StatusOK, "same client behind the proxy")
+}
+
+func TestWebAuthnOptionsFailuresAreReportedAsWebAuthnFailed(testContext *testing.T) {
+	for description, optionsFailure := range map[string]error{
+		"protocol error":      fmt.Errorf("begin webauthn login: %w", protocol.ErrBadRequest.WithDetails("Found no credentials for user")),
+		"webauthn failed":     secondfactor.ErrWebAuthnFailed,
+		"wrapped webauthn":    fmt.Errorf("load: %w", secondfactor.ErrWebAuthnFailed),
+		"assertion verifying": fmt.Errorf("finish: %w", protocol.ErrVerification.WithDetails("Error validating origin")),
+	} {
+		logBuffer := captureLogs(testContext)
+		server := newLoginTestServer(testContext, func(services *Services) { services.WebAuthn = newEnrollmentWebAuthn(testContext) })
+		server.loginService.webAuthnOptionsFailure = optionsFailure
+		pendingCookie := requirePendingCookie(testContext, postLogin(server.handler, loginBody(testPassword)))
+
+		recorder := postLoginStep(server.handler, "/api/auth/login/webauthn/options", `{}`, pendingCookie, loginClientIP)
+
+		requireErrorBody(testContext, recorder, http.StatusUnauthorized, "webauthn_failed", description)
+		if logBuffer.Len() != 0 {
+			testContext.Errorf("%s: a webauthn failure must not be logged as an outage, got %q", description, logBuffer.String())
+		}
+	}
+}
+
+func TestWebAuthnOptionsInfrastructureErrorStillReturns503(testContext *testing.T) {
+	logBuffer := captureLogs(testContext)
+	server := newLoginTestServer(testContext, func(services *Services) { services.WebAuthn = newEnrollmentWebAuthn(testContext) })
+	server.loginService.webAuthnOptionsFailure = errors.New("load webauthn user: connection refused")
+	pendingCookie := requirePendingCookie(testContext, postLogin(server.handler, loginBody(testPassword)))
+
+	recorder := postLoginStep(server.handler, "/api/auth/login/webauthn/options", `{}`, pendingCookie, loginClientIP)
+
+	requireErrorBody(testContext, recorder, http.StatusServiceUnavailable, "database_unavailable", "infrastructure failure")
+	if !strings.Contains(logBuffer.String(), "connection refused") {
+		testContext.Errorf("an infrastructure failure must be logged, got %q", logBuffer.String())
+	}
 }
