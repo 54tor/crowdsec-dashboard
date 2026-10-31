@@ -40,3 +40,25 @@ func TestSPAHandlerAnswersNotFoundWithoutIndex(testContext *testing.T) {
 		testContext.Errorf("expected 404, got %d", response.Code)
 	}
 }
+
+func TestSPAHandlerAnswersNotFoundForMissingAssetsAndFiles(testContext *testing.T) {
+	handler := spaHandler(fstest.MapFS{"index.html": {Data: []byte("<html>spa</html>")}})
+
+	for _, missingPath := range []string{"/assets/old-hash.js", "/assets/dir/old.css", "/favicon.ico", "/logo.png"} {
+		response := serve(handler, missingPath)
+		if response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "spa") {
+			testContext.Errorf("%s: expected plain 404, got %d %q", missingPath, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestSPAHandlerKeepsFallbackForNavigationRoutes(testContext *testing.T) {
+	handler := spaHandler(fstest.MapFS{"index.html": {Data: []byte("<html>spa</html>")}})
+
+	for _, route := range []string{"/bouncers", "/config/files", "/page.html"} {
+		response := serve(handler, route)
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "spa") {
+			testContext.Errorf("%s: fallback failed: %d", route, response.Code)
+		}
+	}
+}

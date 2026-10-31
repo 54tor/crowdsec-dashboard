@@ -33,9 +33,21 @@ func spaHandler(distFiles fs.FS) http.Handler {
 			fileServer.ServeHTTP(responseWriter, request)
 			return
 		}
+		if requestsStaticFile(requestedPath) {
+			http.NotFound(responseWriter, request)
+			return
+		}
 		request.URL.Path = "/"
 		fileServer.ServeHTTP(responseWriter, request)
 	})
+}
+
+func requestsStaticFile(requestedPath string) bool {
+	if strings.HasPrefix(requestedPath, "assets/") {
+		return true
+	}
+	extension := path.Ext(requestedPath)
+	return extension != "" && extension != ".html"
 }
 
 func isRegularFile(distFiles fs.FS, filePath string) bool {
