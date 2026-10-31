@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/api"
+	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
@@ -60,6 +61,7 @@ func main() {
 	services.Enrollment = accountServices.enrollment
 	services.Sessions = sessionStore
 	services.Database = database
+	services.Audit = audit.NewPostgresRecorder(database)
 
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,

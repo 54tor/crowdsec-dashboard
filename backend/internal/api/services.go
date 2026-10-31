@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 
+	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
@@ -32,6 +33,7 @@ type Services struct {
 	Machines       MachineService
 	Hub            HubService
 	Reloader       Reloader
+	Audit          audit.Recorder
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {
