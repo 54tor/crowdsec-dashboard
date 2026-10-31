@@ -12,7 +12,36 @@ import (
 	"github.com/moby/moby/client"
 )
 
-const execTimeout = 60 * time.Second
+const (
+	execTimeout          = 60 * time.Second
+	maxStdoutBytes       = 8 << 20
+	maxStderrBytes       = 4 << 10
+	maxInspectAttempts   = 5
+	defaultRetryInterval = 100 * time.Millisecond
+)
+
+var (
+	ErrOutputTooLarge   = errors.New("cscli output too large")
+	ErrExecStillRunning = errors.New("cscli exec still running")
+)
+
+type cappedWriter struct {
+	buffer         bytes.Buffer
+	limit          int
+	failOnOverflow bool
+}
+
+func (writer *cappedWriter) Write(chunk []byte) (int, error) {
+	remaining := writer.limit - writer.buffer.Len()
+	if len(chunk) <= remaining {
+		return writer.buffer.Write(chunk)
+	}
+	if writer.failOnOverflow {
+		return 0, ErrOutputTooLarge
+	}
+	writer.buffer.Write(chunk[:remaining])
+	return len(chunk), nil
+}
 
 type dockerAPI interface {
 	ExecCreate(ctx context.Context, containerID string, options client.ExecCreateOptions) (client.ExecCreateResult, error)
@@ -24,6 +53,8 @@ type dockerRunner struct {
 	api       dockerAPI
 	container string
 	timeout   time.Duration
+
+	retryInterval time.Duration
 }
 
 func NewDockerRunner(dockerHost, container string) Runner {
@@ -31,7 +62,7 @@ func NewDockerRunner(dockerHost, container string) Runner {
 	if err != nil {
 		return failingRunner{err: fmt.Errorf("docker client: %w", err)}
 	}
-	return &dockerRunner{api: dockerClient, container: container, timeout: execTimeout}
+	return &dockerRunner{api: dockerClient, container: container, timeout: execTimeout, retryInterval: defaultRetryInterval}
 }
 
 type failingRunner struct{ err error }
@@ -64,21 +95,46 @@ func (runner *dockerRunner) Run(ctx context.Context, argv []string) ([]byte, err
 	stopCloseOnCancel := context.AfterFunc(ctx, attached.Close)
 	defer stopCloseOnCancel()
 
-	var stdout, stderr bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdout, &stderr, attached.Reader); err != nil {
+	stdout := &cappedWriter{limit: maxStdoutBytes, failOnOverflow: true}
+	stderr := &cappedWriter{limit: maxStderrBytes}
+	if _, err := stdcopy.StdCopy(stdout, stderr, attached.Reader); err != nil {
+		if errors.Is(err, ErrOutputTooLarge) {
+			return nil, ErrOutputTooLarge
+		}
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("docker exec: %w", ctx.Err())
 		}
 		return nil, fmt.Errorf("docker exec read: %w", err)
 	}
 
-	inspected, err := runner.api.ExecInspect(ctx, created.ID, client.ExecInspectOptions{})
+	exitCode, err := runner.awaitExitCode(ctx, created.ID)
 	if err != nil {
-		return nil, fmt.Errorf("docker exec inspect: %w", err)
+		return nil, err
 	}
-	if inspected.ExitCode != 0 {
-		slog.Debug("cscli exec failed", "exit_code", inspected.ExitCode, "stderr", stderr.String())
-		return nil, fmt.Errorf("%w: exit code %d", ErrCscliFailed, inspected.ExitCode)
+	if exitCode != 0 {
+		slog.Debug("cscli exec failed", "exit_code", exitCode, "stderr", stderr.buffer.String())
+		return nil, fmt.Errorf("%w: exit code %d", ErrCscliFailed, exitCode)
 	}
-	return stdout.Bytes(), nil
+	return stdout.buffer.Bytes(), nil
+}
+
+func (runner *dockerRunner) awaitExitCode(ctx context.Context, execID string) (int, error) {
+	for attempt := 1; attempt <= maxInspectAttempts; attempt++ {
+		inspected, err := runner.api.ExecInspect(ctx, execID, client.ExecInspectOptions{})
+		if err != nil {
+			return 0, fmt.Errorf("docker exec inspect: %w", err)
+		}
+		if !inspected.Running {
+			return inspected.ExitCode, nil
+		}
+		if attempt == maxInspectAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return 0, fmt.Errorf("docker exec: %w", ctx.Err())
+		case <-time.After(runner.retryInterval):
+		}
+	}
+	return 0, ErrExecStillRunning
 }

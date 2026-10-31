@@ -23,6 +23,9 @@ type fakeDockerAPI struct {
 	stream           []byte
 	exitCode         int
 	blockUntilCancel bool
+	runningPolls     int
+	stayRunning      bool
+	inspectCalls     int
 	createdContainer string
 	createdOptions   client.ExecCreateOptions
 	attachOptions    client.ExecAttachOptions
@@ -56,11 +59,15 @@ func (api *fakeDockerAPI) ExecAttach(ctx context.Context, _ string, options clie
 }
 
 func (api *fakeDockerAPI) ExecInspect(_ context.Context, _ string, _ client.ExecInspectOptions) (client.ExecInspectResult, error) {
+	api.inspectCalls++
+	if api.stayRunning || api.inspectCalls <= api.runningPolls {
+		return client.ExecInspectResult{Running: true}, nil
+	}
 	return client.ExecInspectResult{ExitCode: api.exitCode}, nil
 }
 
 func newTestRunner(api *fakeDockerAPI) *dockerRunner {
-	return &dockerRunner{api: api, container: "crowdsec", timeout: 2 * time.Second}
+	return &dockerRunner{api: api, container: "crowdsec", timeout: 2 * time.Second, retryInterval: time.Millisecond}
 }
 
 func TestDockerRunnerReturnsStdoutAndUsesSafeExecOptions(t *testing.T) {
@@ -127,5 +134,59 @@ func TestDockerRunnerRejectsEmptyArgv(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestStdoutOverCapReturnsOutputTooLarge(t *testing.T) {
+	oversizedPayload := strings.Repeat("x", maxStdoutBytes+1)
+	api := &fakeDockerAPI{stream: frame(frameStdout, oversizedPayload)}
+
+	stdout, err := newTestRunner(api).Run(context.Background(), []string{"cscli", "version"})
+
+	if !errors.Is(err, ErrOutputTooLarge) {
+		t.Fatalf("expected ErrOutputTooLarge, got %v", err)
+	}
+	if stdout != nil || strings.Contains(err.Error(), "xxxx") {
+		t.Fatal("output must not leak")
+	}
+}
+
+func TestStderrOverCapIsTruncatedSilently(t *testing.T) {
+	oversizedPayload := strings.Repeat("e", maxStderrBytes*4)
+	api := &fakeDockerAPI{stream: bytes.Join([][]byte{frame(frameStderr, oversizedPayload), frame(frameStdout, "ok")}, nil)}
+
+	stdout, err := newTestRunner(api).Run(context.Background(), []string{"cscli", "version"})
+
+	if err != nil || string(stdout) != "ok" {
+		t.Fatalf("expected ok stdout, got %q, %v", stdout, err)
+	}
+}
+
+func TestRunningExecIsRetriedUntilExitCodeKnown(t *testing.T) {
+	api := &fakeDockerAPI{stream: frame(frameStdout, "ok"), runningPolls: 2, exitCode: 1}
+
+	_, err := newTestRunner(api).Run(context.Background(), []string{"cscli", "version"})
+
+	if !errors.Is(err, ErrCscliFailed) {
+		t.Fatalf("expected ErrCscliFailed after retries, got %v", err)
+	}
+	if api.inspectCalls != 3 {
+		t.Fatalf("expected 3 inspect calls, got %d", api.inspectCalls)
+	}
+}
+
+func TestExecStillRunningIsAnError(t *testing.T) {
+	api := &fakeDockerAPI{stream: frame(frameStdout, "ok"), stayRunning: true}
+
+	stdout, err := newTestRunner(api).Run(context.Background(), []string{"cscli", "version"})
+
+	if !errors.Is(err, ErrExecStillRunning) {
+		t.Fatalf("expected ErrExecStillRunning, got %v", err)
+	}
+	if stdout != nil {
+		t.Fatal("stdout must not be returned")
+	}
+	if api.inspectCalls != maxInspectAttempts {
+		t.Fatalf("expected %d inspect calls, got %d", maxInspectAttempts, api.inspectCalls)
 	}
 }

@@ -92,7 +92,7 @@ func buildCommands() map[string]Command {
 		{"bouncers_add", withName(validateName, []string{"cscli", "bouncers", "add"})},
 		{"bouncers_delete", withName(validateName, []string{"cscli", "bouncers", "delete"})},
 		{"machines_list", fixed("cscli", "machines", "list", "-o", "json")},
-		{"machines_add", withName(validateName, []string{"cscli", "machines", "add"}, "--auto")},
+		{"machines_add", withName(validateName, []string{"cscli", "machines", "add"}, "--auto", "-f", "-")},
 		{"machines_validate", withName(validateName, []string{"cscli", "machines", "validate"})},
 		{"machines_delete", withName(validateName, []string{"cscli", "machines", "delete"})},
 		{"hub_list", fixed("cscli", "hub", "list", "-o", "json")},

@@ -16,6 +16,8 @@ var (
 	durationPattern = regexp.MustCompile(`^[0-9]{1,4}[smhd]$`)
 )
 
+const maxTargetLength = 43
+
 type validator func(value string) error
 
 func matching(pattern *regexp.Regexp) validator {
@@ -35,11 +37,21 @@ var (
 )
 
 func validateTarget(value string) error {
-	if _, addressErr := netip.ParseAddr(value); addressErr == nil {
-		return nil
+	if len(value) > maxTargetLength {
+		return fmt.Errorf("%w: target too long", ErrInvalidField)
 	}
-	if _, prefixErr := netip.ParsePrefix(value); prefixErr == nil {
-		return nil
+	if address, addressErr := netip.ParseAddr(value); addressErr == nil {
+		return rejectUnsafeAddress(address)
+	}
+	if prefix, prefixErr := netip.ParsePrefix(value); prefixErr == nil {
+		return rejectUnsafeAddress(prefix.Addr())
 	}
 	return fmt.Errorf("%w: not an IP address or CIDR", ErrInvalidField)
+}
+
+func rejectUnsafeAddress(address netip.Addr) error {
+	if address.Zone() != "" || address.Is4In6() {
+		return fmt.Errorf("%w: zoned or IPv4-mapped address", ErrInvalidField)
+	}
+	return nil
 }

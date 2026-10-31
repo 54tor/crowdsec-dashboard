@@ -47,7 +47,7 @@ func TestExecuteBuildsExpectedArgv(t *testing.T) {
 		{"bouncers_add", map[string]string{"name": "fw-1"}, []string{"cscli", "bouncers", "add", "fw-1"}},
 		{"bouncers_delete", map[string]string{"name": "fw-1"}, []string{"cscli", "bouncers", "delete", "fw-1"}},
 		{"machines_list", nil, []string{"cscli", "machines", "list", "-o", "json"}},
-		{"machines_add", map[string]string{"name": "m1"}, []string{"cscli", "machines", "add", "m1", "--auto"}},
+		{"machines_add", map[string]string{"name": "m1"}, []string{"cscli", "machines", "add", "m1", "--auto", "-f", "-"}},
 		{"machines_validate", map[string]string{"name": "m1"}, []string{"cscli", "machines", "validate", "m1"}},
 		{"machines_delete", map[string]string{"name": "m1"}, []string{"cscli", "machines", "delete", "m1"}},
 		{"hub_list", nil, []string{"cscli", "hub", "list", "-o", "json"}},
@@ -85,6 +85,13 @@ func TestBanTargetRejectsInvalidInputs(t *testing.T) {
 		{"leading dash", "--all"},
 		{"range", "1.2.3.4-1.2.3.9"},
 		{"space", "1.2.3.4 "},
+		{"zone interface", "fe80::1%eth0"},
+		{"zone long", "fe80::1%" + strings.Repeat("a", 300)},
+		{"zone with space", "fe80::1%a b"},
+		{"zone newline", "fe80::1%\n-x"},
+		{"ipv4 mapped", "::ffff:1.2.3.4"},
+		{"long digits", strings.Repeat("1", 300)},
+		{"long letters", strings.Repeat("a", 300)},
 	}
 	for _, testCase := range testCases {
 		runner := &recordingRunner{}
