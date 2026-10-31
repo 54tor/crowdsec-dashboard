@@ -17,14 +17,22 @@ type AlertService interface {
 }
 
 type Services struct {
-	Decisions DecisionService
-	Alerts    AlertService
+	Decisions      DecisionService
+	Alerts         AlertService
+	AlertReader    AlertLister
+	DecisionReader DecisionLister
+	Platform       Platform
+	ConfigFiles    ConfigFiles
 }
 
-func NewServices(lapiClient *lapi.Client, runner cscli.Runner) Services {
+func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {
 	return Services{
-		Decisions: lapiDecisions{client: lapiClient},
-		Alerts:    cscliAlerts{runner: runner},
+		Decisions:      lapiDecisions{client: lapiClient},
+		Alerts:         cscliAlerts{runner: runner},
+		AlertReader:    lapiClient,
+		DecisionReader: lapiClient,
+		Platform:       cscliPlatform{runner: runner},
+		ConfigFiles:    dirConfigFiles{dir: confDir},
 	}
 }
 

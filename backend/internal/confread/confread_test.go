@@ -1,0 +1,171 @@
+package confread
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+)
+
+func writeConfFile(testContext *testing.T, directory, relativePath, content string) {
+	testContext.Helper()
+	absolutePath := filepath.Join(directory, filepath.FromSlash(relativePath))
+	if mkdirError := os.MkdirAll(filepath.Dir(absolutePath), 0o755); mkdirError != nil {
+		testContext.Fatal(mkdirError)
+	}
+	if writeError := os.WriteFile(absolutePath, []byte(content), 0o600); writeError != nil {
+		testContext.Fatal(writeError)
+	}
+}
+
+func TestReadRejectsCredentialsFiles(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "local_api_credentials.yaml", "password: hunter2\n")
+	writeConfFile(testContext, confDir, "online_api_credentials.yaml", "password: hunter2\n")
+	writeConfFile(testContext, confDir, "parsers/s02-enrich/mine_whitelist_credentials.yaml", "password: hunter2\n")
+	writeConfFile(testContext, confDir, "acquis.d/extra_credentials.yaml", "password: hunter2\n")
+	rejectedNames := []string{
+		"local_api_credentials.yaml",
+		"online_api_credentials.yaml",
+		"parsers/s02-enrich/mine_whitelist_credentials.yaml",
+		"acquis.d/extra_credentials.yaml",
+	}
+
+	for _, rejectedName := range rejectedNames {
+		content, readError := Read(confDir, rejectedName)
+		if !errors.Is(readError, ErrNotAllowed) || content != nil {
+			testContext.Errorf("%s: expected ErrNotAllowed, got %v", rejectedName, readError)
+		}
+	}
+	listedNames, listError := List(confDir)
+	if listError != nil {
+		testContext.Fatal(listError)
+	}
+	for _, listedName := range listedNames {
+		if strings.Contains(listedName, "credentials") {
+			testContext.Errorf("credentials file listed: %s", listedName)
+		}
+	}
+}
+
+func TestReadRejectsPathTraversal(testContext *testing.T) {
+	parentDir := testContext.TempDir()
+	confDir := filepath.Join(parentDir, "crowdsec")
+	writeConfFile(testContext, parentDir, "config.yaml", "secret: outside\n")
+	writeConfFile(testContext, confDir, "config.yaml", "common:\n  log_level: info\n")
+	rejectedNames := []string{
+		"../config.yaml",
+		"acquis.d/../../config.yaml",
+		"/etc/passwd",
+		"/config.yaml",
+		"parsers/../../config.yaml",
+		"config.yaml\x00.txt",
+		"acquis.d\\..\\config.yaml",
+		"",
+		".",
+		"./config.yaml",
+		"unknown.yaml",
+	}
+
+	for _, rejectedName := range rejectedNames {
+		content, readError := Read(confDir, rejectedName)
+		if !errors.Is(readError, ErrNotAllowed) || content != nil {
+			testContext.Errorf("%q: expected ErrNotAllowed, got %v", rejectedName, readError)
+		}
+	}
+}
+
+func TestReadRejectsSymlinkLeavingTheDirectory(testContext *testing.T) {
+	parentDir := testContext.TempDir()
+	confDir := filepath.Join(parentDir, "crowdsec")
+	writeConfFile(testContext, parentDir, "outside.yaml", "name: outside\n")
+	writeConfFile(testContext, confDir, "config.yaml", "name: inside\n")
+	if symlinkError := os.Symlink(filepath.Join(parentDir, "outside.yaml"), filepath.Join(confDir, "profiles.yaml")); symlinkError != nil {
+		testContext.Fatal(symlinkError)
+	}
+
+	content, readError := Read(confDir, "profiles.yaml")
+
+	if readError == nil || content != nil {
+		testContext.Fatalf("expected an error for an escaping symlink, got %q", content)
+	}
+	listedNames, listError := List(confDir)
+	if listError != nil {
+		testContext.Fatal(listError)
+	}
+	if slices.Contains(listedNames, "profiles.yaml") {
+		testContext.Error("escaping symlink must not be listed")
+	}
+}
+
+func TestReadRejectsOversizedFile(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "config.yaml", strings.Repeat("a: b\n", maxFileBytes/5+10))
+
+	content, readError := Read(confDir, "config.yaml")
+
+	if !errors.Is(readError, ErrTooLarge) || content != nil {
+		testContext.Fatalf("expected ErrTooLarge, got %v", readError)
+	}
+}
+
+func TestListReturnsOnlyWhitelistedFiles(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	for _, relativePath := range []string{
+		"config.yaml", "acquis.yaml", "profiles.yaml", "acquis.d/nginx.yaml", "acquis.d/notes.txt",
+		"parsers/s02-enrich/mywhitelists.yaml", "parsers/s02-enrich/other.yaml", "parsers/s01-parse/custom-whitelist.yml",
+		"local_api_credentials.yaml", "simulation.yaml", "notification/slack.yaml",
+	} {
+		writeConfFile(testContext, confDir, relativePath, "name: x\n")
+	}
+
+	listedNames, listError := List(confDir)
+
+	if listError != nil {
+		testContext.Fatal(listError)
+	}
+	expectedNames := []string{
+		"acquis.d/nginx.yaml", "acquis.yaml", "config.yaml",
+		"parsers/s01-parse/custom-whitelist.yml", "parsers/s02-enrich/mywhitelists.yaml", "profiles.yaml",
+	}
+	if !slices.Equal(listedNames, expectedNames) {
+		testContext.Errorf("expected %v, got %v", expectedNames, listedNames)
+	}
+}
+
+func TestReadRedactsSecretValues(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "config.yaml", strings.Join([]string{
+		"common:",
+		"  log_level: info",
+		"api:",
+		"  server:",
+		"    password: hunter2",
+		"    API_KEY: abc123",
+		"    auth_token: \"tok\"",
+		"    client_secret: s3cr3t",
+		"    ssh_key: AAAA",
+		"    listen_uri: 127.0.0.1:8080",
+		"  - token: listed",
+		"",
+	}, "\n"))
+
+	content, readError := Read(confDir, "config.yaml")
+
+	if readError != nil {
+		testContext.Fatal(readError)
+	}
+	servedText := string(content)
+	for _, leakedValue := range []string{"hunter2", "abc123", "tok\"", "s3cr3t", "AAAA", "listed"} {
+		if strings.Contains(servedText, leakedValue) {
+			testContext.Errorf("value %q leaked in %q", leakedValue, servedText)
+		}
+	}
+	for _, keptText := range []string{"log_level: info", "listen_uri: 127.0.0.1:8080", "password: [REDACTED]"} {
+		if !strings.Contains(servedText, keptText) {
+			testContext.Errorf("expected %q in %q", keptText, servedText)
+		}
+	}
+}

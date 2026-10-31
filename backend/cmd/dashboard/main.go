@@ -36,6 +36,7 @@ func main() {
 		Handler: api.NewHandler(loadedConfig, webui.Handler(), api.NewServices(
 			lapi.NewClient(loadedConfig.LAPIURL, loadedConfig.LAPIMachineID, loadedConfig.LAPIMachinePassword, nil),
 			cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer),
+			loadedConfig.ConfDir,
 		)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
