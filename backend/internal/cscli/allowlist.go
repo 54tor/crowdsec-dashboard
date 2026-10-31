@@ -22,11 +22,6 @@ type Command struct {
 	Timeout time.Duration
 }
 
-type fieldSpec struct {
-	flag     string
-	validate validator
-}
-
 func exactFields(fields map[string]string, allowed ...string) error {
 	for fieldName := range fields {
 		if !slices.Contains(allowed, fieldName) {
@@ -70,26 +65,15 @@ func withName(validate validator, prefix []string, suffix ...string) func(map[st
 	}
 }
 
-var alertDeleteSelectors = map[string]fieldSpec{
-	"id": {flag: "--id", validate: validateID},
-	"ip": {flag: "--ip", validate: validateTarget},
-}
-
 func buildAlertsDelete(fields map[string]string) ([]string, error) {
-	if len(fields) != 1 {
-		return nil, fmt.Errorf("%w: exactly one of id or ip is required", ErrInvalidField)
+	if err := exactFields(fields, "id"); err != nil {
+		return nil, err
 	}
-	for fieldName, value := range fields {
-		selector, known := alertDeleteSelectors[fieldName]
-		if !known {
-			return nil, fmt.Errorf("%w: unexpected field %q", ErrInvalidField, fieldName)
-		}
-		if err := selector.validate(value); err != nil {
-			return nil, fmt.Errorf("field %q: %w", fieldName, err)
-		}
-		return []string{"cscli", "alerts", "delete", selector.flag, value}, nil
+	alertID, err := validatedField(fields, "id", validateID)
+	if err != nil {
+		return nil, err
 	}
-	return nil, ErrInvalidField
+	return []string{"cscli", "alerts", "delete", "--id", alertID}, nil
 }
 
 var commands = buildCommands()

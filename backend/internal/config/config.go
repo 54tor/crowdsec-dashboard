@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/alexedwards/argon2id"
 )
 
 const (
@@ -30,6 +32,9 @@ func Load(getenv func(string) string) (Config, error) {
 	adminPasswordHash := getenv("ADMIN_PASSWORD_HASH")
 	if adminPasswordHash == "" {
 		return Config{}, errors.New("ADMIN_PASSWORD_HASH is required")
+	}
+	if _, _, _, decodeError := argon2id.DecodeHash(adminPasswordHash); decodeError != nil {
+		return Config{}, errors.New("ADMIN_PASSWORD_HASH is not a valid argon2id encoded hash")
 	}
 
 	sessionTTL, sessionTTLError := parseSessionTTL(getenv("SESSION_TTL"))

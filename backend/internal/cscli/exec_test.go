@@ -41,8 +41,6 @@ func TestExecuteBuildsExpectedArgv(t *testing.T) {
 		expectedArgv []string
 	}{
 		{"alerts_delete", map[string]string{"id": "42"}, []string{"cscli", "alerts", "delete", "--id", "42"}},
-		{"alerts_delete", map[string]string{"ip": "1.2.3.4"}, []string{"cscli", "alerts", "delete", "--ip", "1.2.3.4"}},
-		{"alerts_delete", map[string]string{"ip": "2001:db8::/32"}, []string{"cscli", "alerts", "delete", "--ip", "2001:db8::/32"}},
 		{"bouncers_list", nil, []string{"cscli", "bouncers", "list", "-o", "json"}},
 		{"bouncers_add", map[string]string{"name": "fw-1"}, []string{"cscli", "bouncers", "add", "fw-1"}},
 		{"bouncers_delete", map[string]string{"name": "fw-1"}, []string{"cscli", "bouncers", "delete", "fw-1"}},
@@ -94,16 +92,22 @@ func TestBanTargetRejectsInvalidInputs(t *testing.T) {
 		{"long letters", strings.Repeat("a", 300)},
 	}
 	for _, testCase := range testCases {
-		runner := &recordingRunner{}
-
-		_, err := Execute(context.Background(), runner, "alerts_delete", map[string]string{"ip": testCase.value})
-
-		if !errors.Is(err, ErrInvalidField) {
+		if err := ValidateTarget(testCase.value); !errors.Is(err, ErrInvalidField) {
 			t.Fatalf("%s: expected ErrInvalidField, got %v", testCase.label, err)
 		}
-		if runner.calls != 0 {
-			t.Fatalf("%s: runner must not be called", testCase.label)
-		}
+	}
+}
+
+func TestAlertsDeleteRejectsIPField(t *testing.T) {
+	runner := &recordingRunner{}
+
+	_, err := Execute(context.Background(), runner, "alerts_delete", map[string]string{"ip": "1.2.3.4"})
+
+	if !errors.Is(err, ErrInvalidField) {
+		t.Fatalf("expected ErrInvalidField, got %v", err)
+	}
+	if runner.calls != 0 {
+		t.Fatal("runner must not be called")
 	}
 }
 
