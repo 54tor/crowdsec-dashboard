@@ -22,17 +22,71 @@ func environmentFrom(variables map[string]string) func(string) string {
 
 var validTestHash = "$argon2id$v=19$m=65536,t=1,p=4$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g"
 
-func TestLoadFailsWhenAdminPasswordHashMissing(testContext *testing.T) {
+const validTestDatabaseURL = "postgres://dashboard:secret-value@localhost:5432/dashboard"
+
+func TestLoadAcceptsMissingAdminPasswordHash(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL}))
+
+	if loadError != nil {
+		testContext.Fatalf("unexpected error: %v", loadError)
+	}
+	if loadedConfig.AdminPasswordHash != "" {
+		testContext.Errorf("expected an empty hash, got %q", loadedConfig.AdminPasswordHash)
+	}
+}
+
+func TestLoadRefusesMissingDatabaseURL(testContext *testing.T) {
 	_, loadError := Load(environmentFrom(map[string]string{}))
 
 	if loadError == nil {
-		testContext.Fatal("expected an error when ADMIN_PASSWORD_HASH is missing")
+		testContext.Fatal("expected an error when DATABASE_URL is missing")
+	}
+	if !strings.Contains(loadError.Error(), "DATABASE_URL") {
+		testContext.Errorf("error must name DATABASE_URL: %v", loadError)
+	}
+}
+
+func TestLoadRefusesNonPostgresDatabaseURLWithoutEchoingIt(testContext *testing.T) {
+	rejectedValues := map[string]string{
+		"mysql":     "mysql://dashboard:secret-value@localhost/dashboard",
+		"sqlite":    "sqlite:///secret-value.db",
+		"no-scheme": "dashboard:secret-value@localhost/dashboard",
+		"plain":     "secret-value",
+	}
+	for caseName, rawDatabaseURL := range rejectedValues {
+		_, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": rawDatabaseURL}))
+
+		if loadError == nil {
+			testContext.Errorf("%s: expected an error", caseName)
+			continue
+		}
+		if !strings.Contains(loadError.Error(), "DATABASE_URL") {
+			testContext.Errorf("%s: error must name DATABASE_URL: %v", caseName, loadError)
+		}
+		if strings.Contains(loadError.Error(), "secret-value") {
+			testContext.Errorf("%s: error echoes the value: %v", caseName, loadError)
+		}
+	}
+}
+
+func TestLoadAcceptsPostgresSchemes(testContext *testing.T) {
+	for _, acceptedURL := range []string{"postgres://localhost/dashboard", "postgresql://localhost/dashboard"} {
+		loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": acceptedURL}))
+
+		if loadError != nil {
+			testContext.Errorf("%s: unexpected error: %v", acceptedURL, loadError)
+			continue
+		}
+		if loadedConfig.DatabaseURL != acceptedURL {
+			testContext.Errorf("expected %q, got %q", acceptedURL, loadedConfig.DatabaseURL)
+		}
 	}
 }
 
 func TestLoadParsesTrustedProxyCIDRs(testContext *testing.T) {
 	loadedConfig, loadError := Load(environmentFrom(map[string]string{
 		"ADMIN_PASSWORD_HASH": validTestHash,
+		"DATABASE_URL":        validTestDatabaseURL,
 		"TRUSTED_PROXY_CIDRS": "10.0.0.0/8,fd00::/8",
 	}))
 
@@ -45,7 +99,7 @@ func TestLoadParsesTrustedProxyCIDRs(testContext *testing.T) {
 }
 
 func TestLoadAppliesDefaults(testContext *testing.T) {
-	loadedConfig, loadError := Load(environmentFrom(map[string]string{"ADMIN_PASSWORD_HASH": validTestHash}))
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"ADMIN_PASSWORD_HASH": validTestHash, "DATABASE_URL": validTestDatabaseURL}))
 
 	if loadError != nil {
 		testContext.Fatalf("unexpected error: %v", loadError)
@@ -61,6 +115,7 @@ func TestLoadAppliesDefaults(testContext *testing.T) {
 func TestLoadRejectsInvalidCIDR(testContext *testing.T) {
 	_, loadError := Load(environmentFrom(map[string]string{
 		"ADMIN_PASSWORD_HASH": validTestHash,
+		"DATABASE_URL":        validTestDatabaseURL,
 		"TRUSTED_PROXY_CIDRS": "not-a-cidr",
 	}))
 
@@ -70,7 +125,7 @@ func TestLoadRejectsInvalidCIDR(testContext *testing.T) {
 }
 
 func TestLoadAcceptsGeneratedArgon2idHash(testContext *testing.T) {
-	_, loadError := Load(environmentFrom(map[string]string{"ADMIN_PASSWORD_HASH": generatedPasswordHash(testContext)}))
+	_, loadError := Load(environmentFrom(map[string]string{"ADMIN_PASSWORD_HASH": generatedPasswordHash(testContext), "DATABASE_URL": validTestDatabaseURL}))
 
 	if loadError != nil {
 		testContext.Fatalf("unexpected error: %v", loadError)
@@ -86,7 +141,7 @@ func TestLoadRefusesMalformedPasswordHashesWithoutEchoingThem(testContext *testi
 		"plain":       "hunter2-not-a-hash",
 	}
 	for caseName, rawHash := range testCases {
-		_, loadError := Load(environmentFrom(map[string]string{"ADMIN_PASSWORD_HASH": rawHash}))
+		_, loadError := Load(environmentFrom(map[string]string{"ADMIN_PASSWORD_HASH": rawHash, "DATABASE_URL": validTestDatabaseURL}))
 
 		if loadError == nil {
 			testContext.Errorf("%s: expected an error", caseName)

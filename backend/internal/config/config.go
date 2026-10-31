@@ -19,6 +19,7 @@ const (
 type Config struct {
 	ListenAddr          string
 	AdminPasswordHash   string
+	DatabaseURL         string
 	SessionTTL          time.Duration
 	LAPIURL             string
 	LAPIMachineID       string
@@ -40,12 +41,16 @@ type Config struct {
 }
 
 func Load(getenv func(string) string) (Config, error) {
-	adminPasswordHash := getenv("ADMIN_PASSWORD_HASH")
-	if adminPasswordHash == "" {
-		return Config{}, errors.New("ADMIN_PASSWORD_HASH is required")
+	databaseURL := getenv("DATABASE_URL")
+	if databaseURLError := validateDatabaseURL(databaseURL); databaseURLError != nil {
+		return Config{}, databaseURLError
 	}
-	if _, _, _, decodeError := argon2id.DecodeHash(adminPasswordHash); decodeError != nil {
-		return Config{}, errors.New("ADMIN_PASSWORD_HASH is not a valid argon2id encoded hash")
+
+	adminPasswordHash := getenv("ADMIN_PASSWORD_HASH")
+	if adminPasswordHash != "" {
+		if _, _, _, decodeError := argon2id.DecodeHash(adminPasswordHash); decodeError != nil {
+			return Config{}, errors.New("ADMIN_PASSWORD_HASH is not a valid argon2id encoded hash")
+		}
 	}
 
 	sessionTTL, sessionTTLError := parseSessionTTL(getenv("SESSION_TTL"))
@@ -71,6 +76,7 @@ func Load(getenv func(string) string) (Config, error) {
 	return Config{
 		ListenAddr:          listenAddr,
 		AdminPasswordHash:   adminPasswordHash,
+		DatabaseURL:         databaseURL,
 		SessionTTL:          sessionTTL,
 		LAPIURL:             getenv("LAPI_URL"),
 		LAPIMachineID:       getenv("LAPI_MACHINE_ID"),
@@ -90,6 +96,17 @@ func Load(getenv func(string) string) (Config, error) {
 		ConfigImportEnabled: syncConfig.ImportEnabled,
 		ConfigImportDir:     syncConfig.ImportDir,
 	}, nil
+}
+
+func validateDatabaseURL(rawValue string) error {
+	if rawValue == "" {
+		return errors.New("DATABASE_URL is required")
+	}
+	lowerCaseValue := strings.ToLower(rawValue)
+	if !strings.HasPrefix(lowerCaseValue, "postgres://") && !strings.HasPrefix(lowerCaseValue, "postgresql://") {
+		return errors.New("DATABASE_URL must start with postgres:// or postgresql://")
+	}
+	return nil
 }
 
 func parseSessionTTL(rawValue string) (time.Duration, error) {
