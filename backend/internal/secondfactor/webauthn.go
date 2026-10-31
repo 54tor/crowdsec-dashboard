@@ -16,7 +16,10 @@ const (
 	userHandleLength        = 32
 )
 
-var ErrWebAuthnFailed = errors.New("webauthn verification failed")
+var (
+	ErrWebAuthnFailed         = errors.New("webauthn verification failed")
+	ErrWebAuthnCloneSuspected = fmt.Errorf("%w: signature counter did not increase", ErrWebAuthnFailed)
+)
 
 type WebAuthn struct {
 	relyingParty *webauthn.WebAuthn
@@ -30,6 +33,10 @@ func NewWebAuthn(rpID string, rpOrigins []string) (*WebAuthn, error) {
 		RPID:          rpID,
 		RPDisplayName: relyingPartyDisplayName,
 		RPOrigins:     append([]string(nil), rpOrigins...),
+		Timeouts: webauthn.TimeoutsConfig{
+			Login:        webauthn.TimeoutConfig{Enforce: true},
+			Registration: webauthn.TimeoutConfig{Enforce: true},
+		},
 	})
 	if newError != nil {
 		return nil, fmt.Errorf("configure webauthn relying party: %w", newError)
@@ -86,7 +93,7 @@ func (relyingParty *WebAuthn) validateLogin(user webAuthnUser, session webauthn.
 		return nil, webAuthnFailure(validateError)
 	}
 	if credential.Authenticator.CloneWarning {
-		return nil, webAuthnFailure(errors.New("signature counter did not increase"))
+		return nil, ErrWebAuthnCloneSuspected
 	}
 	return credential, nil
 }

@@ -93,7 +93,7 @@ func (repository *Repository) recordWebAuthnUse(ctx context.Context, accountID i
 		return fmt.Errorf("count affected rows: %w", rowsError)
 	}
 	if affectedRows == 0 {
-		return webAuthnFailure(errors.New("signature counter did not increase"))
+		return ErrWebAuthnCloneSuspected
 	}
 	return nil
 }

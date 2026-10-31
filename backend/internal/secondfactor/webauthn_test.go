@@ -392,3 +392,68 @@ func TestFinishLoginLeavesZeroCounterReplayToChallengeConsumption(testContext *t
 		testContext.Fatalf("a passkey keeping signCount 0 never raises CloneWarning: the repository must not be relied on for single use (login.Service consumes the session), got %v / %v", firstError, replayError)
 	}
 }
+
+func TestWebAuthnChallengesCarryAnEnforcedExpiry(testContext *testing.T) {
+	fixture := newWebAuthnFixture(testContext)
+	alice := fixture.enroll(testContext, "alice", 0)
+
+	_, loginSession := fixture.beginLogin(testContext, alice.accountID)
+	_, registrationSession, registrationError := fixture.relyingParty.beginRegistration(webAuthnUser{handle: []byte("handle"), name: "alice"})
+
+	if loginSession.Expires.IsZero() {
+		testContext.Error("the login challenge must carry an expiry enforced by the relying party")
+	}
+	if registrationError != nil || registrationSession.Expires.IsZero() {
+		testContext.Errorf("the registration challenge must carry an enforced expiry, got %v", registrationError)
+	}
+}
+
+func TestFinishLoginReportsCloneSuspicionDistinctly(testContext *testing.T) {
+	fixture := newWebAuthnFixture(testContext)
+	alice := fixture.enroll(testContext, "alice", 5)
+	alice.key.credential.Counter = 6
+	assertionOptions, session := fixture.beginLogin(testContext, alice.accountID)
+	assertionResponse := alice.key.assert(legitimateBrowser, assertionOptions)
+	if firstError := fixture.finishLogin(alice.accountID, session, assertionResponse); firstError != nil {
+		testContext.Fatal(firstError)
+	}
+
+	replayError := fixture.finishLogin(alice.accountID, session, assertionResponse)
+
+	if !errors.Is(replayError, ErrWebAuthnCloneSuspected) || !errors.Is(replayError, ErrWebAuthnFailed) {
+		testContext.Errorf("a non-increasing counter must be ErrWebAuthnCloneSuspected wrapping ErrWebAuthnFailed, got %v", replayError)
+	}
+}
+
+func TestSaveSetupNeverReplacesAnExistingUserHandle(testContext *testing.T) {
+	fixture := newWebAuthnFixture(testContext)
+	alice := fixture.enroll(testContext, "alice", 0)
+	ctx := context.Background()
+	var originalHandle []byte
+	if queryError := fixture.database.NewRaw(`SELECT account_webauthn_user_handle FROM account WHERE account_id = ?`, alice.accountID).
+		Scan(ctx, &originalHandle); queryError != nil {
+		testContext.Fatal(queryError)
+	}
+	secondSetup := &Setup{}
+	secondKey := newVirtualKey(0)
+	if confirmError := secondSetup.ConfirmWebAuthn(fixture.relyingParty, secondKey.attest(legitimateBrowser, beginRegistration(testContext, fixture.relyingParty, secondSetup, "alice"))); confirmError != nil {
+		testContext.Fatal(confirmError)
+	}
+	if _, codesError := secondSetup.RecoveryCodes(); codesError != nil {
+		testContext.Fatal(codesError)
+	}
+
+	saveError := fixture.repository.SaveSetup(ctx, fixture.database, alice.accountID, secondSetup)
+
+	var currentHandle []byte
+	if queryError := fixture.database.NewRaw(`SELECT account_webauthn_user_handle FROM account WHERE account_id = ?`, alice.accountID).
+		Scan(ctx, &currentHandle); queryError != nil {
+		testContext.Fatal(queryError)
+	}
+	if saveError == nil {
+		testContext.Error("saving a setup with another user handle must fail")
+	}
+	if !bytes.Equal(originalHandle, currentHandle) {
+		testContext.Error("the existing user handle must be kept")
+	}
+}

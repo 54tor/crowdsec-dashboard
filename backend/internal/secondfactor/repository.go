@@ -76,12 +76,14 @@ func saveWebAuthn(ctx context.Context, executor bun.IDB, accountID int64, confir
 		return fmt.Errorf("encode webauthn credential: %w", marshalError)
 	}
 	handleResult, handleError := executor.ExecContext(ctx,
-		`UPDATE account SET account_webauthn_user_handle = ? WHERE account_id = ?`, confirmed.userHandle, accountID)
+		`UPDATE account SET account_webauthn_user_handle = ?
+		 WHERE account_id = ? AND (account_webauthn_user_handle IS NULL OR account_webauthn_user_handle = ?)`,
+		confirmed.userHandle, accountID, confirmed.userHandle)
 	if handleError != nil {
 		return fmt.Errorf("store webauthn user handle: %w", handleError)
 	}
 	if rowError := requireOneRow(handleResult); rowError != nil {
-		return fmt.Errorf("store webauthn user handle: account %d not found", accountID)
+		return fmt.Errorf("store webauthn user handle: account %d not found or bound to another handle", accountID)
 	}
 	if _, insertError := executor.ExecContext(ctx,
 		`INSERT INTO credential (credential_account_id, credential_kind, credential_webauthn_id, credential_webauthn_data)
