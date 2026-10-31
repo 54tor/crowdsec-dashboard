@@ -7,7 +7,7 @@ import (
 )
 
 func syncEnvironment(extraVariables map[string]string) func(string) string {
-	variables := map[string]string{"ADMIN_PASSWORD_HASH": validTestHash, "DATABASE_URL": validTestDatabaseURL}
+	variables := map[string]string{"DATABASE_URL": validTestDatabaseURL}
 	for variableName, variableValue := range extraVariables {
 		variables[variableName] = variableValue
 	}

@@ -7,8 +7,6 @@ import (
 	"net/netip"
 	"strings"
 	"time"
-
-	"github.com/alexedwards/argon2id"
 )
 
 const (
@@ -18,7 +16,6 @@ const (
 
 type Config struct {
 	ListenAddr          string
-	AdminPasswordHash   string
 	DatabaseURL         string
 	SessionTTL          time.Duration
 	LAPIURL             string
@@ -46,13 +43,6 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, databaseURLError
 	}
 
-	adminPasswordHash := getenv("ADMIN_PASSWORD_HASH")
-	if adminPasswordHash != "" {
-		if _, _, _, decodeError := argon2id.DecodeHash(adminPasswordHash); decodeError != nil {
-			return Config{}, errors.New("ADMIN_PASSWORD_HASH is not a valid argon2id encoded hash")
-		}
-	}
-
 	sessionTTL, sessionTTLError := parseSessionTTL(getenv("SESSION_TTL"))
 	if sessionTTLError != nil {
 		return Config{}, sessionTTLError
@@ -75,7 +65,6 @@ func Load(getenv func(string) string) (Config, error) {
 
 	return Config{
 		ListenAddr:          listenAddr,
-		AdminPasswordHash:   adminPasswordHash,
 		DatabaseURL:         databaseURL,
 		SessionTTL:          sessionTTL,
 		LAPIURL:             getenv("LAPI_URL"),
