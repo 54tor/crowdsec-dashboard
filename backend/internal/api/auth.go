@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net"
 	"net/http"
 	"time"
@@ -19,17 +21,18 @@ const (
 )
 
 type authHandlers struct {
-	passwordHash string
-	sessionTTL   time.Duration
-	trustedCIDRs []*net.IPNet
-	sessions     *auth.SessionStore
-	limiter      *auth.LoginLimiter
-	failureWait  time.Duration
-	hashSlots    chan struct{}
+	authenticator auth.Authenticator
+	sessionTTL    time.Duration
+	trustedCIDRs  []*net.IPNet
+	sessions      auth.SessionStore
+	limiter       *auth.LoginLimiter
+	failureWait   time.Duration
+	hashSlots     chan struct{}
 }
 
 type loginRequest struct {
-	Password string `json:"password"`
+	AccountName string `json:"account_name"`
+	Password    string `json:"password"`
 }
 
 func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request *http.Request) {
@@ -43,6 +46,10 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	if credentials.AccountName == "" || credentials.Password == "" {
+		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return
+	}
 	select {
 	case handlers.hashSlots <- struct{}{}:
 		defer func() { <-handlers.hashSlots }()
@@ -51,14 +58,26 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 		return
 	}
 	attemptStart := time.Now()
-	if !auth.VerifyPassword(handlers.passwordHash, credentials.Password) {
+	identity, authenticateError := handlers.authenticator.Authenticate(request.Context(), credentials.AccountName, credentials.Password)
+	if errors.Is(authenticateError, auth.ErrInvalidCredentials) {
 		time.Sleep(handlers.failureWait - time.Since(attemptStart))
 		writeError(responseWriter, http.StatusUnauthorized, "invalid_credentials")
 		return
 	}
+	if authenticateError != nil {
+		log.Printf("authenticate: %v", authenticateError)
+		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	sessionToken, createError := handlers.sessions.Create(request.Context(), identity.AccountID)
+	if createError != nil {
+		log.Printf("create session: %v", createError)
+		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
 	http.SetCookie(responseWriter, &http.Cookie{
 		Name:     auth.CookieName,
-		Value:    handlers.sessions.Create(),
+		Value:    sessionToken,
 		Path:     "/",
 		MaxAge:   int(handlers.sessionTTL.Seconds()),
 		HttpOnly: true,
@@ -75,7 +94,11 @@ func writeTooManyAttempts(responseWriter http.ResponseWriter) {
 
 func (handlers *authHandlers) logout(responseWriter http.ResponseWriter, request *http.Request) {
 	if sessionCookie, cookieError := request.Cookie(auth.CookieName); cookieError == nil {
-		handlers.sessions.Destroy(sessionCookie.Value)
+		if destroyError := handlers.sessions.Destroy(request.Context(), sessionCookie.Value); destroyError != nil {
+			log.Printf("destroy session: %v", destroyError)
+			writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
+			return
+		}
 	}
 	http.SetCookie(responseWriter, &http.Cookie{
 		Name:     auth.CookieName,

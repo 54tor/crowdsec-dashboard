@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 
+	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
 )
@@ -17,6 +18,8 @@ type AlertService interface {
 }
 
 type Services struct {
+	Sessions       auth.SessionStore
+	Authenticator  auth.Authenticator
 	Decisions      DecisionService
 	Alerts         AlertService
 	AlertReader    AlertLister

@@ -44,7 +44,7 @@ func newAdminFixture(testContext *testing.T, outputs map[string]string, failing 
 	testContext.Helper()
 	runner := &outputRunner{outputsByCommand: outputs, failingCommands: failing}
 	handler := newTestHandlerWithServices(testContext, NewServices(nil, runner, ""))
-	cookie := postLogin(handler, `{"password":"`+testPassword+`"}`).Result().Cookies()[0]
+	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
 	return adminFixture{writeFixture: writeFixture{handler: handler, cookie: cookie}, runner: runner}
 }
 

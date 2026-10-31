@@ -14,16 +14,15 @@ func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services
 }
 
 func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration, services Services) http.Handler {
-	sessions := auth.NewSessionStore(loadedConfig.SessionTTL, time.Now)
-	requireSession := auth.RequireSession(sessions)
+	requireSession := auth.RequireSession(services.Sessions)
 	handlers := &authHandlers{
-		passwordHash: loadedConfig.AdminPasswordHash,
-		sessionTTL:   loadedConfig.SessionTTL,
-		trustedCIDRs: loadedConfig.TrustedProxyCIDRs,
-		sessions:     sessions,
-		limiter:      auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
-		failureWait:  failureWait,
-		hashSlots:    make(chan struct{}, concurrentPasswordHashes),
+		authenticator: services.Authenticator,
+		sessionTTL:    loadedConfig.SessionTTL,
+		trustedCIDRs:  loadedConfig.TrustedProxyCIDRs,
+		sessions:      services.Sessions,
+		limiter:       auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
+		failureWait:   failureWait,
+		hashSlots:     make(chan struct{}, concurrentPasswordHashes),
 	}
 
 	longWrite := extendWriteDeadline(cscli.HubMutationTimeout)

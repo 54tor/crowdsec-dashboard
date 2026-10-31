@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/auth/authtest"
 	"crowdsec-dashboard/internal/config"
-
-	"github.com/alexedwards/argon2id"
 )
 
-const testPassword = "correct horse"
+const (
+	testPassword    = "correct horse"
+	testAccountName = "admin"
+)
 
 func newTestHandler(testContext *testing.T) http.Handler {
 	return newTestHandlerWithServices(testContext, Services{})
@@ -26,12 +28,13 @@ func newTestHandlerWithServices(testContext *testing.T, services Services) http.
 
 func newTestHandlerWithMachineID(testContext *testing.T, services Services, machineID string) http.Handler {
 	testContext.Helper()
-	encodedHash, hashError := argon2id.CreateHash(testPassword, &argon2id.Params{Memory: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32})
-	if hashError != nil {
-		testContext.Fatal(hashError)
-	}
-	handler := newHandler(config.Config{AdminPasswordHash: encodedHash, SessionTTL: time.Hour, LAPIMachineID: machineID}, http.NotFoundHandler(), 0, services)
-	return handler
+	services.Sessions = authtest.NewSessionStore(time.Hour, time.Now)
+	services.Authenticator = authtest.NewAuthenticator(map[string]string{testAccountName: testPassword})
+	return newHandler(config.Config{SessionTTL: time.Hour, LAPIMachineID: machineID}, http.NotFoundHandler(), 0, services)
+}
+
+func loginBody(password string) string {
+	return `{"account_name":"` + testAccountName + `","password":"` + password + `"}`
 }
 
 func postLogin(handler http.Handler, body string) *httptest.ResponseRecorder {
@@ -44,7 +47,7 @@ func postLogin(handler http.Handler, body string) *httptest.ResponseRecorder {
 }
 
 func TestLoginSetsHardenedCookie(testContext *testing.T) {
-	recorder := postLogin(newTestHandler(testContext), `{"password":"`+testPassword+`"}`)
+	recorder := postLogin(newTestHandler(testContext), loginBody(testPassword))
 
 	if recorder.Code != http.StatusOK {
 		testContext.Fatalf("expected 200, got %d", recorder.Code)
@@ -63,7 +66,7 @@ func TestLoginSetsHardenedCookie(testContext *testing.T) {
 }
 
 func TestLoginRejectsWrongPasswordWithConstantError(testContext *testing.T) {
-	recorder := postLogin(newTestHandler(testContext), `{"password":"nope"}`)
+	recorder := postLogin(newTestHandler(testContext), loginBody("nope"))
 
 	if recorder.Code != http.StatusUnauthorized || strings.TrimSpace(recorder.Body.String()) != `{"error":"invalid_credentials"}` {
 		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
@@ -77,7 +80,7 @@ func TestLoginRejectsMalformedAndOversizedBodies(testContext *testing.T) {
 	handler := newTestHandler(testContext)
 
 	malformed := postLogin(handler, `not json`)
-	oversized := postLogin(handler, `{"password":"`+strings.Repeat("a", 10000)+`"}`)
+	oversized := postLogin(handler, loginBody(strings.Repeat("a", 10000)))
 
 	if malformed.Code != http.StatusBadRequest || oversized.Code != http.StatusBadRequest {
 		testContext.Errorf("expected 400 for both, got %d and %d", malformed.Code, oversized.Code)
@@ -87,10 +90,10 @@ func TestLoginRejectsMalformedAndOversizedBodies(testContext *testing.T) {
 func TestLoginIsRateLimitedPerClientIP(testContext *testing.T) {
 	handler := newTestHandler(testContext)
 	for attemptNumber := 1; attemptNumber <= 5; attemptNumber++ {
-		postLogin(handler, `{"password":"nope"}`)
+		postLogin(handler, loginBody("nope"))
 	}
 
-	recorder := postLogin(handler, `{"password":"`+testPassword+`"}`)
+	recorder := postLogin(handler, loginBody(testPassword))
 
 	if recorder.Code != http.StatusTooManyRequests || strings.TrimSpace(recorder.Body.String()) != `{"error":"too_many_attempts"}` {
 		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
@@ -104,7 +107,7 @@ func TestRateLimitedLoginCarriesRetryAfter(testContext *testing.T) {
 	handler := newTestHandler(testContext)
 	var lastRecorder *httptest.ResponseRecorder
 	for attemptNumber := 1; attemptNumber <= 6; attemptNumber++ {
-		lastRecorder = postLogin(handler, `{"password":"nope"}`)
+		lastRecorder = postLogin(handler, loginBody("nope"))
 	}
 
 	if lastRecorder.Code != http.StatusTooManyRequests || lastRecorder.Header().Get("Retry-After") != "60" {
@@ -122,7 +125,7 @@ func TestForgedForwardedForFromUntrustedPeerDoesNotBypassRateLimit(testContext *
 	handler := newTestHandler(testContext)
 	var lastRecorder *httptest.ResponseRecorder
 	for attemptNumber := 1; attemptNumber <= 6; attemptNumber++ {
-		request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(`{"password":"nope"}`))
+		request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(loginBody("nope")))
 		request.RemoteAddr = "203.0.113.9:5555"
 		request.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d", attemptNumber))
 		lastRecorder = httptest.NewRecorder()
@@ -136,13 +139,13 @@ func TestForgedForwardedForFromUntrustedPeerDoesNotBypassRateLimit(testContext *
 
 func TestLoginReturns429WhenArgonSlotsAreBusy(testContext *testing.T) {
 	handlers := &authHandlers{
-		passwordHash: "unused",
-		sessions:     auth.NewSessionStore(time.Hour, time.Now),
-		limiter:      auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
-		hashSlots:    make(chan struct{}, 1),
+		authenticator: authtest.NewAuthenticator(nil),
+		sessions:      authtest.NewSessionStore(time.Hour, time.Now),
+		limiter:       auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
+		hashSlots:     make(chan struct{}, 1),
 	}
 	handlers.hashSlots <- struct{}{}
-	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(`{"password":"x"}`))
+	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(loginBody("x")))
 	request.RemoteAddr = "198.51.100.7:5555"
 	recorder := httptest.NewRecorder()
 
@@ -167,7 +170,7 @@ func TestCrossOriginRejectionIsJSON(testContext *testing.T) {
 
 func TestAuthenticatedUnknownApiRouteReturnsJSON404(testContext *testing.T) {
 	handler := newTestHandler(testContext)
-	sessionCookie := postLogin(handler, `{"password":"`+testPassword+`"}`).Result().Cookies()[0]
+	sessionCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
 	request := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/anything", nil)
 	request.AddCookie(sessionCookie)
 	recorder := httptest.NewRecorder()
@@ -192,7 +195,7 @@ func TestMeReturns401WhenNoSession(testContext *testing.T) {
 
 func TestMeReturns200ThenLogoutRevokesSession(testContext *testing.T) {
 	handler := newTestHandler(testContext)
-	sessionCookie := postLogin(handler, `{"password":"`+testPassword+`"}`).Result().Cookies()[0]
+	sessionCookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
 
 	meRequest := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/auth/me", nil)
 	meRequest.AddCookie(sessionCookie)
@@ -216,7 +219,7 @@ func TestMeReturns200ThenLogoutRevokesSession(testContext *testing.T) {
 }
 
 func TestCrossOriginPostIsRejected(testContext *testing.T) {
-	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(`{"password":"x"}`))
+	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(loginBody("x")))
 	request.Header.Set("Origin", "https://evil.example.org")
 	recorder := httptest.NewRecorder()
 

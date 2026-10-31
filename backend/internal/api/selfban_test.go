@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/auth/authtest"
 	"crowdsec-dashboard/internal/config"
-
-	"github.com/alexedwards/argon2id"
 )
 
 type selfBanFixture struct {
@@ -21,13 +20,13 @@ type selfBanFixture struct {
 
 func newSelfBanFixture(testContext *testing.T, trustedProxyCIDRs []*net.IPNet) selfBanFixture {
 	testContext.Helper()
-	encodedHash, hashError := argon2id.CreateHash(testPassword, &argon2id.Params{Memory: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32})
-	if hashError != nil {
-		testContext.Fatal(hashError)
-	}
 	decisions := &fakeDecisions{}
-	handler := newHandler(config.Config{AdminPasswordHash: encodedHash, SessionTTL: time.Hour, TrustedProxyCIDRs: trustedProxyCIDRs}, http.NotFoundHandler(), 0, Services{Decisions: decisions})
-	cookie := postLogin(handler, `{"password":"`+testPassword+`"}`).Result().Cookies()[0]
+	handler := newHandler(config.Config{SessionTTL: time.Hour, TrustedProxyCIDRs: trustedProxyCIDRs}, http.NotFoundHandler(), 0, Services{
+		Decisions:     decisions,
+		Sessions:      authtest.NewSessionStore(time.Hour, time.Now),
+		Authenticator: authtest.NewAuthenticator(map[string]string{testAccountName: testPassword}),
+	})
+	cookie := postLogin(handler, loginBody(testPassword)).Result().Cookies()[0]
 	return selfBanFixture{handler: handler, cookie: cookie, decisions: decisions}
 }
 
