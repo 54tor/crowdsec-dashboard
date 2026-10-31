@@ -145,6 +145,17 @@ func TestAlertsPagesSliceTheCappedWindow(testContext *testing.T) {
 	}
 }
 
+func TestAlertsWithoutDecisionsSerializeAnEmptyArray(testContext *testing.T) {
+	lister := &fakeAlertLister{alerts: []lapi.Alert{{ID: 1, Decisions: nil}}}
+	fixture := newReadFixture(testContext, Services{AlertReader: lister})
+
+	recorder := fixture.get("/api/alerts", true)
+
+	if !strings.Contains(recorder.Body.String(), `"decisions":[]`) {
+		testContext.Errorf("a missing decisions list must be serialized as [], got %q", recorder.Body.String())
+	}
+}
+
 func TestAlertsForwardFiltersAndRejectBadParameters(testContext *testing.T) {
 	lister := &fakeAlertLister{}
 	fixture := newReadFixture(testContext, Services{AlertReader: lister})
