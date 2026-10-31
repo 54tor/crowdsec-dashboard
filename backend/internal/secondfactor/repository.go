@@ -3,6 +3,7 @@ package secondfactor
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -32,10 +33,31 @@ func totpAssociatedData(accountID int64) []byte {
 }
 
 func (repository *Repository) SaveSetup(ctx context.Context, executor bun.IDB, accountID int64, setup *Setup) error {
-	confirmed, recoveryCodes, isReady := setup.snapshot()
+	confirmedSetup, isReady := setup.snapshot()
 	if !isReady {
 		return ErrNoConfirmedFactor
 	}
+	if confirmedSetup.totp != nil {
+		if saveError := repository.saveTOTP(ctx, executor, accountID, *confirmedSetup.totp); saveError != nil {
+			return saveError
+		}
+	}
+	if confirmedSetup.webAuthn != nil {
+		if saveError := saveWebAuthn(ctx, executor, accountID, *confirmedSetup.webAuthn); saveError != nil {
+			return saveError
+		}
+	}
+	for _, recoveryCode := range confirmedSetup.recoveryCodes {
+		if _, insertError := executor.ExecContext(ctx,
+			`INSERT INTO recovery_code (recovery_code_account_id, recovery_code_hash) VALUES (?, ?)`,
+			accountID, HashRecoveryCode(recoveryCode)); insertError != nil {
+			return fmt.Errorf("insert recovery code: %w", insertError)
+		}
+	}
+	return nil
+}
+
+func (repository *Repository) saveTOTP(ctx context.Context, executor bun.IDB, accountID int64, confirmed confirmedTOTP) error {
 	ciphertext, keyID, sealError := repository.keyring.Seal([]byte(confirmed.secret), totpAssociatedData(accountID))
 	if sealError != nil {
 		return fmt.Errorf("seal totp secret: %w", sealError)
@@ -45,12 +67,26 @@ func (repository *Repository) SaveSetup(ctx context.Context, executor bun.IDB, a
 		 VALUES (?, ?, ?, ?, ?)`, accountID, totpKind, ciphertext, keyID, confirmed.step); insertError != nil {
 		return fmt.Errorf("insert totp credential: %w", insertError)
 	}
-	for _, recoveryCode := range recoveryCodes {
-		if _, insertError := executor.ExecContext(ctx,
-			`INSERT INTO recovery_code (recovery_code_account_id, recovery_code_hash) VALUES (?, ?)`,
-			accountID, HashRecoveryCode(recoveryCode)); insertError != nil {
-			return fmt.Errorf("insert recovery code: %w", insertError)
-		}
+	return nil
+}
+
+func saveWebAuthn(ctx context.Context, executor bun.IDB, accountID int64, confirmed confirmedWebAuthn) error {
+	credentialData, marshalError := json.Marshal(confirmed.credential)
+	if marshalError != nil {
+		return fmt.Errorf("encode webauthn credential: %w", marshalError)
+	}
+	handleResult, handleError := executor.ExecContext(ctx,
+		`UPDATE account SET account_webauthn_user_handle = ? WHERE account_id = ?`, confirmed.userHandle, accountID)
+	if handleError != nil {
+		return fmt.Errorf("store webauthn user handle: %w", handleError)
+	}
+	if rowError := requireOneRow(handleResult); rowError != nil {
+		return fmt.Errorf("store webauthn user handle: account %d not found", accountID)
+	}
+	if _, insertError := executor.ExecContext(ctx,
+		`INSERT INTO credential (credential_account_id, credential_kind, credential_webauthn_id, credential_webauthn_data)
+		 VALUES (?, ?, ?, ?::jsonb)`, accountID, webauthnKind, confirmed.credential.ID, string(credentialData)); insertError != nil {
+		return fmt.Errorf("insert webauthn credential: %w", insertError)
 	}
 	return nil
 }

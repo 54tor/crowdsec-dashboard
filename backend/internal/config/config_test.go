@@ -131,3 +131,102 @@ func TestLoadRejectsInvalidCIDR(testContext *testing.T) {
 		testContext.Fatal("expected an error for an invalid CIDR")
 	}
 }
+
+func TestLoadRequiresBothWebAuthnVariables(testContext *testing.T) {
+	halfSetEnvironments := []map[string]string{
+		{"DATABASE_URL": validTestDatabaseURL, "WEBAUTHN_RP_ID": "dashboard.example.com"},
+		{"DATABASE_URL": validTestDatabaseURL, "WEBAUTHN_RP_ORIGINS": "https://dashboard.example.com"},
+	}
+	for _, halfSetEnvironment := range halfSetEnvironments {
+		_, loadError := Load(environmentFrom(halfSetEnvironment))
+
+		if loadError == nil {
+			testContext.Fatalf("expected an error for a half-set WebAuthn pair %v", halfSetEnvironment)
+		}
+		errorText := loadError.Error()
+		if !strings.Contains(errorText, "WEBAUTHN_RP_ID") || !strings.Contains(errorText, "WEBAUTHN_RP_ORIGINS") {
+			testContext.Errorf("error must name both variables: %v", loadError)
+		}
+		if strings.Contains(errorText, "dashboard.example.com") {
+			testContext.Errorf("error must not echo the configured value: %v", loadError)
+		}
+	}
+}
+
+func TestLoadLeavesWebAuthnDisabledWhenBothVariablesAreUnset(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL}))
+
+	if loadError != nil || loadedConfig.WebAuthnRPID != "" || loadedConfig.WebAuthnRPOrigins != nil {
+		testContext.Fatalf("expected WebAuthn disabled, got %q %v (%v)", loadedConfig.WebAuthnRPID, loadedConfig.WebAuthnRPOrigins, loadError)
+	}
+}
+
+func TestLoadParsesWebAuthnOrigins(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{
+		"DATABASE_URL":        validTestDatabaseURL,
+		"WEBAUTHN_RP_ID":      "example.com",
+		"WEBAUTHN_RP_ORIGINS": " https://example.com , https://dashboard.example.com:8443 ,",
+	}))
+
+	if loadError != nil {
+		testContext.Fatal(loadError)
+	}
+	expectedOrigins := []string{"https://example.com", "https://dashboard.example.com:8443"}
+	if loadedConfig.WebAuthnRPID != "example.com" || strings.Join(loadedConfig.WebAuthnRPOrigins, " ") != strings.Join(expectedOrigins, " ") {
+		testContext.Errorf("expected %v, got %q %v", expectedOrigins, loadedConfig.WebAuthnRPID, loadedConfig.WebAuthnRPOrigins)
+	}
+}
+
+func TestLoadRefusesHTTPOriginExceptLocalhost(testContext *testing.T) {
+	_, refusedError := Load(environmentFrom(map[string]string{
+		"DATABASE_URL":        validTestDatabaseURL,
+		"WEBAUTHN_RP_ID":      "dashboard.example.com",
+		"WEBAUTHN_RP_ORIGINS": "http://dashboard.example.com",
+	}))
+	if refusedError == nil || !strings.Contains(refusedError.Error(), "WEBAUTHN_RP_ORIGINS") {
+		testContext.Errorf("expected an http origin outside localhost to be refused, got %v", refusedError)
+	}
+
+	localhostConfig, localhostError := Load(environmentFrom(map[string]string{
+		"DATABASE_URL":        validTestDatabaseURL,
+		"WEBAUTHN_RP_ID":      "localhost",
+		"WEBAUTHN_RP_ORIGINS": "http://localhost:18080",
+	}))
+	if localhostError != nil || localhostConfig.WebAuthnRPID != "localhost" {
+		testContext.Errorf("expected http://localhost:18080 to be accepted, got %v", localhostError)
+	}
+}
+
+func TestLoadRefusesWebAuthnOriginOutsideRPID(testContext *testing.T) {
+	rejectedOrigins := []string{
+		"https://evil.example.net",
+		"https://notexample.com",
+		"https://example.com/path",
+		"https://alice@example.com",
+		"ftp://example.com",
+		"example.com",
+	}
+	for _, rejectedOrigin := range rejectedOrigins {
+		_, loadError := Load(environmentFrom(map[string]string{
+			"DATABASE_URL":        validTestDatabaseURL,
+			"WEBAUTHN_RP_ID":      "example.com",
+			"WEBAUTHN_RP_ORIGINS": rejectedOrigin,
+		}))
+
+		if loadError == nil || !strings.Contains(loadError.Error(), "WEBAUTHN_RP_ORIGINS") {
+			testContext.Errorf("origin %q: expected a refusal naming WEBAUTHN_RP_ORIGINS, got %v", rejectedOrigin, loadError)
+		}
+	}
+}
+
+func TestLoadRefusesIPAddressAsWebAuthnRPID(testContext *testing.T) {
+	_, loadError := Load(environmentFrom(map[string]string{
+		"DATABASE_URL":        validTestDatabaseURL,
+		"WEBAUTHN_RP_ID":      "192.0.2.10",
+		"WEBAUTHN_RP_ORIGINS": "https://192.0.2.10",
+	}))
+
+	if loadError == nil || !strings.Contains(loadError.Error(), "WEBAUTHN_RP_ID") {
+		testContext.Errorf("expected an IP address RP ID to be refused, got %v", loadError)
+	}
+}

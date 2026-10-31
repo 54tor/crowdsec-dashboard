@@ -4,6 +4,9 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 var ErrNoConfirmedFactor = errors.New("no confirmed second factor")
@@ -18,8 +21,13 @@ type Setup struct {
 	enrollment    TOTPEnrollment
 	hasEnrollment bool
 	confirmedStep int64
-	isConfirmed   bool
+	totpConfirmed bool
 	recoveryCodes []string
+
+	webAuthnAccountName string
+	webAuthnUserHandle  []byte
+	webAuthnSession     *webauthn.SessionData
+	webAuthnCredential  *webauthn.Credential
 }
 
 func (setup *Setup) BeginTOTP(accountName string) (TOTPEnrollment, error) {
@@ -48,14 +56,14 @@ func (setup *Setup) ConfirmTOTP(code string, now time.Time) error {
 		return ErrInvalidCode
 	}
 	setup.confirmedStep = matchedStep
-	setup.isConfirmed = true
+	setup.totpConfirmed = true
 	return nil
 }
 
 func (setup *Setup) RecoveryCodes() ([]string, error) {
 	setup.mutex.Lock()
 	defer setup.mutex.Unlock()
-	if !setup.isConfirmed {
+	if !setup.hasConfirmedFactor() {
 		return nil, ErrNoConfirmedFactor
 	}
 	if setup.recoveryCodes == nil {
@@ -71,7 +79,67 @@ func (setup *Setup) RecoveryCodes() ([]string, error) {
 func (setup *Setup) Ready() bool {
 	setup.mutex.Lock()
 	defer setup.mutex.Unlock()
-	return setup.isConfirmed && setup.recoveryCodes != nil
+	return setup.hasConfirmedFactor() && setup.recoveryCodes != nil
+}
+
+func (setup *Setup) hasConfirmedFactor() bool {
+	return setup.totpConfirmed || setup.webAuthnCredential != nil
+}
+
+func (setup *Setup) BeginWebAuthn(relyingParty *WebAuthn, accountName string) (*protocol.CredentialCreation, error) {
+	if relyingParty == nil {
+		return nil, ErrWebAuthnFailed
+	}
+	setup.mutex.Lock()
+	defer setup.mutex.Unlock()
+	if setup.webAuthnUserHandle == nil {
+		userHandle, handleError := newUserHandle()
+		if handleError != nil {
+			return nil, handleError
+		}
+		setup.webAuthnUserHandle = userHandle
+	}
+	setup.webAuthnAccountName = accountName
+	creation, session, beginError := relyingParty.beginRegistration(setup.webAuthnUser())
+	if beginError != nil {
+		return nil, beginError
+	}
+	setup.webAuthnSession = session
+	return creation, nil
+}
+
+func (setup *Setup) ConfirmWebAuthn(relyingParty *WebAuthn, responseBody []byte) error {
+	if relyingParty == nil {
+		return ErrWebAuthnFailed
+	}
+	setup.mutex.Lock()
+	defer setup.mutex.Unlock()
+	session := setup.webAuthnSession
+	setup.webAuthnSession = nil
+	if session == nil {
+		return ErrWebAuthnFailed
+	}
+	credential, createError := relyingParty.createCredential(setup.webAuthnUser(), *session, responseBody)
+	if createError != nil {
+		return createError
+	}
+	setup.webAuthnCredential = credential
+	return nil
+}
+
+func (setup *Setup) webAuthnUser() webAuthnUser {
+	return webAuthnUser{handle: setup.webAuthnUserHandle, name: setup.webAuthnAccountName}
+}
+
+type confirmedWebAuthn struct {
+	userHandle []byte
+	credential webauthn.Credential
+}
+
+type setupSnapshot struct {
+	totp          *confirmedTOTP
+	webAuthn      *confirmedWebAuthn
+	recoveryCodes []string
 }
 
 type confirmedTOTP struct {
@@ -79,12 +147,21 @@ type confirmedTOTP struct {
 	step   int64
 }
 
-func (setup *Setup) snapshot() (confirmedTOTP, []string, bool) {
+func (setup *Setup) snapshot() (setupSnapshot, bool) {
 	setup.mutex.Lock()
 	defer setup.mutex.Unlock()
-	if !setup.isConfirmed || setup.recoveryCodes == nil {
-		return confirmedTOTP{}, nil, false
+	if !setup.hasConfirmedFactor() || setup.recoveryCodes == nil {
+		return setupSnapshot{}, false
 	}
-	return confirmedTOTP{secret: setup.enrollment.Secret, step: setup.confirmedStep},
-		append([]string(nil), setup.recoveryCodes...), true
+	confirmedSetup := setupSnapshot{recoveryCodes: append([]string(nil), setup.recoveryCodes...)}
+	if setup.totpConfirmed {
+		confirmedSetup.totp = &confirmedTOTP{secret: setup.enrollment.Secret, step: setup.confirmedStep}
+	}
+	if setup.webAuthnCredential != nil {
+		confirmedSetup.webAuthn = &confirmedWebAuthn{
+			userHandle: append([]byte(nil), setup.webAuthnUserHandle...),
+			credential: *setup.webAuthnCredential,
+		}
+	}
+	return confirmedSetup, true
 }
