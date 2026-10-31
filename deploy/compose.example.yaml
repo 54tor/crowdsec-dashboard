@@ -53,6 +53,7 @@ services:
     networks: [docker-proxy]
 
   postgres:
+    # A pull that crosses a PostgreSQL major version starts an empty cluster: see docs/operations.md.
     image: postgres:latest
     container_name: crowdsec-dashboard-postgres
     restart: unless-stopped

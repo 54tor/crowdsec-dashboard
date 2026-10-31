@@ -17,6 +17,7 @@ socket (see [Limits](#honest-limits)).
   API response or in the database. `POST /api/auth/enroll` needs this token, the new account name and
   password. **Whoever can read the logs while no account exists can create the first (admin) account**:
   protect the logs and enrol promptly after the first start.
+- The enrolment window reopens whenever the database holds no account (for instance an empty cluster after a PostgreSQL major upgrade): see docs/operations.md.
 - A restart while no account exists generates a new token and invalidates the previous one. Once the
   first account exists, enrolment is closed for good: the route answers 404 and the old token is
   useless. Two simultaneous enrolments with the right token create one account (a PostgreSQL advisory

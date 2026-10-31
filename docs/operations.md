@@ -73,6 +73,11 @@ after the database is healthy.
 - If PostgreSQL goes down while the dashboard runs, `/api/healthz` answers 503 and login and
   authenticated routes answer 503 `database_unavailable`. Nobody is signed out: sessions are valid
   again once the database is back.
+- Major upgrade trap: since PostgreSQL 18 the image keeps data in `/var/lib/postgresql/<major>/docker`,
+  so a `docker compose pull` that crosses a major version initialises a new empty cluster beside the
+  old one. A major upgrade needs a dump and restore (or `pg_upgrade`): note the running major
+  (`SELECT version()`) before pulling. If the dashboard log shows an enrolment token after an upgrade,
+  the cluster is empty: stop the stack, do not enrol, and restore the previous data.
 - Automated backup and restore of the database are not provided yet (planned for a later lot):
   until then, back up the `postgres-data` volume or dump the database with your usual tooling.
 
