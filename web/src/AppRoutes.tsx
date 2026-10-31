@@ -1,10 +1,28 @@
+import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router'
 import { AuthProvider } from '@/auth/AuthProvider'
 import { ProtectedRoute } from '@/auth/ProtectedRoute'
 import { Layout } from '@/components/Layout'
 import { Login } from '@/pages/Login'
 import { Placeholder } from '@/pages/Placeholder'
+import { Alerts } from '@/pages/Alerts'
+import { Config } from '@/pages/Config'
+import { Decisions } from '@/pages/Decisions'
+import { Health } from '@/pages/Health'
+import { Metrics } from '@/pages/Metrics'
 import { NAV_ITEMS } from '@/routes'
+
+const READ_PAGES: Record<string, ReactElement> = {
+  '/alerts': <Alerts />,
+  '/decisions': <Decisions />,
+  '/health': <Health />,
+  '/metrics': <Metrics />,
+  '/config': <Config />,
+}
+
+function pageFor(path: string, labelKey: string): ReactElement {
+  return READ_PAGES[path] ?? <Placeholder titleKey={labelKey} />
+}
 
 export function AppRoutes() {
   return (
@@ -15,7 +33,7 @@ export function AppRoutes() {
           <Route element={<Layout />}>
             <Route index element={<Navigate to="/alerts" replace />} />
             {NAV_ITEMS.map((navItem) => (
-              <Route key={navItem.path} path={navItem.path} element={<Placeholder titleKey={navItem.labelKey} />} />
+              <Route key={navItem.path} path={navItem.path} element={pageFor(navItem.path, navItem.labelKey)} />
             ))}
           </Route>
         </Route>

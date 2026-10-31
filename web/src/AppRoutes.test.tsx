@@ -5,6 +5,7 @@ import { apiFetch, resetUnauthenticatedGuard } from '@/api/client'
 import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { initI18n, setLanguage } from '@/i18n'
+import { makePage } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
 import { renderApp } from '@/test/renderApp'
 
@@ -90,7 +91,12 @@ describe('app routing and auth', () => {
   })
 
   it('staysLoggedInAndShowsNetworkErrorWhenLogoutRequestFails', async () => {
-    const fetchMock = stubFetch({ 'GET /api/auth/me': { status: 200, body: { status: 'ok' } } })
+    const emptyAlertsPage = { status: 200, body: makePage([]) }
+    const fetchMock = stubFetch({
+      'GET /api/auth/me': { status: 200, body: { status: 'ok' } },
+      'GET /api/alerts?page=1&per_page=20': emptyAlertsPage,
+      'GET /api/alerts?page=1&per_page=100': emptyAlertsPage,
+    })
     const user = userEvent.setup()
     renderApp('/alerts')
     await screen.findByRole('heading', { name: en.nav.alerts })
