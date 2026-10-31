@@ -1,6 +1,6 @@
 # Disposable development stack: a throwaway CrowdSec, the socket proxy and the dashboard.
 # Use ./up.sh to start it (it generates .env.local, registers the dashboard machine and
-# prints the generated admin password once). Tear down with:
+# prints the one-time enrolment token of the first account). Tear down with:
 #   docker compose -p csdash-dev down -v --remove-orphans
 name: csdash-dev
 
@@ -24,6 +24,29 @@ services:
       - crowdsec-data:/var/lib/crowdsec/data
       - dev-logs:/var/log/dev
     networks: [core, egress]
+
+  postgres:
+    image: postgres:latest
+    container_name: csdash-dev-postgres
+    restart: "no"
+    environment:
+      POSTGRES_USER: dashboard
+      POSTGRES_DB: dashboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run up.sh first}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    mem_limit: 512m
+    pids_limit: 128
+    cpus: 0.5
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: [no-new-privileges]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dashboard -d dashboard"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [core]
 
   socket-proxy:
     image: wollomatic/socket-proxy:1
@@ -61,6 +84,9 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges]
     env_file: .env.local
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       LISTEN_ADDR: ":8080"
       LAPI_URL: http://csdash-dev-crowdsec:8080
@@ -93,6 +119,7 @@ services:
 volumes:
   crowdsec-config:
   crowdsec-data:
+  postgres-data:
   dev-logs:
 
 networks:

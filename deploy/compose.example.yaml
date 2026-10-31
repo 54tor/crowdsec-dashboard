@@ -1,7 +1,8 @@
 # Production example. Adapt names, networks and paths; keep the security settings.
 #
 # Secrets never live in this file: copy dashboard.env.example to dashboard.env (mode 0600)
-# and fill it in. Single-quote the argon2id hash there, compose would otherwise expand its "$".
+# and postgres.env.example to postgres.env (mode 0600) and fill them in. The first account is
+# created in the browser: read the one-time enrolment token in the dashboard logs at first start.
 name: crowdsec-dashboard
 
 services:
@@ -51,6 +52,32 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker-proxy]
 
+  postgres:
+    image: postgres:latest
+    container_name: crowdsec-dashboard-postgres
+    restart: unless-stopped
+    env_file: postgres.env
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    # The entrypoint needs these to fix ownership and drop to the postgres user.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: [no-new-privileges]
+    mem_limit: 512m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No published port: only the dashboard reaches it, on its own internal network.
+    networks: [database]
+
   dashboard:
     build:
       context: ..
@@ -58,8 +85,11 @@ services:
     image: crowdsec-dashboard:latest
     container_name: crowdsec-dashboard
     restart: unless-stopped
-    # ADMIN_PASSWORD_HASH, LAPI_MACHINE_PASSWORD: see dashboard.env.example.
+    # DATABASE_URL, LAPI_MACHINE_PASSWORD: see dashboard.env.example.
     env_file: dashboard.env
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       LISTEN_ADDR: ":8080"
       SESSION_TTL: 12h
@@ -93,7 +123,7 @@ services:
         max-file: "3"
     # No published port: the TLS reverse proxy shares the "web" network and forwards to dashboard:8080.
     expose: ["8080"]
-    networks: [crowdsec, docker-proxy, web]
+    networks: [crowdsec, docker-proxy, database, web]
 
   # Example of the TLS reverse proxy you already run, with the fixed address trusted above.
   # reverse-proxy:
@@ -110,9 +140,12 @@ services:
 volumes:
   crowdsec-config:
   crowdsec-data:
+  postgres-data:
 
 networks:
   crowdsec: {}
+  database:
+    internal: true
   docker-proxy:
     internal: true
   # The existing network of your reverse proxy, created by the proxy's own compose project.

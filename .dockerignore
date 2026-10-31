@@ -6,6 +6,7 @@ web/dist
 **/.env
 **/.env.*
 deploy/dashboard.env
+deploy/postgres.env
 deploy/dev/.env.local
 *.log
 backend/internal/webui/dist/*
