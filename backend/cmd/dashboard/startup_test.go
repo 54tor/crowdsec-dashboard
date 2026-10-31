@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -91,4 +92,26 @@ func tokenFromLine(line string) string {
 		}
 	}
 	return ""
+}
+
+func TestStartupRefusesInvalidSecretsKey(testContext *testing.T) {
+	invalidKeyFile := filepath.Join(testContext.TempDir(), "secrets.key")
+	if writeError := os.WriteFile(invalidKeyFile, []byte("not-a-valid-key-material"), 0o600); writeError != nil {
+		testContext.Fatalf("write key file: %v", writeError)
+	}
+
+	keyring, loadError := loadSecretsKeyring(invalidKeyFile)
+
+	if loadError == nil || keyring != nil {
+		testContext.Fatalf("an invalid key must be refused, got %v", loadError)
+	}
+	if !strings.Contains(loadError.Error(), invalidKeyFile) {
+		testContext.Errorf("error must name the key file: %v", loadError)
+	}
+	if strings.Contains(loadError.Error(), "not-a-valid-key-material") {
+		testContext.Error("error must not contain the key content")
+	}
+	if _, missingError := loadSecretsKeyring(filepath.Join(testContext.TempDir(), "absent.key")); missingError == nil {
+		testContext.Error("a missing key file must be refused")
+	}
 }

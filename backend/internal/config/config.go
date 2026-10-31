@@ -17,6 +17,7 @@ const (
 type Config struct {
 	ListenAddr          string
 	DatabaseURL         string
+	SecretsKeyFile      string
 	SessionTTL          time.Duration
 	LAPIURL             string
 	LAPIMachineID       string
@@ -43,6 +44,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, databaseURLError
 	}
 
+	secretsKeyFile := getenv("SECRETS_KEY_FILE")
+	if secretsKeyFile == "" {
+		return Config{}, errors.New("SECRETS_KEY_FILE is required")
+	}
+
 	sessionTTL, sessionTTLError := parseSessionTTL(getenv("SESSION_TTL"))
 	if sessionTTLError != nil {
 		return Config{}, sessionTTLError
@@ -66,6 +72,7 @@ func Load(getenv func(string) string) (Config, error) {
 	return Config{
 		ListenAddr:          listenAddr,
 		DatabaseURL:         databaseURL,
+		SecretsKeyFile:      secretsKeyFile,
 		SessionTTL:          sessionTTL,
 		LAPIURL:             getenv("LAPI_URL"),
 		LAPIMachineID:       getenv("LAPI_MACHINE_ID"),

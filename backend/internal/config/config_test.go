@@ -5,8 +5,18 @@ import (
 	"testing"
 )
 
+const validTestSecretsKeyFile = "/run/dashboard-secrets/key"
+
 func environmentFrom(variables map[string]string) func(string) string {
-	return func(name string) string { return variables[name] }
+	return func(name string) string {
+		if value, isSet := variables[name]; isSet {
+			return value
+		}
+		if name == "SECRETS_KEY_FILE" {
+			return validTestSecretsKeyFile
+		}
+		return ""
+	}
 }
 
 const validTestDatabaseURL = "postgres://dashboard:secret-value@localhost:5432/dashboard"
@@ -27,6 +37,22 @@ func TestLoadRefusesMissingDatabaseURL(testContext *testing.T) {
 	}
 	if !strings.Contains(loadError.Error(), "DATABASE_URL") {
 		testContext.Errorf("error must name DATABASE_URL: %v", loadError)
+	}
+}
+
+func TestLoadRefusesMissingSecretsKeyFile(testContext *testing.T) {
+	_, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL, "SECRETS_KEY_FILE": ""}))
+
+	if loadError == nil || !strings.Contains(loadError.Error(), "SECRETS_KEY_FILE") {
+		testContext.Errorf("expected an error naming SECRETS_KEY_FILE, got %v", loadError)
+	}
+}
+
+func TestLoadReadsSecretsKeyFile(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL, "SECRETS_KEY_FILE": "/run/other/key"}))
+
+	if loadError != nil || loadedConfig.SecretsKeyFile != "/run/other/key" {
+		testContext.Errorf("expected /run/other/key, got %q (%v)", loadedConfig.SecretsKeyFile, loadError)
 	}
 }
 

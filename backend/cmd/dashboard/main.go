@@ -32,6 +32,11 @@ func main() {
 		log.Fatal(loadError)
 	}
 
+	keyring, keyringError := loadSecretsKeyring(loadedConfig.SecretsKeyFile)
+	if keyringError != nil {
+		log.Fatalf("secrets key: %v", keyringError)
+	}
+
 	startupContext, cancelStartup := context.WithTimeout(context.Background(), startupTimeout)
 	database, openError := store.Open(startupContext, loadedConfig.DatabaseURL)
 	if openError != nil {
@@ -43,6 +48,7 @@ func main() {
 	if accountsError != nil {
 		log.Fatalf("startup: %v", accountsError)
 	}
+	accountServices.keyring = keyring
 	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
 
 	services := api.NewServices(

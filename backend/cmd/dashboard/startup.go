@@ -8,6 +8,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"crowdsec-dashboard/internal/accounts"
+	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store"
 )
 
@@ -21,6 +22,11 @@ const (
 type accountServices struct {
 	repository *accounts.Repository
 	enrollment *accounts.Enrollment
+	keyring    *secrets.Keyring
+}
+
+func loadSecretsKeyring(keyFilePath string) (*secrets.Keyring, error) {
+	return secrets.LoadKeyring(keyFilePath)
 }
 
 type logFunction func(format string, arguments ...any)
