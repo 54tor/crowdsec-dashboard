@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"time"
 
@@ -60,6 +61,7 @@ type dockerRunner struct {
 func NewDockerRunner(dockerHost, container string) Runner {
 	dockerClient, err := client.New(client.WithHost(dockerHost))
 	if err != nil {
+		log.Printf("docker client unavailable, cscli commands will fail: %v", err)
 		return failingRunner{err: fmt.Errorf("docker client: %w", err)}
 	}
 	return &dockerRunner{api: dockerClient, container: container, timeout: maxExecTimeout, retryInterval: defaultRetryInterval}

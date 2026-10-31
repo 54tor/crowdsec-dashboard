@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"log"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -188,5 +190,20 @@ func TestExecStillRunningIsAnError(t *testing.T) {
 	}
 	if api.inspectCalls != maxInspectAttempts {
 		t.Fatalf("expected %d inspect calls, got %d", maxInspectAttempts, api.inspectCalls)
+	}
+}
+
+func TestNewDockerRunnerLogsConstructionFailure(t *testing.T) {
+	var logBuffer bytes.Buffer
+	log.SetOutput(&logBuffer)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	runner := NewDockerRunner("", "crowdsec")
+
+	if _, runError := runner.Run(context.Background(), []string{"cscli", "version"}); runError == nil {
+		t.Fatal("expected the failing runner to return an error")
+	}
+	if !strings.Contains(logBuffer.String(), "docker client unavailable") {
+		t.Fatalf("expected a startup log line, got %q", logBuffer.String())
 	}
 }

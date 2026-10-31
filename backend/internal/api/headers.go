@@ -1,6 +1,9 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
@@ -9,6 +12,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		headers.Set("X-Content-Type-Options", "nosniff")
 		headers.Set("Referrer-Policy", "no-referrer")
 		headers.Set("X-Frame-Options", "DENY")
+		if strings.HasPrefix(request.URL.Path, "/api/") {
+			headers.Set("Cache-Control", "no-store")
+		}
 		next.ServeHTTP(responseWriter, request)
 	})
 }
