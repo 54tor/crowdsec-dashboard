@@ -35,6 +35,10 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 	router.HandleFunc("POST /api/auth/logout", handlers.logout)
 	router.Handle("POST /api/auth/logout-all", requireSession(http.HandlerFunc(handlers.logoutAll)))
 	router.Handle("GET /api/auth/me", requireSession(http.HandlerFunc(handlers.me)))
+	accessRules := accessRuleHandlers{service: services.AccessRules, geolocator: services.Geolocator, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	router.Handle("GET /api/account/access-rules", requireSession(http.HandlerFunc(accessRules.list)))
+	router.Handle("POST /api/account/access-rules", requireSession(http.HandlerFunc(accessRules.add)))
+	router.Handle("DELETE /api/account/access-rules/{id}", requireSession(http.HandlerFunc(accessRules.remove)))
 	router.Handle("GET /api/alerts", requireSession(http.HandlerFunc(alertReadHandlers{lister: services.AlertReader}.list)))
 	router.Handle("GET /api/decisions", requireSession(http.HandlerFunc(decisionReadHandlers{lister: services.DecisionReader}.list)))
 	router.Handle("GET /api/health", requireSession(http.HandlerFunc(healthReportHandlers{platform: services.Platform, selfMachineID: loadedConfig.LAPIMachineID}.get)))

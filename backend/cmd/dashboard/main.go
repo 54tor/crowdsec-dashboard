@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"crowdsec-dashboard/internal/accessrule"
 	"crowdsec-dashboard/internal/api"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
@@ -63,6 +64,8 @@ func main() {
 	services.Sessions = sessionStore
 	services.Database = database
 	services.Audit = audit.NewPostgresRecorder(database)
+	services.Geolocator = accountServices.geolocator
+	services.AccessRules = accessrule.NewRepository(database)
 
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,

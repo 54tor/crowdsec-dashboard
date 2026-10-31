@@ -6,6 +6,7 @@ import (
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
+	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
 )
 
@@ -34,6 +35,8 @@ type Services struct {
 	Hub            HubService
 	Reloader       Reloader
 	Audit          audit.Recorder
+	Geolocator     geo.Geolocator
+	AccessRules    AccessRuleService
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {
