@@ -14,12 +14,9 @@ RUN go mod download
 COPY backend/ ./
 COPY --from=web /src/backend/internal/webui/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 go build -p 4 -trimpath -ldflags="-s -w" -o /out/dashboard ./cmd/dashboard
-RUN CGO_ENABLED=0 go build -p 4 -trimpath -ldflags="-s -w" -o /out/hashpassword ./cmd/hashpassword
 
 FROM gcr.io/distroless/static:nonroot
 COPY --from=backend /out/dashboard /dashboard
-# One-shot helper, no shell needed: docker run --rm -i --entrypoint /hashpassword <image> <<< "$password"
-COPY --from=backend /out/hashpassword /hashpassword
 USER nonroot:nonroot
 EXPOSE 8080
 ENTRYPOINT ["/dashboard"]
