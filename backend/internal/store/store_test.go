@@ -259,7 +259,7 @@ func TestDeletingAccountCascadesRecoveryCodesAndAccessRules(testContext *testing
 
 	for _, tableName := range []string{"recovery_code", "access_rule"} {
 		var remainingRows int
-		if countError := database.NewRaw("SELECT count(*) FROM " + tableName).Scan(ctx, &remainingRows); countError != nil {
+		if countError := database.NewRaw("SELECT count(*) FROM "+tableName).Scan(ctx, &remainingRows); countError != nil {
 			testContext.Fatalf("count %s: %v", tableName, countError)
 		}
 		if remainingRows != 0 {
