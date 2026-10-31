@@ -85,7 +85,8 @@ services:
       - /run:exec,nosuid,nodev,mode=0755
       - /tmp:noexec,nosuid,nodev,mode=1777
     cap_drop: [ALL]
-    cap_add: [KILL, SETGID, SETUID]
+    cap_add: [CHOWN, DAC_READ_SEARCH, KILL, SETGID, SETUID]
+    secrets: [dashboard-secrets-key]
     security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/healthz"]
@@ -105,6 +106,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       CROWDSEC_CONF_DIR: /etc/crowdsec
       TRUSTED_PROXY_CIDRS: ""
+      SECRETS_KEY_FILE: /run/dashboard-secrets/key
       S6_READ_ONLY_ROOT: "1"
       WAIT_FOR_NETWORK: "false"
     volumes:
@@ -133,6 +135,10 @@ volumes:
   crowdsec-data:
   postgres-data:
   dev-logs:
+
+secrets:
+  dashboard-secrets-key:
+    file: ./secrets/dashboard-secrets.key
 
 networks:
   core:

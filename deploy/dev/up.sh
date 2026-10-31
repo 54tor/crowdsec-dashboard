@@ -41,6 +41,12 @@ if ! grep -q '^DATABASE_URL=' .env.local; then
   } >> .env.local
 fi
 
+if [ ! -f secrets/dashboard-secrets.key ]; then
+  umask 077
+  mkdir -p secrets
+  openssl rand -base64 32 > secrets/dashboard-secrets.key
+fi
+
 set -a
 # shellcheck disable=SC1091
 . ./.env.local

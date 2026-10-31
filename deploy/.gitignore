@@ -1,2 +1,3 @@
 dashboard.env
 postgres.env
+secrets/
