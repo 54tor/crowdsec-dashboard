@@ -72,7 +72,9 @@ Applied to every attempt, successful ones included:
   - globally, 30 attempts per minute, so a distributed guess cannot run faster whatever the sources;
   - at most 10 000 tracked clients: beyond that new clients are refused until old entries expire;
   - a single password verification at a time (each one allocates 64 MiB for argon2id, the container is capped at 256 MiB); a concurrent attempt answers 429;
-  - a failed attempt always takes at least 500 ms.
+  - a failed login (`POST /api/auth/login`) always takes at least 500 ms; a failed enrolment
+    (`POST /api/auth/enroll`) answers at once, bounded by the limits above and the single
+    verification slot.
 - Every later step (`/api/auth/login/*` and `/api/auth/enroll/*`): 30 requests per minute per client
   (same client key), with **no global bucket**. These steps are already bounded by the pending
   login (5 attempts, one address, 5 minutes), by the account lockout and by the 256-bit enrolment
