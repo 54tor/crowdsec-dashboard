@@ -21,12 +21,16 @@ func newTestHandler(testContext *testing.T) http.Handler {
 }
 
 func newTestHandlerWithServices(testContext *testing.T, services Services) http.Handler {
+	return newTestHandlerWithMachineID(testContext, services, "")
+}
+
+func newTestHandlerWithMachineID(testContext *testing.T, services Services, machineID string) http.Handler {
 	testContext.Helper()
 	encodedHash, hashError := argon2id.CreateHash(testPassword, &argon2id.Params{Memory: 8 * 1024, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32})
 	if hashError != nil {
 		testContext.Fatal(hashError)
 	}
-	handler := newHandler(config.Config{AdminPasswordHash: encodedHash, SessionTTL: time.Hour}, http.NotFoundHandler(), 0, services)
+	handler := newHandler(config.Config{AdminPasswordHash: encodedHash, SessionTTL: time.Hour, LAPIMachineID: machineID}, http.NotFoundHandler(), 0, services)
 	return handler
 }
 

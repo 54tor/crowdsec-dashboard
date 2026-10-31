@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 )
@@ -18,7 +17,7 @@ func requireConfirm(request *http.Request, expected string) error {
 		Confirm string `json:"confirm"`
 	}
 	limitedBody := http.MaxBytesReader(nil, request.Body, maxConfirmBodyBytes)
-	if decodeError := json.NewDecoder(limitedBody).Decode(&payload); decodeError != nil {
+	if decodeError := decodeSingleObject(limitedBody, &payload); decodeError != nil {
 		return errConfirmationRequired
 	}
 	if expected == "" || payload.Confirm != expected {

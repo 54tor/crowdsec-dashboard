@@ -4,13 +4,22 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 )
 
 var reloadArgv = []string{"kill", "-HUP", "1"}
 
+const (
+	DefaultTimeout     = 30 * time.Second
+	HubMutationTimeout = 120 * time.Second
+)
+
+var hubMutationCommands = []string{"hub_update", "hub_upgrade", "collections_install", "collections_remove"}
+
 type Command struct {
-	Name  string
-	Build func(fields map[string]string) ([]string, error)
+	Name    string
+	Build   func(fields map[string]string) ([]string, error)
+	Timeout time.Duration
 }
 
 type fieldSpec struct {
@@ -87,25 +96,29 @@ var commands = buildCommands()
 
 func buildCommands() map[string]Command {
 	definitions := []Command{
-		{"alerts_delete", buildAlertsDelete},
-		{"bouncers_list", fixed("cscli", "bouncers", "list", "-o", "json")},
-		{"bouncers_add", withName(validateName, []string{"cscli", "bouncers", "add"})},
-		{"bouncers_delete", withName(validateName, []string{"cscli", "bouncers", "delete"})},
-		{"machines_list", fixed("cscli", "machines", "list", "-o", "json")},
-		{"machines_add", withName(validateName, []string{"cscli", "machines", "add"}, "--auto", "-f", "-")},
-		{"machines_validate", withName(validateName, []string{"cscli", "machines", "validate"})},
-		{"machines_delete", withName(validateName, []string{"cscli", "machines", "delete"})},
-		{"hub_list", fixed("cscli", "hub", "list", "-o", "json")},
-		{"hub_update", fixed("cscli", "hub", "update")},
-		{"hub_upgrade", fixed("cscli", "hub", "upgrade")},
-		{"collections_install", withName(validateHubName, []string{"cscli", "collections", "install"})},
-		{"collections_remove", withName(validateHubName, []string{"cscli", "collections", "remove"})},
-		{"metrics", fixed("cscli", "metrics", "-o", "json")},
-		{"version", fixed("cscli", "version")},
-		{"reload", fixed(reloadArgv...)},
+		{Name: "alerts_delete", Build: buildAlertsDelete},
+		{Name: "bouncers_list", Build: fixed("cscli", "bouncers", "list", "-o", "json")},
+		{Name: "bouncers_add", Build: withName(validateName, []string{"cscli", "bouncers", "add"})},
+		{Name: "bouncers_delete", Build: withName(validateName, []string{"cscli", "bouncers", "delete"})},
+		{Name: "machines_list", Build: fixed("cscli", "machines", "list", "-o", "json")},
+		{Name: "machines_add", Build: withName(validateName, []string{"cscli", "machines", "add"}, "--auto", "-f", "-")},
+		{Name: "machines_validate", Build: withName(validateName, []string{"cscli", "machines", "validate"})},
+		{Name: "machines_delete", Build: withName(validateName, []string{"cscli", "machines", "delete"})},
+		{Name: "hub_list", Build: fixed("cscli", "hub", "list", "-o", "json")},
+		{Name: "hub_update", Build: fixed("cscli", "hub", "update")},
+		{Name: "hub_upgrade", Build: fixed("cscli", "hub", "upgrade")},
+		{Name: "collections_install", Build: withName(validateHubName, []string{"cscli", "collections", "install"})},
+		{Name: "collections_remove", Build: withName(validateHubName, []string{"cscli", "collections", "remove"})},
+		{Name: "metrics", Build: fixed("cscli", "metrics", "-o", "json")},
+		{Name: "version", Build: fixed("cscli", "version")},
+		{Name: "reload", Build: fixed(reloadArgv...)},
 	}
 	byName := make(map[string]Command, len(definitions))
 	for _, definition := range definitions {
+		definition.Timeout = DefaultTimeout
+		if slices.Contains(hubMutationCommands, definition.Name) {
+			definition.Timeout = HubMutationTimeout
+		}
 		byName[definition.Name] = definition
 	}
 	return byName

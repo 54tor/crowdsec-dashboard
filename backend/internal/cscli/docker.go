@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	execTimeout          = 60 * time.Second
+	maxExecTimeout       = HubMutationTimeout
 	maxStdoutBytes       = 8 << 20
 	maxStderrBytes       = 4 << 10
 	maxInspectAttempts   = 5
@@ -62,7 +62,7 @@ func NewDockerRunner(dockerHost, container string) Runner {
 	if err != nil {
 		return failingRunner{err: fmt.Errorf("docker client: %w", err)}
 	}
-	return &dockerRunner{api: dockerClient, container: container, timeout: execTimeout, retryInterval: defaultRetryInterval}
+	return &dockerRunner{api: dockerClient, container: container, timeout: maxExecTimeout, retryInterval: defaultRetryInterval}
 }
 
 type failingRunner struct{ err error }

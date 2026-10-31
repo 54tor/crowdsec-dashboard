@@ -33,7 +33,10 @@ func (service cscliMachines) Delete(ctx context.Context, name string) error {
 	return executeError
 }
 
-type machineHandlers struct{ service MachineService }
+type machineHandlers struct {
+	service       MachineService
+	selfMachineID string
+}
 
 func (handlers machineHandlers) create(responseWriter http.ResponseWriter, request *http.Request) {
 	name, decoded := decodeNamedRequest(responseWriter, request)
@@ -58,6 +61,10 @@ func (handlers machineHandlers) validate(responseWriter http.ResponseWriter, req
 
 func (handlers machineHandlers) remove(responseWriter http.ResponseWriter, request *http.Request) {
 	name := request.PathValue("name")
+	if handlers.selfMachineID != "" && name == handlers.selfMachineID {
+		writeError(responseWriter, http.StatusConflict, "self_account")
+		return
+	}
 	if requireConfirm(request, name) != nil {
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return

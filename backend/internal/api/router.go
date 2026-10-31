@@ -6,6 +6,7 @@ import (
 
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/cscli"
 )
 
 func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services Services) http.Handler {
@@ -25,6 +26,7 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 		hashSlots:    make(chan struct{}, concurrentPasswordHashes),
 	}
 
+	longWrite := extendWriteDeadline(cscli.HubMutationTimeout)
 	router := http.NewServeMux()
 	router.Handle("GET /api/healthz", HealthHandler())
 	router.HandleFunc("POST /api/auth/login", handlers.login)
@@ -41,14 +43,14 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 	router.Handle("DELETE /api/alerts/{id}", requireSession(http.HandlerFunc(alertHandlers{service: services.Alerts}.remove)))
 	router.Handle("POST /api/bouncers", requireSession(http.HandlerFunc(bouncerHandlers{service: services.Bouncers}.create)))
 	router.Handle("DELETE /api/bouncers/{name}", requireSession(http.HandlerFunc(bouncerHandlers{service: services.Bouncers}.remove)))
-	router.Handle("POST /api/machines", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines}.create)))
-	router.Handle("POST /api/machines/{name}/validate", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines}.validate)))
-	router.Handle("DELETE /api/machines/{name}", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines}.remove)))
+	router.Handle("POST /api/machines", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}.create)))
+	router.Handle("POST /api/machines/{name}/validate", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}.validate)))
+	router.Handle("DELETE /api/machines/{name}", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}.remove)))
 	router.Handle("GET /api/hub", requireSession(http.HandlerFunc(hubHandlers{service: services.Hub}.list)))
-	router.Handle("POST /api/hub/update", requireSession(http.HandlerFunc(hubHandlers{service: services.Hub}.update)))
-	router.Handle("POST /api/hub/upgrade", requireSession(http.HandlerFunc(hubHandlers{service: services.Hub}.upgrade)))
-	router.Handle("POST /api/hub/collections", requireSession(http.HandlerFunc(hubHandlers{service: services.Hub}.install)))
-	router.Handle("DELETE /api/hub/collections/{name...}", requireSession(http.HandlerFunc(hubHandlers{service: services.Hub}.remove)))
+	router.Handle("POST /api/hub/update", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.update))))
+	router.Handle("POST /api/hub/upgrade", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.upgrade))))
+	router.Handle("POST /api/hub/collections", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.install))))
+	router.Handle("DELETE /api/hub/collections/{name...}", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.remove))))
 	router.Handle("POST /api/crowdsec/reload", requireSession(http.HandlerFunc(reloadHandlers{service: services.Reloader}.reload)))
 	router.Handle("/api/", requireSession(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
 		writeError(responseWriter, http.StatusNotFound, "not_found")

@@ -1,9 +1,6 @@
 package api
 
-import (
-	"encoding/json"
-	"net/http"
-)
+import "net/http"
 
 const maxNamedBodyBytes = 1024
 
@@ -13,9 +10,7 @@ type namedRequest struct {
 
 func decodeNamedRequest(responseWriter http.ResponseWriter, request *http.Request) (string, bool) {
 	var payload namedRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(responseWriter, request.Body, maxNamedBodyBytes))
-	decoder.DisallowUnknownFields()
-	if decodeError := decoder.Decode(&payload); decodeError != nil {
+	if decodeError := decodeSingleObject(http.MaxBytesReader(responseWriter, request.Body, maxNamedBodyBytes), &payload); decodeError != nil {
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return "", false
 	}

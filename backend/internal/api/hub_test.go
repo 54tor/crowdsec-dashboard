@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -47,14 +48,25 @@ func newAdminFixture(testContext *testing.T, outputs map[string]string, failing 
 	return adminFixture{writeFixture: writeFixture{handler: handler, cookie: cookie}, runner: runner}
 }
 
+func captureLogs(testContext *testing.T) *bytes.Buffer {
+	testContext.Helper()
+	var logBuffer bytes.Buffer
+	previousHandler := slog.Default()
+	log.SetOutput(&logBuffer)
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	testContext.Cleanup(func() {
+		slog.SetDefault(previousHandler)
+		log.SetOutput(os.Stderr)
+	})
+	return &logBuffer
+}
+
 func TestCreateBouncerReturnsKeyOnceAndDoesNotLogIt(testContext *testing.T) {
 	outputs := map[string]string{
 		"cscli bouncers add fw-bouncer": "API key for 'fw-bouncer':\n\n   " + testBouncerKey + "\n\nPlease keep this key since you will not be able to retrieve it!\n",
 	}
 	fixture := newAdminFixture(testContext, outputs, nil)
-	var logBuffer bytes.Buffer
-	log.SetOutput(&logBuffer)
-	testContext.Cleanup(func() { log.SetOutput(os.Stderr) })
+	logBuffer := captureLogs(testContext)
 
 	recorder := fixture.send(http.MethodPost, "/api/bouncers", `{"name":"fw-bouncer"}`, true)
 
@@ -81,9 +93,7 @@ func TestCreateMachineReturnsPasswordOnceWithoutLoggingIt(testContext *testing.T
 		"cscli machines add agent-1 --auto -f -": "url: http://127.0.0.1:8080\nlogin: agent-1\npassword: " + testMachinePassword + "\n",
 	}
 	fixture := newAdminFixture(testContext, outputs, nil)
-	var logBuffer bytes.Buffer
-	log.SetOutput(&logBuffer)
-	testContext.Cleanup(func() { log.SetOutput(os.Stderr) })
+	logBuffer := captureLogs(testContext)
 
 	recorder := fixture.send(http.MethodPost, "/api/machines", `{"name":"agent-1"}`, true)
 
@@ -144,14 +154,24 @@ func TestCreateCredentialsFailOnUnparseableOutputWithoutEchoingIt(testContext *t
 }
 
 func TestCreateCredentialsMapCscliFailureWithoutLeak(testContext *testing.T) {
-	failing := map[string]bool{"cscli bouncers add b1": true}
+	failing := map[string]bool{"cscli bouncers add b1": true, "cscli machines add m1 --auto -f -": true}
 	fixture := newAdminFixture(testContext, nil, failing)
+	logBuffer := captureLogs(testContext)
 
-	recorder := fixture.send(http.MethodPost, "/api/bouncers", `{"name":"b1"}`, true)
+	bouncerRecorder := fixture.send(http.MethodPost, "/api/bouncers", `{"name":"b1"}`, true)
+	machineRecorder := fixture.send(http.MethodPost, "/api/machines", `{"name":"m1"}`, true)
 
-	expectError(testContext, recorder, http.StatusBadGateway, "cscli_failed")
-	if strings.Contains(recorder.Body.String(), testBouncerKey) || strings.Contains(recorder.Body.String(), testMachinePassword) {
-		testContext.Error("failure body leaked output")
+	expectError(testContext, bouncerRecorder, http.StatusBadGateway, "cscli_failed")
+	expectError(testContext, machineRecorder, http.StatusBadGateway, "cscli_failed")
+	for _, secret := range []string{testBouncerKey, testMachinePassword} {
+		for _, recorder := range []*httptest.ResponseRecorder{bouncerRecorder, machineRecorder} {
+			if strings.Contains(recorder.Body.String(), secret) {
+				testContext.Error("failure body leaked output")
+			}
+		}
+		if strings.Contains(logBuffer.String(), secret) {
+			testContext.Error("failure leaked into the log")
+		}
 	}
 }
 

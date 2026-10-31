@@ -20,7 +20,6 @@ import (
 const (
 	readHeaderTimeout = 5 * time.Second
 	readTimeout       = 15 * time.Second
-	writeTimeout      = 60 * time.Second
 	idleTimeout       = 120 * time.Second
 	shutdownTimeout   = 10 * time.Second
 )
@@ -40,7 +39,7 @@ func main() {
 		)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
+		WriteTimeout:      api.DefaultWriteTimeout,
 		IdleTimeout:       idleTimeout,
 	}
 

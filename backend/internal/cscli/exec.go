@@ -9,6 +9,7 @@ import (
 var (
 	ErrUnknownCommand = errors.New("unknown cscli command")
 	ErrCscliFailed    = errors.New("cscli command failed")
+	ErrTimeout        = errors.New("cscli command timed out")
 )
 
 type Runner interface {
@@ -24,5 +25,11 @@ func Execute(ctx context.Context, runner Runner, name string, fields map[string]
 	if err != nil {
 		return nil, err
 	}
-	return runner.Run(ctx, argv)
+	commandContext, cancel := context.WithTimeout(ctx, command.Timeout)
+	defer cancel()
+	output, runError := runner.Run(commandContext, argv)
+	if runError != nil && errors.Is(runError, context.DeadlineExceeded) && ctx.Err() == nil {
+		return nil, ErrTimeout
+	}
+	return output, runError
 }

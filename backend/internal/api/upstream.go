@@ -17,6 +17,8 @@ func writeUpstreamError(responseWriter http.ResponseWriter, upstreamError error)
 		writeError(responseWriter, http.StatusNotFound, "not_found")
 	case errors.Is(upstreamError, lapi.ErrBadRequest), errors.Is(upstreamError, lapi.ErrInvalidTarget), errors.Is(upstreamError, cscli.ErrInvalidField):
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+	case errors.Is(upstreamError, cscli.ErrTimeout):
+		writeError(responseWriter, http.StatusGatewayTimeout, "cscli_timeout")
 	case errors.Is(upstreamError, lapi.ErrForbidden), errors.As(upstreamError, &statusError):
 		writeError(responseWriter, http.StatusBadGateway, "lapi_error")
 	default:
