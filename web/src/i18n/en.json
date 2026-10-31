@@ -360,6 +360,7 @@
     "add": "Add rule",
     "deleteAria": "Delete {{value}}",
     "deleteTitle": "Delete this rule",
-    "deleteDescription": "Sign-ins that only this rule allowed will be refused. The change is refused if it would lock out your current connection."
+    "deleteDescription": "Sign-ins that only this rule allowed will be refused. The change is refused if it would lock out your current connection.",
+    "deleteLastDescription": "This is the last rule: deleting it turns the allowlist off and allows sign-in from anywhere."
   }
 }

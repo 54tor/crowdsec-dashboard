@@ -2,6 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
+import fr from '@/i18n/fr.json'
+import { setLanguage } from '@/i18n'
 import { stubFetch, type RouteTable } from '@/test/fetchStub'
 import { prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
@@ -199,5 +201,38 @@ describe('account security page', () => {
     renderApp('/account/security')
 
     expect(await screen.findByRole('link', { name: 'alice' })).toHaveAttribute('href', '/account/security')
+  })
+
+  it('explainsTheGenericConsequenceWhenSeveralRulesExist', async () => {
+    stubFetch(accessRoutes(LIST_WITH_RULES))
+    const user = userEvent.setup()
+    renderApp('/account/security')
+
+    await user.click(await screen.findByRole('button', { name: 'Delete 203.0.113.0/24' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(en.accountSecurity.deleteDescription)).toBeInTheDocument()
+    expect(within(dialog).queryByText(en.accountSecurity.deleteLastDescription)).not.toBeInTheDocument()
+  })
+
+  it('explainsThatDeletingTheLastRuleTurnsTheAllowlistOff', async () => {
+    stubFetch(accessRoutes({ status: 200, body: { rules: [{ id: 1, kind: 'ip', value: '203.0.113.0/24' }], client_ip: '203.0.113.7', client_country: null } }))
+    const user = userEvent.setup()
+    renderApp('/account/security')
+
+    await user.click(await screen.findByRole('button', { name: 'Delete 203.0.113.0/24' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(en.accountSecurity.deleteLastDescription)).toBeInTheDocument()
+    expect(within(dialog).queryByText(en.accountSecurity.deleteDescription)).not.toBeInTheDocument()
+  })
+
+  it('explainsTheLastRuleDeletionInFrench', async () => {
+    await setLanguage('fr')
+    stubFetch(accessRoutes({ status: 200, body: { rules: [{ id: 1, kind: 'ip', value: '203.0.113.0/24' }], client_ip: '203.0.113.7', client_country: null } }))
+    const user = userEvent.setup()
+    renderApp('/account/security')
+
+    await user.click(await screen.findByRole('button', { name: 'Supprimer 203.0.113.0/24' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(fr.accountSecurity.deleteLastDescription)).toBeInTheDocument()
   })
 })

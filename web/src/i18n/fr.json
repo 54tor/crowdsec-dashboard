@@ -360,6 +360,7 @@
     "add": "Ajouter la règle",
     "deleteAria": "Supprimer {{value}}",
     "deleteTitle": "Supprimer cette règle",
-    "deleteDescription": "Les connexions que seule cette règle autorisait seront refusées. La modification est refusée si elle vous excluait de votre connexion actuelle."
+    "deleteDescription": "Les connexions que seule cette règle autorisait seront refusées. La modification est refusée si elle vous excluait de votre connexion actuelle.",
+    "deleteLastDescription": "C'est la dernière règle : la supprimer désactive la liste blanche et autorise la connexion de partout."
   }
 }

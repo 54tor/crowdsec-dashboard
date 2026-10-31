@@ -22,7 +22,7 @@ export function AccessRulesTable({ rules, onRuleDeleted }: AccessRulesTableProps
           buttonLabel={t('common.delete')}
           ariaLabel={t('accountSecurity.deleteAria', { value: rule.value })}
           title={t('accountSecurity.deleteTitle')}
-          description={t('accountSecurity.deleteDescription')}
+          description={t(rules.length === 1 ? 'accountSecurity.deleteLastDescription' : 'accountSecurity.deleteDescription')}
           target={rule.value}
           request={() => deleteAccessRule(rule.id)}
           invalidates={[ACCESS_RULES_QUERY_KEY]}
