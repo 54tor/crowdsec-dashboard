@@ -35,7 +35,11 @@ func (service *fakeAccessRules) Add(_ context.Context, accountID int64, kind, va
 	if service.addError != nil {
 		return accessrule.Rule{}, service.addError
 	}
-	return accessrule.Rule{ID: 5, Kind: kind, Value: value}, nil
+	canonicalValue, canonicalError := accessrule.Canonicalize(kind, value)
+	if canonicalError != nil {
+		return accessrule.Rule{}, canonicalError
+	}
+	return accessrule.Rule{ID: 5, Kind: kind, Value: canonicalValue}, nil
 }
 
 func (service *fakeAccessRules) Delete(_ context.Context, _, ruleID int64, _ netip.Addr, _ geo.Geolocator) error {
@@ -184,4 +188,12 @@ func TestDeleteAccessRuleRecordsAuditAndReturns404ForUnknownRule(testContext *te
 	if len(fixture.recorder.events) != 1 || fixture.recorder.events[0].action != audit.ActionAccessRuleRemoved || fixture.recorder.events[0].target != "ip:198.51.100.0/24" {
 		testContext.Errorf("unexpected audit events %+v", fixture.recorder.events)
 	}
+}
+
+func TestAddAccessRuleRefusesMatchEverythingPrefix(testContext *testing.T) {
+	fixture := newAccessRuleFixture(testContext, nil)
+
+	recorder := fixture.send(http.MethodPost, "/api/account/access-rules", `{"kind":"ip","value":"0.0.0.0/0"}`, "")
+
+	expectError(testContext, recorder, http.StatusBadRequest, "invalid_access_rule")
 }

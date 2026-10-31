@@ -21,7 +21,7 @@ func TestCanonicalizeIPAcceptsAddressAndCIDR(testContext *testing.T) {
 }
 
 func TestCanonicalizeRejectsZoneAndGarbage(testContext *testing.T) {
-	for _, input := range []string{"fe80::1%eth0", "example.com", "999.1.1.1", "", "192.0.2.0/33"} {
+	for _, input := range []string{"fe80::1%eth0", "example.com", "999.1.1.1", "", "192.0.2.0/33", "0.0.0.0/0", "::/0", "::ffff:0:0/96", "::ffff:0.0.0.0/96"} {
 		if _, canonicalError := Canonicalize(KindIP, input); !errors.Is(canonicalError, ErrInvalidRule) {
 			testContext.Errorf("%q: expected ErrInvalidRule, got %v", input, canonicalError)
 		}

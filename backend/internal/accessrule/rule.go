@@ -52,6 +52,9 @@ func canonicalizeIP(value string) (string, error) {
 		}
 		address, bits = address.Unmap(), bits-ipv4InIPv6PrefixBits
 	}
+	if bits == 0 {
+		return "", ErrInvalidRule
+	}
 	return netip.PrefixFrom(address, bits).Masked().String(), nil
 }
 
