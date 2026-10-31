@@ -18,3 +18,15 @@ export function waitForDebounce(): Promise<void> {
 export function requestedUrls(fetchMock: { mock: { calls: unknown[][] } }): string[] {
   return fetchMock.mock.calls.map(([requestedUrl]) => String(requestedUrl))
 }
+
+export function requestsTo(fetchMock: { mock: { calls: unknown[][] } }, method: string, url: string): RequestInit[] {
+  return fetchMock.mock.calls
+    .filter(([requestedUrl, init]) => String(requestedUrl) === url && ((init as RequestInit | undefined)?.method ?? 'GET') === method)
+    .map(([, init]) => (init ?? {}) as RequestInit)
+}
+
+export function slowResponse(status: number, body: unknown, delayMilliseconds: number): Promise<Response> {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(new Response(JSON.stringify(body), { status })), delayMilliseconds)
+  })
+}

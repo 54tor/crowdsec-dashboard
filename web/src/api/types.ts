@@ -112,3 +112,27 @@ export interface ListFilters {
   ip: string
   since: string
 }
+
+export interface HubItem {
+  type: string
+  name: string
+  status: string
+  local_version: string
+  description: string
+}
+
+export interface BanRequest {
+  ip: string
+  duration: string
+  reason: string
+}
+
+export interface CreatedBouncer {
+  name: string
+  key: string
+}
+
+export interface CreatedMachine {
+  name: string
+  password: string
+}

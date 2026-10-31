@@ -17,7 +17,7 @@ function maxPrefixFor(address: string): number {
   return ipaddr.IPv4.isValidFourPartDecimal(address) ? IPV4_MAX_PREFIX : IPV6_MAX_PREFIX
 }
 
-function isValidTarget(target: string): boolean {
+export function isValidTarget(target: string): boolean {
   const [address, prefix, ...rest] = target.split('/')
   if (rest.length > 0 || !isValidAddress(address)) {
     return false

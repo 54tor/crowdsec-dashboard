@@ -2,10 +2,13 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Decision } from '@/api/types'
 import type { DataTableColumn } from '@/components/DataTable'
+import { BanDialog } from '@/components/BanDialog'
 import { FilterBar } from '@/components/FilterBar'
 import { InfoNotice } from '@/components/Notice'
 import { PagedTableSection } from '@/components/PagedTableSection'
+import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { Badge } from '@/components/ui/badge'
+import { deleteDecision } from '@/api/writeApi'
 import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
 import { formatDateTime } from '@/lib/format'
@@ -37,6 +40,21 @@ export function Decisions() {
         className: 'whitespace-nowrap',
         cell: (decision) => (decision.until ? formatDateTime(decision.until, i18n.language) : decision.duration),
       },
+      {
+        key: 'actions',
+        header: t('decisions.actions'),
+        cell: (decision) => (
+          <RowDeleteAction
+            buttonLabel={t('decisions.unban')}
+            ariaLabel={t('decisions.unbanAria', { target: decision.value })}
+            title={t('decisions.unbanTitle', { target: decision.value })}
+            description={t('decisions.unbanDescription', { id: decision.id })}
+            target={String(decision.id)}
+            request={(confirm) => deleteDecision(String(decision.id), confirm)}
+            invalidates={[['decisions']]}
+          />
+        ),
+      },
     ],
     [t, i18n.language],
   )
@@ -44,6 +62,7 @@ export function Decisions() {
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">{t('decisions.title')}</h1>
+      <BanDialog />
       <InfoNotice>{t('decisions.communityNotice')}</InfoNotice>
       <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} />
       <PagedTableSection

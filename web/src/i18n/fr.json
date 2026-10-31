@@ -89,7 +89,12 @@
       "decisions": "Décisions",
       "message": "Message"
     },
-    "simulated": "Simulée"
+    "simulated": "Simulée",
+    "actions": "Actions",
+    "delete": "Supprimer",
+    "deleteAria": "Supprimer l'alerte {{id}}",
+    "deleteTitle": "Supprimer l'alerte {{id}}",
+    "deleteDescription": "L'alerte {{id}} et ses décisions seront supprimées définitivement."
   },
   "decisions": {
     "title": "Décisions",
@@ -103,7 +108,12 @@
       "scenario": "Scénario",
       "expires": "Expire",
       "simulated": "Simulée"
-    }
+    },
+    "actions": "Actions",
+    "unban": "Débannir",
+    "unbanAria": "Débannir {{target}}",
+    "unbanTitle": "Débannir {{target}}",
+    "unbanDescription": "La décision {{id}} sera supprimée et la cible ne sera plus bloquée."
   },
   "chart": {
     "label": "Graphique des alertes par heure",
@@ -167,5 +177,26 @@
     "select": "Sélectionnez un fichier pour l'afficher.",
     "viewer": "Contenu de {{name}}",
     "loading": "Chargement du fichier…"
+  },
+  "dialog": {
+    "cancel": "Annuler",
+    "working": "Traitement…",
+    "close": "Fermer"
+  },
+  "confirmDelete": {
+    "label": "Saisissez {{target}} pour confirmer",
+    "hint": "Cette action est irréversible. Ressaisissez exactement la cible pour activer le bouton."
+  },
+  "ban": {
+    "open": "Bannir une IP",
+    "title": "Bannir une adresse IP",
+    "description": "Crée une décision de bannissement manuelle sur l'API locale CrowdSec.",
+    "ip": "Adresse IP ou CIDR",
+    "duration": "Durée",
+    "durationHint": "Un nombre suivi de s, m, h ou d (ex. 24h).",
+    "presets": "Durées prédéfinies",
+    "reason": "Motif (facultatif)",
+    "submit": "Bannir",
+    "success": "{{target}} banni."
   }
 }

@@ -1,4 +1,4 @@
-import type { Alert, Decision, HealthReport, Page } from '@/api/types'
+import type { Alert, Bouncer, Decision, HealthReport, HubItem, Machine, Page } from '@/api/types'
 
 export const MALICIOUS_SCENARIO = '<img src=x onerror=alert(1)>'
 
@@ -52,6 +52,42 @@ export function makeHealth(overrides: Partial<HealthReport> = {}): HealthReport 
     bouncers: [],
     machines: [],
     degraded: [],
+    ...overrides,
+  }
+}
+
+export function makeBouncer(overrides: Partial<Bouncer> = {}): Bouncer {
+  return {
+    name: 'firewall-one',
+    type: 'crowdsec-firewall-bouncer',
+    version: 'v0.0.31',
+    ip_address: '203.0.113.30',
+    last_pull: '2026-10-31T10:00:00Z',
+    revoked: false,
+    auth_type: 'api-key',
+    ...overrides,
+  }
+}
+
+export function makeMachine(overrides: Partial<Machine> = {}): Machine {
+  return {
+    machine_id: 'machine-one',
+    ip_address: '203.0.113.20',
+    last_heartbeat: '2026-10-31T10:00:00Z',
+    version: 'v1.7.3',
+    is_validated: true,
+    auth_type: 'password',
+    ...overrides,
+  }
+}
+
+export function makeHubItem(overrides: Partial<HubItem> = {}): HubItem {
+  return {
+    type: 'collections',
+    name: 'crowdsecurity/linux',
+    status: 'enabled',
+    local_version: '0.2',
+    description: 'core linux',
     ...overrides,
   }
 }

@@ -4,8 +4,10 @@ import type { Alert } from '@/api/types'
 import type { DataTableColumn } from '@/components/DataTable'
 import { FilterBar } from '@/components/FilterBar'
 import { PagedTableSection } from '@/components/PagedTableSection'
+import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { TimelineChart } from '@/components/TimelineChart'
 import { Badge } from '@/components/ui/badge'
+import { deleteAlert } from '@/api/writeApi'
 import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
 import { formatDateTime, formatNumber } from '@/lib/format'
@@ -41,6 +43,21 @@ export function Alerts() {
       { key: 'events', header: t('alerts.columns.events'), cell: (alertRow) => formatNumber(alertRow.events_count, i18n.language) },
       { key: 'decisions', header: t('alerts.columns.decisions'), cell: (alertRow) => formatNumber(alertRow.decisions.length, i18n.language) },
       { key: 'message', header: t('alerts.columns.message'), cell: (alertRow) => alertRow.message },
+      {
+        key: 'actions',
+        header: t('alerts.actions'),
+        cell: (alertRow) => (
+          <RowDeleteAction
+            buttonLabel={t('alerts.delete')}
+            ariaLabel={t('alerts.deleteAria', { id: alertRow.id })}
+            title={t('alerts.deleteTitle', { id: alertRow.id })}
+            description={t('alerts.deleteDescription', { id: alertRow.id })}
+            target={String(alertRow.id)}
+            request={(confirm) => deleteAlert(String(alertRow.id), confirm)}
+            invalidates={[['alerts'], ['decisions']]}
+          />
+        ),
+      },
     ],
     [t, i18n.language],
   )

@@ -89,7 +89,12 @@
       "decisions": "Decisions",
       "message": "Message"
     },
-    "simulated": "Simulated"
+    "simulated": "Simulated",
+    "actions": "Actions",
+    "delete": "Delete",
+    "deleteAria": "Delete alert {{id}}",
+    "deleteTitle": "Delete alert {{id}}",
+    "deleteDescription": "The alert {{id}} and its decisions will be permanently deleted."
   },
   "decisions": {
     "title": "Decisions",
@@ -103,7 +108,12 @@
       "scenario": "Scenario",
       "expires": "Expires",
       "simulated": "Simulated"
-    }
+    },
+    "actions": "Actions",
+    "unban": "Unban",
+    "unbanAria": "Unban {{target}}",
+    "unbanTitle": "Unban {{target}}",
+    "unbanDescription": "The decision {{id}} will be deleted and the target will no longer be blocked."
   },
   "chart": {
     "label": "Alerts per hour chart",
@@ -167,5 +177,26 @@
     "select": "Select a file to view it.",
     "viewer": "Content of {{name}}",
     "loading": "Loading file…"
+  },
+  "dialog": {
+    "cancel": "Cancel",
+    "working": "Working…",
+    "close": "Close"
+  },
+  "confirmDelete": {
+    "label": "Type {{target}} to confirm",
+    "hint": "This action cannot be undone. Retype the target exactly to enable the button."
+  },
+  "ban": {
+    "open": "Ban IP",
+    "title": "Ban an IP address",
+    "description": "Create a manual ban decision on the CrowdSec local API.",
+    "ip": "IP address or CIDR",
+    "duration": "Duration",
+    "durationHint": "A number followed by s, m, h or d (e.g. 24h).",
+    "presets": "Duration presets",
+    "reason": "Reason (optional)",
+    "submit": "Ban",
+    "success": "{{target}} banned."
   }
 }
