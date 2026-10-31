@@ -209,6 +209,7 @@ const alertsWithDecisionsBody = `[
 func TestListDecisionsUsesAlertsRouteAndFlattensDecisions(testing *testing.T) {
 	fake, client := newFakeLAPI(testing)
 	fake.alertsBody.Store(alertsWithDecisionsBody)
+	client.now = func() time.Time { return time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC) }
 
 	decisionList, listError := client.ListDecisions(context.Background(), DecisionFilter{IP: "203.0.113.9", Scenario: "crowdsecurity/ssh-bf", Since: "24h", Type: "ban"})
 
