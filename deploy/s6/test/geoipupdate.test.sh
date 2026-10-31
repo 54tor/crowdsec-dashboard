@@ -306,8 +306,52 @@ geoip_dir_is_chowned_on_every_start() {
         report_failure "${test_name}" "simulated root run: expected exit 0, got ${exit_code}"
         return
     fi
-    if ! grep -qxF "chown -R docker-user:docker-user ${case_directory}/geoip" "${case_directory}/records/chown.argv"; then
-        report_failure "${test_name}" "geoip directory not chowned: $(cat "${case_directory}/records/chown.argv")"
+    if ! grep -qE "^chown -h docker-user:docker-user .*${case_directory}/geoip( |$)" "${case_directory}/records/chown.argv"; then
+        report_failure "${test_name}" "geoip directory not chowned with -h: $(cat "${case_directory}/records/chown.argv")"
+        return
+    fi
+    report_success "${test_name}"
+}
+
+# A process running as docker-user can plant a symlink in the volume. busybox chown -R
+# does not follow it today, but the script must not depend on that: every chown over the
+# volume has to carry -h, take the planted link itself as an argument, and never recurse
+# with -R (recursion is done by find -xdev, which does not follow links nor cross mounts).
+geoip_dir_chown_never_follows_symlinks() {
+    local test_name="geoip_dir_chown_never_follows_symlinks"
+    local case_directory exit_code geoip_chown_lines
+    case_directory="$(new_case_directory)"
+    mkdir -p "${case_directory}/outside-target" "${case_directory}/geoip/nested"
+    ln -s "${case_directory}/outside-target" "${case_directory}/geoip/planted-link"
+    ln -s "${case_directory}/outside-target" "${case_directory}/geoip/nested/planted-nested-link"
+    write_fake "${case_directory}/fakes" chown 'exit 0'
+    write_fake "${case_directory}/fakes" id 'if [[ "${1:-}" == "-u" ]]; then echo 0; else exec /usr/bin/id "$@"; fi'
+    write_credentials "${case_directory}" "${fake_account_id}" "${fake_license_key}"
+    exit_code="$(run_geoipupdate_init "${case_directory}")"
+    if [[ "${exit_code}" != 0 ]]; then
+        report_failure "${test_name}" "expected exit 0, got ${exit_code}"
+        return
+    fi
+    geoip_chown_lines="$(grep -F "${case_directory}/geoip" "${case_directory}/records/chown.argv" || true)"
+    if [[ -z "${geoip_chown_lines}" ]]; then
+        report_failure "${test_name}" "the geoip directory was not chowned"
+        return
+    fi
+    if grep -qvE '^chown -h ' <<< "${geoip_chown_lines}"; then
+        report_failure "${test_name}" "a chown over the volume lacks -h: ${geoip_chown_lines}"
+        return
+    fi
+    if grep -qE '(^| )-[a-zA-Z]*[RL]' <<< "${geoip_chown_lines}"; then
+        report_failure "${test_name}" "a chown over the volume recurses or follows links: ${geoip_chown_lines}"
+        return
+    fi
+    if ! grep -qF "${case_directory}/geoip/planted-link" <<< "${geoip_chown_lines}" \
+        || ! grep -qF "${case_directory}/geoip/nested/planted-nested-link" <<< "${geoip_chown_lines}"; then
+        report_failure "${test_name}" "planted links were not chowned as links: ${geoip_chown_lines}"
+        return
+    fi
+    if grep -qF "${case_directory}/outside-target" "${case_directory}/records/chown.argv"; then
+        report_failure "${test_name}" "the link target outside the volume was passed to chown"
         return
     fi
     if ! grep -qxF "chown docker-user:docker-user ${case_directory}/conf ${case_directory}/conf/GeoIP.conf" "${case_directory}/records/chown.argv"; then
@@ -446,6 +490,7 @@ frequency_is_validated_before_use
 conf_is_mode_0600
 argv_env_and_logs_never_contain_license_key
 geoip_dir_is_chowned_on_every_start
+geoip_dir_chown_never_follows_symlinks
 initial_fetch_runs_only_when_database_missing
 cron_service_strips_root_field
 geoipupdate_once_returns_binary_status_without_secrets

@@ -68,7 +68,7 @@ mkdir -p "${geoip_directory}"
 if is_root; then
     chown docker-user:docker-user "${conf_directory}" "${conf_file}" \
         || disable_updates "cannot hand ${conf_file} to docker-user"
-    chown -R docker-user:docker-user "${geoip_directory}" \
+    find "${geoip_directory}" -xdev -exec chown -h docker-user:docker-user {} + \
         || log "cannot hand ${geoip_directory} to docker-user: updates will fail"
 fi
 

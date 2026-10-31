@@ -31,7 +31,7 @@ if getent passwd "${USER_NAME}" >/dev/null; then
         usermod -o -u "${TARGET_UID}" -g "${TARGET_GID}" "${USER_NAME}"
         home_dir="$(getent passwd "${USER_NAME}" | cut -d: -f6)"
         if [[ -n "${home_dir}" && -d "${home_dir}" ]]; then
-            chown -R "${TARGET_UID}:${TARGET_GID}" "${home_dir}"
+            find "${home_dir}" -xdev -exec chown -h "${TARGET_UID}:${TARGET_GID}" {} +
         fi
     fi
 else
