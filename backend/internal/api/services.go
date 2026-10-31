@@ -20,6 +20,7 @@ type AlertService interface {
 type Services struct {
 	Sessions       auth.SessionStore
 	Authenticator  auth.Authenticator
+	Database       Pinger
 	Decisions      DecisionService
 	Alerts         AlertService
 	AlertReader    AlertLister

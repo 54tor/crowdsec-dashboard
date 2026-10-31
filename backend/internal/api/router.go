@@ -27,7 +27,7 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 
 	longWrite := extendWriteDeadline(cscli.HubMutationTimeout)
 	router := http.NewServeMux()
-	router.Handle("GET /api/healthz", HealthHandler())
+	router.Handle("GET /api/healthz", HealthHandler(services.Database))
 	router.HandleFunc("POST /api/auth/login", handlers.login)
 	router.HandleFunc("POST /api/auth/logout", handlers.logout)
 	router.Handle("GET /api/auth/me", requireSession(http.HandlerFunc(handlers.me)))
