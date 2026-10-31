@@ -28,8 +28,16 @@ func newTestHandlerWithServices(testContext *testing.T, services Services) http.
 
 func newTestHandlerWithMachineID(testContext *testing.T, services Services, machineID string) http.Handler {
 	testContext.Helper()
-	services.Sessions = authtest.NewSessionStore(time.Hour, time.Now)
-	services.Authenticator = authtest.NewAuthenticator(map[string]string{testAccountName: testPassword})
+	authenticator := authtest.NewAuthenticator(map[string]string{testAccountName: testPassword})
+	sessions := authtest.NewSessionStore(time.Hour, time.Now)
+	sessions.ResolveIdentitiesWith(func(accountID int64) (auth.AccountIdentity, bool) {
+		if accountID == enrolledIdentity.AccountID {
+			return enrolledIdentity, true
+		}
+		return authenticator.IdentityByID(accountID)
+	})
+	services.Sessions = sessions
+	services.Authenticator = authenticator
 	return newHandler(config.Config{SessionTTL: time.Hour, LAPIMachineID: machineID}, http.NotFoundHandler(), 0, services)
 }
 

@@ -28,8 +28,12 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 	longWrite := extendWriteDeadline(cscli.HubMutationTimeout)
 	router := http.NewServeMux()
 	router.Handle("GET /api/healthz", HealthHandler(services.Database))
+	enrollment := enrollmentHandlers{enrollment: services.Enrollment, auth: handlers}
+	router.HandleFunc("GET /api/auth/status", enrollment.status)
+	router.HandleFunc("POST /api/auth/enroll", enrollment.enroll)
 	router.HandleFunc("POST /api/auth/login", handlers.login)
 	router.HandleFunc("POST /api/auth/logout", handlers.logout)
+	router.Handle("POST /api/auth/logout-all", requireSession(http.HandlerFunc(handlers.logoutAll)))
 	router.Handle("GET /api/auth/me", requireSession(http.HandlerFunc(handlers.me)))
 	router.Handle("GET /api/alerts", requireSession(http.HandlerFunc(alertReadHandlers{lister: services.AlertReader}.list)))
 	router.Handle("GET /api/decisions", requireSession(http.HandlerFunc(decisionReadHandlers{lister: services.DecisionReader}.list)))

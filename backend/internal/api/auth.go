@@ -69,22 +69,30 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
+	handlers.openSession(responseWriter, request, identity)
+}
+
+func (handlers *authHandlers) openSession(responseWriter http.ResponseWriter, request *http.Request, identity auth.AccountIdentity) {
 	sessionToken, createError := handlers.sessions.Create(request.Context(), identity.AccountID)
 	if createError != nil {
 		log.Printf("create session: %v", createError)
 		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
-	http.SetCookie(responseWriter, &http.Cookie{
+	http.SetCookie(responseWriter, handlers.sessionCookie(sessionToken, int(handlers.sessionTTL.Seconds())))
+	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (handlers *authHandlers) sessionCookie(value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
 		Name:     auth.CookieName,
-		Value:    sessionToken,
+		Value:    value,
 		Path:     "/",
-		MaxAge:   int(handlers.sessionTTL.Seconds()),
+		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
-	})
-	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
+	}
 }
 
 func writeTooManyAttempts(responseWriter http.ResponseWriter) {
@@ -100,17 +108,28 @@ func (handlers *authHandlers) logout(responseWriter http.ResponseWriter, request
 			return
 		}
 	}
-	http.SetCookie(responseWriter, &http.Cookie{
-		Name:     auth.CookieName,
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
-	})
+	http.SetCookie(responseWriter, handlers.sessionCookie("", -1))
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (handlers *authHandlers) me(responseWriter http.ResponseWriter, _ *http.Request) {
-	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "authenticated"})
+func (handlers *authHandlers) logoutAll(responseWriter http.ResponseWriter, request *http.Request) {
+	identity, _ := auth.IdentityFromContext(request.Context())
+	if destroyError := handlers.sessions.DestroyAllForAccount(request.Context(), identity.AccountID); destroyError != nil {
+		log.Printf("destroy account sessions: %v", destroyError)
+		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	http.SetCookie(responseWriter, handlers.sessionCookie("", -1))
+	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type meResponse struct {
+	Status      string `json:"status"`
+	AccountName string `json:"account_name"`
+	AccountRole string `json:"account_role"`
+}
+
+func (handlers *authHandlers) me(responseWriter http.ResponseWriter, request *http.Request) {
+	identity, _ := auth.IdentityFromContext(request.Context())
+	writeJSON(responseWriter, http.StatusOK, meResponse{Status: "authenticated", AccountName: identity.AccountName, AccountRole: identity.AccountRole})
 }
