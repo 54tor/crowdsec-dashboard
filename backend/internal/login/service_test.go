@@ -499,6 +499,56 @@ func TestCompleteSetupRevokesExistingSessionsAndClearsWindow(testContext *testin
 	}
 }
 
+// scalarText reads one value as text, so 'infinity' and NULL compare without
+// any time conversion in Go.
+func (fixture *loginFixture) scalarText(testContext *testing.T, query string, arguments ...any) string {
+	testContext.Helper()
+	var value string
+	if queryError := fixture.database.NewRaw(query, arguments...).Scan(context.Background(), &value); queryError != nil {
+		testContext.Fatal(queryError)
+	}
+	return value
+}
+
+func TestCompleteSetupKeepsWindowOpenWhenRecoveryCodesCannotBeSaved(testContext *testing.T) {
+	fixture := newLoginFixture(testContext)
+	legacyAccountID := fixture.createAccount(testContext, "alice")
+	fixture.openSetupWindow(testContext, legacyAccountID, "infinity")
+	beginResult := fixture.beginOrFail(testContext, "alice")
+	prepareTOTPSetup(testContext, fixture, beginResult.PendingID)
+	credentialCountQuery := `SELECT count(*)::text FROM credential WHERE credential_account_id = ?`
+	setupUntilQuery := `SELECT COALESCE(account_second_factor_setup_until::text, 'NULL') FROM account WHERE account_id = ?`
+	credentialCountBefore := fixture.scalarText(testContext, credentialCountQuery, legacyAccountID)
+	setupUntilBefore := fixture.scalarText(testContext, setupUntilQuery, legacyAccountID)
+	// The schema is this test's own (storetest.New); NOT VALID skips existing rows,
+	// so only the recovery code inserts of SaveSetup, its last writes, fail.
+	if _, alterError := fixture.database.ExecContext(context.Background(),
+		`ALTER TABLE recovery_code ADD CONSTRAINT always_fail CHECK (false) NOT VALID`); alterError != nil {
+		testContext.Fatal(alterError)
+	}
+
+	_, failedCompleteError := fixture.service.CompleteSetup(context.Background(), beginResult.PendingID, clientAddress)
+
+	if failedCompleteError == nil {
+		testContext.Fatal("CompleteSetup must fail when the recovery codes cannot be saved")
+	}
+	if credentialCountAfter := fixture.scalarText(testContext, credentialCountQuery, legacyAccountID); credentialCountAfter != credentialCountBefore {
+		testContext.Errorf("no credential may survive the rollback, had %s rows, now %s", credentialCountBefore, credentialCountAfter)
+	}
+	if setupUntilAfter := fixture.scalarText(testContext, setupUntilQuery, legacyAccountID); setupUntilAfter != setupUntilBefore {
+		testContext.Errorf("the setup window must stay open, was %s, now %s", setupUntilBefore, setupUntilAfter)
+	}
+
+	if _, dropError := fixture.database.ExecContext(context.Background(), `ALTER TABLE recovery_code DROP CONSTRAINT always_fail`); dropError != nil {
+		testContext.Fatal(dropError)
+	}
+	identity, retriedCompleteError := fixture.service.CompleteSetup(context.Background(), beginResult.PendingID, clientAddress)
+
+	if retriedCompleteError != nil || identity.AccountID != legacyAccountID {
+		testContext.Errorf("the pending setup must stay usable after the failure, got %+v / %v", identity, retriedCompleteError)
+	}
+}
+
 func TestConcurrentSetupCompletionsEnrolOnce(testContext *testing.T) {
 	fixture := newLoginFixture(testContext)
 	legacyAccountID := fixture.createAccount(testContext, "alice")

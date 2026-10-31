@@ -553,3 +553,61 @@ func TestStartAgainReplacesPendingState(testContext *testing.T) {
 		testContext.Error("the abandoned account name must not exist")
 	}
 }
+
+// failRecoveryCodeInserts adds a constraint that no row can satisfy, so the
+// last write of SaveSetup fails after the account and its TOTP credential were
+// inserted in the same transaction. NOT VALID skips the check of existing rows.
+// The schema is the test's own (storetest.New), so other tests are unaffected.
+func failRecoveryCodeInserts(testContext *testing.T, repository *Repository) {
+	testContext.Helper()
+	if _, alterError := repository.database.ExecContext(context.Background(),
+		"ALTER TABLE recovery_code ADD CONSTRAINT always_fail CHECK (false) NOT VALID"); alterError != nil {
+		testContext.Fatal(alterError)
+	}
+}
+
+func allowRecoveryCodeInserts(testContext *testing.T, repository *Repository) {
+	testContext.Helper()
+	if _, alterError := repository.database.ExecContext(context.Background(),
+		"ALTER TABLE recovery_code DROP CONSTRAINT always_fail"); alterError != nil {
+		testContext.Fatal(alterError)
+	}
+}
+
+func countRows(testContext *testing.T, repository *Repository, countQuery string) int {
+	testContext.Helper()
+	var rowCount int
+	if countError := repository.database.NewRaw(countQuery).Scan(context.Background(), &rowCount); countError != nil {
+		testContext.Fatal(countError)
+	}
+	return rowCount
+}
+
+func TestCompleteCreatesNoAccountWhenRecoveryCodesCannotBeSaved(testContext *testing.T) {
+	enrollment, repository := newEnrollment(testContext)
+	token := openToken(testContext, enrollment)
+	startWithConfirmedTOTP(testContext, enrollment, token, enrollmentAccountName)
+	failRecoveryCodeInserts(testContext, repository)
+
+	_, failedCompleteError := enrollment.Complete(context.Background(), token)
+
+	if failedCompleteError == nil {
+		testContext.Fatal("Complete must fail when the recovery codes cannot be saved")
+	}
+	if accountCount := countRows(testContext, repository, "SELECT count(*) FROM account"); accountCount != 0 {
+		testContext.Errorf("no account may exist without its factor, got %d accounts", accountCount)
+	}
+	if credentialCount := countRows(testContext, repository, "SELECT count(*) FROM credential"); credentialCount != 0 {
+		testContext.Errorf("no credential may survive the rollback, got %d rows", credentialCount)
+	}
+
+	allowRecoveryCodeInserts(testContext, repository)
+	createdIdentity, retriedCompleteError := enrollment.Complete(context.Background(), token)
+
+	if retriedCompleteError != nil || createdIdentity.AccountName != enrollmentAccountName {
+		testContext.Errorf("the token and pending state must stay usable after the failure, got %+v / %v", createdIdentity, retriedCompleteError)
+	}
+	if recoveryCodeCount := countRows(testContext, repository, "SELECT count(*) FROM recovery_code"); recoveryCodeCount != 10 {
+		testContext.Errorf("expected the 10 recovery codes after the retry, got %d", recoveryCodeCount)
+	}
+}
