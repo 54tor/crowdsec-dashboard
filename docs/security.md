@@ -24,29 +24,203 @@ socket (see [Limits](#honest-limits)).
   lock); the other gets 404, as enrolment is then closed.
 - A wrong token answers 403 `invalid_enrollment_token` (a missing or empty one, 400 `invalid_request`);
   it is compared in constant time and enrolment is limited per client like login.
+- The first account needs a second factor. `POST /api/auth/enroll` with the token, a name and a
+  password creates nothing in the database: the validated name and password hash are held in memory
+  under the token, and the account is written only at `POST /api/auth/enroll/complete`, once a TOTP
+  or a passkey is confirmed and the recovery codes have been shown. This state has no expiry of its
+  own: it disappears at completion or when the process restarts, and a new `enroll` call with the
+  token replaces it. Until completion nothing is stored, so an abandoned enrolment leaves no
+  account (and a restart gives a new token).
 
 ## Login
 
-- Login takes an account name and a password. An unknown account and a wrong password cost the same
-  time and answer the same 401 `invalid_credentials`, so accounts cannot be enumerated.
-- If PostgreSQL is unreachable, login and authenticated requests answer 503 `database_unavailable`,
-  never 401 (which would sign the user out of the interface).
-- Rate limits, applied to every login attempt, successful ones included:
+Login has three steps. Each one must succeed before the next is reached, and a session cookie is
+issued only at the end.
+
+1. **Password** (`POST /api/auth/login`). An unknown account and a wrong password cost the same time
+   and answer the same 401 `invalid_credentials`, so accounts cannot be enumerated. On success the
+   dashboard creates a *pending login* and answers `second_factor_required` with the enrolled
+   methods (`totp`, `webauthn` when enabled; a recovery code is always accepted as well), or
+   `second_factor_setup_required` for an account that has no factor yet (see
+   [Accounts from the first release](#accounts-from-the-first-release)).
+2. **Second factor**: a TOTP code, a recovery code or a WebAuthn assertion.
+3. **Access allowlist**: the client address and country are checked against the account's rules
+   ([Access allowlist](#access-allowlist)). The session is created only if they pass.
+
+If PostgreSQL is unreachable, login and authenticated requests answer 503 `database_unavailable`,
+never 401 (which would sign the user out of the interface).
+
+### Pending login
+
+- It is a 256-bit random identifier kept only in memory, in the cookie `pending_login`:
+  `HttpOnly`, `Secure`, `SameSite=Strict`, path `/api/auth`, lifetime 5 minutes. It never reaches the
+  database and does not survive a restart (the user signs in again).
+- It is bound to the client address that presented the password: used from another address it is
+  refused as expired. It is usable once: success, lockout and the fifth wrong factor all consume it.
+  At most 5 factor attempts per pending login; at most 10 000 pending logins at a time (beyond that,
+  503 `too_many_pending_logins`).
+- Two requests for the same pending login are processed one after the other, never in parallel.
+
+### Rate limits
+
+Applied to every attempt, successful ones included:
+
+- `POST /api/auth/login` and `POST /api/auth/enroll`, the two entries that check a secret with no
+  earlier state:
   - per client, 5 attempts per minute (burst of 5, one more every 12 s); the client key is the IPv4
     address or the IPv6 `/64` prefix, so rotating addresses inside a /64 does not help;
   - globally, 30 attempts per minute, so a distributed guess cannot run faster whatever the sources;
   - at most 10 000 tracked clients: beyond that new clients are refused until old entries expire;
   - a single password verification at a time (each one allocates 64 MiB for argon2id, the container is capped at 256 MiB); a concurrent attempt answers 429;
   - a failed attempt always takes at least 500 ms.
-  Blocked requests answer 429 `too_many_attempts` with `Retry-After: 60`. The global limit means an attacker can briefly lock the
-  legitimate admin out; that is accepted over letting guesses through.
-- The login body is capped at 1 KiB.
+- Every later step (`/api/auth/login/*` and `/api/auth/enroll/*`): 30 requests per minute per client
+  (same client key), with **no global bucket**. These steps are already bounded by the pending
+  login (5 attempts, one address, 5 minutes), by the account lockout and by the 256-bit enrolment
+  token. Without a global bucket, a flood of password attempts from many addresses cannot stop the
+  operator from completing the second factor, and a typo or a complete TOTP plus passkey enrolment
+  (7 calls) is never rate limited. The setup stage of an old account has no attempt cap of its own
+  beyond this per-client limit and the 5 minute pending lifetime.
+
+Blocked requests answer 429 `too_many_attempts` with `Retry-After: 60`. The global limit on
+`login` and `enroll` means an attacker can briefly lock the legitimate admin out of the password
+step; that is accepted over letting guesses through. Login bodies are capped at 1 KiB (64 KiB for a
+WebAuthn response).
+
+### Lockout
+
+- Only second-factor failures count. A wrong password never changes the counter, so an attacker who
+  only knows the account name cannot lock the owner out: this is deliberate, to avoid a
+  denial-of-service on the account. Only someone who already knows the password can trigger a
+  lockout.
+- Each factor check first *reserves* an attempt in the database (an atomic `UPDATE` on the account
+  row), and only then verifies the code. Concurrent guesses therefore cannot exceed the limit.
+  The fifth failure within a series locks the account for 15 minutes. A success resets the counter.
+  When a lock has expired, the next attempt starts a new series at one.
+- A locked account answers 423 `account_locked` with `Retry-After` (seconds left), at the password
+  step (after a correct password) and at a factor step started before the lock, and the pending
+  login is dropped. The failure that triggers the lock answers 401 like the others and consumes
+  its pending login. Recovery codes count as second-factor attempts like any other method.
+- A factor that was accepted stays used even when the allowlist then refuses the login: a TOTP step
+  or recovery code cannot be replayed afterwards.
+- The unlock is manual, by SQL ([operations.md](operations.md#unlocking-an-account)).
+
+## Second factor
+
+- Every login requires a second factor; there is no way to skip it. Two kinds, plus recovery codes:
+  - **TOTP**: SHA-1, 6 digits, 30 seconds (the combination every authenticator app supports). A
+    code from the previous, current or next 30 s step is accepted, and a step already used is
+    refused (`credential_totp_last_step`), so a code cannot be replayed within its window. One TOTP
+    per account.
+  - **WebAuthn** (optional, see `WEBAUTHN_RP_ID` in [configuration.md](configuration.md#webauthn)):
+    passkeys and security keys, attestation `none`. User verification is `preferred`, not required:
+    a security key that only proves presence (touch, no PIN or biometric) is accepted, so it is
+    then a possession factor only. Challenges expire (the library's timeouts are enforced) and are
+    single use: the server drops the pending challenge before it verifies the response, so an
+    assertion cannot be replayed. A passkey whose signature counter stays at 0 (many synced
+    passkeys) gets no clone detection; for others, a counter that does not increase is refused
+    and audited as `webauthn_clone_suspected`. No `excludeCredentials` list is sent when enrolling:
+    setup is only offered to an account that has no factor, and resetting a factor is planned for a
+    later lot.
+  - **Recovery codes**: 10 codes of 16 characters (80 bits), shown once at enrolment, stored only as
+    SHA-256 hashes, each usable once. They are typed like a TOTP code (case, dashes and the
+    lookalikes `O`, `I`, `L` are normalised). Using one is audited.
+- Enrolment cannot finish without a confirmed factor and the generated recovery codes.
+- Browsers without the JSON WebAuthn API cannot enrol or use a passkey; they use TOTP.
+- Decisions the interface cannot reverse yet: the factors of an account cannot be changed or reset
+  from the UI (planned for a later lot); the SQL procedures of
+  [operations.md](operations.md#unlocking-an-account) cover the emergency cases.
+
+### Encryption of TOTP secrets
+
+A TOTP secret must be readable to verify codes, so it is encrypted rather than hashed: AES-256-GCM
+with a random nonce, the account id as authenticated data (a ciphertext copied to another account
+fails), and a key held outside the database (`SECRETS_KEY_FILE`). Each row stores the `key_id`
+(first 16 hex characters of the key's SHA-256) of the key that sealed it, so a future rotation can
+tell keys apart; today a single key is loaded, and a row sealed with another key cannot be opened.
+A database dump alone does not reveal TOTP secrets; a dump plus the key does. **Losing the key
+makes the secrets unreadable**: see [operations.md](operations.md#secrets-key). Passkey public data
+and recovery-code hashes are not secret and are not encrypted. The key is read from a tmpfs file
+that only `docker-user` can read, and is never logged.
+
+### Accounts from the first release
+
+Accounts created before the second factor existed have none. Migration 00002 opens a *setup window*
+on every such account (`account_second_factor_setup_until = infinity`). At the next login, after
+the correct password, the dashboard asks to enrol a factor instead of asking for one: **whoever
+presents the password first enrols their own factor**. Sign in right after upgrading. On completion
+the window closes, the recovery codes are shown, and every session of the account is revoked. An
+account with no factor and a closed window is refused with 403
+`second_factor_setup_not_allowed`. An operator can reopen the window by SQL
+([operations.md](operations.md#reopening-the-setup-window)).
+
+## Access allowlist
+
+Each account can restrict where it signs in from, with IP/CIDR rules and country rules.
+
+- **No rule means unrestricted. Any rule means deny by default**: the login is accepted only if the
+  client address matches an IP rule, or its country matches a country rule. Deleting the last rule
+  turns the allowlist off (the UI says so).
+- Order of checks: password, then second factor, then allowlist. A refused login answers 403
+  `access_denied` (audited as `login_denied_access_rule`) after the factor was consumed.
+- Rules are normalised before they are stored: addresses to `/32` or `/128`, IPv4-mapped IPv6 to
+  IPv4, host bits cleared. A prefix of length zero (`0.0.0.0/0`, `::/0`) is refused. There is **no
+  minimum length** otherwise: `/1` to `/7` are accepted today and allow a large part of the
+  Internet.
+- **Lock-out guard**: adding or deleting a rule is refused with 409 `would_lock_out_current_client`
+  when the resulting rule set would not admit the address you are connected from, evaluated inside a
+  transaction with the account row locked. The address is the one resolved like the login rate
+  limiter (`TRUSTED_PROXY_CIDRS`): behind a proxy without it, the proxy's own address is what is
+  protected. The guard covers the current session's address only: other sessions and other
+  addresses can be cut off.
+- Country rules need a GeoLite2 Country database (`GEOIP_DATABASE_FILE`). With no database, an
+  unreadable one, or an address the database does not know, a country rule never matches: the login
+  is refused unless an IP rule matches (fail closed). Adding a country rule while no database is
+  available is refused (409 `geolocation_unavailable`). The database file is re-read when it
+  changes; if the replacement cannot be read the previous one stays in use (logged). The log warns
+  at start when the database is older than 45 days.
+- The country of an address comes from MaxMind's data, which is approximate: VPNs and mobile
+  carriers appear in the country of the exit point.
+- A fallback to an external geolocation service exists in the code as an extension point, but no
+  provider ships and none is configured. Enabling one would send the addresses of your operators
+  (every address presented at login, and the address shown in the access rules page) to a third
+  party. Do not enable one without accepting that.
+- GeoLite2 attribution and licence: this product includes GeoLite2 data created by MaxMind,
+  available from https://www.maxmind.com. Use of the data is governed by MaxMind's GeoLite2 licence
+  terms. The MaxMind licence key is a secret file, never a variable or a command-line argument, and
+  is readable by `docker-user` (see [Container image](#container-image)).
+
+## Audit log
+
+Authentication events are written to the `audit_event` table with the account (empty for an
+unknown account), an action, a short target, the client address and the time. Targets are stripped
+of control characters and cut at 64 characters. Recorded actions:
+
+| Action | When | Target |
+|---|---|---|
+| `login_success` | a login completed (session issued) | account name |
+| `login_failure` | wrong password or unknown account | the account name as typed |
+| `second_factor_failure` | a wrong code or assertion | `totp`, `recovery_code`, `webauthn`, or `webauthn_clone_suspected` |
+| `account_locked` | the failure that triggered a lockout | account name |
+| `login_denied_access_rule` | second factor accepted, allowlist refused | account name |
+| `recovery_code_used` | a recovery code was accepted | account name |
+| `enrollment_completed` | the first account was created | account name |
+| `second_factor_enrolled` | a factor was confirmed at enrolment or at setup | `totp` or `webauthn` |
+| `access_rule_added`, `access_rule_removed` | a rule changed | `ip:<cidr>` or `country:<code>` |
+
+Not audited yet: a password step that ends on a locked account, an attempt refused because the
+account is already locked, rate-limited requests, session creation and logout. The `login_failure`
+target is whatever was typed in the account name field, so a password typed there by mistake is
+recorded: restrict who can read the table. There is no retention policy and no page or API to read
+the log yet; query the table directly. A failed write is logged by the dashboard and never blocks
+the login.
 
 ## Sessions
 
 - A session token is 32 random bytes. The server keeps only its SHA-256 digest, with an expiry, in
   the `session` table of PostgreSQL. Lifetime is fixed (`SESSION_TTL`, default 12 h), not extended
   by activity; expired rows are pruned every hour.
+- Sessions are created only after the third step of login. Completing a second-factor setup at
+  login revokes every existing session of that account.
 - Sessions survive a dashboard restart. Logout destroys the server-side session, "log out
   everywhere" (`POST /api/auth/logout-all`) destroys all sessions of the account, and deleting an
   account removes its sessions (cascade).
@@ -123,6 +297,53 @@ are masked anywhere. Known gaps: a secret stored under a key with another name, 
 comment or free text, is not detected. Do not rely on redaction for files you
 would not show an admin.
 
+## Container image
+
+The dashboard image is built on Alpine with s6-overlay as init and supervisor, not on a distroless
+base. That is a larger attack surface than before (a shell, `apk`, busybox, cron, `bash`) that was
+accepted to supervise the dashboard and `geoipupdate` in one container. Mitigations:
+
+- The dashboard process runs as `docker-user` (UID/GID 10000, remappable with `DOCKER_USER_UID` and
+  `DOCKER_USER_GID`). The container itself starts as root because s6 and the init scripts need it;
+  they drop privileges with `s6-setuidgid`.
+- Root filesystem read-only (`read_only: true`), with three tmpfs:
+  - `/run:exec,nosuid,nodev,mode=0755`: s6-overlay runs code from `/run` and refuses a
+    world-writable one, so Docker's tmpfs defaults (`noexec`, mode 1777) would break it. It holds
+    the s6 state, the copied secrets key and the `geoipupdate` configuration;
+  - `/etc/cron.d:noexec,nosuid,nodev,mode=0755`: the cron entry written at start; root-only, so
+    `docker-user` cannot schedule anything;
+  - `/tmp:noexec,nosuid,nodev,mode=1777`.
+  The only writable volume is `/var/lib/geoip`, owned by `docker-user`.
+- `cap_drop: [ALL]`, `no-new-privileges`, and only these capabilities added back, each shown to be
+  necessary by removing it in turn:
+
+  | Capability | Why |
+  |---|---|
+  | `SETUID`, `SETGID` | `s6-setuidgid` drops to `docker-user`; without them the dashboard does not start (`s6-applyuidgid: fatal: unable to setuid`) |
+  | `KILL` | root (`s6-supervise`) signals the dashboard on stop; without it `docker stop` ends with exit 137 and no clean shutdown |
+  | `CHOWN`, `DAC_READ_SEARCH` | the compose secret is root-owned with mode 0600 from the host: root needs `DAC_READ_SEARCH` to read it and `CHOWN` to hand the copy and the GeoLite2 volume to `docker-user`; either one alone fails |
+
+  `DAC_OVERRIDE` and `FOWNER` are not needed.
+- The hook directories `/custom-scripts.d` and `/docker-entrypoint.d` are root-owned in the image and
+  run as root at start; with a read-only root filesystem `docker-user` cannot add to them. Mounting
+  scripts there is a root-level decision: only mount scripts you trust.
+- Secrets: the secrets key is copied by `25-secrets-key` to a tmpfs file (mode 0400, owner
+  `docker-user`, directory 0700). The MaxMind licence key is read from a secret file, never from an
+  environment variable or a command-line argument (so it is not in `docker inspect`, `/proc/*/environ`
+  or process listings), and `GeoIP.conf` is written mode 0600 to the tmpfs. `docker-user` must be
+  able to read that file, because `geoipupdate` runs as `docker-user`: a compromised dashboard
+  process can therefore read the licence key (a free GeoLite2 key, revocable from the MaxMind
+  account).
+- `chown` over the GeoLite2 volume never follows symbolic links (`find -xdev -exec chown -h`), so a
+  link planted in the volume cannot change the owner of files elsewhere.
+- Supply chain: s6-overlay is downloaded from its release archives and verified against a pinned
+  SHA-256 before extraction; `geoipupdate` has no Alpine package and is compiled from source in a
+  separate Go build stage (checked by the Go checksum database); the final image carries no
+  compiler. The image is built for `x86_64` and `aarch64` only.
+- A UID remap rewrites `/etc/passwd` and `/etc/group` and so requires a writable root filesystem;
+  with `read_only: true` the container stops at start (the log shows `groupmod` failing on the
+  read-only `/etc`) rather than running with the wrong user.
+
 ## Honest limits
 
 - The socket proxy filters by method and path, not by body. It allows `POST /containers/<crowdsec>/exec`
@@ -134,14 +355,27 @@ would not show an admin.
   it with untrusted workloads.
 - The proxy blocks everything else (other containers, images, networks, container creation), so the
   blast radius is the CrowdSec container and the dashboard's own LAPI account, not the whole host.
-- No audit log yet, no two-factor authentication, no IP or country allowlist: these come in later
-  lots. All accounts created so far are administrators.
-- The login rate limiter is per process (one replica).
+- All accounts are administrators. Roles, API tokens and a UI to read the audit log come in later
+  lots.
+- Known limits of the second factor and the allowlist, collected here:
+  - allowlist prefixes from `/1` to `/7` are accepted (no minimum length yet);
+  - the pending state of a first-account enrolment and of a setup has no expiry of its own (memory
+    only, gone at restart or completion);
+  - the factors of an account cannot be reset from the UI yet, and WebAuthn `excludeCredentials` is
+    not used because setup is offered only to accounts without a factor;
+  - a security key used without PIN or biometric is accepted (user verification `preferred`), and a
+    passkey with a counter stuck at 0 has no clone detection;
+  - without a GeoLite2 database, country rules refuse everyone not matched by an IP rule;
+  - the audit log is not complete (see [Audit log](#audit-log)) and has no retention.
+- The login rate limiter, the pending logins and the enrolment state are per process (one replica).
 
 ## Exposure advice
 
 - Put it behind a TLS reverse proxy; do not publish the container port.
 - Restrict who can reach it: IP allowlist at the proxy, or a VPN, in addition to the password.
 - Use a long random password (12 characters minimum). Protect `dashboard.env` and `postgres.env`
-  (mode 0600): they hold the database password and `LAPI_MACHINE_PASSWORD`.
+  (mode 0600): they hold the database password and `LAPI_MACHINE_PASSWORD`. Protect the secrets key
+  file the same way and keep a copy apart from the database backups.
+- Prefer a passkey or security key with a PIN or biometric over presence-only keys, keep the
+  recovery codes offline, and add an allowlist rule for your usual networks once you rely on it.
 - Set `TRUSTED_PROXY_CIDRS` to the proxy's single address (see [configuration.md](configuration.md)).

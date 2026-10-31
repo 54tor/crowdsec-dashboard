@@ -6,8 +6,14 @@
 backend/                 Go module "crowdsec-dashboard" (Go 1.26)
   cmd/dashboard/         HTTP server entry point
   internal/api/          router, handlers, services (one file per resource)
-  internal/accounts/     account repository and first-account enrolment
-  internal/auth/         authentication, session middleware, login rate limiter, client IP resolution
+  internal/accounts/     account repository, first-account enrolment, second-factor lockout and setup window
+  internal/accessrule/   per-account IP/country allowlist: rules, evaluation, lock-out guard
+  internal/audit/        authentication audit events (`audit_event`)
+  internal/auth/         password authentication, session middleware, rate limiters, client IP resolution
+  internal/login/        three-step login (password, second factor, allowlist), in-memory pending logins
+  internal/secondfactor/ TOTP, recovery codes, WebAuthn, in-memory enrolment accumulator, persistence
+  internal/secrets/      AES-256-GCM keyring read from the secrets key file
+  internal/geo/          country lookup: rereading GeoLite2 reader, provider chain
   internal/config/       environment variable loading and validation
   internal/confread/     allowlisted, redacted reading of configuration files
   internal/cscli/        command allowlist, field validation, Docker exec runner
@@ -17,7 +23,8 @@ backend/                 Go module "crowdsec-dashboard" (Go 1.26)
   internal/webui/        embeds the built front end (dist/) and serves the SPA
 web/                     Vite + React + TypeScript front end, Tailwind, TanStack Query, i18next
   src/pages/ components/ hooks/ api/ i18n/ lib/ test/
-deploy/                  Dockerfile, production compose example, env example
+deploy/                  Dockerfile (Alpine + s6-overlay), production compose example, env examples
+  s6/                    init scripts, services and shell tests of the image (rootfs/, overlays/, test/)
   dev/                   disposable development stack (see below)
 docs/                    this documentation
 ```
@@ -33,7 +40,15 @@ cd backend && TEST_DATABASE_URL=... go vet ./... && TEST_DATABASE_URL=... go tes
 deploy/dev/test-db.sh down      # stops it and removes its volume
 cd web && npm test           # vitest, jsdom
 cd web && npm run typecheck && npm run lint
+for suite in deploy/s6/test/*.test.sh; do bash "$suite"; done   # image init scripts, no Docker needed
 ```
+
+The shell suites exercise the init scripts of the image (`05-wait-network`, `25-secrets-key`,
+`30-geoipupdate` and the cron service) with fakes, and `scrub.test.sh` checks the identity scrub of `deploy/`
+(`scrub.sh` itself needs `SCRUB_PATTERNS`, patterns kept outside the repository, and reads tracked
+files: `git add` new files first). The WebAuthn flows are tested with a virtual authenticator, the
+GeoLite2 reader with databases written by a test-only library, so no hardware and no MaxMind
+account are needed.
 
 Tests that need PostgreSQL (store, sessions, accounts, API) read `TEST_DATABASE_URL`; each test gets
 its own schema. Without that variable they are skipped, so a plain `go test` still passes but does
@@ -70,9 +85,16 @@ cd deploy/dev
 docker compose -p csdash-dev down -v --remove-orphans
 ```
 
-The first `up.sh` generates the git-ignored `.env.local` (random machine and database passwords). It
+The first `up.sh` generates the git-ignored `.env.local` (random machine and database passwords) and
+`secrets/dashboard-secrets.key` (the secrets key, `openssl rand -base64 32`; do not delete it while
+the stack holds accounts). It
 prints the enrolment token of the first account (read from the dashboard log) and the address to
 enrol at, `http://127.0.0.1:18080/enroll`; once an account exists it says so instead. The dashboard is on `http://127.0.0.1:18080` only.
+Enrolment asks for a second factor: use any TOTP app, or a virtual authenticator in the browser
+developer tools. The dev stack runs the same hardened image as production and has no MaxMind
+account, so country rules are refused there; to try WebAuthn, add `WEBAUTHN_RP_ID: localhost` and
+`WEBAUTHN_RP_ORIGINS: http://localhost:18080` to the `dashboard` service and browse
+`http://localhost:18080` (an IP cannot be a relying party ID).
 Writing log lines to `/var/log/dev/*.log` in the CrowdSec container feeds the Metrics page.
 Only touch your own `csdash-dev` project when other stacks run on the same Docker host.
 

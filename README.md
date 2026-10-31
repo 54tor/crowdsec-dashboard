@@ -64,12 +64,16 @@ Every destructive action asks you to retype the target, and the server checks it
   socket: it talks to a filtering proxy.
 - Configuration files are read from a read-only mount of the CrowdSec configuration volume.
 - Accounts and sessions are stored in PostgreSQL (passwords and session tokens are hashed); schema migrations run at every start.
+- Sign-in is password, then a second factor (TOTP, or a passkey / security key when WebAuthn is configured, with recovery codes), then an optional per-account IP and country allowlist (country rules use GeoLite2 data, refreshed inside the image when you provide a MaxMind account).
 
 ## Quick start
 
 1. Copy `deploy/compose.example.yaml` next to your CrowdSec stack and adapt container names and
    networks (the dashboard needs to reach the LAPI and the socket proxy).
-2. Create the LAPI machine account of the dashboard, then fill `deploy/dashboard.env.example` (copy to
+2. Create the secrets key that encrypts the TOTP secrets, outside git:
+   `install -d -m 0700 secrets && (umask 077; openssl rand -base64 32 > secrets/dashboard-secrets.key)`
+   and back it up apart from the database ([docs/operations.md](docs/operations.md#secrets-key)).
+   Then create the LAPI machine account of the dashboard, then fill `deploy/dashboard.env.example` (copy to
    `dashboard.env`, mode 0600) and `deploy/postgres.env.example` (copy to `postgres.env`): see
    [docs/configuration.md](docs/configuration.md).
 3. Set `DOCKER_GID` to the group of the Docker socket, then start:
@@ -79,16 +83,16 @@ Every destructive action asks you to retype the target, and the server checks it
    docker compose -f compose.example.yaml up -d --build
    ```
 
-4. Read the enrolment token in the dashboard log (`docker logs`), open `/enroll` and create the first
-   account: see [docs/operations.md](docs/operations.md#first-start-and-enrolment).
+4. Read the enrolment token in the dashboard log (`docker logs`), open `/enroll`, create the first
+   account and confirm its second factor (the account is created only then): see [docs/operations.md](docs/operations.md#first-start-and-enrolment).
 5. Put a TLS reverse proxy in front of `dashboard:8080` and set `TRUSTED_PROXY_CIDRS` to its single
    address. The session cookie is `Secure`: sign-in only works over HTTPS, or over
    `http://127.0.0.1` / `http://localhost` in browsers that treat these as secure contexts.
 
 ## Documentation
 
-- [docs/configuration.md](docs/configuration.md): environment variables, database, machine account, Prometheus
+- [docs/configuration.md](docs/configuration.md): environment variables, secrets key, WebAuthn, MaxMind, database, machine account, Prometheus
 - [docs/security.md](docs/security.md): threat model, protections and their limits
-- [docs/operations.md](docs/operations.md): known limits, troubleshooting by error code, backup
+- [docs/operations.md](docs/operations.md): known limits, troubleshooting by error code, secrets key, dashboard image, account recovery, backup
 - [docs/api.md](docs/api.md): HTTP API reference
 - [docs/development.md](docs/development.md): layout, tests, dev stack, conventions

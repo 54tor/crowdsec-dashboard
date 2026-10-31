@@ -15,6 +15,10 @@
 | Contact status | A bouncer or machine is "stale" after more than 5 minutes without contact. The dashboard's own machine account never sends a heartbeat: it is flagged "This dashboard" and shows no contact status. |
 | Health page | One failing source does not blank the page: the response lists it in `degraded` (`version`, `bouncers`, `machines`) and shows the others. |
 | Sessions | Stored in PostgreSQL, 12 h by default, kept across restarts. The login rate limiter is per process: one replica only. |
+| Pending logins | The state between the password step and the second factor (5 minutes, 5 attempts, bound to the client address) is in memory: a restart makes everybody in mid-login start again. The first-account enrolment state is also in memory, with no expiry, and is lost at restart. |
+| Second factor | TOTP always; WebAuthn only with `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS`. Factors cannot be changed or reset from the interface yet. |
+| Access allowlist | No rule means no restriction; any rule means deny by default. Country rules need the GeoLite2 database, otherwise they never match. No minimum prefix length except zero. |
+| Audit log | Written to `audit_event`; no page, no retention, and some events are not recorded yet ([security.md](security.md#audit-log)). |
 
 ## Troubleshooting
 
@@ -27,6 +31,20 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `database_unavailable` | 503 | PostgreSQL unreachable or failing. Check the `postgres` service and `DATABASE_URL`; the interface keeps the session and recovers when the database is back. |
 | `invalid_enrollment_token` | 403 | Wrong enrolment token. Use the one of the latest start ([First start and enrolment](#first-start-and-enrolment)). |
 | `invalid_account_name`, `invalid_password_length` | 400 | Enrolment: name not matching `^[a-z0-9][a-z0-9._-]{0,63}$`, or password outside 12 to 128 characters. |
+| `pending_login_expired` | 401 | The pending login (cookie `pending_login`) is missing, older than 5 minutes, used up (5 attempts, success or lock), already consumed, from another client address, or lost in a restart. Sign in again from the password. |
+| `invalid_code` | 401 | Wrong TOTP code or recovery code at login (also 400 at setup for a wrong confirmation code). Check the phone clock; a code can be used once. Counts toward the lockout. |
+| `webauthn_failed` | 401 | Passkey assertion refused: wrong origin or relying party, expired or reused challenge, unknown credential, or a counter that did not increase. Counts toward the lockout at login. |
+| `webauthn_disabled` | 404 | `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS` are not set. |
+| `account_locked` | 423 | Five second-factor failures. The response carries `Retry-After` in seconds; the lock lasts 15 minutes. To unlock now: [Unlocking an account](#unlocking-an-account). |
+| `access_denied` | 403 | The password and factor were right but the account's allowlist does not admit this address or country. With a country rule, check that the GeoLite2 database is present ([Dashboard image](#dashboard-image)). Fix it by SQL: [Removing an allowlist](#removing-an-allowlist). |
+| `second_factor_setup_not_allowed` | 403 | The account has no second factor and its setup window is closed. See [Reopening the setup window](#reopening-the-setup-window). |
+| `second_factor_required` | 409 | Enrolment or setup was completed before a factor was confirmed and the recovery codes were generated. |
+| `enrollment_not_started` | 409 | An enrolment step came before `POST /api/auth/enroll`, or the dashboard restarted since. Start again with the token from the new log. |
+| `second_factor_unavailable` | 503 | A TOTP key or recovery codes could not be generated; the dashboard log has the cause. |
+| `too_many_pending_logins` | 503 | 10 000 logins are waiting for their second factor; retry shortly. |
+| `invalid_access_rule`, `access_rule_exists` | 400, 409 | Allowlist rule malformed (kind `ip` or `country`, `/0` refused) or already present. |
+| `would_lock_out_current_client` | 409 | The change would stop your current address from signing in. Add an IP rule for it first, or use the SQL procedure from the host. |
+| `geolocation_unavailable` | 409 | A country rule was added while no readable GeoLite2 database is loaded. |
 | `too_many_attempts` | 429 | Login rate limit or concurrency cap. Wait a minute (the response carries `Retry-After: 60`). If everybody is limited, the proxy address is probably not in `TRUSTED_PROXY_CIDRS` and all users share one client address. |
 | `cross_origin` | 403 | A state-changing request came from another origin. Check that the reverse proxy forwards `Host` and does not rewrite `Origin`. |
 | `invalid_request` | 400 | Malformed body, id or filter. |
@@ -69,7 +87,12 @@ after the database is healthy.
   then serves requests. It refuses to start if `DATABASE_URL` is missing or unreachable, or if a
   migration fails: read the container log.
 - Back up the database before upgrading the dashboard to a new version, since an upgrade may migrate
-  the schema.
+  the schema. The upgrade that introduces the second factor applies migration 00002 at the next
+  start: it adds the factor, recovery code, allowlist and lockout columns and tables, and opens the
+  second-factor setup window of every existing account (see
+  [security.md](security.md#accounts-from-the-first-release)). The dashboard also needs the secrets
+  key before that start ([Secrets key](#secrets-key)). Sign in right after upgrading to enrol
+  your factor.
 - If PostgreSQL goes down while the dashboard runs, `/api/healthz` answers 503 and login and
   authenticated routes answer 503 `database_unavailable`. Nobody is signed out: sessions are valid
   again once the database is back.
@@ -83,27 +106,168 @@ after the database is healthy.
 
 ## First start and enrolment
 
-1. Fill `dashboard.env` and `postgres.env` from the examples and start the stack.
+1. Create the secrets key (once) and, optionally, the MaxMind files ([Secrets key](#secrets-key),
+   [Dashboard image](#dashboard-image)). Fill `dashboard.env` and `postgres.env` from the examples
+   and start the stack.
 2. While the `account` table is empty, the dashboard logs a line such as
    `no account yet: open /enroll and enroll the first account with token <token>`
    (`docker logs <dashboard container>`). The token lives in memory only and is replaced at each
    restart while no account exists.
 3. Open `https://<your host>/enroll`, enter the token, an account name and a password of 12 to 128
-   characters. The first account is an administrator and is signed in at once.
-4. From then on enrolment is closed (`POST /api/auth/enroll` answers 404) and no token is logged.
+   characters.
+4. Add a second factor: scan the QR code (or type the secret) in an authenticator app and enter a
+   code, or register a passkey when WebAuthn is enabled. Then save the 10 recovery codes: they are
+   shown once. Only when you confirm are the account, its factor and its recovery codes written.
+   The first account is an administrator and is signed in at once.
+5. From then on enrolment is closed (`POST /api/auth/enroll` answers 404) and no token is logged.
+
+If the dashboard restarts between steps 3 and 4, the work in progress is lost and nothing was
+created: use the new token from the log.
 
 Whoever can read the logs while no account exists can create the first account: enrol promptly and
 keep the logs private ([security.md](security.md#accounts-and-enrolment)). The development stack
 (`deploy/dev/up.sh`) prints the token for you.
 
+Signing in afterwards: password, then a TOTP code (or a passkey, or a recovery code), then the
+allowlist if you defined one. Accounts that existed before the second factor are asked to enrol one
+at their next login; see [security.md](security.md#accounts-from-the-first-release).
+
+## Secrets key
+
+The key that encrypts the TOTP secrets is a 32-byte random value, base64 encoded, in a file given to
+the container as the compose secret `dashboard-secrets-key`:
+
+```
+install -d -m 0700 secrets && (umask 077; openssl rand -base64 32 > secrets/dashboard-secrets.key)
+```
+
+At start, `25-secrets-key` copies it to `/run/dashboard-secrets/key` on a tmpfs (0400, owned by
+`docker-user`), which `SECRETS_KEY_FILE` names. The container stops at start when the secret is
+missing, unreadable or empty, and the dashboard refuses to start when the copy is not a valid key.
+
+- **Back the key up separately from the database dump.** A database backup alone is useless for
+  TOTP without the key, and a backup that sits next to the key defeats the encryption.
+- **If the key is lost, the TOTP secrets are unreadable** and TOTP logins fail for everybody.
+  Passwords, passkeys and recovery codes keep working, so recovery codes or a passkey are the way
+  back in; then reset the TOTP factors by SQL (see
+  [Resetting a lost factor](#resetting-a-lost-factor)) and enrol again.
+- Do not replace the key with another one while TOTP secrets exist: they were sealed with the old
+  one and are identified by its `key_id`, and the dashboard holds a single key.
+
+## Dashboard image
+
+The dashboard image is Alpine with s6-overlay (init and supervisor), not distroless. s6 supervises
+two services in one container: the dashboard, which runs as the unprivileged `docker-user`
+(UID/GID 10000), and a cron service (supercronic) that runs `geoipupdate`. The container is
+started as root so the init scripts can run; the hardening and its reasons are in
+[security.md](security.md#container-image). Points to know when operating it:
+
+- **Compose settings are not optional**: `read_only: true` with the three tmpfs of the example
+  (`/run` with `exec` and mode `0755`, `/etc/cron.d` with mode `0755`, `/tmp`), `S6_READ_ONLY_ROOT: "1"`,
+  `cap_drop: [ALL]` and `cap_add: [CHOWN, DAC_READ_SEARCH, KILL, SETGID, SETUID]`. A `/run` mounted
+  with Docker's default tmpfs options (`noexec`, mode 1777) makes s6 fail. The startup scripts stop
+  the container on failure (`S6_BEHAVIOUR_IF_STAGE2_FAILS=2`), except `30-geoipupdate`, which never
+  fails the start.
+- **UID remap**: `DOCKER_USER_UID` / `DOCKER_USER_GID` work only with a writable root filesystem.
+  They edit `/etc/passwd` and `/etc/group`; with `read_only: true` the container stops with
+  `groupmod` failing. Set `read_only: false` if you must remap, or keep the default 10000 and
+  `chown` your volumes.
+- **WAIT_FOR_NETWORK**: the image waits for `1.1.1.1:443` for up to 15 s by default and then
+  continues; the example compose sets `WAIT_FOR_NETWORK: "false"` because the database is already
+  awaited by `depends_on` (see [configuration.md](configuration.md#environment-variables)).
+- **Hooks**: executable files in `/custom-scripts.d` and `/docker-entrypoint.d` run as root at
+  start. Both directories are root-owned; add scripts by mounting them read-only.
+- **GeoLite2 updates**: `geoipupdate` is compiled from source in the image (no Alpine package) and
+  scheduled by cron inside the dashboard container, as `docker-user`. You need a free MaxMind
+  account. Put the account id and the licence key in the compose secrets `maxmind-account-id` and
+  `maxmind-license-key` ([configuration.md](configuration.md#maxmind-credentials)). Without both
+  files, or with malformed values, no cron entry is created and the log says
+  `GeoLite2 updates are disabled`; the dashboard then runs without country rules. The database is
+  stored in the `geoip-data` volume as `GeoLite2-Country.mmdb`, with the frequency of
+  `GEOIPUPDATE_FREQUENCY_HOURS`.
+- **First download**: at start, when the cron entry exists and the database file is missing, the
+  cron service launches one update immediately, in the background. If the database file already
+  exists but is empty or corrupt, no immediate update runs: the first fetch waits for the next
+  scheduled run (minute 17 of the scheduled hour). Delete the bad file and restart to fetch at
+  once. The dashboard keeps ignoring an unreadable file and logs `geolocation database ... is not
+  readable yet`; country rules are refused meanwhile. It also logs a warning when the database is
+  older than 45 days.
+- **Check it**: `docker logs <dashboard container>` shows `[geoipupdate] GeoLite2 updates scheduled at
+  '<cron expression>'` and, after a failed run, `update failed with status N`. Updates need outbound
+  access to `updates.maxmind.com` over HTTPS from the dashboard container, so it needs at least one
+  network that is not `internal` (in the example, `crowdsec` or `web`).
+
+This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com.
+
+## Account recovery by SQL
+
+There is no password reset, no factor reset and no allowlist reset in the interface yet. When an
+operator is locked out, run SQL on the dashboard database from the host, for example
+`docker exec -i <postgres container> psql -U <user> -d <database>`. Check the account first
+(`SELECT account_id, account_name FROM account;`) and use its id below. Everything here is a write
+to the production database: take a backup before the first one.
+
+### Unlocking an account
+
+A locked account (423 `account_locked`) unlocks itself after 15 minutes. To unlock now:
+
+```sql
+UPDATE account SET account_locked_until = NULL, account_failed_second_factor_count = 0
+ WHERE account_name = '<account name>';
+```
+
+### Removing an allowlist
+
+If the rules refuse every address you have (403 `access_denied`), delete the rules; with no rule the
+account is unrestricted again:
+
+```sql
+DELETE FROM access_rule WHERE access_rule_account_id =
+  (SELECT account_id FROM account WHERE account_name = '<account name>');
+```
+
+The lock-out guard of the interface does not apply to SQL.
+
+### Reopening the setup window
+
+An account with no second factor and a closed window is refused with 403
+`second_factor_setup_not_allowed`. Reopen the window for one day; the next correct password lets the
+holder enrol a factor (whoever presents the password first enrols it, so do it when you are ready to
+sign in), and the window closes at completion:
+
+```sql
+UPDATE account SET account_second_factor_setup_until = now() + interval '1 day'
+ WHERE account_name = '<account name>';
+```
+
+### Resetting a lost factor
+
+If an operator lost both their authenticator and their recovery codes, delete the factors and the
+codes, then reopen the setup window. The next login asks to enrol a new factor and generates new
+codes. These statements follow from how the login code decides between a factor step and a setup
+step (the account has no `totp` or `webauthn` credential): they are not part of the automated test
+suite, so try them on a copy first.
+
+```sql
+DELETE FROM credential WHERE credential_kind IN ('totp', 'webauthn')
+   AND credential_account_id = (SELECT account_id FROM account WHERE account_name = '<account name>');
+DELETE FROM recovery_code WHERE recovery_code_account_id =
+  (SELECT account_id FROM account WHERE account_name = '<account name>');
+UPDATE account SET account_second_factor_setup_until = now() + interval '1 day'
+ WHERE account_name = '<account name>';
+```
+
 ## Backup and restore
 
-The dashboard keeps its state in PostgreSQL (accounts, sessions). Keep the compose file,
-`dashboard.env` and `postgres.env` in your usual configuration backup, and back up the database
-(see [PostgreSQL](#postgresql)). To restore, redeploy the files and the database, and recreate the
+The dashboard keeps its state in PostgreSQL (accounts, factors, recovery codes, allowlist rules,
+sessions, audit events). Keep the compose file, `dashboard.env`, `postgres.env` and the secrets
+key file in your usual configuration backup, and back up the database (see
+[PostgreSQL](#postgresql)). **Back up the secrets key apart from the database**, otherwise a restored
+database cannot verify TOTP codes ([Secrets key](#secrets-key)). The GeoLite2 volume needs no backup:
+it is downloaded again. To restore, redeploy the files and the database, and recreate the
 LAPI machine account if the CrowdSec data was lost. CrowdSec's own volumes (configuration,
 `crowdsec.db`) are backed up with CrowdSec, not with the dashboard.
 
-Accounts have no password-reset feature yet: with the database restored you keep your accounts; if
+Accounts have no password-reset feature yet (for a lost second factor, see [Account recovery by SQL](#account-recovery-by-sql)): with the database restored you keep your accounts; if
 the `account` table is emptied, the next start opens enrolment again. To rotate the machine password,
 run `cscli machines delete` and `add` again with the new value, then recreate the dashboard.
