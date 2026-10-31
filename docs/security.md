@@ -16,9 +16,9 @@ socket (see [Limits](#honest-limits)).
     address or the IPv6 `/64` prefix, so rotating addresses inside a /64 does not help;
   - globally, 30 attempts per minute, so a distributed guess cannot run faster whatever the sources;
   - at most 10 000 tracked clients: beyond that new clients are refused until old entries expire;
-  - at most 2 password verifications at the same time (argon2id uses memory); more answer 429;
+  - a single password verification at a time (each one allocates 64 MiB for argon2id, the container is capped at 256 MiB); a concurrent attempt answers 429;
   - a failed attempt always takes at least 500 ms.
-  Blocked requests answer 429 `too_many_attempts`. The global limit means an attacker can briefly lock the
+  Blocked requests answer 429 `too_many_attempts` with `Retry-After: 60`. The global limit means an attacker can briefly lock the
   legitimate admin out; that is accepted over letting guesses through.
 - The login body is capped at 1 KiB.
 
@@ -40,8 +40,8 @@ socket (see [Limits](#honest-limits)).
 ## Headers and content security policy
 
 Every response carries `Content-Security-Policy: default-src 'self'`, `X-Content-Type-Options:
-nosniff`, `Referrer-Policy: no-referrer` and `X-Frame-Options: DENY`. Responses that carry a secret
-(new bouncer key, new machine password) add `Cache-Control: no-store`.
+nosniff`, `Referrer-Policy: no-referrer` and `X-Frame-Options: DENY`. Every response under `/api/`
+(configuration file contents and new secrets included) carries `Cache-Control: no-store`; static assets do not.
 
 `default-src 'self'` allows only same-origin scripts, styles, fonts, images and connections: no
 inline script, no CDN, no external font. The front end bundles its fonts and charts for this reason.

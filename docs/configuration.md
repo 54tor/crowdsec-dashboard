@@ -45,14 +45,16 @@ The dashboard logs in to the LAPI as a machine to read alerts, push manual bans 
 decisions. Create it in the CrowdSec container:
 
 ```
-docker exec crowdsec cscli machines add dashboard --password '<password>' -f /dev/null
+docker exec crowdsec cscli machines add dashboard --auto -f /dev/stdout
 docker exec crowdsec cscli machines validate dashboard
 ```
 
-`-f /dev/null` stops cscli from overwriting the credentials file of the engine. In current CrowdSec
-releases `machines add` validates the account at once and `validate` is a no-op; keep it for
-setups that require manual validation. Use the same name and password for `LAPI_MACHINE_ID` and
-`LAPI_MACHINE_PASSWORD`.
+`--auto` makes cscli generate the password, and `-f /dev/stdout` prints the credentials YAML to the
+terminal instead of overwriting the credentials file of the engine. Copy the `password:` value into
+`LAPI_MACHINE_PASSWORD` in `dashboard.env`. This keeps the password out of the shell history and out
+of the process list, which `--password '<password>'` would not. In current CrowdSec releases
+`machines add` validates the account at once and `validate` is a no-op; keep it for setups that
+require manual validation. Use the machine name for `LAPI_MACHINE_ID`.
 
 ## Prometheus for the Metrics page
 

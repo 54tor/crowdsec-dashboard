@@ -24,7 +24,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 |---|---|---|
 | `unauthenticated` | 401 | No or expired session. Sign in again; also happens after a dashboard restart. |
 | `invalid_credentials` | 401 | Wrong password. Check `ADMIN_PASSWORD_HASH` was single-quoted in the env file. |
-| `too_many_attempts` | 429 | Login rate limit or concurrency cap. Wait a minute. If everybody is limited, the proxy address is probably not in `TRUSTED_PROXY_CIDRS` and all users share one client address. |
+| `too_many_attempts` | 429 | Login rate limit or concurrency cap. Wait a minute (the response carries `Retry-After: 60`). If everybody is limited, the proxy address is probably not in `TRUSTED_PROXY_CIDRS` and all users share one client address. |
 | `cross_origin` | 403 | A state-changing request came from another origin. Check that the reverse proxy forwards `Host` and does not rewrite `Origin`. |
 | `invalid_request` | 400 | Malformed body, id or filter. |
 | `invalid_target`, `invalid_duration`, `invalid_reason` | 400 | Ban form: not an IP/CIDR (or range wider than /8 IPv4, /32 IPv6), duration not like `24h`, reason over 200 characters or with control characters. |
@@ -39,6 +39,13 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `cscli_timeout` | 504 | The command exceeded 30 s (120 s for hub operations). Retry; check the network of the CrowdSec container for hub calls. |
 
 Quick checks:
+
+- Reverse proxy timeouts: hub operations (update, upgrade, install, remove) may take up to 135 s,
+  so the proxy's read and send timeouts must exceed that. nginx: `proxy_read_timeout 150s;
+  proxy_send_timeout 150s;` (the default 60 s cuts them). Traefik: `respondingTimeouts.readTimeout`
+  and `writeTimeout` on the entry point, or `forwardingTimeouts.responseHeaderTimeout`, above 150 s.
+- Server-side failures are logged by the dashboard (`docker logs`): a line `upstream error: class=...`
+  with the error class and, for known failures, the exit code or status. Command output is never logged.
 
 - Socket proxy denies: its log prints `blocked request` with the path. A pair of `HEAD /_ping` 405 and
   `GET /_ping` 403 lines at each exec is normal: the Docker client probes the API version and falls

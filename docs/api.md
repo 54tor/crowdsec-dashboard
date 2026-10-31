@@ -54,7 +54,7 @@ number of entries fetched (at most 100), `may_be_truncated` is true when the win
 | DELETE | `/api/hub/collections/{name...}` | yes | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400; 502; 504 |
 | POST | `/api/crowdsec/reload` | yes | none | `200 {"status":"reload_requested"}` | 502; 504 |
 
-Names (bouncers, machines) match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; hub names allow one `/`.
+Machine names match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; bouncer names also allow `@` after the first character (bouncers registered over TLS are named `name@<address>`); hub names allow one `/`.
 The machine self-check runs before the confirmation check, so `self_account` wins over
 `confirmation_required`.
 
