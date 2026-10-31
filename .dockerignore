@@ -11,3 +11,5 @@ deploy/dev/.env.local
 *.log
 backend/internal/webui/dist/*
 !backend/internal/webui/dist/.gitkeep
+deploy/secrets
+deploy/dev/secrets
