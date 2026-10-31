@@ -1,12 +1,14 @@
 export class ApiError extends Error {
   readonly code: string
   readonly status: number
+  readonly retryAfterSeconds?: number
 
-  constructor(code: string, status: number) {
+  constructor(code: string, status: number, retryAfterSeconds?: number) {
     super(code)
     this.name = 'ApiError'
     this.code = code
     this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -44,6 +46,12 @@ async function readErrorCode(response: Response): Promise<string> {
   return fallbackCode
 }
 
+function readRetryAfterSeconds(response: Response): number | undefined {
+  const headerValue = response.headers.get('Retry-After')
+  const retryAfterSeconds = headerValue === null ? Number.NaN : Number(headerValue)
+  return Number.isInteger(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds : undefined
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
@@ -60,7 +68,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     if (code === 'unauthenticated') {
       notifyUnauthenticatedOnce()
     }
-    throw new ApiError(code, response.status)
+    throw new ApiError(code, response.status, readRetryAfterSeconds(response))
   }
   if (response.status === 204) {
     return undefined as T

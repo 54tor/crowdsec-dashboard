@@ -63,3 +63,29 @@ describe('apiFetch', () => {
     await expect(apiFetch('/api/auth/me')).resolves.toEqual({ status: 'ok' })
   })
 })
+
+describe('apiFetch retry delay', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('exposesTheRetryAfterHeaderInSeconds', async () => {
+    stubFetch({
+      'POST /api/auth/login': { status: 423, body: { error: 'account_locked' }, headers: { 'Retry-After': '300' } },
+    })
+    await expect(apiFetch('/api/auth/login', { method: 'POST' })).rejects.toMatchObject({
+      code: 'account_locked',
+      status: 423,
+      retryAfterSeconds: 300,
+    })
+  })
+
+  it('ignoresAnInvalidRetryAfterHeader', async () => {
+    stubFetch({
+      'POST /api/auth/login': { status: 423, body: { error: 'account_locked' }, headers: { 'Retry-After': 'soon' } },
+    })
+    const failure = await apiFetch('/api/auth/login', { method: 'POST' }).catch((caught: unknown) => caught)
+    expect(failure).toMatchObject({ code: 'account_locked' })
+    expect((failure as { retryAfterSeconds?: number }).retryAfterSeconds).toBeUndefined()
+  })
+})

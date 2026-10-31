@@ -23,6 +23,13 @@ const AUTHENTICATED_ALICE = {
   body: { status: 'authenticated', account_name: 'alice', account_role: 'admin' },
 }
 
+const TOTP_REQUIRED = { status: 200, body: { status: 'second_factor_required', methods: ['totp'] } }
+
+async function submitSecondFactor(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByLabelText(en.login.secondFactor.totpLabel), '123456')
+  await user.click(screen.getByRole('button', { name: en.login.secondFactor.submit }))
+}
+
 async function fillLoginForm(user: ReturnType<typeof userEvent.setup>, password: string) {
   await user.type(await screen.findByLabelText(en.login.accountName), 'alice')
   await user.type(screen.getByLabelText(en.login.password), password)
@@ -73,7 +80,8 @@ describe('app routing and auth', () => {
   it('guardIsResetByLoginSoLaterExpiryRedirectsAgain', async () => {
     stubFetch({
       'GET /api/auth/me': UNAUTHENTICATED,
-      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+      'POST /api/auth/login': TOTP_REQUIRED,
+      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
       'GET /api/alerts': UNAUTHENTICATED,
     })
     const user = userEvent.setup()
@@ -81,6 +89,7 @@ describe('app routing and auth', () => {
     for (let expiryNumber = 1; expiryNumber <= 2; expiryNumber += 1) {
       await fillLoginForm(user, 'correct horse')
       await user.click(screen.getByRole('button', { name: en.login.submit }))
+      await submitSecondFactor(user)
       expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
       await triggerUnauthenticatedDataCalls(1)
       expect(await screen.findByRole('heading', { name: en.login.title })).toBeInTheDocument()
@@ -91,12 +100,14 @@ describe('app routing and auth', () => {
   it('doesNotKeepThePasswordInTheMutationCache', async () => {
     stubFetch({
       'GET /api/auth/me': UNAUTHENTICATED,
-      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+      'POST /api/auth/login': TOTP_REQUIRED,
+      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
     })
     const user = userEvent.setup()
     const { queryClient } = renderApp('/login')
     await fillLoginForm(user, 'correct horse')
     await user.click(screen.getByRole('button', { name: en.login.submit }))
+    await submitSecondFactor(user)
     expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
     expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
   })
@@ -142,7 +153,8 @@ describe('app routing and auth', () => {
     let hasSession = false
     const fetchMock = stubFetch({
       'GET /api/auth/me': () => (hasSession ? { status: 200, body: { status: 'ok' } } : UNAUTHENTICATED),
-      'POST /api/auth/login': () => {
+      'POST /api/auth/login': TOTP_REQUIRED,
+      'POST /api/auth/login/totp': () => {
         hasSession = true
         return { status: 200, body: { status: 'ok' } }
       },
@@ -155,6 +167,7 @@ describe('app routing and auth', () => {
     renderApp('/login')
     await fillLoginForm(user, 'correct horse')
     await user.click(screen.getByRole('button', { name: en.login.submit }))
+    await submitSecondFactor(user)
 
     expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: en.nav.label })).toBeInTheDocument()
@@ -178,7 +191,8 @@ describe('app routing and auth', () => {
     const fetchMock = stubFetch({
       'GET /api/auth/status': ENROLLMENT_CLOSED,
       'GET /api/auth/me': UNAUTHENTICATED,
-      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+      'POST /api/auth/login': TOTP_REQUIRED,
+      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
     })
     const user = userEvent.setup()
     renderApp('/login')
@@ -187,6 +201,7 @@ describe('app routing and auth', () => {
     expect(screen.getByLabelText(en.login.password)).toHaveAttribute('autocomplete', 'current-password')
     await fillLoginForm(user, 'correct horse')
     await user.click(screen.getByRole('button', { name: en.login.submit }))
+    await submitSecondFactor(user)
     await screen.findByRole('heading', { name: en.nav.alerts })
     const loginCall = fetchMock.mock.calls.find(([requestedPath]) => requestedPath === '/api/auth/login')
     expect(JSON.parse(String(loginCall?.[1]?.body))).toEqual({
@@ -199,13 +214,15 @@ describe('app routing and auth', () => {
     const fetchMock = stubFetch({
       'GET /api/auth/status': ENROLLMENT_CLOSED,
       'GET /api/auth/me': UNAUTHENTICATED,
-      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+      'POST /api/auth/login': TOTP_REQUIRED,
+      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
     })
     const user = userEvent.setup()
     renderApp('/login')
     await user.type(await screen.findByLabelText(en.login.accountName), '  Alice ')
     await user.type(screen.getByLabelText(en.login.password), 'correct horse')
     await user.click(screen.getByRole('button', { name: en.login.submit }))
+    await submitSecondFactor(user)
     await screen.findByRole('heading', { name: en.nav.alerts })
     const loginCall = fetchMock.mock.calls.find(([requestedPath]) => requestedPath === '/api/auth/login')
     expect(JSON.parse(String(loginCall?.[1]?.body)).account_name).toBe('alice')

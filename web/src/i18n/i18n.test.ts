@@ -12,7 +12,7 @@ function collectKeyPaths(node: unknown, prefix = ''): string[] {
 }
 
 const KNOWN_ERROR_CODES = [
-  'unauthenticated', 'invalid_credentials', 'too_many_attempts', 'cross_origin', 'not_found',
+  'unauthenticated', 'pending_login_expired', 'access_denied', 'second_factor_setup_not_allowed', 'too_many_pending_logins', 'invalid_credentials', 'too_many_attempts', 'cross_origin', 'not_found',
   'invalid_request', 'invalid_code', 'webauthn_failed', 'webauthn_unsupported', 'webauthn_disabled', 'second_factor_required', 'enrollment_not_started', 'second_factor_unavailable', 'invalid_account_name', 'invalid_password_length', 'invalid_enrollment_token', 'database_unavailable', 'invalid_target', 'invalid_duration', 'invalid_reason', 'confirmation_required',
   'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'self_account', 'network', 'unknown',
 ]
@@ -25,6 +25,14 @@ describe('i18n', () => {
 
   it('bothLocaleFilesHaveSameKeys', () => {
     expect(collectKeyPaths(fr).sort()).toEqual(collectKeyPaths(en).sort())
+  })
+
+  it('interpolatesTheLockDurationInMinutes', async () => {
+    const i18nModule = await import('./index')
+    await i18nModule.initI18n()
+    await i18nModule.setLanguage('en')
+    expect(i18nModule.errorMessage({ code: 'account_locked', retryAfterSeconds: 61 })).toContain('2 minute')
+    expect(i18nModule.errorMessage({ code: 'account_locked' })).toContain('1 minute')
   })
 
   it('translatesErrorCodeInBothLanguages', async () => {

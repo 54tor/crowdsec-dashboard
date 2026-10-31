@@ -31,7 +31,19 @@
     "accountName": "Nom du compte",
     "password": "Mot de passe",
     "submit": "Se connecter",
-    "submitting": "Connexion…"
+    "submitting": "Connexion…",
+    "secondFactor": {
+      "title": "Second facteur",
+      "description": "Confirmez votre identité pour terminer la connexion.",
+      "totpLabel": "Code d'authentification",
+      "recoveryLabel": "Code de secours",
+      "submit": "Confirmer",
+      "submitting": "Vérification…",
+      "useRecoveryCode": "Utiliser un code de secours",
+      "useTotp": "Utiliser un code d'authentification",
+      "useSecurityKey": "Utiliser une clé de sécurité",
+      "securityKeyWaiting": "En attente de votre clé de sécurité…"
+    }
   },
   "enroll": {
     "title": "Créer le premier compte",
@@ -95,12 +107,17 @@
     "invalid_enrollment_token": "Le jeton d'enrôlement est invalide.",
     "database_unavailable": "La base de données est indisponible. Réessayez dans un instant.",
     "invalid_code": "Le code est incorrect ou a expiré.",
-    "webauthn_failed": "La clé de sécurité n'a pas pu être enregistrée.",
+    "webauthn_failed": "La clé de sécurité n'a pas pu être utilisée.",
     "webauthn_unsupported": "Ce navigateur ne gère pas les clés de sécurité. Utilisez plutôt une application d'authentification.",
     "webauthn_disabled": "Les clés de sécurité ne sont pas activées sur ce serveur.",
     "second_factor_required": "Validez un second facteur avant de continuer.",
     "enrollment_not_started": "Créez d'abord le compte.",
-    "second_factor_unavailable": "Le service de second facteur est indisponible. Réessayez dans un instant."
+    "second_factor_unavailable": "Le service de second facteur est indisponible. Réessayez dans un instant.",
+    "account_locked": "Ce compte est temporairement verrouillé. Réessayez dans {{minutes}} minute(s).",
+    "pending_login_expired": "Votre tentative de connexion a expiré. Veuillez recommencer.",
+    "access_denied": "Accès refusé.",
+    "second_factor_setup_not_allowed": "Un second facteur ne peut pas être configuré ici. Contactez un administrateur.",
+    "too_many_pending_logins": "Trop de connexions en cours. Réessayez dans un instant."
   },
   "filters": {
     "label": "Filtres",

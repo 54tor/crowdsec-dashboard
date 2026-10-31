@@ -1,7 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError, apiFetch, resetUnauthenticatedGuard, setUnauthenticatedHandler } from '@/api/client'
+import { beginLogin, completeLoginSetup, verifyLoginSecondFactor } from '@/api/loginApi'
 import { completeSetup } from '@/api/secondFactorApi'
 import { Button } from '@/components/ui/button'
 import { AuthContext, type AuthState } from './AuthContext'
@@ -27,6 +28,11 @@ async function fetchSessionState(): Promise<SessionState> {
   }
 }
 
+function openSession(queryClient: QueryClient, accountName: string | null): void {
+  resetUnauthenticatedGuard()
+  queryClient.setQueryData(SESSION_QUERY_KEY, { accountName } satisfies SessionIdentity as SessionState)
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const { t } = useTranslation()
@@ -43,12 +49,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(sessionQuery.data),
       accountName: sessionQuery.data ? sessionQuery.data.accountName : null,
       async login(accountName, password) {
-        await apiFetch('/api/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ account_name: accountName, password }),
-        })
-        resetUnauthenticatedGuard()
-        queryClient.setQueryData(SESSION_QUERY_KEY, { accountName } satisfies SessionIdentity as SessionState)
+        const loginProgress = await beginLogin(accountName, password)
+        pendingAccountName.current = accountName
+        return loginProgress
+      },
+      async verifySecondFactor(method, value) {
+        await verifyLoginSecondFactor(method, value)
+        openSession(queryClient, pendingAccountName.current)
+      },
+      async completeLoginSetup() {
+        await completeLoginSetup()
+        openSession(queryClient, pendingAccountName.current)
       },
       async enroll(enrollmentToken, accountName, password) {
         const enrollResponse = await apiFetch<{ methods: string[] }>('/api/auth/enroll', {
@@ -60,11 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async completeEnrollment(enrollmentToken) {
         await completeSetup({ basePath: '/api/auth/enroll', extraBody: { token: enrollmentToken } })
-        resetUnauthenticatedGuard()
         queryClient.setQueryData(ENROLLMENT_STATUS_QUERY_KEY, { enrollment_required: false })
-        queryClient.setQueryData(SESSION_QUERY_KEY, {
-          accountName: pendingAccountName.current,
-        } satisfies SessionIdentity as SessionState)
+        openSession(queryClient, pendingAccountName.current)
       },
       async logout() {
         try {

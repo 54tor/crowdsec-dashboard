@@ -31,7 +31,19 @@
     "accountName": "Account name",
     "password": "Password",
     "submit": "Sign in",
-    "submitting": "Signing in…"
+    "submitting": "Signing in…",
+    "secondFactor": {
+      "title": "Second factor",
+      "description": "Confirm it is you to finish signing in.",
+      "totpLabel": "Authentication code",
+      "recoveryLabel": "Recovery code",
+      "submit": "Confirm",
+      "submitting": "Checking…",
+      "useRecoveryCode": "Use a recovery code",
+      "useTotp": "Use an authentication code",
+      "useSecurityKey": "Use a security key",
+      "securityKeyWaiting": "Waiting for your security key…"
+    }
   },
   "enroll": {
     "title": "Create the first account",
@@ -95,12 +107,17 @@
     "invalid_enrollment_token": "The enrolment token is invalid.",
     "database_unavailable": "The database is unavailable. Please try again shortly.",
     "invalid_code": "The code is incorrect or has expired.",
-    "webauthn_failed": "The security key could not be registered.",
+    "webauthn_failed": "The security key could not be used.",
     "webauthn_unsupported": "This browser does not support security keys. Use an authenticator app instead.",
     "webauthn_disabled": "Security keys are not enabled on this server.",
     "second_factor_required": "Confirm a second factor before continuing.",
     "enrollment_not_started": "Create the account first.",
-    "second_factor_unavailable": "The second factor service is unavailable. Please try again shortly."
+    "second_factor_unavailable": "The second factor service is unavailable. Please try again shortly.",
+    "account_locked": "This account is temporarily locked. Try again in {{minutes}} minute(s).",
+    "pending_login_expired": "Your sign-in attempt has expired. Please start again.",
+    "access_denied": "Access denied.",
+    "second_factor_setup_not_allowed": "A second factor cannot be set up from here. Contact an administrator.",
+    "too_many_pending_logins": "Too many sign-ins in progress. Please try again shortly."
   },
   "filters": {
     "label": "Filters",

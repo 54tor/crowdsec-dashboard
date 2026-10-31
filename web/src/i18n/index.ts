@@ -42,9 +42,16 @@ function syncDocument(): void {
   document.title = i18next.t('app.title')
 }
 
+const DEFAULT_RETRY_AFTER_SECONDS = 60
+
 export function errorMessage(error: unknown): string {
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : 'unknown'
-  return i18next.t(`errors.${code}`, { defaultValue: i18next.t('errors.unknown') })
+  const retryAfterSeconds =
+    typeof error === 'object' && error !== null && 'retryAfterSeconds' in error && typeof error.retryAfterSeconds === 'number'
+      ? error.retryAfterSeconds
+      : DEFAULT_RETRY_AFTER_SECONDS
+  const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60))
+  return i18next.t(`errors.${code}`, { defaultValue: i18next.t('errors.unknown'), minutes })
 }
 
 export function initI18n(): Promise<unknown> {
