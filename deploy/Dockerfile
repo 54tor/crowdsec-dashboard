@@ -15,13 +15,11 @@ COPY backend/ ./
 COPY --from=web /src/backend/internal/webui/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 go build -p 4 -trimpath -ldflags="-s -w" -o /out/dashboard ./cmd/dashboard
 
-# No Alpine package exists: built from source, integrity checked by the Go checksum database.
 FROM golang:alpine AS geoipupdate-build
 ARG GEOIPUPDATE_VERSION=latest
 RUN CGO_ENABLED=0 GOBIN=/out go install -p 4 -trimpath -ldflags="-s -w" \
     "github.com/maxmind/geoipupdate/v8/cmd/geoipupdate@${GEOIPUPDATE_VERSION}"
 
-# s6-overlay release archives, verified against their published SHA-256.
 FROM alpine:latest AS s6
 ARG S6_OVERLAY_VERSION=3.2.3.2
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]

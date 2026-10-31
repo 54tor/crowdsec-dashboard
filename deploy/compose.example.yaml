@@ -109,18 +109,16 @@ services:
       # Pin it in the proxy's own compose (ipv4_address) so that it survives recreation, and use
       # that /32 here. IPv6 variant: TRUSTED_PROXY_CIDRS: fd00:30::10/128
       TRUSTED_PROXY_CIDRS: 172.30.0.10/32
-      # s6-overlay runs from a read-only root; the network wait is not needed (depends_on).
       S6_READ_ONLY_ROOT: "1"
       WAIT_FOR_NETWORK: "false"
     volumes:
       - crowdsec-config:/etc/crowdsec:ro
     read_only: true
-    # Exact options: s6-overlay executes from /run and refuses a world-writable /run.
+    # /run must be exec and not world-writable for s6-overlay.
     tmpfs:
       - /run:exec,nosuid,nodev,mode=0755
       - /tmp:noexec,nosuid,nodev,mode=1777
-    # The container starts as root for s6; the dashboard runs as docker-user (10000).
-    # SETUID/SETGID: s6-setuidgid drops to docker-user. KILL: root signals the dashboard on stop.
+    # SETUID/SETGID for s6-setuidgid, KILL to signal the dashboard on stop.
     cap_drop: [ALL]
     cap_add: [KILL, SETGID, SETUID]
     security_opt: ["no-new-privileges:true"]
