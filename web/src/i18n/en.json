@@ -16,7 +16,8 @@
   },
   "common": {
     "loading": "Loading…",
-    "comingSoon": "This page is coming soon."
+    "comingSoon": "This page is coming soon.",
+    "delete": "Delete"
   },
   "language": {
     "label": "Language",
@@ -50,7 +51,8 @@
     "network": "Network error. Check your connection.",
     "unknown": "An unexpected error occurred.",
     "file_too_large": "The file is too large to display.",
-    "config_unavailable": "The configuration files are unavailable."
+    "config_unavailable": "The configuration files are unavailable.",
+    "invalid_name": "Use letters, digits, dots, dashes or underscores (64 characters at most), starting with a letter or digit."
   },
   "filters": {
     "label": "Filters",
@@ -198,5 +200,39 @@
     "reason": "Reason (optional)",
     "submit": "Ban",
     "success": "{{target}} banned."
+  },
+  "secret": {
+    "create": "Create",
+    "done": "Done",
+    "copy": "Copy",
+    "copied": "Copied to clipboard.",
+    "copyFailed": "Copy failed. Select the value manually.",
+    "warning": "Save this value now. It is shown only once and cannot be retrieved later."
+  },
+  "bouncers": {
+    "title": "Bouncers",
+    "add": "Add bouncer",
+    "addTitle": "Add a bouncer",
+    "addDescription": "Registers a new bouncer and generates its API key.",
+    "nameLabel": "Bouncer name",
+    "secretLabel": "API key",
+    "actions": "Actions",
+    "deleteAria": "Delete {{name}}",
+    "deleteTitle": "Delete bouncer {{name}}",
+    "deleteDescription": "The bouncer {{name}} will lose access to the CrowdSec local API."
+  },
+  "machines": {
+    "title": "Machines",
+    "add": "Add machine",
+    "addTitle": "Add a machine",
+    "addDescription": "Registers a new machine and generates its password.",
+    "nameLabel": "Machine name",
+    "secretLabel": "Password",
+    "actions": "Actions",
+    "validate": "Validate",
+    "validateAria": "Validate {{name}}",
+    "deleteAria": "Delete {{name}}",
+    "deleteTitle": "Delete machine {{name}}",
+    "deleteDescription": "The machine {{name}} will lose access to the CrowdSec local API."
   }
 }

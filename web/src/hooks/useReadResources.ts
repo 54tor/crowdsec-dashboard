@@ -4,8 +4,10 @@ import type { ConfigFileContent, ConfigFileList, HealthReport, MetricsResponse }
 
 const HEALTH_REFRESH_MILLISECONDS = 30_000
 
+export const HEALTH_QUERY_KEY = ['health']
+
 export function useHealth() {
-  return useQuery({ queryKey: ['health'], queryFn: () => apiFetch<HealthReport>('/api/health'), refetchInterval: HEALTH_REFRESH_MILLISECONDS })
+  return useQuery({ queryKey: HEALTH_QUERY_KEY, queryFn: () => apiFetch<HealthReport>('/api/health'), refetchInterval: HEALTH_REFRESH_MILLISECONDS })
 }
 
 export function useMetrics() {

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Bouncer, Machine } from '@/api/types'
 import { AgeCell } from '@/components/AgeCell'
@@ -6,7 +6,12 @@ import { ContactStatus } from '@/components/ContactStatus'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { Badge } from '@/components/ui/badge'
 
-export function BouncersTable({ bouncers, now }: { bouncers: Bouncer[]; now: number }) {
+export interface RowActions<Row> {
+  header: string
+  cell: (row: Row) => ReactNode
+}
+
+export function BouncersTable({ bouncers, now, actions }: { bouncers: Bouncer[]; now: number; actions?: RowActions<Bouncer> }) {
   const { t } = useTranslation()
   const columns = useMemo<DataTableColumn<Bouncer>[]>(
     () => [
@@ -17,8 +22,9 @@ export function BouncersTable({ bouncers, now }: { bouncers: Bouncer[]; now: num
       { key: 'lastContact', header: t('health.columns.lastContact'), cell: (bouncer) => <AgeCell isoDate={bouncer.last_pull} now={now} /> },
       { key: 'status', header: t('health.columns.status'), cell: (bouncer) => <ContactStatus lastContact={bouncer.last_pull} now={now} revoked={bouncer.revoked} /> },
       { key: 'auth', header: t('health.columns.auth'), cell: (bouncer) => bouncer.auth_type },
+      ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell }] : []),
     ],
-    [t, now],
+    [t, now, actions],
   )
   if (bouncers.length === 0) {
     return <p className="text-sm text-muted-foreground">{t('health.noBouncers')}</p>
@@ -26,7 +32,7 @@ export function BouncersTable({ bouncers, now }: { bouncers: Bouncer[]; now: num
   return <DataTable caption={t('health.bouncersCaption')} columns={columns} rows={bouncers} rowKey={(bouncer) => bouncer.name} />
 }
 
-export function MachinesTable({ machines, now }: { machines: Machine[]; now: number }) {
+export function MachinesTable({ machines, now, actions }: { machines: Machine[]; now: number; actions?: RowActions<Machine> }) {
   const { t } = useTranslation()
   const columns = useMemo<DataTableColumn<Machine>[]>(
     () => [
@@ -45,8 +51,9 @@ export function MachinesTable({ machines, now }: { machines: Machine[]; now: num
         ),
       },
       { key: 'auth', header: t('health.columns.auth'), cell: (machine) => machine.auth_type },
+      ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell }] : []),
     ],
-    [t, now],
+    [t, now, actions],
   )
   if (machines.length === 0) {
     return <p className="text-sm text-muted-foreground">{t('health.noMachines')}</p>

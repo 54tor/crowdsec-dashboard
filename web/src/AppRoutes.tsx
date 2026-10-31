@@ -6,9 +6,11 @@ import { Layout } from '@/components/Layout'
 import { Login } from '@/pages/Login'
 import { Placeholder } from '@/pages/Placeholder'
 import { Alerts } from '@/pages/Alerts'
+import { Bouncers } from '@/pages/Bouncers'
 import { Config } from '@/pages/Config'
 import { Decisions } from '@/pages/Decisions'
 import { Health } from '@/pages/Health'
+import { Machines } from '@/pages/Machines'
 import { Metrics } from '@/pages/Metrics'
 import { NAV_ITEMS } from '@/routes'
 
@@ -18,6 +20,8 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/health': <Health />,
   '/metrics': <Metrics />,
   '/config': <Config />,
+  '/bouncers': <Bouncers />,
+  '/machines': <Machines />,
 }
 
 function pageFor(path: string, labelKey: string): ReactElement {

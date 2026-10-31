@@ -16,7 +16,8 @@
   },
   "common": {
     "loading": "Chargement…",
-    "comingSoon": "Cette page arrive bientôt."
+    "comingSoon": "Cette page arrive bientôt.",
+    "delete": "Supprimer"
   },
   "language": {
     "label": "Langue",
@@ -50,7 +51,8 @@
     "network": "Erreur réseau. Vérifiez votre connexion.",
     "unknown": "Une erreur inattendue s'est produite.",
     "file_too_large": "Le fichier est trop volumineux pour être affiché.",
-    "config_unavailable": "Les fichiers de configuration sont indisponibles."
+    "config_unavailable": "Les fichiers de configuration sont indisponibles.",
+    "invalid_name": "Utilisez des lettres, chiffres, points, tirets ou underscores (64 caractères maximum), en commençant par une lettre ou un chiffre."
   },
   "filters": {
     "label": "Filtres",
@@ -198,5 +200,39 @@
     "reason": "Motif (facultatif)",
     "submit": "Bannir",
     "success": "{{target}} banni."
+  },
+  "secret": {
+    "create": "Créer",
+    "done": "Terminé",
+    "copy": "Copier",
+    "copied": "Copié dans le presse-papiers.",
+    "copyFailed": "Échec de la copie. Sélectionnez la valeur manuellement.",
+    "warning": "Enregistrez cette valeur maintenant. Elle n'est affichée qu'une seule fois et ne pourra plus être consultée."
+  },
+  "bouncers": {
+    "title": "Bouncers",
+    "add": "Ajouter un bouncer",
+    "addTitle": "Ajouter un bouncer",
+    "addDescription": "Enregistre un nouveau bouncer et génère sa clé d'API.",
+    "nameLabel": "Nom du bouncer",
+    "secretLabel": "Clé d'API",
+    "actions": "Actions",
+    "deleteAria": "Supprimer {{name}}",
+    "deleteTitle": "Supprimer le bouncer {{name}}",
+    "deleteDescription": "Le bouncer {{name}} perdra l'accès à l'API locale CrowdSec."
+  },
+  "machines": {
+    "title": "Machines",
+    "add": "Ajouter une machine",
+    "addTitle": "Ajouter une machine",
+    "addDescription": "Enregistre une nouvelle machine et génère son mot de passe.",
+    "nameLabel": "Nom de la machine",
+    "secretLabel": "Mot de passe",
+    "actions": "Actions",
+    "validate": "Valider",
+    "validateAria": "Valider {{name}}",
+    "deleteAria": "Supprimer {{name}}",
+    "deleteTitle": "Supprimer la machine {{name}}",
+    "deleteDescription": "La machine {{name}} perdra l'accès à l'API locale CrowdSec."
   }
 }
