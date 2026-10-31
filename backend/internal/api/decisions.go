@@ -60,9 +60,6 @@ func targetContainsClient(target string, clientAddress string) bool {
 	if prefixError != nil {
 		return false
 	}
-	if prefix.Addr().Is4In6() {
-		prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
-	}
 	return prefix.Contains(client)
 }
 

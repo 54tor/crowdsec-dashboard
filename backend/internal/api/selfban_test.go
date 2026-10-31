@@ -122,3 +122,17 @@ func TestBanIsNotBlockedWhenTheClientAddressCannotBeParsed(testContext *testing.
 		testContext.Errorf("unexpected %d %q", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestValidationPrecedesTheSelfBanGuard(testContext *testing.T) {
+	fixture := newSelfBanFixture(testContext, nil)
+
+	expectError(testContext, fixture.ban("198.51.100.7:5555", "", "198.0.0.0/7"), http.StatusBadRequest, "invalid_target")
+	invalidDurationBody := `{"ip":"198.51.100.7","duration":"bad","reason":"test"}`
+	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/decisions", strings.NewReader(invalidDurationBody))
+	request.RemoteAddr = "198.51.100.7:5555"
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(fixture.cookie)
+	recorder := httptest.NewRecorder()
+	fixture.handler.ServeHTTP(recorder, request)
+	expectError(testContext, recorder, http.StatusBadRequest, "invalid_duration")
+}

@@ -54,7 +54,7 @@ export function MachinesTable({ machines, now, actions }: { machines: Machine[];
         header: t('health.columns.status'),
         cell: (machine) => (
           <span className="flex flex-wrap gap-1">
-            <ContactStatus lastContact={machine.self ? new Date(now).toISOString() : machine.last_heartbeat} now={now} />
+            {!machine.self && <ContactStatus lastContact={machine.last_heartbeat} now={now} />}
             <Badge variant="outline">{machine.is_validated ? t('health.validated') : t('health.notValidated')}</Badge>
           </span>
         ),

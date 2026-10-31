@@ -19,16 +19,21 @@ export function Machines() {
         <div className="flex flex-wrap items-start gap-2">
           {!machine.is_validated && <ValidateMachineButton machineId={machine.machine_id} />}
           {machine.self ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled
-              aria-label={`${t('machines.deleteAria', { name: machine.machine_id })}: ${t('machines.selfDeleteReason')}`}
-              title={t('machines.selfDeleteReason')}
-            >
-              {t('common.delete')}
-            </Button>
+            <div className="flex flex-col gap-1">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled
+                aria-label={t('machines.deleteAria', { name: machine.machine_id })}
+                aria-describedby={`self-delete-reason-${machine.machine_id}`}
+              >
+                {t('common.delete')}
+              </Button>
+              <span id={`self-delete-reason-${machine.machine_id}`} className="text-xs text-muted-foreground">
+                {t('machines.selfDeleteReason')}
+              </span>
+            </div>
           ) : (
             <RowDeleteAction
               buttonLabel={t('common.delete')}

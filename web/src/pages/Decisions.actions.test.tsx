@@ -49,6 +49,31 @@ describe('decision actions', () => {
     expect(confirmButton).toBeDisabled()
   })
 
+  it('unbanOfARangeRequiresTheExactRangeAndStillSendsTheDecisionId', async () => {
+    const rangeDecision = makeDecision({ id: 11, alert_id: 1, scope: 'Range', value: '198.51.100.0/24' })
+    const fetchMock = stubFetch(
+      decisionRoutes({
+        [DECISIONS_URL]: { status: 200, body: makePage([rangeDecision]) },
+        'DELETE /api/decisions/11': { status: 200, body: { status: 'deleted' } },
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    await user.click(await screen.findByRole('button', { name: 'Unban 198.51.100.0/24' }))
+    const dialog = await screen.findByRole('dialog')
+    const confirmButton = within(dialog).getByRole('button', { name: en.decisions.unban })
+    const confirmInput = within(dialog).getByLabelText('Type 198.51.100.0/24 to confirm')
+    await user.type(confirmInput, '198.51.100.0')
+    expect(confirmButton).toBeDisabled()
+    await user.type(confirmInput, '/24')
+    expect(confirmButton).toBeEnabled()
+    await user.click(confirmButton)
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/11')).toHaveLength(1))
+    expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/11')[0].body).toBe('{"confirm":"11"}')
+  })
+
   it('unbanSendsOnlyConfirmBodyAtDecisionIdPathThenRefreshesList', async () => {
     const fetchMock = stubFetch(decisionRoutes({ 'DELETE /api/decisions/10': { status: 200, body: { status: 'deleted' } } }))
     const user = userEvent.setup()

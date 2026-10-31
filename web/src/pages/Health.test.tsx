@@ -71,6 +71,8 @@ describe('health page', () => {
     expect(within(selfRow).getByText(en.health.self)).toBeInTheDocument()
     expect(within(selfRow).queryByText(en.health.stale)).not.toBeInTheDocument()
     expect(within(selfRow).queryByText(en.health.never)).not.toBeInTheDocument()
+    expect(within(selfRow).queryByText(en.health.ok)).not.toBeInTheDocument()
+    expect(within(selfRow).getByText(en.health.validated)).toBeInTheDocument()
     expect(within(otherRow).queryByText(en.health.self)).not.toBeInTheDocument()
     expect(within(otherRow).getByText(en.health.stale)).toBeInTheDocument()
   })

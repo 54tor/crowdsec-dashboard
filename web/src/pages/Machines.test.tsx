@@ -60,9 +60,15 @@ describe('machines page', () => {
     expect(within(selfRow).getByText(en.health.self)).toBeInTheDocument()
     expect(within(selfRow).queryByText(en.health.stale)).not.toBeInTheDocument()
     expect(within(selfRow).queryByText(en.health.never)).not.toBeInTheDocument()
-    const deleteButton = within(selfRow).getByRole('button', { name: 'Delete dashboard-machine: ' + en.machines.selfDeleteReason })
+    expect(within(selfRow).queryByText(en.health.ok)).not.toBeInTheDocument()
+    expect(within(selfRow).getByText(en.health.validated)).toBeInTheDocument()
+    const deleteButton = within(selfRow).getByRole('button', { name: 'Delete dashboard-machine' })
+    const visibleReason = within(selfRow).getByText(en.machines.selfDeleteReason)
     expect(deleteButton).toBeDisabled()
-    expect(deleteButton).toHaveAttribute('title', en.machines.selfDeleteReason)
+    expect(deleteButton).toHaveAttribute('aria-describedby', visibleReason.id)
+    expect(visibleReason.id).not.toBe('')
+    const otherRow = screen.getByText('machine-two').closest('tr') as HTMLElement
+    expect(within(otherRow).getByText(en.health.stale)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete machine-two' })).toBeEnabled()
   })
 
