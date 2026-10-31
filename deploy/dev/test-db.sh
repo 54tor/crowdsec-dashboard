@@ -20,6 +20,10 @@ services:
     tmpfs:
       - /var/lib/postgresql
     mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "psql -h 127.0.0.1 -U postgres -d csdash_test -c 'select 1'"]
+      interval: 1s
+      retries: 30
 COMPOSE
 }
 
