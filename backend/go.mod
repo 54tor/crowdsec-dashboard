@@ -6,6 +6,7 @@ require (
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/time v0.16.0
 )
 

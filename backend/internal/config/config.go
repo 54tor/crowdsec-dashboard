@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -26,6 +27,16 @@ type Config struct {
 	DockerHost          string
 	ConfDir             string
 	TrustedProxyCIDRs   []*net.IPNet
+
+	SyncEnabled         bool
+	SyncInterval        time.Duration
+	SyncDryRun          bool
+	SyncMaxChanges      int
+	SyncReadLimit       int
+	SyncPeersFile       string
+	ShareExcludeCIDRs   []netip.Prefix
+	ConfigImportEnabled bool
+	ConfigImportDir     string
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -47,6 +58,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, cidrError
 	}
 
+	syncConfig, syncError := loadSyncSettings(getenv)
+	if syncError != nil {
+		return Config{}, syncError
+	}
+
 	listenAddr := getenv("LISTEN_ADDR")
 	if listenAddr == "" {
 		listenAddr = defaultListenAddr
@@ -63,6 +79,16 @@ func Load(getenv func(string) string) (Config, error) {
 		DockerHost:          getenv("DOCKER_HOST"),
 		ConfDir:             getenv("CROWDSEC_CONF_DIR"),
 		TrustedProxyCIDRs:   trustedProxyCIDRs,
+
+		SyncEnabled:         syncConfig.Enabled,
+		SyncInterval:        syncConfig.Interval,
+		SyncDryRun:          syncConfig.DryRun,
+		SyncMaxChanges:      syncConfig.MaxChanges,
+		SyncReadLimit:       syncConfig.ReadLimit,
+		SyncPeersFile:       syncConfig.PeersFile,
+		ShareExcludeCIDRs:   syncConfig.ShareExcludeCIDRs,
+		ConfigImportEnabled: syncConfig.ImportEnabled,
+		ConfigImportDir:     syncConfig.ImportDir,
 	}, nil
 }
 
