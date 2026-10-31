@@ -10,6 +10,7 @@ import { Bouncers } from '@/pages/Bouncers'
 import { Config } from '@/pages/Config'
 import { Decisions } from '@/pages/Decisions'
 import { Health } from '@/pages/Health'
+import { Hub } from '@/pages/Hub'
 import { Machines } from '@/pages/Machines'
 import { Metrics } from '@/pages/Metrics'
 import { NAV_ITEMS } from '@/routes'
@@ -22,6 +23,7 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/config': <Config />,
   '/bouncers': <Bouncers />,
   '/machines': <Machines />,
+  '/hub': <Hub />,
 }
 
 function pageFor(path: string, labelKey: string): ReactElement {

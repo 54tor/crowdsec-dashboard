@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '@/api/client'
-import type { ConfigFileContent, ConfigFileList, HealthReport, MetricsResponse } from '@/api/types'
+import type { ConfigFileContent, ConfigFileList, HealthReport, HubItem, MetricsResponse } from '@/api/types'
 
 const HEALTH_REFRESH_MILLISECONDS = 30_000
 
@@ -8,6 +8,12 @@ export const HEALTH_QUERY_KEY = ['health']
 
 export function useHealth() {
   return useQuery({ queryKey: HEALTH_QUERY_KEY, queryFn: () => apiFetch<HealthReport>('/api/health'), refetchInterval: HEALTH_REFRESH_MILLISECONDS })
+}
+
+export const HUB_QUERY_KEY = ['hub']
+
+export function useHub() {
+  return useQuery({ queryKey: HUB_QUERY_KEY, queryFn: () => apiFetch<HubItem[]>('/api/hub') })
 }
 
 export function useMetrics() {

@@ -52,7 +52,8 @@
     "unknown": "An unexpected error occurred.",
     "file_too_large": "The file is too large to display.",
     "config_unavailable": "The configuration files are unavailable.",
-    "invalid_name": "Use letters, digits, dots, dashes or underscores (64 characters at most), starting with a letter or digit."
+    "invalid_name": "Use letters, digits, dots, dashes or underscores (64 characters at most), starting with a letter or digit.",
+    "refresh": "Refresh data"
   },
   "filters": {
     "label": "Filters",
@@ -234,5 +235,37 @@
     "deleteAria": "Delete {{name}}",
     "deleteTitle": "Delete machine {{name}}",
     "deleteDescription": "The machine {{name}} will lose access to the CrowdSec local API."
+  },
+  "hub": {
+    "title": "Hub",
+    "caption": "Hub items",
+    "filterType": "Type",
+    "filterName": "Name",
+    "allTypes": "All types",
+    "update": "Update",
+    "upgrade": "Upgrade",
+    "slowNote": "Update and upgrade can take up to two minutes.",
+    "install": "Install collection",
+    "installTitle": "Install a collection",
+    "installDescription": "Installs a collection from the CrowdSec hub, for example crowdsecurity/linux.",
+    "installName": "Collection name",
+    "installSubmit": "Install",
+    "remove": "Remove",
+    "removeAria": "Remove {{name}}",
+    "removeTitle": "Remove collection {{name}}",
+    "removeDescription": "The collection {{name}} will be uninstalled.",
+    "reloadRequired": "CrowdSec must be reloaded",
+    "reloadHint": "The hub changed. Reload CrowdSec for the changes to take effect.",
+    "reload": "Reload CrowdSec",
+    "empty": "No hub item matches these filters.",
+    "noItems": "The hub list is empty.",
+    "columns": {
+      "type": "Type",
+      "name": "Name",
+      "status": "Status",
+      "version": "Version",
+      "description": "Description",
+      "actions": "Actions"
+    }
   }
 }

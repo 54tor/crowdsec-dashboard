@@ -52,7 +52,8 @@
     "unknown": "Une erreur inattendue s'est produite.",
     "file_too_large": "Le fichier est trop volumineux pour être affiché.",
     "config_unavailable": "Les fichiers de configuration sont indisponibles.",
-    "invalid_name": "Utilisez des lettres, chiffres, points, tirets ou underscores (64 caractères maximum), en commençant par une lettre ou un chiffre."
+    "invalid_name": "Utilisez des lettres, chiffres, points, tirets ou underscores (64 caractères maximum), en commençant par une lettre ou un chiffre.",
+    "refresh": "Actualiser les données"
   },
   "filters": {
     "label": "Filtres",
@@ -234,5 +235,37 @@
     "deleteAria": "Supprimer {{name}}",
     "deleteTitle": "Supprimer la machine {{name}}",
     "deleteDescription": "La machine {{name}} perdra l'accès à l'API locale CrowdSec."
+  },
+  "hub": {
+    "title": "Hub",
+    "caption": "Éléments du hub",
+    "filterType": "Type",
+    "filterName": "Nom",
+    "allTypes": "Tous les types",
+    "update": "Mettre à jour",
+    "upgrade": "Mettre à niveau",
+    "slowNote": "La mise à jour et la mise à niveau peuvent prendre jusqu'à deux minutes.",
+    "install": "Installer une collection",
+    "installTitle": "Installer une collection",
+    "installDescription": "Installe une collection du hub CrowdSec, par exemple crowdsecurity/linux.",
+    "installName": "Nom de la collection",
+    "installSubmit": "Installer",
+    "remove": "Retirer",
+    "removeAria": "Retirer {{name}}",
+    "removeTitle": "Retirer la collection {{name}}",
+    "removeDescription": "La collection {{name}} sera désinstallée.",
+    "reloadRequired": "CrowdSec doit être rechargé",
+    "reloadHint": "Le hub a changé. Rechargez CrowdSec pour appliquer les changements.",
+    "reload": "Recharger CrowdSec",
+    "empty": "Aucun élément du hub ne correspond à ces filtres.",
+    "noItems": "La liste du hub est vide.",
+    "columns": {
+      "type": "Type",
+      "name": "Nom",
+      "status": "Statut",
+      "version": "Version",
+      "description": "Description",
+      "actions": "Actions"
+    }
   }
 }
