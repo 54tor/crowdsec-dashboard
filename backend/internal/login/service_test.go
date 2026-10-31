@@ -518,3 +518,58 @@ func TestBeginReturnsStoreFullBeyondCapacity(testContext *testing.T) {
 		testContext.Errorf("expected ErrPendingStoreFull, got %v", fullError)
 	}
 }
+
+// failedSecondFactorCount reads the account counter so the per-pending-login
+// cap can be told apart from the per-account lockout, which also stops at 5.
+func (fixture *loginFixture) failedSecondFactorCount(testContext *testing.T, accountID int64) int {
+	testContext.Helper()
+	var failedCount int
+	if queryError := fixture.database.NewRaw(`SELECT account_failed_second_factor_count FROM account WHERE account_id = ?`, accountID).
+		Scan(context.Background(), &failedCount); queryError != nil {
+		testContext.Fatal(queryError)
+	}
+	return failedCount
+}
+
+func TestPendingLoginAttemptCapIsIndependentOfAccountLockout(testContext *testing.T) {
+	fixture := newLoginFixtureWith(testContext, fixtureOptions{maxAttempts: 2})
+	alice := fixture.createTOTPAccount(testContext, "alice")
+	beginResult := fixture.beginOrFail(testContext, "alice")
+
+	for attemptNumber := 1; attemptNumber <= 2; attemptNumber++ {
+		if _, verifyError := fixture.service.VerifyTOTP(context.Background(), beginResult.PendingID, clientAddress, neverMatchingTOTPCode); !errors.Is(verifyError, ErrSecondFactorInvalid) {
+			testContext.Fatalf("attempt %d: expected ErrSecondFactorInvalid, got %v", attemptNumber, verifyError)
+		}
+	}
+	_, thirdError := fixture.service.VerifyTOTP(context.Background(), beginResult.PendingID, clientAddress, fixture.totpCode(testContext, alice.secret))
+
+	if !errors.Is(thirdError, ErrPendingLoginInvalid) {
+		testContext.Errorf("the pending login must be forgotten after its own cap, got %v", thirdError)
+	}
+	if verifications := fixture.factors.totpVerifications.Load(); verifications != 2 {
+		testContext.Errorf("expected exactly 2 verifications, got %d", verifications)
+	}
+	if failedCount := fixture.failedSecondFactorCount(testContext, alice.accountID); failedCount != 2 {
+		testContext.Errorf("expected the account counter at 2, got %d", failedCount)
+	}
+	if lockedUntil, _ := fixture.accounts.LockedUntil(context.Background(), alice.accountID); !lockedUntil.IsZero() {
+		testContext.Errorf("the per-pending cap must not lock the account, got %v", lockedUntil)
+	}
+}
+
+func TestParallelWrongCodesRespectThePendingLoginCap(testContext *testing.T) {
+	fixture := newLoginFixtureWith(testContext, fixtureOptions{maxAttempts: 2})
+	alice := fixture.createTOTPAccount(testContext, "alice")
+	beginResult := fixture.beginOrFail(testContext, "alice")
+
+	runConcurrently(20, func() {
+		fixture.service.VerifyTOTP(context.Background(), beginResult.PendingID, clientAddress, neverMatchingTOTPCode)
+	})
+
+	if verifications := fixture.factors.totpVerifications.Load(); verifications > 2 {
+		testContext.Errorf("expected at most 2 verifications, got %d", verifications)
+	}
+	if lockedUntil, _ := fixture.accounts.LockedUntil(context.Background(), alice.accountID); !lockedUntil.IsZero() {
+		testContext.Errorf("the per-pending cap must not lock the account, got %v", lockedUntil)
+	}
+}

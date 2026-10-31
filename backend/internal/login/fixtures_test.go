@@ -116,6 +116,7 @@ type loginFixture struct {
 type fixtureOptions struct {
 	geolocator       fakeGeolocator
 	maxPendingLogins int
+	maxAttempts      int
 }
 
 func newLoginFixture(testContext *testing.T) *loginFixture {
@@ -155,6 +156,7 @@ func newLoginFixtureWith(testContext *testing.T, options fixtureOptions) *loginF
 		Database:         database,
 		Now:              clock.Now,
 		MaxPendingLogins: options.maxPendingLogins,
+		MaxAttempts:      options.maxAttempts,
 	})
 	return fixture
 }
