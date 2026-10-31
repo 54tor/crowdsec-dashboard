@@ -30,3 +30,21 @@ export function slowResponse(status: number, body: unknown, delayMilliseconds: n
     setTimeout(() => resolve(new Response(JSON.stringify(body), { status })), delayMilliseconds)
   })
 }
+
+export function deferredResponse() {
+  let resolveResponse!: (response: Response) => void
+  const promise = new Promise<Response>((resolve) => {
+    resolveResponse = resolve
+  })
+  return {
+    promise,
+    settle: (status: number, body: unknown) => resolveResponse(new Response(JSON.stringify(body), { status })),
+  }
+}
+
+export function holdPostRequests(fetchMock: { getMockImplementation: () => ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | undefined; mockImplementation: (implementation: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) => unknown }) {
+  const heldResponse = deferredResponse()
+  const defaultImplementation = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (input, init) => (init?.method === 'POST' || init?.method === 'DELETE' ? heldResponse.promise : defaultImplementation(input, init)))
+  return heldResponse
+}

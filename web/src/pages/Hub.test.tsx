@@ -103,19 +103,78 @@ describe('hub page', () => {
     expect(await screen.findByText(en.hub.reloadRequired)).toBeInTheDocument()
   })
 
-  it('timeoutOnUpgradeShowsTranslatedMessageAndRefreshButton', async () => {
+  it('timeoutOnUpgradeShowsTranslatedMessageRefreshButtonAndReloadBanner', async () => {
     const fetchMock = stubFetch(hubRoutes({ 'POST /api/hub/upgrade': { status: 504, body: { error: 'cscli_timeout' } } }))
     const user = userEvent.setup()
     renderApp('/hub')
 
     await user.click(await screen.findByRole('button', { name: en.hub.upgrade }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.cscli_timeout)
-    expect(screen.queryByText(en.hub.reloadRequired)).not.toBeInTheDocument()
+    expect(await screen.findByText(en.errors.cscli_timeout)).toBeInTheDocument()
+    expect(screen.getByText(en.hub.reloadRequired)).toBeInTheDocument()
     const hubFetchesBefore = requestsTo(fetchMock, 'GET', '/api/hub').length
     await user.click(screen.getByRole('button', { name: en.errors.refresh }))
     await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/hub').length).toBeGreaterThan(hubFetchesBefore))
     expect(screen.getByRole('button', { name: en.hub.upgrade })).toBeEnabled()
+  })
+
+  it('reloadBannerSurvivesRefreshAfterTimeoutAndDisappearsOnlyAfterSuccessfulReload', async () => {
+    const fetchMock = stubFetch(
+      hubRoutes({
+        'POST /api/hub/collections': { status: 200, body: { status: 'installed' } },
+        'POST /api/hub/upgrade': { status: 504, body: { error: 'cscli_timeout' } },
+        'POST /api/crowdsec/reload': { status: 200, body: { status: 'reload_requested' } },
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    await user.click(await screen.findByRole('button', { name: en.hub.install }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(en.hub.installName), 'crowdsecurity/nginx')
+    await user.click(within(dialog).getByRole('button', { name: en.hub.installSubmit }))
+    await screen.findByText(en.hub.reloadRequired)
+
+    await user.click(screen.getByRole('button', { name: en.hub.upgrade }))
+    const hubFetchesBefore = requestsTo(fetchMock, 'GET', '/api/hub').length
+    await user.click(await screen.findByRole('button', { name: en.errors.refresh }))
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/hub').length).toBeGreaterThan(hubFetchesBefore))
+    expect(screen.getByText(en.hub.reloadRequired)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: en.hub.reload }))
+    await waitFor(() => expect(screen.queryByText(en.hub.reloadRequired)).not.toBeInTheDocument())
+  })
+
+  it('timeoutOnRemoveRaisesReloadBanner', async () => {
+    stubFetch(
+      hubRoutes({
+        'POST /api/hub/collections': { status: 504, body: { error: 'cscli_timeout' } },
+        'DELETE /api/hub/collections/crowdsecurity/linux': { status: 504, body: { error: 'cscli_timeout' } },
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    await user.click(await screen.findByRole('button', { name: 'Remove crowdsecurity/linux' }))
+    const removeDialog = await screen.findByRole('dialog')
+    await user.type(within(removeDialog).getByLabelText('Type crowdsecurity/linux to confirm'), 'crowdsecurity/linux')
+    await user.click(within(removeDialog).getByRole('button', { name: en.hub.remove }))
+    expect(await within(removeDialog).findByText(en.errors.cscli_timeout)).toBeInTheDocument()
+    expect(screen.getAllByText(en.hub.reloadRequired).length).toBeGreaterThan(0)
+  })
+
+  it('timeoutOnInstallRaisesReloadBanner', async () => {
+    stubFetch(hubRoutes({ 'POST /api/hub/collections': { status: 504, body: { error: 'cscli_timeout' } } }))
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    await user.click(await screen.findByRole('button', { name: en.hub.install }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(en.hub.installName), 'crowdsecurity/nginx')
+    await user.click(within(dialog).getByRole('button', { name: en.hub.installSubmit }))
+
+    expect(await within(dialog).findByText(en.errors.cscli_timeout)).toBeInTheDocument()
+    expect(screen.getAllByText(en.hub.reloadRequired).length).toBeGreaterThan(0)
   })
 
   it('showsSpinnerNoteAndBlocksDoubleSubmitWhileUpgrading', async () => {

@@ -1,10 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
 import { makeDecision, makePage } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
-import { prepareEnglishApp, requestsTo, SESSION_OK, slowResponse } from '@/test/pageHarness'
+import { holdPostRequests, prepareEnglishApp, requestsTo, SESSION_OK, slowResponse } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const DECISIONS_URL = 'GET /api/decisions?page=1&per_page=20'
@@ -155,5 +155,47 @@ describe('decision actions', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(requestsTo(fetchMock, 'POST', '/api/decisions')).toHaveLength(1)
+  })
+
+  it('confirmDeleteDialogCannotBeClosedWhilePending', async () => {
+    const fetchMock = stubFetch(decisionRoutes())
+    const heldResponse = holdPostRequests(fetchMock)
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    await user.click(await screen.findByRole('button', { name: 'Unban 203.0.113.7' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Type 10 to confirm'), '10')
+    await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
+    await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/10')).toHaveLength(1))
+
+    await user.keyboard('{Escape}')
+    fireEvent.pointerDown(document.body)
+    expect(within(dialog).getByRole('button', { name: en.dialog.cancel })).toBeDisabled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    heldResponse.settle(502, { error: 'lapi_unavailable' })
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(en.errors.lapi_unavailable)
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: en.dialog.cancel })).toBeEnabled()
+  })
+
+  it('banDialogCannotBeClosedWhilePending', async () => {
+    const fetchMock = stubFetch(decisionRoutes())
+    const heldResponse = holdPostRequests(fetchMock)
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    const dialog = await openBanDialog(user)
+    await user.type(within(dialog).getByLabelText(en.ban.ip), '203.0.113.9')
+    await user.click(within(dialog).getByRole('button', { name: en.ban.submit }))
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/decisions')).toHaveLength(1))
+
+    await user.keyboard('{Escape}')
+    fireEvent.pointerDown(document.body)
+    expect(within(dialog).getByRole('button', { name: en.dialog.cancel })).toBeDisabled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    heldResponse.settle(400, { error: 'invalid_target' })
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(en.errors.invalid_target)
   })
 })

@@ -5,6 +5,7 @@ import { ErrorNotice } from '@/components/Notice'
 import { SecretReveal } from '@/components/SecretReveal'
 import { Button } from '@/components/ui/button'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { usePendingReport } from '@/hooks/usePendingReport'
 import { validateResourceName } from '@/lib/nameValidation'
 
 export interface CreateSecretLabels {
@@ -19,15 +20,17 @@ interface CreateSecretFormProps {
   createSecret: (name: string) => Promise<string>
   onCreated: () => void
   onClose: () => void
+  reportPending: (isPending: boolean) => void
 }
 
-export function CreateSecretForm({ labels, createSecret, onCreated, onClose }: CreateSecretFormProps) {
+export function CreateSecretForm({ labels, createSecret, onCreated, onClose, reportPending }: CreateSecretFormProps) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [secret, setSecret] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false)
   const [failure, setFailure] = useState<unknown>(null)
   const isSubmitting = useRef(false)
+  usePendingReport(isPending, reportPending)
   const nameError = name === '' ? null : validateResourceName(name)
   const isValid = name !== '' && !nameError
 
@@ -81,7 +84,7 @@ export function CreateSecretForm({ labels, createSecret, onCreated, onClose }: C
       <DialogFooter>
         {secret === null ? (
           <>
-            <Button type="button" variant="outline" onClick={close}>
+            <Button type="button" variant="outline" disabled={isPending} onClick={close}>
               {t('dialog.cancel')}
             </Button>
             <Button type="submit" disabled={!isValid || isPending}>

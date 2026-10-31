@@ -4,14 +4,17 @@ import { installCollection } from '@/api/writeApi'
 import { FormField } from '@/components/FormField'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { PendingLockDialog } from '@/components/PendingLockDialog'
+import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { usePendingReport } from '@/hooks/usePendingReport'
 import { useHubMutation } from '@/hooks/useHubMutation'
 import { validateHubName } from '@/lib/nameValidation'
 
-function InstallForm({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
+function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; onClose: () => void; reportPending: (isPending: boolean) => void }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const installation = useHubMutation(installCollection, onDone)
+  usePendingReport(installation.isPending, reportPending)
   const nameError = name === '' ? null : validateHubName(name)
   const isValid = name !== '' && !nameError
 
@@ -37,7 +40,7 @@ function InstallForm({ onDone, onClose }: { onDone: () => void; onClose: () => v
       />
       {installation.error && <ErrorNotice error={installation.error} />}
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" disabled={installation.isPending} onClick={onClose}>
           {t('dialog.cancel')}
         </Button>
         <Button type="submit" disabled={!isValid || installation.isPending}>
@@ -52,13 +55,8 @@ export function InstallCollectionDialog() {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button type="button">{t('hub.install')}</Button>
-      </DialogTrigger>
-      <DialogContent showCloseButton={false}>
-        <InstallForm onDone={() => setIsOpen(false)} onClose={() => setIsOpen(false)} />
-      </DialogContent>
-    </Dialog>
+    <PendingLockDialog open={isOpen} onOpenChange={setIsOpen} trigger={<Button type="button">{t('hub.install')}</Button>}>
+      {(reportPending) => <InstallForm onDone={() => setIsOpen(false)} onClose={() => setIsOpen(false)} reportPending={reportPending} />}
+    </PendingLockDialog>
   )
 }

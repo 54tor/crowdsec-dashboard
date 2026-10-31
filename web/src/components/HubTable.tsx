@@ -5,6 +5,7 @@ import { removeCollection } from '@/api/writeApi'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { HUB_QUERY_KEY } from '@/hooks/useReadResources'
+import { isTimeoutError } from '@/lib/apiErrors'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
 
 export function HubTable({ items }: { items: HubItem[] }) {
@@ -31,6 +32,7 @@ export function HubTable({ items }: { items: HubItem[] }) {
               request={(confirm) => removeCollection(hubItem.name, confirm)}
               invalidates={[HUB_QUERY_KEY]}
               onDeleted={markReloadRequired}
+              onFailed={(failure) => isTimeoutError(failure) && markReloadRequired()}
             />
           ),
       },

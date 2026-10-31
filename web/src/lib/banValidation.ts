@@ -14,7 +14,7 @@ function isIpv4MappedAddress(address: string): boolean {
   return ipaddr.IPv6.isValid(address) && ipaddr.IPv6.parse(address).isIPv4MappedAddress()
 }
 
-function isPrefixWideEnough(address: string, prefix: string): boolean {
+function isPrefixNarrowEnough(address: string, prefix: string): boolean {
   const minimumPrefix = ipaddr.IPv4.isValidFourPartDecimal(address) ? MIN_IPV4_BAN_PREFIX : MIN_IPV6_BAN_PREFIX
   return Number(prefix) >= minimumPrefix
 }
@@ -27,7 +27,7 @@ export function validateBanTarget(target: string): BanFieldError | null {
   if (isIpv4MappedAddress(address)) {
     return 'invalid_target'
   }
-  if (prefix !== undefined && !isPrefixWideEnough(address, prefix)) {
+  if (prefix !== undefined && !isPrefixNarrowEnough(address, prefix)) {
     return 'invalid_target'
   }
   return null

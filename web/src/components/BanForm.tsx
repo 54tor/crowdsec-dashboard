@@ -6,22 +6,25 @@ import { FormField } from '@/components/FormField'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { usePendingReport } from '@/hooks/usePendingReport'
 import { validateBanDuration, validateBanReason, validateBanTarget } from '@/lib/banValidation'
 
 const DURATION_PRESETS = ['1h', '24h', '7d', '30d']
 const DEFAULT_DURATION = '24h'
 
 interface BanFormProps {
+  reportPending: (isPending: boolean) => void
   onBanned: (target: string) => void
   onClose: () => void
 }
 
-export function BanForm({ onBanned, onClose }: BanFormProps) {
+export function BanForm({ onBanned, onClose, reportPending }: BanFormProps) {
   const { t } = useTranslation()
   const [target, setTarget] = useState('')
   const [duration, setDuration] = useState(DEFAULT_DURATION)
   const [reason, setReason] = useState('')
   const ban = useMutation({ mutationFn: banIp, onSuccess: () => onBanned(target) })
+  usePendingReport(ban.isPending, reportPending)
 
   const targetError = target === '' ? null : validateBanTarget(target)
   const durationError = validateBanDuration(duration)
@@ -74,7 +77,7 @@ export function BanForm({ onBanned, onClose }: BanFormProps) {
       />
       {ban.error && <ErrorNotice error={ban.error} />}
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" disabled={ban.isPending} onClick={onClose}>
           {t('dialog.cancel')}
         </Button>
         <Button type="submit" disabled={!isValid || ban.isPending}>

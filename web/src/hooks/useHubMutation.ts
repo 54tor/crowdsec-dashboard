@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { HUB_QUERY_KEY } from '@/hooks/useReadResources'
+import { isTimeoutError } from '@/lib/apiErrors'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
 
 export function useHubMutation<Variables = void>(mutationFn: (variables: Variables) => Promise<unknown>, onDone?: () => void) {
@@ -11,6 +12,11 @@ export function useHubMutation<Variables = void>(mutationFn: (variables: Variabl
       markReloadRequired()
       void queryClient.invalidateQueries({ queryKey: HUB_QUERY_KEY })
       onDone?.()
+    },
+    onError: (failure) => {
+      if (isTimeoutError(failure)) {
+        markReloadRequired()
+      }
     },
   })
 }

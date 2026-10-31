@@ -4,7 +4,9 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { HUB_QUERY_KEY } from '@/hooks/useReadResources'
 import { errorMessage } from '@/i18n'
+import { isTimeoutError } from '@/lib/apiErrors'
 
 export function InfoNotice({ children }: { children: ReactNode }) {
   return (
@@ -25,10 +27,6 @@ export function WarningNotice({ title, children }: { title?: string; children: R
   )
 }
 
-function isTimeout(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'cscli_timeout'
-}
-
 export function ErrorNotice({ error }: { error: unknown }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -37,8 +35,8 @@ export function ErrorNotice({ error }: { error: unknown }) {
       <TriangleAlert aria-hidden="true" />
       <AlertDescription>
         {errorMessage(error)}
-        {isTimeout(error) && (
-          <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void queryClient.invalidateQueries()}>
+        {isTimeoutError(error) && (
+          <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void queryClient.invalidateQueries({ queryKey: HUB_QUERY_KEY })}>
             {t('errors.refresh')}
           </Button>
         )}

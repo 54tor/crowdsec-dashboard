@@ -1,19 +1,10 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useContext } from 'react'
+import { ReloadRequiredContext, type ReloadRequiredState } from '@/hooks/ReloadRequiredContext'
 
-const RELOAD_REQUIRED_KEY = ['reload-required']
-
-export function useReloadRequired() {
-  const queryClient = useQueryClient()
-  const { data: isReloadRequired } = useQuery({
-    queryKey: RELOAD_REQUIRED_KEY,
-    queryFn: () => false,
-    initialData: false,
-    staleTime: Infinity,
-    gcTime: Infinity,
-  })
-  return {
-    isReloadRequired,
-    markReloadRequired: () => queryClient.setQueryData(RELOAD_REQUIRED_KEY, true),
-    clearReloadRequired: () => queryClient.setQueryData(RELOAD_REQUIRED_KEY, false),
+export function useReloadRequired(): ReloadRequiredState {
+  const state = useContext(ReloadRequiredContext)
+  if (state === null) {
+    throw new Error('useReloadRequired must be used inside ReloadRequiredProvider')
   }
+  return state
 }

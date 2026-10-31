@@ -1,4 +1,4 @@
-import { apiFetch } from '@/api/client'
+import { ApiError, apiFetch } from '@/api/client'
 import type { BanRequest, CreatedBouncer, CreatedMachine } from '@/api/types'
 
 interface StatusResponse {
@@ -13,8 +13,14 @@ function deleteConfirmed(path: string, confirm: string): Promise<StatusResponse>
   return sendJson('DELETE', path, { confirm })
 }
 
+const FORBIDDEN_PATH_SEGMENTS = new Set(['', '.', '..'])
+
 function encodeSegments(name: string): string {
-  return name.split('/').map(encodeURIComponent).join('/')
+  const segments = name.split('/')
+  if (segments.some((segment) => FORBIDDEN_PATH_SEGMENTS.has(segment))) {
+    throw new ApiError('invalid_request', 0)
+  }
+  return segments.map(encodeURIComponent).join('/')
 }
 
 export const banIp = (ban: BanRequest) => sendJson<StatusResponse>('POST', '/api/decisions', ban)
@@ -31,6 +37,6 @@ export const deleteMachine = (name: string, confirm: string) => deleteConfirmed(
 export const updateHub = () => sendJson<StatusResponse>('POST', '/api/hub/update')
 export const upgradeHub = () => sendJson<StatusResponse>('POST', '/api/hub/upgrade')
 export const installCollection = (name: string) => sendJson<StatusResponse>('POST', '/api/hub/collections', { name })
-export const removeCollection = (name: string, confirm: string) => deleteConfirmed(`/api/hub/collections/${encodeSegments(name)}`, confirm)
+export const removeCollection = async (name: string, confirm: string) => deleteConfirmed(`/api/hub/collections/${encodeSegments(name)}`, confirm)
 
 export const reloadCrowdsec = () => sendJson<StatusResponse>('POST', '/api/crowdsec/reload')

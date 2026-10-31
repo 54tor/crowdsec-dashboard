@@ -1,10 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
 import { makeBouncer, makeHealth } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
-import { prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
+import { holdPostRequests, prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const FAKE_KEY = 'fake-bouncer-key-for-tests'
@@ -60,6 +60,24 @@ describe('bouncers page', () => {
     expect(document.body.innerHTML).not.toContain(FAKE_KEY)
     expect(everythingStoredInBrowser(queryClient)).not.toContain(FAKE_KEY)
     await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/health').length).toBeGreaterThan(1))
+  })
+
+  it('createSecretDialogCannotBeClosedWhilePending', async () => {
+    const fetchMock = stubFetch(bouncerRoutes())
+    const heldResponse = holdPostRequests(fetchMock)
+    const user = userEvent.setup()
+    renderApp('/bouncers')
+
+    const dialog = await createBouncerNamed(user, 'new-one')
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/bouncers')).toHaveLength(1))
+
+    await user.keyboard('{Escape}')
+    fireEvent.pointerDown(document.body)
+    expect(within(dialog).getByRole('button', { name: en.dialog.cancel })).toBeDisabled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    heldResponse.settle(200, { name: 'new-one', key: FAKE_KEY })
+    expect(await within(screen.getByRole('dialog')).findByText(FAKE_KEY)).toBeInTheDocument()
   })
 
   it('keyIsClearedWhenDialogIsClosedWithEscapeAndReopenedEmpty', async () => {

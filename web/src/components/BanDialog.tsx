@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BanForm } from '@/components/BanForm'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
+import { PendingLockDialog } from '@/components/PendingLockDialog'
 
 export function BanDialog() {
   const { t } = useTranslation()
@@ -22,14 +22,9 @@ export function BanDialog() {
       <p role="status" className="text-sm text-muted-foreground">
         {lastBannedTarget && t('ban.success', { target: lastBannedTarget })}
       </p>
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogTrigger asChild>
-          <Button type="button">{t('ban.open')}</Button>
-        </DialogTrigger>
-        <DialogContent showCloseButton={false}>
-          <BanForm onBanned={finishBan} onClose={() => setIsOpen(false)} />
-        </DialogContent>
-      </Dialog>
+      <PendingLockDialog open={isOpen} onOpenChange={setIsOpen} trigger={<Button type="button">{t('ban.open')}</Button>}>
+        {(reportPending) => <BanForm onBanned={finishBan} onClose={() => setIsOpen(false)} reportPending={reportPending} />}
+      </PendingLockDialog>
     </div>
   )
 }
