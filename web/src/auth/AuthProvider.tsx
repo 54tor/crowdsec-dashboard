@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError, apiFetch, resetUnauthenticatedGuard, setUnauthenticatedHandler } from '@/api/client'
+import { Button } from '@/components/ui/button'
 import { AuthContext, type AuthState } from './AuthContext'
 import { ENROLLMENT_STATUS_QUERY_KEY } from './useEnrollmentStatus'
 
@@ -75,6 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (sessionQuery.isPending) {
     return <p className="p-6 text-sm text-muted-foreground">{t('common.loading')}</p>
+  }
+  if (sessionQuery.isError) {
+    const errorCode = sessionQuery.error instanceof ApiError ? sessionQuery.error.code : 'network'
+    return (
+      <div role="alert" className="flex flex-col items-start gap-3 p-6 text-sm">
+        <p>{t(`errors.${errorCode}`, { defaultValue: t('errors.network') })}</p>
+        <Button onClick={() => void sessionQuery.refetch()}>{t('common.retry')}</Button>
+      </div>
+    )
   }
   return <AuthContext.Provider value={authState}>{children}</AuthContext.Provider>
 }

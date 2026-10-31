@@ -15,6 +15,7 @@
     "hub": "Hub"
   },
   "common": {
+    "retry": "Réessayer",
     "loading": "Chargement…",
     "comingSoon": "Cette page arrive bientôt.",
     "delete": "Supprimer"

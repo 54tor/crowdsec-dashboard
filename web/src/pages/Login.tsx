@@ -32,7 +32,7 @@ export function Login() {
     setIsSubmitting(true)
     setLoginError(null)
     try {
-      await login(accountName.trim(), password)
+      await login(accountName.trim().toLowerCase(), password)
     } catch (loginFailure) {
       setLoginError({ failure: loginFailure })
     } finally {

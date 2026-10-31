@@ -195,6 +195,53 @@ describe('app routing and auth', () => {
     })
   })
 
+  it('lowercasesTheAccountNameAtLogin', async () => {
+    const fetchMock = stubFetch({
+      'GET /api/auth/status': ENROLLMENT_CLOSED,
+      'GET /api/auth/me': UNAUTHENTICATED,
+      'POST /api/auth/login': { status: 200, body: { status: 'ok' } },
+    })
+    const user = userEvent.setup()
+    renderApp('/login')
+    await user.type(await screen.findByLabelText(en.login.accountName), '  Alice ')
+    await user.type(screen.getByLabelText(en.login.password), 'correct horse')
+    await user.click(screen.getByRole('button', { name: en.login.submit }))
+    await screen.findByRole('heading', { name: en.nav.alerts })
+    const loginCall = fetchMock.mock.calls.find(([requestedPath]) => requestedPath === '/api/auth/login')
+    expect(JSON.parse(String(loginCall?.[1]?.body)).account_name).toBe('alice')
+  })
+
+  it('showsRetryableDatabaseUnavailableStateWhenSessionCheckFailsAtLoad', async () => {
+    let isDatabaseUp = false
+    const fetchMock = stubFetch({
+      'GET /api/auth/status': ENROLLMENT_CLOSED,
+      'GET /api/auth/me': () =>
+        isDatabaseUp
+          ? { status: 200, body: { status: 'authenticated', account_name: 'alice', account_role: 'admin' } }
+          : { status: 503, body: { error: 'database_unavailable' } },
+    })
+    const user = userEvent.setup()
+    const { visitedPaths } = renderApp('/decisions')
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.database_unavailable)
+    expect(visitedPaths).toEqual(['/decisions'])
+    expect(screen.queryByRole('heading', { name: en.login.title })).not.toBeInTheDocument()
+
+    isDatabaseUp = true
+    await user.click(screen.getByRole('button', { name: en.common.retry }))
+    expect(await screen.findByRole('heading', { name: en.nav.decisions })).toBeInTheDocument()
+    expect(visitedPaths).toEqual(['/decisions'])
+    const meCalls = fetchMock.mock.calls.filter(([requestedPath]) => requestedPath === '/api/auth/me')
+    expect(meCalls).toHaveLength(2)
+  })
+
+  it('translatesTheSessionCheckFailureStateToFrench', async () => {
+    stubFetch({ 'GET /api/auth/me': { status: 503, body: { error: 'database_unavailable' } } })
+    await setLanguage('fr')
+    renderApp('/decisions')
+    expect(await screen.findByRole('alert')).toHaveTextContent(fr.errors.database_unavailable)
+    expect(screen.getByRole('button', { name: fr.common.retry })).toBeInTheDocument()
+  })
+
   it('translatesDatabaseUnavailableWithoutLoggingOut', async () => {
     stubFetch({
       'GET /api/auth/status': ENROLLMENT_CLOSED,
