@@ -112,17 +112,25 @@ services:
       SECRETS_KEY_FILE: /run/dashboard-secrets/key
       S6_READ_ONLY_ROOT: "1"
       WAIT_FOR_NETWORK: "false"
+      GEOIP_DATABASE_FILE: /var/lib/geoip/GeoLite2-Country.mmdb
+      GEOIPUPDATE_FREQUENCY_HOURS: "24"
     volumes:
       - crowdsec-config:/etc/crowdsec:ro
+      - geoip-data:/var/lib/geoip
     read_only: true
     # /run must be exec and not world-writable for s6-overlay.
     tmpfs:
       - /run:exec,nosuid,nodev,mode=0755
       - /tmp:noexec,nosuid,nodev,mode=1777
-    # SETUID/SETGID for s6-setuidgid, KILL to signal the dashboard on stop, DAC_READ_SEARCH and CHOWN to hand the key to it.
+      - /etc/cron.d:noexec,nosuid,nodev,mode=0755
+    # SETUID/SETGID for s6-setuidgid, KILL to signal the dashboard on stop, DAC_READ_SEARCH and CHOWN to hand the secrets and the GeoLite2 volume to it.
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_READ_SEARCH, KILL, SETGID, SETUID]
-    secrets: [dashboard-secrets-key]
+    secrets:
+      - dashboard-secrets-key
+      # Optional GeoLite2 updates: uncomment with the matching top-level secrets below.
+      # - maxmind-account-id
+      # - maxmind-license-key
     security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/healthz"]
@@ -158,11 +166,16 @@ volumes:
   crowdsec-config:
   crowdsec-data:
   postgres-data:
+  geoip-data:
 
 # Create once, outside git: install -d -m 0700 secrets && (umask 077; openssl rand -base64 32 > secrets/dashboard-secrets.key)
 secrets:
   dashboard-secrets-key:
     file: ./secrets/dashboard-secrets.key
+  # maxmind-account-id:
+  #   file: ./secrets/maxmind-account-id
+  # maxmind-license-key:
+  #   file: ./secrets/maxmind-license-key
 
 networks:
   crowdsec: {}

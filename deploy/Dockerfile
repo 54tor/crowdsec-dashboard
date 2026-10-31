@@ -48,14 +48,17 @@ ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
 LABEL org.opencontainers.image.title="crowdsec-dashboard" \
       org.opencontainers.image.description="Web dashboard for a CrowdSec instance, supervised by s6-overlay and run as an unprivileged user."
 RUN set -eux; \
-    apk add --no-cache bash ca-certificates shadow tzdata; \
+    apk add --no-cache bash ca-certificates shadow supercronic tzdata; \
     groupadd --gid 10000 docker-user; \
     useradd --uid 10000 --gid docker-user -M --shell /bin/bash docker-user; \
-    install -d -o 0 -g 0 -m 0755 /custom-scripts.d /docker-entrypoint.d
+    install -d -o 0 -g 0 -m 0755 /custom-scripts.d /docker-entrypoint.d /etc/cron.d; \
+    install -d -o 10000 -g 10000 -m 0755 /var/lib/geoip
 COPY --from=s6 /s6root/ /
 COPY --from=geoipupdate-build /out/geoipupdate /usr/local/bin/geoipupdate
 COPY --from=backend /out/dashboard /usr/local/bin/dashboard
+COPY --chown=0:0 deploy/s6/overlays/alpine/ /
 COPY --chown=0:0 deploy/s6/rootfs/ /
+VOLUME /var/lib/geoip
 EXPOSE 8080
 HEALTHCHECK CMD wget -q -O /dev/null http://127.0.0.1:8080/api/healthz
 ENTRYPOINT ["/init"]

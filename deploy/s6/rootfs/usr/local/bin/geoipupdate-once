@@ -1,0 +1,13 @@
+#!/command/with-contenv bash
+
+set -uo pipefail
+
+conf_file="${GEOIPUPDATE_CONF_DIR:-/run/geoipupdate}/GeoIP.conf"
+geoip_directory="${GEOIP_DIR:-/var/lib/geoip}"
+
+geoipupdate -f "${conf_file}" -d "${geoip_directory}"
+update_status=$?
+if (( update_status != 0 )); then
+    echo "[geoipupdate] update failed with status ${update_status}" >&2
+fi
+exit "${update_status}"

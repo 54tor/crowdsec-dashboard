@@ -1,0 +1,80 @@
+#!/command/with-contenv bash
+# Never exits non-zero: S6_BEHAVIOUR_IF_STAGE2_FAILS=2 would stop the container.
+
+set -uo pipefail
+
+secrets_directory="${GEOIPUPDATE_SECRETS_DIR:-/run/secrets}"
+conf_directory="${GEOIPUPDATE_CONF_DIR:-/run/geoipupdate}"
+cron_directory="${CRON_DIR:-/etc/cron.d}"
+geoip_directory="${GEOIP_DIR:-/var/lib/geoip}"
+frequency_hours="${GEOIPUPDATE_FREQUENCY_HOURS:-24}"
+
+account_id_file="${secrets_directory}/maxmind-account-id"
+license_key_file="${secrets_directory}/maxmind-license-key"
+conf_file="${conf_directory}/GeoIP.conf"
+cron_entry_file="${cron_directory}/geoipupdate"
+cron_command="root /usr/local/bin/run_as_docker_user /usr/local/bin/geoipupdate-once"
+
+log() {
+    echo "[geoipupdate] $1"
+}
+
+disable_updates() {
+    rm -f "${cron_entry_file}" "${conf_file}"
+    log "$1: GeoLite2 updates are disabled"
+    exit 0
+}
+
+read_secret_file() {
+    local secret_path="$1"
+    [[ -f "${secret_path}" && -r "${secret_path}" ]] || return 1
+    printf '%s' "$(< "${secret_path}")"
+}
+
+schedule_for_frequency() {
+    case "$1" in
+        1|2|3|4|6|8|12) echo "17 */$1 * * *" ;;
+        24|48|72|96|120|144|168) echo "17 3 */$(( $1 / 24 )) * *" ;;
+        *) return 1 ;;
+    esac
+}
+
+is_root() {
+    [[ "$(id -u)" == 0 ]]
+}
+
+account_id="$(read_secret_file "${account_id_file}")" || disable_updates "MaxMind account id file missing or unreadable"
+license_key="$(read_secret_file "${license_key_file}")" || disable_updates "MaxMind license key file missing or unreadable"
+[[ -n "${account_id}" && -n "${license_key}" ]] || disable_updates "MaxMind credential file empty"
+[[ "${account_id}" =~ ^[0-9]+$ ]] || disable_updates "MaxMind account id is not numeric"
+[[ "${license_key}" =~ ^[A-Za-z0-9_]+$ ]] || disable_updates "MaxMind license key has unexpected characters"
+
+if ! cron_schedule="$(schedule_for_frequency "${frequency_hours}")"; then
+    log "GEOIPUPDATE_FREQUENCY_HOURS must divide 24 or be a multiple of 24 up to 168: using 24"
+    cron_schedule="$(schedule_for_frequency 24)"
+fi
+
+umask 077
+if ! mkdir -p "${conf_directory}" || ! chmod 0700 "${conf_directory}"; then
+    disable_updates "cannot create ${conf_directory}"
+fi
+rm -f "${conf_file}"
+printf 'AccountID %s\nLicenseKey %s\nEditionIDs GeoLite2-Country\n' "${account_id}" "${license_key}" > "${conf_file}" \
+    || disable_updates "cannot write ${conf_file}"
+unset account_id license_key
+chmod 0600 "${conf_file}"
+
+mkdir -p "${geoip_directory}"
+if is_root; then
+    chown docker-user:docker-user "${conf_directory}" "${conf_file}" \
+        || disable_updates "cannot hand ${conf_file} to docker-user"
+    chown -R docker-user:docker-user "${geoip_directory}" \
+        || log "cannot hand ${geoip_directory} to docker-user: updates will fail"
+fi
+
+umask 022
+printf '%s %s\n' "${cron_schedule}" "${cron_command}" > "${cron_entry_file}" \
+    || disable_updates "cannot write ${cron_entry_file}"
+chmod 0644 "${cron_entry_file}"
+log "GeoLite2 updates scheduled at '${cron_schedule}'"
+exit 0
