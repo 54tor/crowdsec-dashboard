@@ -1,0 +1,256 @@
+[
+  {
+    "capacity": 0,
+    "created_at": "2026-10-31T13:34:26Z",
+    "decisions": [
+      {
+        "duration": "3h59m59s",
+        "id": 14,
+        "origin": "crowdsec",
+        "scenario": "spike/default-profile",
+        "scope": "Range",
+        "simulated": true,
+        "type": "ban",
+        "value": "198.51.100.128/25"
+      }
+    ],
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "source_ip",
+            "value": "198.51.100.128/25"
+          }
+        ],
+        "timestamp": "2026-10-31 13:34:25 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 16,
+    "labels": null,
+    "leakspeed": "0",
+    "machine_id": "dashboard-spike",
+    "message": "spike",
+    "remediation": true,
+    "scenario": "spike/default-profile",
+    "scenario_hash": "",
+    "scenario_version": "",
+    "simulated": true,
+    "source": {
+      "scope": "Range",
+      "value": "198.51.100.128/25"
+    },
+    "start_at": "2026-10-31T13:34:25Z",
+    "stop_at": "2026-10-31T13:34:25Z",
+    "uuid": "ac961b6c-4318-44e4-902b-df826e5d82ad"
+  },
+  {
+    "capacity": 0,
+    "created_at": "2026-10-31T13:34:26Z",
+    "decisions": null,
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "source_ip",
+            "value": "203.0.113.35"
+          }
+        ],
+        "timestamp": "2026-10-31 13:34:25 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 15,
+    "labels": null,
+    "leakspeed": "0",
+    "machine_id": "dashboard-spike",
+    "message": "spike",
+    "scenario": "spike/default-profile",
+    "scenario_hash": "",
+    "scenario_version": "",
+    "simulated": true,
+    "source": {
+      "as_name": "Example Net",
+      "as_number": "64496",
+      "cn": "ZZ",
+      "ip": "203.0.113.35",
+      "scope": "Ip",
+      "value": "203.0.113.35"
+    },
+    "start_at": "2026-10-31T13:34:25Z",
+    "stop_at": "2026-10-31T13:34:25Z",
+    "uuid": "c534621f-83c9-4dbd-b594-d25036799ce9"
+  },
+  {
+    "capacity": 0,
+    "created_at": "2026-10-31T13:34:25Z",
+    "decisions": null,
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "source_ip",
+            "value": "203.0.113.34"
+          }
+        ],
+        "timestamp": "2026-10-31 13:34:25 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 14,
+    "labels": null,
+    "leakspeed": "0",
+    "machine_id": "dashboard-spike",
+    "message": "spike",
+    "scenario": "spike/default-profile",
+    "scenario_hash": "",
+    "scenario_version": "",
+    "simulated": false,
+    "source": {
+      "as_name": "Example Net",
+      "as_number": "64496",
+      "cn": "ZZ",
+      "ip": "203.0.113.34",
+      "scope": "Ip",
+      "value": "203.0.113.34"
+    },
+    "start_at": "2026-10-31T13:34:25Z",
+    "stop_at": "2026-10-31T13:34:25Z",
+    "uuid": "bb8e2df9-9bac-47fd-8fd8-52e7864d2a60"
+  },
+  {
+    "capacity": 0,
+    "created_at": "2026-10-31T13:34:25Z",
+    "decisions": [
+      {
+        "duration": "3h59m59s",
+        "id": 13,
+        "origin": "crowdsec",
+        "scenario": "spike/default-profile",
+        "scope": "Ip",
+        "simulated": false,
+        "type": "ban",
+        "value": "203.0.113.33"
+      }
+    ],
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "source_ip",
+            "value": "203.0.113.33"
+          }
+        ],
+        "timestamp": "2026-10-31 13:34:25 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 13,
+    "labels": null,
+    "leakspeed": "0",
+    "machine_id": "dashboard-spike",
+    "message": "spike",
+    "remediation": true,
+    "scenario": "spike/default-profile",
+    "scenario_hash": "",
+    "scenario_version": "",
+    "simulated": false,
+    "source": {
+      "as_name": "Example Net",
+      "as_number": "64496",
+      "cn": "ZZ",
+      "ip": "203.0.113.33",
+      "scope": "Ip",
+      "value": "203.0.113.33"
+    },
+    "start_at": "2026-10-31T13:34:25Z",
+    "stop_at": "2026-10-31T13:34:25Z",
+    "uuid": "61b3a997-3dfe-4f86-9d9e-3d9233e9d5de"
+  },
+  {
+    "capacity": 0,
+    "created_at": "2026-10-31T13:34:25Z",
+    "decisions": null,
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "source_ip",
+            "value": "203.0.113.32"
+          }
+        ],
+        "timestamp": "2026-10-31 13:34:25 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 12,
+    "labels": null,
+    "leakspeed": "0",
+    "machine_id": "dashboard-spike",
+    "message": "spike",
+    "scenario": "spike/default-profile",
+    "scenario_hash": "",
+    "scenario_version": "",
+    "simulated": true,
+    "source": {
+      "as_name": "Example Net",
+      "as_number": "64496",
+      "cn": "ZZ",
+      "ip": "203.0.113.32",
+      "scope": "Ip",
+      "value": "203.0.113.32"
+    },
+    "start_at": "2026-10-31T13:34:25Z",
+    "stop_at": "2026-10-31T13:34:25Z",
+    "uuid": "419c72df-6232-4487-9d7a-f82ed9ae509c"
+  },
+  {
+    "capacity": 0,
+    "created_at": "2026-10-31T13:34:25Z",
+    "decisions": [
+      {
+        "duration": "3h59m59s",
+        "id": 12,
+        "origin": "crowdsec",
+        "scenario": "spike/default-profile",
+        "scope": "Ip",
+        "simulated": true,
+        "type": "ban",
+        "value": "203.0.113.31"
+      }
+    ],
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "source_ip",
+            "value": "203.0.113.31"
+          }
+        ],
+        "timestamp": "2026-10-31 13:34:25 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 11,
+    "labels": null,
+    "leakspeed": "0",
+    "machine_id": "dashboard-spike",
+    "message": "spike",
+    "remediation": true,
+    "scenario": "spike/default-profile",
+    "scenario_hash": "",
+    "scenario_version": "",
+    "simulated": true,
+    "source": {
+      "as_name": "Example Net",
+      "as_number": "64496",
+      "cn": "ZZ",
+      "ip": "203.0.113.31",
+      "scope": "Ip",
+      "value": "203.0.113.31"
+    },
+    "start_at": "2026-10-31T13:34:25Z",
+    "stop_at": "2026-10-31T13:34:25Z",
+    "uuid": "a8ca8aae-6554-43d3-bfcf-3a15abdabea2"
+  }
+]

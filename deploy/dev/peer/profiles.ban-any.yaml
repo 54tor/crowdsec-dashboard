@@ -1,0 +1,9 @@
+# DISPOSABLE worst-case profile: ban every alert that reaches the LAPI profile evaluation,
+# whatever its scope or remediation flag. Not for production.
+name: ban_any_alert
+filters:
+  - "true"
+decisions:
+  - type: ban
+    duration: 4h
+on_success: break

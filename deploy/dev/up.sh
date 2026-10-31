@@ -2,6 +2,8 @@
 # Starts the disposable development stack (compose project csdash-dev).
 #   ./up.sh            CrowdSec without Prometheus, like the real instance
 #   ./up.sh metrics    CrowdSec with the Prometheus listener enabled
+#   ./up.sh peer       also start the disposable second engine peer-a (peer/compose.override.yaml),
+#                      reachable inside the stack as http://peer-a:8080 (see spike.sh)
 # On first run it generates .env.local (git-ignored) with random secrets and prints
 # the admin password once. Re-running keeps the existing secrets.
 set -euo pipefail
@@ -18,7 +20,7 @@ random_secret() {
 }
 
 compose() {
-  docker compose -p "$project" --env-file .env.local "$@"
+  docker compose -p "$project" --env-file .env.local -f compose.yaml -f peer/compose.override.yaml "$@"
 }
 
 if [ ! -f .env.local ]; then
@@ -46,6 +48,9 @@ if [ "$variant" = metrics ]; then
 fi
 
 compose up -d --wait --wait-timeout 180 crowdsec
+if [ "$variant" = peer ]; then
+  compose up -d --wait --wait-timeout 180 peer-a
+fi
 
 # (Re)register the dashboard machine so its password always matches .env.local.
 # Machines created with cscli are validated at once.

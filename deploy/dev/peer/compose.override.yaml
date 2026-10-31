@@ -1,0 +1,46 @@
+# DISPOSABLE second CrowdSec engine ("peer-a") for the engine-sync spike. Development only.
+# NOTE: relative paths below resolve against deploy/dev (the first -f file), not this directory.
+# Layered over compose.yaml in the same compose project (csdash-dev), so it shares the
+# internal `core` network: the LAPI is reachable as http://peer-a:8080 from the other
+# containers. Nothing is published on the host.
+#   docker compose -p csdash-dev -f deploy/dev/compose.yaml -f deploy/dev/peer/compose.override.yaml up -d peer-a
+# or ./up.sh peer. Tear down with: docker compose -p csdash-dev down -v --remove-orphans
+services:
+  peer-a:
+    image: crowdsecurity/crowdsec:latest
+    container_name: csdash-dev-peer-a
+    restart: "no"
+    mem_limit: 512m
+    pids_limit: 256
+    cpus: 1.0
+    environment:
+      DISABLE_ONLINE_API: "true"
+    volumes:
+      - ./acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      # Prometheus off plus a LOW flush.max_items so the spike can show what the flush purges.
+      - ./peer/config.peer.yaml:/etc/crowdsec/config.yaml.local:ro
+      # Disposable profile that bans on ANY alert (worst case for the alert-import probe).
+      - ./peer/profiles.ban-any.yaml:/etc/crowdsec/profiles.yaml:ro
+      - peer-a-config:/etc/crowdsec
+      - peer-a-data:/var/lib/crowdsec/data
+      - dev-logs:/var/log/dev
+    networks: [core, egress]
+
+  # Throwaway curl client on the internal network, used by spike.sh for every LAPI call.
+  spike-curl:
+    profiles: [spike]
+    image: curlimages/curl:latest
+    container_name: csdash-dev-spike-curl
+    restart: "no"
+    mem_limit: 32m
+    pids_limit: 32
+    cpus: 0.25
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    entrypoint: ["sleep", "infinity"]
+    networks: [core]
+
+volumes:
+  peer-a-config:
+  peer-a-data:

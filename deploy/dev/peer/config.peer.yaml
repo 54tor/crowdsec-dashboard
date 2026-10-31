@@ -1,0 +1,6 @@
+# DISPOSABLE overlay for peer-a (merged over config.yaml). Not for production.
+prometheus:
+  enabled: false
+db_config:
+  flush:
+    max_items: 20
