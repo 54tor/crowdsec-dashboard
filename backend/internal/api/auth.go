@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	maxLoginBodyBytes       = 1024
-	loginAttemptsPerMinute  = 5
-	loginFailureMinimumWait = 500 * time.Millisecond
+	maxLoginBodyBytes        = 1024
+	loginAttemptsPerIP       = 5
+	loginAttemptsGlobal      = 30
+	concurrentPasswordHashes = 2
+	loginFailureMinimumWait  = 500 * time.Millisecond
 )
 
 type authHandlers struct {
@@ -22,6 +24,7 @@ type authHandlers struct {
 	sessions     *auth.SessionStore
 	limiter      *auth.LoginLimiter
 	failureWait  time.Duration
+	hashSlots    chan struct{}
 }
 
 type loginRequest struct {
@@ -37,6 +40,13 @@ func (handlers *authHandlers) login(responseWriter http.ResponseWriter, request 
 	request.Body = http.MaxBytesReader(responseWriter, request.Body, maxLoginBodyBytes)
 	if decodeError := json.NewDecoder(request.Body).Decode(&credentials); decodeError != nil {
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	select {
+	case handlers.hashSlots <- struct{}{}:
+		defer func() { <-handlers.hashSlots }()
+	default:
+		writeError(responseWriter, http.StatusTooManyRequests, "too_many_attempts")
 		return
 	}
 	attemptStart := time.Now()

@@ -41,7 +41,9 @@ func main() {
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-signalContext.Done()
 		shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancelShutdown()
@@ -54,4 +56,5 @@ func main() {
 	if serveError := server.ListenAndServe(); !errors.Is(serveError, http.ErrServerClosed) {
 		log.Fatal(serveError)
 	}
+	<-shutdownDone
 }

@@ -1,12 +1,14 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/config"
 
 	"github.com/alexedwards/argon2id"
@@ -83,6 +85,67 @@ func TestLoginIsRateLimitedPerClientIP(testContext *testing.T) {
 	recorder := postLogin(handler, `{"password":"`+testPassword+`"}`)
 
 	if recorder.Code != http.StatusTooManyRequests || strings.TrimSpace(recorder.Body.String()) != `{"error":"too_many_attempts"}` {
+		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestForgedForwardedForFromUntrustedPeerDoesNotBypassRateLimit(testContext *testing.T) {
+	handler := newTestHandler(testContext)
+	var lastRecorder *httptest.ResponseRecorder
+	for attemptNumber := 1; attemptNumber <= 6; attemptNumber++ {
+		request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(`{"password":"nope"}`))
+		request.RemoteAddr = "203.0.113.9:5555"
+		request.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.100.%d", attemptNumber))
+		lastRecorder = httptest.NewRecorder()
+		handler.ServeHTTP(lastRecorder, request)
+	}
+
+	if lastRecorder.Code != http.StatusTooManyRequests {
+		testContext.Errorf("expected 429 on sixth attempt, got %d", lastRecorder.Code)
+	}
+}
+
+func TestLoginReturns429WhenArgonSlotsAreBusy(testContext *testing.T) {
+	handlers := &authHandlers{
+		passwordHash: "unused",
+		sessions:     auth.NewSessionStore(time.Hour, time.Now),
+		limiter:      auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
+		hashSlots:    make(chan struct{}, 1),
+	}
+	handlers.hashSlots <- struct{}{}
+	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(`{"password":"x"}`))
+	request.RemoteAddr = "198.51.100.7:5555"
+	recorder := httptest.NewRecorder()
+
+	handlers.login(recorder, request)
+
+	if recorder.Code != http.StatusTooManyRequests || strings.TrimSpace(recorder.Body.String()) != `{"error":"too_many_attempts"}` {
+		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestCrossOriginRejectionIsJSON(testContext *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/login", strings.NewReader(`{}`))
+	request.Header.Set("Origin", "https://evil.example.org")
+	recorder := httptest.NewRecorder()
+
+	newTestHandler(testContext).ServeHTTP(recorder, request)
+
+	if strings.TrimSpace(recorder.Body.String()) != `{"error":"cross_origin"}` {
+		testContext.Errorf("unexpected body %q", recorder.Body.String())
+	}
+}
+
+func TestAuthenticatedUnknownApiRouteReturnsJSON404(testContext *testing.T) {
+	handler := newTestHandler(testContext)
+	sessionCookie := postLogin(handler, `{"password":"`+testPassword+`"}`).Result().Cookies()[0]
+	request := httptest.NewRequest(http.MethodGet, "https://dashboard.example.com/api/anything", nil)
+	request.AddCookie(sessionCookie)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNotFound || strings.TrimSpace(recorder.Body.String()) != `{"error":"not_found"}` {
 		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
 	}
 }

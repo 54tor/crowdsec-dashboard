@@ -20,8 +20,9 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 		sessionTTL:   loadedConfig.SessionTTL,
 		trustedCIDRs: loadedConfig.TrustedProxyCIDRs,
 		sessions:     sessions,
-		limiter:      auth.NewLoginLimiter(loginAttemptsPerMinute),
+		limiter:      auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
 		failureWait:  failureWait,
+		hashSlots:    make(chan struct{}, concurrentPasswordHashes),
 	}
 
 	router := http.NewServeMux()
@@ -29,8 +30,14 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 	router.HandleFunc("POST /api/auth/login", handlers.login)
 	router.HandleFunc("POST /api/auth/logout", handlers.logout)
 	router.Handle("GET /api/auth/me", requireSession(http.HandlerFunc(handlers.me)))
-	router.Handle("/api/", requireSession(http.NotFoundHandler()))
+	router.Handle("/api/", requireSession(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
+		writeError(responseWriter, http.StatusNotFound, "not_found")
+	})))
 	router.Handle("/", singlePageApp)
 
-	return securityHeaders(http.NewCrossOriginProtection().Handler(router))
+	crossOriginProtection := http.NewCrossOriginProtection()
+	crossOriginProtection.SetDenyHandler(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
+		writeError(responseWriter, http.StatusForbidden, "cross_origin")
+	}))
+	return securityHeaders(crossOriginProtection.Handler(router))
 }
