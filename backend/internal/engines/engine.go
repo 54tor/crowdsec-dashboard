@@ -28,6 +28,7 @@ type Engine struct {
 	CollectionCursor    int64
 	LastCollectedAt     *time.Time
 	LastCollectionError string
+	CursorReset         bool
 }
 
 type Proxy struct {

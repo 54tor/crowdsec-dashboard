@@ -145,6 +145,17 @@ func (collector *Collector) Stats() map[string]EngineStats {
 	return statsByName
 }
 
+func (collector *Collector) RecordCursorReset(engineID int64) {
+	collector.stateMutex.Lock()
+	defer collector.stateMutex.Unlock()
+	currentState, found := collector.states[engineID]
+	if !found {
+		currentState = newEngineState(collector.settings)
+		collector.states[engineID] = currentState
+	}
+	currentState.stats.Resets++
+}
+
 func (collector *Collector) claim(engineID int64, onlyWhenDue bool) bool {
 	collector.stateMutex.Lock()
 	defer collector.stateMutex.Unlock()

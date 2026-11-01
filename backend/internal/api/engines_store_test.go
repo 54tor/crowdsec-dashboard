@@ -10,11 +10,14 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"code.dny.dev/ssrf"
 
+	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/collector"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store/storetest"
@@ -29,6 +32,7 @@ type storedEngineFixture struct {
 	registry   *engines.Registry
 	service    *reloadCountingEngineService
 	recorder   *fakeAuditRecorder
+	collector  *collector.Collector
 }
 
 type reloadCountingEngineService struct {
@@ -50,10 +54,12 @@ func newStoredEngineFixture(testContext *testing.T, guardian *ssrf.Guardian) sto
 	}
 	repository := engines.NewRepository(database, keyring)
 	registry := engines.NewRegistry(repository, nil, guardian)
-	service := &reloadCountingEngineService{EngineService: NewEngineService(repository, registry, nil)}
+	engineCollector := collector.New(registry, repository, archive.NewWriter(database, archive.DefaultBounds), repository,
+		collector.DefaultSettings(time.Minute, 100), time.Now, func(string, ...any) {})
+	service := &reloadCountingEngineService{EngineService: NewEngineService(repository, registry, engineCollector)}
 	recorder := &fakeAuditRecorder{}
 	handler, cookie := newEngineHandler(testContext, service, recorder, auth.RoleAdmin)
-	return storedEngineFixture{handler: handler, cookie: cookie, repository: repository, registry: registry, service: service, recorder: recorder}
+	return storedEngineFixture{handler: handler, cookie: cookie, repository: repository, registry: registry, service: service, recorder: recorder, collector: engineCollector}
 }
 
 func (fixture storedEngineFixture) send(method, path, body string) *httptest.ResponseRecorder {
@@ -252,4 +258,27 @@ func TestEngineTestDistinguishesSuccessAuthFailureAndUnreachable(testContext *te
 	createStoredEngine(testContext, fixture, closedURL)
 	expectError(testContext, fixture.send(http.MethodPost, "/api/engines/edge-1/test", ""), http.StatusBadGateway, "engine_unreachable")
 	expectError(testContext, fixture.send(http.MethodPost, "/api/engines/ghost/test", ""), http.StatusNotFound, "engine_not_found")
+}
+
+func TestDestinationChangeCountsACursorReset(testContext *testing.T) {
+	fixture := newStoredEngineFixture(testContext, loopbackGuardian())
+	firstEngine := httptest.NewServer(http.NotFoundHandler())
+	testContext.Cleanup(firstEngine.Close)
+	secondEngine := httptest.NewServer(http.NotFoundHandler())
+	testContext.Cleanup(secondEngine.Close)
+	createStoredEngine(testContext, fixture, localhostURL(testContext, firstEngine))
+
+	renameRecorder := fixture.send(http.MethodPatch, "/api/engines/edge-1", `{"enabled":true}`)
+	if renameRecorder.Code != http.StatusOK || fixture.collector.Stats()["edge-1"].Resets != 0 {
+		testContext.Fatalf("a change without a new destination must not count a reset: %d", renameRecorder.Code)
+	}
+	moveRecorder := fixture.send(http.MethodPatch, "/api/engines/edge-1",
+		`{"lapi_url":"`+localhostURL(testContext, secondEngine)+`","machine_password":"another-password"}`)
+
+	if moveRecorder.Code != http.StatusOK {
+		testContext.Fatalf("expected 200, got %d %q", moveRecorder.Code, moveRecorder.Body.String())
+	}
+	if resets := fixture.collector.Stats()["edge-1"].Resets; resets != 1 {
+		testContext.Fatalf("expected one counted reset, got %d", resets)
+	}
 }

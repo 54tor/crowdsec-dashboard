@@ -7,6 +7,8 @@ import (
 	"github.com/uptrace/bun"
 )
 
+const cursorResetExpression = "engine_collection_cursor = ?"
+
 type columnChange struct {
 	expression string
 	value      any
@@ -31,9 +33,19 @@ func (repository *Repository) Update(ctx context.Context, name string, input Inp
 		}
 		loadedEngine, reloadError := getEngine(ctx, transaction, `engine_id = ?`, currentRow.ID)
 		updatedEngine = loadedEngine
+		updatedEngine.CursorReset = resetsCursor(changes)
 		return reloadError
 	})
 	return updatedEngine, transactionError
+}
+
+func resetsCursor(changes []columnChange) bool {
+	for _, change := range changes {
+		if change.expression == cursorResetExpression {
+			return true
+		}
+	}
+	return false
 }
 
 func loadLockedRow(ctx context.Context, transaction bun.Tx, name string) (engineRow, error) {
@@ -125,7 +137,7 @@ func (repository *Repository) planURL(currentRow engineRow, input Input) ([]colu
 		if !passwordProvided {
 			return nil, ErrSecretRequired
 		}
-		changes = append(changes, columnChange{"engine_collection_cursor = ?", 0})
+		changes = append(changes, columnChange{cursorResetExpression, 0})
 	}
 	if input.LAPIURL != "" {
 		changes = append(changes, columnChange{"engine_lapi_url = ?", input.LAPIURL})

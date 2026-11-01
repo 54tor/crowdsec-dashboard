@@ -252,7 +252,7 @@ the received alerts is already archived), sets the cursor back to 0 and counts a
 is duplicated and the old alerts stay in the archive. Residual case: when every alert the engine
 still serves has already left the archive by retention and its newest alert was deleted, a reset
 is assumed wrongly and that window is archived once more (purged again by retention). Re-archiving after a reset gives the old alerts a new collection time, hence a fresh retention period. If an engine's database is reset while the dashboard is not running and its new ids exceed the old cursor, the reset goes undetected and the alerts in between are never archived: the gap is silent and not counted. Changing the
-host, port or scheme of an engine's URL also resets its cursor.
+host, port or scheme of an engine's URL also resets its cursor, and the reset is counted in `resets`.
 
 **Dates.** An archived alert whose engine date (`created_at`) is missing, unparseable or in the future is dated by its collection time, so a skewed engine clock cannot pin its alerts at the top of the lists.
 

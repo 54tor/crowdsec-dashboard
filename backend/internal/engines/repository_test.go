@@ -279,8 +279,12 @@ func TestUpdateURLResetsCursor(testContext *testing.T) {
 	if updateError != nil {
 		testContext.Fatalf("update: %v", updateError)
 	}
-	if updatedEngine.CollectionCursor != 0 {
-		testContext.Errorf("cursor must reset, got %d", updatedEngine.CollectionCursor)
+	if updatedEngine.CollectionCursor != 0 || !updatedEngine.CursorReset {
+		testContext.Errorf("cursor must reset and be reported, got %d reset=%v", updatedEngine.CollectionCursor, updatedEngine.CursorReset)
+	}
+	untouchedEngine, flagError := fixture.repository.Update(context.Background(), "edge-1", Input{SyncEnabled: boolPointer(true)})
+	if flagError != nil || untouchedEngine.CursorReset {
+		testContext.Errorf("a flag change must not report a reset: %v reset=%v", flagError, untouchedEngine.CursorReset)
 	}
 	credentials, _ := fixture.repository.Credentials(context.Background(), createdEngine.ID)
 	if credentials.MachinePassword != "fresh-password" {

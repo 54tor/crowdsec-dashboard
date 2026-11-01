@@ -41,6 +41,14 @@ func NewEngineService(repository *engines.Repository, registry *engines.Registry
 	return engineService{Repository: repository, Registry: registry, engineCollector: engineCollector}
 }
 
+func (service engineService) Update(ctx context.Context, name string, input engines.Input) (engines.Engine, error) {
+	updatedEngine, updateError := service.Repository.Update(ctx, name, input)
+	if updateError == nil && updatedEngine.CursorReset && service.engineCollector != nil {
+		service.engineCollector.RecordCursorReset(updatedEngine.ID)
+	}
+	return updatedEngine, updateError
+}
+
 func (service engineService) CollectionStats() map[string]collector.EngineStats {
 	if service.engineCollector == nil {
 		return nil
