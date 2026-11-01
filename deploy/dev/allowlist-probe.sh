@@ -215,7 +215,14 @@ wait_for_lapi() {
   return 1
 }
 
+teardown_probe() {
+  compose down -v --remove-orphans >&2 || true
+}
+
 main() {
+  if [ "${PROBE_KEEP:-0}" != "1" ]; then
+    trap teardown_probe EXIT
+  fi
   # Idempotent: drop a leftover probe project (literal name, never a variable-built target elsewhere).
   compose down -v --remove-orphans >&2 || true
   progress "starting $project"
@@ -223,15 +230,11 @@ main() {
   wait_for_lapi
   emit_note env version "$(cscli version 2>&1 | tr '\n' ' ')"
   emit_note env image "$(docker inspect --format '{{.Config.Image}} {{.Image}}' "$container_name")"
-  cscli machines add "$machine_name" --password "$machine_password" --force >&2
+  cscli machines add "$machine_name" --password "$machine_password" -f /dev/null --force >&2
   login_machine
   probe_a_allowlists
   probe_b_not_found
   probe_c_alerts
-  if [ "${PROBE_KEEP:-0}" != "1" ]; then
-    progress "tearing $project down"
-    compose down -v --remove-orphans >&2
-  fi
 }
 
 main "$@"

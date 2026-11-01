@@ -13,6 +13,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 project="${CSDASH_PROJECT:-csdash-dev}"
+if ! [[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+  echo "invalid CSDASH_PROJECT: use lowercase letters, digits, - and _" >&2
+  exit 1
+fi
 dashboard_port="${CSDASH_DASHBOARD_PORT:-18080}"
 variant="${1:-default}"
 machine_id=dashboard-dev

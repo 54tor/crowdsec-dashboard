@@ -3,10 +3,15 @@
 # addresses are used: 203.0.113.0/24, 198.51.100.0/24 (RFC 5737), 2001:db8::/32 (RFC 3849).
 # Run it once per fresh stack (a second run adds the same fake data again).
 # CSDASH_PROJECT (default csdash-dev) selects the stack, SEED_ENGINE=peer-a seeds the demo engine
-# instead of the local one (each run adds 10 alerts: 3 manual ones and 7 pushed ones).
+# instead of the local one (each run adds about 10 alerts: 3 manual ones and 7 pushed ones).
 set -euo pipefail
 
-container="${CSDASH_PROJECT:-csdash-dev}-${SEED_ENGINE:-crowdsec}"
+project="${CSDASH_PROJECT:-csdash-dev}"
+if ! [[ "$project" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+  echo "invalid CSDASH_PROJECT: use lowercase letters, digits, - and _" >&2
+  exit 1
+fi
+container="$project-${SEED_ENGINE:-crowdsec}"
 seed_machine=dev-agent
 
 crowdsec() {

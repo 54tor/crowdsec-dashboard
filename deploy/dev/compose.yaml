@@ -1,11 +1,12 @@
 # Disposable development stack: a throwaway CrowdSec, the socket proxy and the dashboard.
 # Use ./up.sh to start it (it generates .env.local, registers the dashboard machine and
 # prints the one-time enrolment token of the first account). Tear down with:
-#   docker compose -p csdash-dev down -v --remove-orphans
+#   docker compose -p csdash-dev --env-file .env.local -f compose.yaml -f peer/compose.override.yaml down -v --remove-orphans
+# (throwaway project only, never for a stack whose data matters; the override file removes the peer-a volumes too)
 # CSDASH_PROJECT (default csdash-dev) prefixes every container and image name and
 # CSDASH_DASHBOARD_PORT (default 18080) is the host port, so a second isolated copy can run
 # beside the default one (see up.sh). Without them the stack is exactly csdash-dev on 18080.
-name: csdash-dev
+name: ${CSDASH_PROJECT:-csdash-dev}
 
 services:
   crowdsec:

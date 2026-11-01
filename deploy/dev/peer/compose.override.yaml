@@ -4,7 +4,8 @@
 # internal `core` network: the LAPI is reachable as http://peer-a:8080 from the other
 # containers. Nothing is published on the host.
 #   docker compose -p csdash-dev -f deploy/dev/compose.yaml -f deploy/dev/peer/compose.override.yaml up -d peer-a
-# or ./up.sh peer. Tear down with: docker compose -p csdash-dev down -v --remove-orphans
+# or ./up.sh peer. Tear down a throwaway project with
+# (never a project whose data matters): docker compose -p csdash-dev --env-file .env.local -f compose.yaml -f peer/compose.override.yaml down -v --remove-orphans
 services:
   peer-a:
     image: crowdsecurity/crowdsec:latest
