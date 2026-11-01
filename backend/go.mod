@@ -3,6 +3,7 @@ module crowdsec-dashboard
 go 1.26.0
 
 require (
+	code.dny.dev/ssrf v0.3.0
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/descope/virtualwebauthn v1.0.5
 	github.com/go-webauthn/webauthn v0.18.2
@@ -13,6 +14,7 @@ require (
 	github.com/oschwald/geoip2-golang/v2 v2.5.0
 	github.com/pquerna/otp v1.5.0
 	github.com/pressly/goose/v3 v3.29.0
+	github.com/things-go/go-socks5 v0.1.4
 	github.com/uptrace/bun v1.3.0
 	github.com/uptrace/bun/dialect/pgdialect v1.3.0
 	go.yaml.in/yaml/v3 v3.0.5
