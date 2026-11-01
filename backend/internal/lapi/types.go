@@ -131,3 +131,26 @@ type DecisionList struct {
 	Decisions      []Decision
 	MayBeTruncated bool
 }
+
+type AllowlistItem struct {
+	Value       string `json:"value"`
+	Description string `json:"description"`
+	CreatedAt   string `json:"created_at"`
+	Expiration  string `json:"expiration"`
+}
+
+type Allowlist struct {
+	Name           string          `json:"name"`
+	AllowlistID    string          `json:"allowlist_id"`
+	Description    string          `json:"description"`
+	Items          []AllowlistItem `json:"items"`
+	CreatedAt      string          `json:"created_at"`
+	UpdatedAt      string          `json:"updated_at"`
+	ConsoleManaged bool            `json:"console_managed"`
+}
+
+type AllowlistRead struct {
+	Allowlists []Allowlist
+	Supported  bool
+	Truncated  bool
+}
