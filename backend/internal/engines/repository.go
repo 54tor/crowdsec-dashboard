@@ -139,14 +139,17 @@ func (repository *Repository) CollectionCursor(ctx context.Context, engineID int
 	return cursor, nil
 }
 
-func (repository *Repository) RecordCollection(ctx context.Context, engineID int64, collectedAt time.Time, errorCode string) error {
-	var storedErrorCode any
-	if errorCode != "" {
-		storedErrorCode = errorCode
+func (repository *Repository) RecordCollection(ctx context.Context, engineID int64, collectedAt time.Time, errorCode CollectionErrorCode) error {
+	statement := `UPDATE engine SET engine_last_collected_at = ?, engine_last_collection_error = NULL WHERE engine_id = ?`
+	arguments := []any{collectedAt.UTC(), engineID}
+	if errorCode != CollectionSucceeded {
+		if !knownCollectionErrorCodes[errorCode] {
+			return ErrUnknownCollectionErrorCode
+		}
+		statement = `UPDATE engine SET engine_last_collection_error = ? WHERE engine_id = ?`
+		arguments = []any{string(errorCode), engineID}
 	}
-	result, updateError := repository.database.ExecContext(ctx,
-		`UPDATE engine SET engine_last_collected_at = ?, engine_last_collection_error = ? WHERE engine_id = ?`,
-		collectedAt, storedErrorCode, engineID)
+	result, updateError := repository.database.ExecContext(ctx, statement, arguments...)
 	if updateError != nil {
 		return fmt.Errorf("record collection: %w", updateError)
 	}

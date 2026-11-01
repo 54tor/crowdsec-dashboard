@@ -8,11 +8,26 @@ import (
 )
 
 const (
-	ErrorCodeUnreachable      = "engine_unreachable"
-	ErrorCodeAuthFailed       = "engine_auth_failed"
-	ErrorCodeBlockedAddress   = "engine_blocked_address"
-	ErrorCodeSecretUnreadable = "engine_secret_unreadable"
+	ErrorCodeUnreachable        = "engine_unreachable"
+	ErrorCodeAuthFailed         = "engine_auth_failed"
+	ErrorCodeBlockedAddress     = "engine_blocked_address"
+	ErrorCodeSecretUnreadable   = "engine_secret_unreadable"
+	ErrorCodeArchiveWriteFailed = "archive_write_failed"
 )
+
+type CollectionErrorCode string
+
+const CollectionSucceeded CollectionErrorCode = ""
+
+var ErrUnknownCollectionErrorCode = errors.New("unknown collection error code")
+
+var knownCollectionErrorCodes = map[CollectionErrorCode]bool{
+	ErrorCodeUnreachable:        true,
+	ErrorCodeAuthFailed:         true,
+	ErrorCodeBlockedAddress:     true,
+	ErrorCodeSecretUnreadable:   true,
+	ErrorCodeArchiveWriteFailed: true,
+}
 
 func ErrorCode(engineError error) string {
 	switch {
@@ -23,4 +38,8 @@ func ErrorCode(engineError error) string {
 	default:
 		return ErrorCodeUnreachable
 	}
+}
+
+func CollectionFailure(engineError error) CollectionErrorCode {
+	return CollectionErrorCode(ErrorCode(engineError))
 }

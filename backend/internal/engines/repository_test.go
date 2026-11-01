@@ -11,6 +11,7 @@ import (
 
 	"github.com/uptrace/bun"
 
+	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store/storetest"
 )
@@ -426,25 +427,66 @@ func TestDeleteRemovesEngineAndReportsMissing(testContext *testing.T) {
 	}
 }
 
-func TestRecordCollectionAndCursor(testContext *testing.T) {
+// engine_last_collected_at is the last successful collection: a failure only
+// replaces the error code, and a success clears it.
+func TestRecordCollectionKeepsLastSuccessOnFailure(testContext *testing.T) {
 	fixture := newFixture(testContext)
 	createdEngine := mustCreate(testContext, fixture, remoteInput("edge-1", "https://one.example.com"))
-	collectedAt := time.Now().UTC().Truncate(time.Second)
+	successfulAt := time.Now().UTC().Truncate(time.Second)
 
-	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, collectedAt, "engine_unreachable"); recordError != nil {
-		testContext.Fatalf("record: %v", recordError)
+	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt, CollectionSucceeded); recordError != nil {
+		testContext.Fatalf("record success: %v", recordError)
+	}
+	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt.Add(time.Hour), CollectionFailure(lapi.ErrAuthFailed)); recordError != nil {
+		testContext.Fatalf("record failure: %v", recordError)
 	}
 
-	recordedEngine, _ := fixture.repository.Get(context.Background(), "edge-1")
-	if recordedEngine.LastCollectionError != "engine_unreachable" || recordedEngine.LastCollectedAt == nil {
-		testContext.Errorf("collection state not recorded: %+v", recordedEngine)
+	failedEngine, _ := fixture.repository.Get(context.Background(), "edge-1")
+	if failedEngine.LastCollectionError != ErrorCodeAuthFailed {
+		testContext.Errorf("expected the failure code, got %q", failedEngine.LastCollectionError)
+	}
+	if failedEngine.LastCollectedAt == nil || !failedEngine.LastCollectedAt.Equal(successfulAt) {
+		testContext.Errorf("a failure must keep the last success time, got %v", failedEngine.LastCollectedAt)
+	}
+
+	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt.Add(2*time.Hour), CollectionSucceeded); recordError != nil {
+		testContext.Fatalf("record second success: %v", recordError)
+	}
+	recoveredEngine, _ := fixture.repository.Get(context.Background(), "edge-1")
+	if recoveredEngine.LastCollectionError != "" || !recoveredEngine.LastCollectedAt.Equal(successfulAt.Add(2*time.Hour)) {
+		testContext.Errorf("a success must clear the code and move the time: %+v", recoveredEngine)
 	}
 	cursor, cursorError := fixture.repository.CollectionCursor(context.Background(), createdEngine.ID)
 	if cursorError != nil || cursor != 0 {
 		testContext.Errorf("cursor: %d %v", cursor, cursorError)
 	}
-	if missingError := fixture.repository.RecordCollection(context.Background(), 987654, collectedAt, ""); !errors.Is(missingError, ErrEngineNotFound) {
+	if missingError := fixture.repository.RecordCollection(context.Background(), 987654, successfulAt, CollectionSucceeded); !errors.Is(missingError, ErrEngineNotFound) {
 		testContext.Errorf("expected ErrEngineNotFound, got %v", missingError)
+	}
+}
+
+// The column only ever receives a code of the closed set: free text, such as a raw
+// url.Error that could carry a proxy URL with credentials, is refused unwritten.
+func TestRecordCollectionRefusesFreeText(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	createdEngine := mustCreate(testContext, fixture, remoteInput("edge-1", "https://one.example.com"))
+	rawErrorText := CollectionErrorCode(`Get "https://user:` + markerProxyPassword + `@proxy.example.com": dial tcp: refused`)
+
+	recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, time.Now(), rawErrorText)
+
+	if !errors.Is(recordError, ErrUnknownCollectionErrorCode) {
+		testContext.Fatalf("expected ErrUnknownCollectionErrorCode, got %v", recordError)
+	}
+	storedEngine, _ := fixture.repository.Get(context.Background(), "edge-1")
+	if storedEngine.LastCollectionError != "" {
+		testContext.Fatalf("free text must never be stored, got %q", storedEngine.LastCollectionError)
+	}
+	for _, knownCode := range []CollectionErrorCode{
+		ErrorCodeUnreachable, ErrorCodeAuthFailed, ErrorCodeBlockedAddress, ErrorCodeSecretUnreadable, ErrorCodeArchiveWriteFailed,
+	} {
+		if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, time.Now(), knownCode); recordError != nil {
+			testContext.Errorf("known code %q refused: %v", knownCode, recordError)
+		}
 	}
 }
 
