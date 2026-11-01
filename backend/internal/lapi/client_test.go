@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -520,5 +521,42 @@ func TestGetAlertReadsOneAlertByID(testing *testing.T) {
 	}
 	if fake.alertCount.Load() != callsBefore {
 		testing.Error("a refused id must not reach the LAPI")
+	}
+}
+
+func TestDefaultClientNeverUsesTheEnvironmentProxy(testing *testing.T) {
+	var proxyRequests atomic.Int32
+	environmentProxy := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		proxyRequests.Add(1)
+		responseWriter.WriteHeader(http.StatusBadGateway)
+	}))
+	testing.Cleanup(environmentProxy.Close)
+	testing.Setenv("HTTP_PROXY", environmentProxy.URL)
+	testing.Setenv("http_proxy", environmentProxy.URL)
+	testing.Setenv("NO_PROXY", "")
+	testing.Setenv("no_proxy", "")
+	var directRequests atomic.Int32
+	engine := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		directRequests.Add(1)
+		responseWriter.WriteHeader(http.StatusNoContent)
+	}))
+	testing.Cleanup(engine.Close)
+	client := NewClient("http://lapi.example.test", "machine", "password", nil)
+	transport := client.httpClient.Transport.(*http.Transport)
+	if transport.Proxy != nil {
+		testing.Fatal("the default transport must not read the environment proxy")
+	}
+	transport.DialContext = func(dialContext context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(dialContext, network, engine.Listener.Addr().String())
+	}
+
+	response, requestError := client.httpClient.Get("http://lapi.example.test/v1/alerts")
+	if requestError != nil {
+		testing.Fatal(requestError)
+	}
+	response.Body.Close()
+
+	if proxyRequests.Load() != 0 || directRequests.Load() != 1 {
+		testing.Fatalf("proxy saw %d requests, engine saw %d", proxyRequests.Load(), directRequests.Load())
 	}
 }

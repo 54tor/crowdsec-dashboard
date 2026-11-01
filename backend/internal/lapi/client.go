@@ -39,6 +39,7 @@ type Client struct {
 func NewClient(baseURL, machineID, machinePassword string, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{
+			Transport: directTransport(),
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -52,6 +53,12 @@ func NewClient(baseURL, machineID, machinePassword string, httpClient *http.Clie
 		now:             time.Now,
 		loginTimeout:    defaultTimeout,
 	}
+}
+
+func directTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	return transport
 }
 
 func (client *Client) ListAlerts(ctx context.Context, filter AlertFilter) ([]Alert, error) {
