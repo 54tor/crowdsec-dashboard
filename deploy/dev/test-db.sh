@@ -19,7 +19,7 @@ services:
       - "127.0.0.1::5432"
     tmpfs:
       - /var/lib/postgresql
-    mem_limit: 256m
+    mem_limit: 1g
     healthcheck:
       test: ["CMD-SHELL", "psql -h 127.0.0.1 -U postgres -d csdash_test -c 'select 1'"]
       interval: 1s
