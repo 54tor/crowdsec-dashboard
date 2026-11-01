@@ -316,3 +316,38 @@ func TestReadAlertsForArchiveRefusesNonArrayBody(testContext *testing.T) {
 		testContext.Fatalf("expected ErrLAPIUnavailable, got %v", readError)
 	}
 }
+
+// The token lock is held during the login exchange and does not watch the caller's
+// context, so a login that hangs under a 120 s archive budget would block every live
+// route waiting for the token. The login is therefore bounded by its own short
+// timeout, whatever deadline the surrounding archive read has.
+func TestArchiveReadLoginIsBoundedByTheShortLoginTimeout(testContext *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		select {
+		case <-request.Context().Done():
+		case <-time.After(10 * time.Second):
+		}
+	}))
+	testContext.Cleanup(server.Close)
+	client := NewClient(server.URL, "machine-1", testPassword, server.Client())
+	client.loginTimeout = 150 * time.Millisecond
+
+	startedAt := time.Now()
+	_, readError := client.ReadAlertsForArchive(context.Background(), 0, archiveTestMaxBytes, 30*time.Second)
+	elapsed := time.Since(startedAt)
+
+	if !IsTimeout(readError) {
+		testContext.Fatalf("expected the hanging login to time out, got %v", readError)
+	}
+	if elapsed > 3*time.Second {
+		testContext.Fatalf("the login waited %v, the archive budget instead of the login timeout", elapsed)
+	}
+}
+
+func TestDefaultLoginTimeoutIsTheShortCallTimeout(testContext *testing.T) {
+	client := NewClient("http://lapi.example.com", "machine-1", testPassword, nil)
+	if client.loginTimeout != 15*time.Second {
+		testContext.Fatalf("expected the 15 s login timeout of existing calls, got %v", client.loginTimeout)
+	}
+}

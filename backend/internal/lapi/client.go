@@ -31,6 +31,7 @@ type Client struct {
 	machinePassword string
 	httpClient      *http.Client
 	now             func() time.Time
+	loginTimeout    time.Duration
 	tokenMutex      sync.Mutex
 	token           string
 }
@@ -49,6 +50,7 @@ func NewClient(baseURL, machineID, machinePassword string, httpClient *http.Clie
 		machinePassword: machinePassword,
 		httpClient:      httpClient,
 		now:             time.Now,
+		loginTimeout:    defaultTimeout,
 	}
 }
 
@@ -291,6 +293,8 @@ func (client *Client) Login(ctx context.Context) error {
 }
 
 func (client *Client) loginLocked(ctx context.Context) (string, error) {
+	ctx, cancelLogin := context.WithTimeout(ctx, client.loginTimeout)
+	defer cancelLogin()
 	credentials := map[string]any{
 		"machine_id": client.machineID,
 		"password":   client.machinePassword,
