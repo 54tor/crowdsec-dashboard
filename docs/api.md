@@ -195,6 +195,10 @@ Only `live:true` rows of the `local` engine can be deleted this way. `DELETE /ap
 from the archive only (a remote engine is never contacted). Both are audited `alert_deleted` with
 target `<engine>/<upstream id>` and refuse a `read_only` account (403 `forbidden`).
 
+In this release the routes marked "yes" above (decisions, bouncers, machines, hub, reload) still
+accept a `read_only` account: only the alert deletions and the engine routes check the role. Role
+enforcement on the other write routes comes with the account management of a later release.
+
 Machine names match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; bouncer names also allow `@` after the first character (bouncers registered over TLS are named `name@<address>`); hub names allow one `/`.
 The machine self-check runs before the confirmation check, so `self_account` wins over
 `confirmation_required`.
@@ -235,12 +239,18 @@ out of the collection until it is fixed); never a raw error text.
   (RFC 1918, `100.64.0.0/10`, `fc00::/7`) are accepted. Host names are checked when the connection
   is made, after DNS resolution.
 - `engine_secret_required`: a `lapi_url` change of scheme, host or port without `machine_password`
-  in the same request; a `proxy.url` or `proxy.kind` change on an engine that has proxy credentials
+  in the same request (a change of the path alone keeps the stored password; such a change of
+  scheme, host or port also resets the collection cursor to 0, so the next collection reads the new
+  engine from its start); a `proxy.url` or `proxy.kind` change on an engine that has proxy credentials
   without new credentials or `clear_credentials`; a proxy change on an `http` engine without
   `machine_password`. Nothing is written and no connection is made.
 - Deleting an engine deletes its whole archive; disable it (`"enabled": false`) to keep the archive.
 - `test` logs in as the machine (`POST /v1/watchers/login`) through the engine's own guarded
-  client and proxy. The engine's answer is never returned, only the outcome.
+  client and proxy, also for a disabled engine and for `local` (which uses the dashboard's own LAPI
+  client). The engine's answer is never returned, only the outcome: `ok`, `engine_unreachable`,
+  `engine_auth_failed` or `engine_blocked_address` (see the oracle note in
+  [security.md](security.md#engines-and-outbound-connections)).
+- `name` can be changed by `PATCH` (rename); the audit target is the new name.
 - Every successful create, update and delete, and every test of an existing engine, is audited
   (`engine_created`, `engine_updated`, `engine_deleted`, `engine_tested`) with the engine name as
   target. After each successful write the engine registry is reloaded; when that reload fails the

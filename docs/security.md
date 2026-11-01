@@ -199,7 +199,7 @@ Each account can restrict where it signs in from, with IP/CIDR rules and country
 
 ## Audit log
 
-Authentication events are written to the `audit_event` table with the account (empty for an
+Authentication events and the engine and alert-deletion actions are written to the `audit_event` table with the account (empty for an
 unknown account), an action, a short target, the client address and the time. Targets are stripped
 of control characters and cut at 64 characters. Recorded actions:
 
@@ -214,6 +214,9 @@ of control characters and cut at 64 characters. Recorded actions:
 | `enrollment_completed` | the first account was created | account name |
 | `second_factor_enrolled` | a factor was confirmed at enrolment or at setup | `totp` or `webauthn` |
 | `access_rule_added`, `access_rule_removed` | a rule changed | `ip:<cidr>` or `country:<code>` |
+| `engine_created`, `engine_updated`, `engine_deleted` | an engine was written (after a rename, the new name) | engine name |
+| `engine_tested` | a connection test of an existing engine, successful or not | engine name |
+| `alert_deleted` | a live local alert (with its archived copy) or an archived alert was deleted | `<engine>/<upstream alert id>` |
 
 Not audited yet: a password step that ends on a locked account, an attempt refused because the
 account is already locked, rate-limited requests, session creation and logout. The `login_failure`
@@ -358,6 +361,84 @@ accepted to supervise the dashboard and `geoipupdate` in one container. Mitigati
   with `read_only: true` the container stops at start (the log shows `groupmod` failing on the
   read-only `/etc`) rather than running with the wrong user.
 
+## Engines and outbound connections
+
+An administrator can register remote CrowdSec engines (`/api/engines`, [api.md](api.md#engines));
+the dashboard then logs in to their LAPI as a machine and archives their alerts. Only the `admin`
+role can read, add, change, test or delete engines; a `read_only` account only sees the engine
+names (`GET /api/engines/names`, for filters and selectors), never their URL, machine, proxy or
+collection state.
+
+Every connection to a remote engine (collection, connection test, allowlist read) goes through one
+client per engine, never through `HTTP_PROXY` / `HTTPS_PROXY` of the environment:
+
+- **Address policy.** The address is checked when the connection is made, after DNS resolution,
+  so a name that resolves (or re-resolves) to a forbidden address is refused. Allowed: private ranges, because engines legitimately live there (RFC 1918
+  `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, carrier-grade NAT `100.64.0.0/10`, IPv6 ULA
+  `fc00::/7`) and public unicast addresses, on any port. Refused: loopback, link-local (including
+  `169.254.169.254`), unspecified, multicast and the reserved and documentation ranges
+  (the built-in list of `code.dny.dev/ssrf`), plus two metadata endpoints that sit inside allowed
+  ranges: `100.100.100.200` (Alibaba Cloud) and `fd00:ec2::254` (AWS IPv6). A refusal is reported
+  as `engine_blocked_address`. A literal forbidden address in `lapi_url` or `proxy.url` is refused
+  when the engine is saved. IPv4-mapped IPv6 forms are unmapped before the check.
+- **Proxy as a trust boundary.** With a proxy (`socks5` or `http`), the check applies to the proxy
+  address; the engine host name is resolved by the proxy (`socks5` behaves as `socks5h`), so the
+  dashboard cannot check where the proxy connects. Choosing a proxy is choosing to trust it: only
+  configure proxies you control.
+- **No redirects, bounded exchanges.** Redirects are never followed. Connecting and the TLS
+  handshake have 5 s each, response headers are capped at 64 KiB, a request or a login has 15 s
+  (a connection test 10 s, the collector's full history read 120 s), and bodies are capped (16 MiB
+  for collector reads, 4 MiB for allowlists, 8 MiB otherwise). An oversized answer is an error or
+  an incomplete read; it is never used partially.
+- **Secrets at rest.** The machine password and the proxy credentials of an engine are sealed with
+  the secrets key (AES-GCM, see [Encryption of TOTP secrets](#encryption-of-totp-secrets)) with the
+  engine id as associated data: a sealed value copied to another engine row does not open. No API
+  response, error, log or audit entry carries them; the API only says `has_proxy_credentials`.
+- **Secrets bound to their destination.** Changing the scheme, host or port of `lapi_url` requires
+  the machine password in the same request; changing `proxy.url` or `proxy.kind` of an engine
+  that has proxy credentials requires new credentials (or `clear_credentials`); changing the proxy
+  of an `http` engine requires the machine password (the password crosses the new proxy in clear
+  text). Otherwise the request fails with `engine_secret_required` before any write or connection,
+  so a stored secret is never sent to a destination an administrator just typed. A change of the
+  URL **path** alone keeps the stored password: a gateway that routes engines by path could then
+  receive it, so treat path-routed gateways as one destination.
+- **Connection test oracle.** `POST /api/engines/{name}/test` returns only the outcome (`ok`,
+  `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`), never the body of the
+  answer, and errors never repeat the submitted URL. An administrator can still use it, and the
+  collector status, as a reachability probe: "something answers on that address and port", "it
+  refused the machine login", or "this address is blocked". Addresses that the policy allows but
+  that may be sensitive on your host stay reachable this way, for example the Docker bridge
+  gateway (`172.17.0.1`, RFC 1918) or the Tailscale resolver (`100.100.100.100`, carrier-grade
+  NAT). If the dashboard sits next to services it must not reach, isolate it at the network
+  level (a dedicated Docker network, an egress firewall), the policy above is not a substitute.
+- **What an administrator can reach.** Any allowed address and port, as an HTTP client that sends
+  `POST /v1/watchers/login` and the LAPI read routes with the stored machine credentials.
+  Nothing else: no free-form request, no response content shown.
+- **The local engine** comes from `LAPI_URL` (configuration, not the UI). Its client is not subject
+  to the address policy, since it is usually on a Docker network or loopback; it cannot be edited
+  through the API (`engine_local_readonly`).
+- **Engine data is attacker data.** Archived events (user agents, URLs, payloads, meta) are stored
+  as received after removal of NUL bytes and replacement of invalid UTF-8, bounded per alert (200 events, 200
+  decisions, 64 meta keys of 128 bytes, values of 4 KiB, 60 KiB of meta per event), and rendered as
+  plain text in `<bdi>` isolates (see [Headers and content security
+  policy](#headers-and-content-security-policy)). Bidirectional control characters are kept and
+  isolated, not stripped.
+
+### Allowlist check before writes
+
+`allowguard` reads the allowlists of an engine (`GET /v1/allowlists?with_content=true`) and
+decides whether a ban target overlaps an active allowlist entry, in both directions (an entry
+inside the target range or the target inside an entry), for IPv4 and IPv6. An entry is active when
+it has no expiration (CrowdSec serialises a permanent entry as `0001-01-01T00:00:00.000Z`) or its
+expiration is not past. It fails closed: a read error, a truncated answer (over 4 MiB or 10 000
+entries), an unreadable entry value or a 404 (a real LAPI answers an unknown route with an empty
+404, which cannot be told apart from a wrong port or a proxy) makes the engine's allowlists
+unavailable and every target is refused (`allowlist_unavailable`). Only a 404 whose body is a JSON
+object with a string `message`, which no LAPI tested sends, is read as "no allowlist support" and
+lets targets through. Consequence: an engine whose CrowdSec is too old to have allowlists
+refuses the writes guarded this way. No write path uses it in this release; it is the shared filter
+for the dashboard-initiated writes of later releases.
+
 ## Honest limits
 
 - The socket proxy filters by method and path, not by body. It allows `POST /containers/<crowdsec>/exec`
@@ -369,8 +450,11 @@ accepted to supervise the dashboard and `geoipupdate` in one container. Mitigati
   it with untrusted workloads.
 - The proxy blocks everything else (other containers, images, networks, container creation), so the
   blast radius is the CrowdSec container and the dashboard's own LAPI account, not the whole host.
-- All accounts are administrators. Roles, API tokens and a UI to read the audit log come in later
-  lots.
+- Accounts have a role, `admin` or `read_only`. The first account is `admin`; there is no
+  interface to create accounts or change a role yet. `read_only` is enforced on the engine routes
+  (except the engine names) and on alert deletion only: in this release a `read_only` account can
+  still ban, unban, manage bouncers and machines, change the hub and reload CrowdSec. API tokens
+  and a UI to read the audit log come in later lots.
 - Known limits of the second factor and the allowlist, collected here:
   - allowlist prefixes from `/1` to `/7` are accepted (no minimum length yet);
   - the pending state of a first-account enrolment and of a setup has no expiry of its own (memory

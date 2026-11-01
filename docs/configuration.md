@@ -41,6 +41,16 @@ these files, which compose would otherwise expand.
 | `ARCHIVE_DECISION_RETENTION_DAYS` | `365` | Days an archived decision is kept, from 1 to 3650, never more than `ARCHIVE_ALERT_RETENTION_DAYS`. |
 | `ARCHIVE_EVENT_RETENTION_DAYS` | `90` | Days the archived events (attacker-controlled data, the largest part) are kept, from 1 to 3650, never more than `ARCHIVE_ALERT_RETENTION_DAYS`. |
 
+The archive retention runs once at start and then every hour (each run stops after 30 minutes and
+resumes at the next one). All three horizons count from the time the dashboard collected the alert
+(its own clock, so a skewed engine clock cannot shorten or extend them). Each run deletes, in this
+order and in batches of 5 000 rows, the events, then the decisions, then the alerts older than their
+horizon; deleting an alert also deletes whatever events and decisions it still has. A decision or
+event retention longer than the alert retention would be cut short silently by that cascade, so it
+is refused at start. Decisions are purged on collection time alone: with a short
+`ARCHIVE_DECISION_RETENTION_DAYS`, a long ban can leave the archive while it is still active on
+the engine.
+
 `DATABASE_URL`, `SECRETS_KEY_FILE`, `WEBAUTHN_RP_*`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS`,
 `COLLECTOR_*`, `ARCHIVE_*` and `CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,
 Docker and configuration variables have no default and no start-time check: a

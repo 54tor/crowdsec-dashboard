@@ -80,7 +80,9 @@ project `csdash-dev`, with documentation addresses only (203.0.113.0/24, 198.51.
 cd deploy/dev
 ./up.sh              # CrowdSec with Prometheus off, like a typical instance
 ./up.sh metrics      # Prometheus on, for the Metrics page
+./up.sh peer         # also start the demo engine peer-a
 ./seed.sh            # fake alerts and decisions (run once per fresh stack)
+SEED_ENGINE=peer-a ./seed.sh   # the same on peer-a (10 alerts per run)
 ./check-proxy.sh     # proves the socket proxy denies everything except the three exec calls
 docker compose -p csdash-dev down -v --remove-orphans
 ```
@@ -97,6 +99,65 @@ account, so country rules are refused there; to try WebAuthn, add `WEBAUTHN_RP_I
 `http://localhost:18080` (an IP cannot be a relying party ID).
 Writing log lines to `/var/log/dev/*.log` in the CrowdSec container feeds the Metrics page.
 Only touch your own `csdash-dev` project when other stacks run on the same Docker host.
+
+`CSDASH_PROJECT` (default `csdash-dev`) and `CSDASH_DASHBOARD_PORT` (default `18080`) start a
+second, isolated copy beside the default one, with its own containers, volumes, networks, image tag
+and socket-proxy rules; its generated env file and secrets key go to `secrets/<project>/`
+(git-ignored), so the default `.env.local` and key are never touched. `seed.sh` honours
+`CSDASH_PROJECT` too. Tear such a copy down with its own project name:
+
+```
+CSDASH_PROJECT=csdash-e2e CSDASH_DASHBOARD_PORT=18180 ./up.sh peer
+CSDASH_PROJECT=csdash-e2e SEED_ENGINE=peer-a ./seed.sh
+docker compose -p csdash-e2e --env-file secrets/csdash-e2e/env.local \
+  -f compose.yaml -f peer/compose.override.yaml down -v --remove-orphans
+```
+
+### Demo engine peer-a
+
+`./up.sh peer` starts `peer-a`, a second CrowdSec on the internal network only (no published
+port), with `db_config.flush.max_items: 20` so its own purge is visible quickly, and a profile that
+bans on any alert. To archive it:
+
+1. create a machine on it: `docker exec csdash-dev-peer-a cscli machines add <name> --password
+   <password> -f /dev/null`;
+2. on the Engines page, add `peer-a` with URL `http://peer-a:8080`, that machine and password, and
+   "Allow plain HTTP to this engine" checked; "Test connection" must succeed;
+3. seed it (`SEED_ENGINE=peer-a ./seed.sh`, several runs for more than 20 alerts).
+
+CrowdSec keeps an alert with an active decision whatever `max_items` says; to see the flush, expire
+them on the demo engine (`docker exec csdash-dev-peer-a cscli decisions delete --all`), then wait a
+minute.
+
+### Allowlist probe
+
+`deploy/dev/allowlist-probe.sh` starts its own throwaway engine (project `csdash-allowlist-probe`,
+no published port), records how the LAPI serves allowlists (shape of
+`GET /v1/allowlists?with_content=true`, permanent entries as `0001-01-01T00:00:00.000Z`, expired
+entries never returned, empty-body 404 for unknown routes, 500 for an unknown allowlist name) and
+what it stores for an alert on an allowlisted address, then tears itself down. The
+`allowlists.json` and `allowlist-not-found.json` fixtures were recorded with it; run it again when
+upgrading CrowdSec.
+
+### End-to-end check of the archive
+
+On an isolated copy (above), with `peer-a`:
+
+1. enrol, add `peer-a` on the Engines page and test it;
+2. push more than 20 alerts on `peer-a`, expire its decisions, wait for its flush: `docker exec
+   <project>-peer-a cscli alerts list -o json --limit 0 | jq length` drops to 21 while the Alerts
+   page filtered on `peer-a` still lists every alert, badged "Archived", without Delete;
+3. seed the local engine, wait a collection, delete a live local alert: it disappears from the LAPI
+   and from the archive (`GET /api/alerts/archive/<archive_id>` answers 404);
+4. `docker stop <project>-crowdsec`: the Alerts page stays served from the archive with the "Local API
+   unreachable, showing the archive." banner (`live_status:"unavailable"`);
+5. downgrade the account in that copy's database only (`docker exec <project>-postgres psql -U
+   dashboard -d dashboard -c "UPDATE account SET account_role='read_only' WHERE
+   account_name='<account>'"`): the Engines link and page are gone, `/api/engines` answers 403
+   `forbidden`, and the engine filter of the Alerts page still lists every engine.
+
+The "10 000+" total needs more than 10 000 archived alerts and is covered by the API tests, not
+by this check.
 
 ## Refreshing the fixtures
 

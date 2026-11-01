@@ -19,6 +19,8 @@
 | Second factor | TOTP always; WebAuthn only with `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS`. Factors cannot be changed or reset from the interface yet. |
 | Access allowlist | No rule means no restriction; any rule means deny by default. Country rules need the GeoLite2 database, otherwise they never match. No minimum prefix length except zero. Checked at sign-in only: existing sessions are not cut off. |
 | Audit log | Written to `audit_event`; no page, no retention, and some events are not recorded yet ([security.md](security.md#audit-log)). |
+| Engines | Managed on the Engines page by `admin` accounts only ([Engines and the archive](#engines-and-the-archive)). Collection counters and the "History incomplete" warning restart with the process. |
+| Roles | `read_only` hides the Engines page and is refused on the engine and alert-deletion routes; the other write routes and buttons are not restricted yet (a `read_only` account still sees Delete on live local alerts and gets 403 `forbidden`). |
 
 ## Troubleshooting
 
@@ -58,6 +60,16 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `lapi_unavailable` | 502 | LAPI unreachable, answered 5xx, or refused the machine login. Check `LAPI_URL`, the machine name and password, and that the machine is validated. |
 | `lapi_error` | 502 | The LAPI answered with an unexpected 4xx (including 403). Check the machine account. |
 | `cscli_failed` | 502 | The exec failed: Docker unreachable, CrowdSec container not running or misnamed, socket proxy denying the call, `cscli` exited non-zero (for example an unknown collection or machine), or output could not be parsed. Look at the socket proxy log first. |
+| `forbidden` | 403 | The action needs the `admin` role (engines, alert deletion). |
+| `target_mismatch` | 409 | The alert or decision id now designates another target (different uuid, scope or value): the list was stale or the LAPI was reset. Reload the page. |
+| `engine_exists`, `engine_not_found`, `invalid_engine` | 409, 404, 400 | Engine name already used, unknown engine, or a field refused (name, URL scheme without `allow_insecure_http`, credentials or forbidden address in a URL, proxy kind). |
+| `engine_local_readonly` | 409 | The `local` engine comes from `LAPI_URL` and cannot be changed or deleted from the API. |
+| `engine_secret_required` | 400 | The destination changed: re-enter the machine password (and the proxy credentials) in the same request. |
+| `engine_unreachable` | 502 | No answer from the engine or its proxy, a timeout, an answer that is not a LAPI login, or an answer over the size limit. Check the URL, the port, the proxy and the network between the dashboard and the engine. |
+| `engine_auth_failed` | 502 | The engine refused the machine login: check the machine id and password with `cscli machines list` on that engine, and that the machine is validated. |
+| `engine_blocked_address` | 502 | The address (or the proxy address) resolved to a forbidden range ([security.md](security.md#engines-and-outbound-connections)). |
+| `engine_secret_unreadable` | engine status | The stored secret cannot be decrypted with the current secrets key (key changed or row restored from another installation): edit the engine and re-enter the secrets. The engine is left out of collection meanwhile. |
+| `archive_write_failed` | engine status | The archive write failed (database). The engine is retried with backoff. |
 | `cscli_timeout` | 504 | The command exceeded 30 s (120 s for hub operations). Retry; check the network of the CrowdSec container for hub calls. |
 
 Quick checks:
@@ -199,6 +211,69 @@ started as root so the init scripts can run; the hardening and its reasons are i
 
 This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com.
 
+## Engines and the archive
+
+The `local` engine row is created or updated at start from `LAPI_URL` and `LAPI_MACHINE_ID` (no
+password stored: it uses `LAPI_MACHINE_PASSWORD`). Remote engines are added on the Engines page;
+each needs a machine account on that engine (`cscli machines add <name> --password <password>`,
+validated). "Test connection" logs in once and reports the outcome only.
+
+**Collector.** Every `COLLECTOR_INTERVAL` (default 1 min), each enabled engine is read
+independently: a slow or failing engine never delays the others and is retried with exponential
+backoff (at most 1 h). The cursor is the highest upstream alert id archived for the engine, stored
+in the database and read again at each collection. The first collection reads the whole history
+(at most 16 MiB and 120 s); later ones read the newest `COLLECTOR_POLL_LIMIT` alerts and only
+archive the ones above the cursor. Alerts from the community blocklist (CAPI) are not archived.
+Duplicates are impossible: an alert is keyed by engine, upstream id and upstream uuid. Each
+collection updates `last_collected_at` (last success) and `last_error_code` in the `engine` row;
+the counters (`inserted`, `duplicates`, `skipped`, `gaps`, `resets`) live in memory. An alert that
+cannot be stored (for example a meta value that is not a string, or a value the database refuses)
+is skipped and counted, and the next valid alert is still archived. Events are bounded per alert
+(see [security.md](security.md#engines-and-outbound-connections)); an alert whose events or meta
+were cut has `events_truncated:true` in its detail.
+
+**History incomplete.** When the newest alerts read do not reach back to the cursor (more new
+alerts than the poll limit since the last collection), the collector reads the whole history
+again; if that read is truncated or too slow it archives what the poll returned, counts a gap
+and the Engines page shows "History incomplete since the dashboard started". Some alerts of that
+window may never be archived if the engine purged them meanwhile. The warning is held in memory and
+disappears at the next restart even though the archive keeps the hole. Lower the interval or raise
+`COLLECTOR_POLL_LIMIT` for busy engines.
+
+**Engine flush.** CrowdSec purges its own alerts (`db_config.flush.max_items`, `max_age`, checked
+every minute). It keeps the newest `max_items + 1` alerts and never purges an alert that still has
+an active decision; the dashboard archive keeps them all, within the archive retention. Measured on
+the demo engine (`max_items: 20`): 43 alerts pushed, 21 left on the engine after the flush, 43 in
+the archive.
+
+**Engine reset.** If an engine's database is recreated, its alert ids restart at 1. The collector
+detects it (an id it already holds with another uuid, or a newest id below the cursor while none of
+the received alerts is already archived), sets the cursor back to 0 and counts a `reset`; nothing
+is duplicated and the old alerts stay in the archive. Residual case: when every alert the engine
+still serves has already left the archive by retention and its newest alert was deleted, a reset
+is assumed wrongly and that window is archived once more (purged again by retention). Changing the
+host, port or scheme of an engine's URL also resets its cursor.
+
+**Retention.** Archived alerts, decisions and events are purged hourly by collection age
+([configuration.md](configuration.md#environment-variables)). Alerts purged from the archive are
+not collected again while the engine still serves them (they are below the cursor).
+
+**Deleting an engine deletes its archive** (alerts, events and decisions, in one cascade), after
+the name is retyped. To stop collecting and keep the archive, disable the engine instead.
+
+**Deleting alerts.** Delete on a live local alert removes it from the LAPI (`cscli alerts delete`)
+and its archived copy in the same request, so it does not come back from the archive.
+Unbanning a live local decision leaves its archived copy, shown "Archived, not active". Archived
+alerts of any engine can be deleted from the archive through the API only
+(`DELETE /api/alerts/archive/{archive_id}`); remote engines are never written to.
+
+**Schema notes.** The archive tables (`engine`, `alert`, `event`, `decision`, migration 00003)
+deliberately keep two denormalisations: alert fields that CrowdSec repeats per alert (scenario,
+source scope and value, country, AS, decision type and origin) are stored as text instead of
+lookup tables, and `event_meta` and `engine_public_address_list` are JSONB documents. Upgrading to
+the release that adds the archive applies migration 00003 at the next start: back up the database
+first (see [PostgreSQL](#postgresql)).
+
 ## Account recovery by SQL
 
 There is no password reset, no factor reset and no allowlist reset in the interface yet. When an
@@ -279,10 +354,11 @@ the lock expires, so run [Unlocking an account](#unlocking-an-account) too if ne
 ## Backup and restore
 
 The dashboard keeps its state in PostgreSQL (accounts, factors, recovery codes, allowlist rules,
-sessions, audit events). Keep the compose file, `dashboard.env`, `postgres.env` and the secrets
+sessions, audit events, engines with their sealed secrets, and the alert archive). The archive is
+the only copy of the alerts that the engines have already purged. Keep the compose file, `dashboard.env`, `postgres.env` and the secrets
 key file in your usual configuration backup, and back up the database (see
 [PostgreSQL](#postgresql)). **Back up the secrets key apart from the database**, otherwise a restored
-database cannot verify TOTP codes ([Secrets key](#secrets-key)). The GeoLite2 volume needs no backup:
+database cannot verify TOTP codes nor open the engine secrets ([Secrets key](#secrets-key)). The GeoLite2 volume needs no backup:
 it is downloaded again. To restore, redeploy the files and the database, and recreate the
 LAPI machine account if the CrowdSec data was lost. CrowdSec's own volumes (configuration,
 `crowdsec.db`) are backed up with CrowdSec, not with the dashboard.
