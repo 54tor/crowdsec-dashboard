@@ -413,13 +413,41 @@ func TestKnownDecisionKeysMatchesEngine(testContext *testing.T) {
 	fixture.storeFor(testContext, fixture.engineID, sampleAlerts(1, 2))
 	fixture.storeFor(testContext, fixture.remoteEngineID, sampleAlerts(3, 3))
 
-	knownDecisions, knownError := fixture.reader.KnownDecisionKeys(context.Background(), "local", []int64{10, 30, 99})
+	archiveIDs, _ := fixture.reader.KnownAlertKeys(context.Background(), "local", []UpstreamKey{
+		{UpstreamID: 1, UUID: "uuid-1"}, {UpstreamID: 2, UUID: "uuid-2"},
+	})
+	archivedAlertIDs := []int64{archiveIDs[UpstreamKey{UpstreamID: 1, UUID: "uuid-1"}], archiveIDs[UpstreamKey{UpstreamID: 2, UUID: "uuid-2"}]}
+
+	knownDecisions, knownError := fixture.reader.KnownDecisionKeys(context.Background(), "local", archivedAlertIDs, []int64{10, 30, 99})
 
 	if knownError != nil {
 		testContext.Fatalf("known decision keys: %v", knownError)
 	}
 	if len(knownDecisions) != 1 || !knownDecisions[10] {
 		testContext.Errorf("only decision 10 belongs to the local engine archive, got %v", knownDecisions)
+	}
+}
+
+// The lookup is restricted to the decisions of the given archived alerts: a
+// decision id archived under another alert (an engine reset reuses ids) is not
+// reported, and no alert ids means nothing is known.
+func TestKnownDecisionKeysIsRestrictedToTheGivenAlerts(testContext *testing.T) {
+	fixture := newReaderFixture(testContext)
+	fixture.storeFor(testContext, fixture.engineID, sampleAlerts(1, 2))
+	archiveIDs, _ := fixture.reader.KnownAlertKeys(context.Background(), "local", []UpstreamKey{{UpstreamID: 1, UUID: "uuid-1"}})
+
+	restrictedDecisions, restrictedError := fixture.reader.KnownDecisionKeys(context.Background(), "local",
+		[]int64{archiveIDs[UpstreamKey{UpstreamID: 1, UUID: "uuid-1"}]}, []int64{10, 20})
+	noAlertDecisions, noAlertError := fixture.reader.KnownDecisionKeys(context.Background(), "local", nil, []int64{10, 20})
+
+	if restrictedError != nil || noAlertError != nil {
+		testContext.Fatalf("known decision keys: %v %v", restrictedError, noAlertError)
+	}
+	if len(restrictedDecisions) != 1 || !restrictedDecisions[10] {
+		testContext.Errorf("decision 20 belongs to alert 2, which was not asked, got %v", restrictedDecisions)
+	}
+	if len(noAlertDecisions) != 0 {
+		testContext.Errorf("no archived alert asked, no decision known, got %v", noAlertDecisions)
 	}
 }
 
@@ -522,5 +550,30 @@ func TestReaderNeverExposesEngineConnectionDetails(testContext *testing.T) {
 		if strings.Contains(string(encodedOutput), forbiddenValue) {
 			testContext.Errorf("reader output leaks engine detail %q: %s", forbiddenValue, encodedOutput)
 		}
+	}
+}
+
+// Deleting by archive id reports which engine and upstream id the row belonged
+// to, so the caller can audit "<engine>/<upstream id>" without a second read.
+func TestDeleteArchivedAlertByArchiveIDReportsItsKey(testContext *testing.T) {
+	fixture := newReaderFixture(testContext)
+	fixture.storeFor(testContext, fixture.remoteEngineID, sampleAlerts(5, 5))
+	archiveIDs, _ := fixture.reader.KnownAlertKeys(context.Background(), remoteEngineName, []UpstreamKey{{UpstreamID: 5, UUID: "uuid-5"}})
+	archiveID := archiveIDs[UpstreamKey{UpstreamID: 5, UUID: "uuid-5"}]
+
+	deletedAlert, deleteError := fixture.reader.DeleteArchivedAlert(context.Background(), archiveID)
+
+	if deleteError != nil {
+		testContext.Fatalf("delete by archive id: %v", deleteError)
+	}
+	if deletedAlert.Engine != remoteEngineName || deletedAlert.UpstreamID != 5 {
+		testContext.Errorf("expected edge-1/5, got %+v", deletedAlert)
+	}
+	if obtainedCounts := fixture.tableCounts(testContext); obtainedCounts != [3]int{0, 0, 0} {
+		testContext.Errorf("the alert and its children must be gone, got %v", obtainedCounts)
+	}
+	_, againError := fixture.reader.DeleteArchivedAlert(context.Background(), archiveID)
+	if !errors.Is(againError, ErrAlertNotFound) {
+		testContext.Errorf("a second delete must report ErrAlertNotFound, got %v", againError)
 	}
 }

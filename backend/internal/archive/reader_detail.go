@@ -53,9 +53,9 @@ func (reader *Reader) KnownAlertKeys(ctx context.Context, engineName string, key
 	return knownKeys, nil
 }
 
-func (reader *Reader) KnownDecisionKeys(ctx context.Context, engineName string, upstreamIDs []int64) (map[int64]bool, error) {
+func (reader *Reader) KnownDecisionKeys(ctx context.Context, engineName string, archivedAlertIDs []int64, upstreamIDs []int64) (map[int64]bool, error) {
 	knownDecisions := map[int64]bool{}
-	if len(upstreamIDs) == 0 || strings.ContainsRune(engineName, 0) {
+	if len(upstreamIDs) == 0 || len(archivedAlertIDs) == 0 || strings.ContainsRune(engineName, 0) {
 		return knownDecisions, nil
 	}
 	var knownIDs []int64
@@ -64,8 +64,8 @@ func (reader *Reader) KnownDecisionKeys(ctx context.Context, engineName string, 
 		 FROM decision
 		 JOIN alert ON alert_id = decision_alert_id
 		 JOIN engine ON engine_id = alert_engine_id
-		 WHERE engine_name = ? AND decision_upstream_id = ANY(?::bigint[])`,
-		engineName, pgdialect.Array(upstreamIDs),
+		 WHERE decision_alert_id = ANY(?::bigint[]) AND engine_name = ? AND decision_upstream_id = ANY(?::bigint[])`,
+		pgdialect.Array(archivedAlertIDs), engineName, pgdialect.Array(upstreamIDs),
 	).Scan(ctx, &knownIDs)
 	if queryError != nil {
 		return nil, queryError
@@ -122,4 +122,23 @@ func (reader *Reader) DeleteAlert(ctx context.Context, engineName string, key Up
 		return false, rowsError
 	}
 	return deletedRows > 0, nil
+}
+
+type DeletedAlert struct {
+	Engine     string `bun:"engine_name"`
+	UpstreamID int64  `bun:"alert_upstream_id"`
+}
+
+func (reader *Reader) DeleteArchivedAlert(ctx context.Context, archiveID int64) (DeletedAlert, error) {
+	var deletedAlert DeletedAlert
+	deleteError := reader.database.NewRaw(
+		`DELETE FROM alert USING engine
+		 WHERE engine_id = alert_engine_id AND alert_id = ?
+		 RETURNING engine_name, alert_upstream_id`,
+		archiveID,
+	).Scan(ctx, &deletedAlert)
+	if errors.Is(deleteError, sql.ErrNoRows) {
+		return DeletedAlert{}, ErrAlertNotFound
+	}
+	return deletedAlert, deleteError
 }
