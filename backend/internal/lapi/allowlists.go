@@ -1,7 +1,6 @@
 package lapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +11,6 @@ import (
 const (
 	maxAllowlistResponseBytes = 4 << 20
 	maxAllowlistEntries       = 10000
-	maxUnsupportedBodyBytes   = 4 << 10
 )
 
 var ErrAllowlistsUnreadable = errors.New("lapi: allowlists unreadable")
@@ -29,33 +27,19 @@ func (client *Client) ListAllowlists(ctx context.Context) (AllowlistRead, error)
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return AllowlistRead{}, ErrAuthFailed
 	case status == http.StatusNotFound:
-		return classifyNotFound(responseBody)
+		return AllowlistRead{}, ErrAllowlistsUnreadable
 	case status < 200 || status > 299:
 		return AllowlistRead{}, decodeResponse(status, nil, nil)
 	}
 	if int64(len(responseBody)) > maxAllowlistResponseBytes {
-		return AllowlistRead{Allowlists: []Allowlist{}, Supported: true, Truncated: true}, nil
+		return AllowlistRead{Allowlists: []Allowlist{}, Truncated: true}, nil
 	}
 	allowlists := []Allowlist{}
 	if decodeError := json.Unmarshal(responseBody, &allowlists); decodeError != nil {
 		return AllowlistRead{}, ErrAllowlistsUnreadable
 	}
 	allowlists, truncated := capEntries(allowlists)
-	return AllowlistRead{Allowlists: allowlists, Supported: true, Truncated: truncated}, nil
-}
-
-func classifyNotFound(responseBody []byte) (AllowlistRead, error) {
-	if len(responseBody) > maxUnsupportedBodyBytes {
-		return AllowlistRead{}, ErrAllowlistsUnreadable
-	}
-	var notFoundBody struct {
-		Message *string `json:"message"`
-	}
-	trimmedBody := bytes.TrimSpace(responseBody)
-	if len(trimmedBody) == 0 || trimmedBody[0] != '{' || json.Unmarshal(trimmedBody, &notFoundBody) != nil || notFoundBody.Message == nil {
-		return AllowlistRead{}, ErrAllowlistsUnreadable
-	}
-	return AllowlistRead{Allowlists: []Allowlist{}, Supported: false}, nil
+	return AllowlistRead{Allowlists: allowlists, Truncated: truncated}, nil
 }
 
 func capEntries(allowlists []Allowlist) ([]Allowlist, bool) {

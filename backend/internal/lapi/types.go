@@ -151,6 +151,5 @@ type Allowlist struct {
 
 type AllowlistRead struct {
 	Allowlists []Allowlist
-	Supported  bool
 	Truncated  bool
 }

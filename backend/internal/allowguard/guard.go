@@ -15,7 +15,6 @@ type activeEntry struct {
 
 type Guard struct {
 	unavailable bool
-	unsupported bool
 	entries     []activeEntry
 }
 
@@ -26,9 +25,6 @@ func Unavailable() Guard {
 func FromRead(read lapi.AllowlistRead, readError error, now time.Time) Guard {
 	if readError != nil || read.Truncated {
 		return Unavailable()
-	}
-	if !read.Supported {
-		return Guard{unsupported: true}
 	}
 	var entries []activeEntry
 	for _, allowlist := range read.Allowlists {
@@ -48,8 +44,4 @@ func FromRead(read lapi.AllowlistRead, readError error, now time.Time) Guard {
 
 func (guard Guard) Available() bool {
 	return !guard.unavailable
-}
-
-func (guard Guard) Supported() bool {
-	return !guard.unsupported
 }

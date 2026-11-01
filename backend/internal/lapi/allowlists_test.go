@@ -61,7 +61,7 @@ func TestListAllowlistsDecodesFixture(testing *testing.T) {
 	if listError != nil {
 		testing.Fatal(listError)
 	}
-	if !allowlistRead.Supported || allowlistRead.Truncated || len(allowlistRead.Allowlists) != 1 {
+	if allowlistRead.Truncated || len(allowlistRead.Allowlists) != 1 {
 		testing.Fatalf("unexpected read: %+v", allowlistRead)
 	}
 	probeAllowlist := allowlistRead.Allowlists[0]
@@ -98,15 +98,15 @@ func TestListAllowlistsKeepsExpirationString(testing *testing.T) {
 	}
 }
 
-func TestListAllowlistsTreatsLAPI404AsUnsupported(testing *testing.T) {
+func TestListAllowlistsFailsClosedOnAJSONMessage404(testing *testing.T) {
 	_, client := newAllowlistClient(testing, func(responseWriter http.ResponseWriter, request *http.Request) {
 		responseWriter.Header().Set("Content-Type", "application/json")
 		responseWriter.WriteHeader(http.StatusNotFound)
 		responseWriter.Write([]byte(`{"message":"route not found"}`))
 	})
 	allowlistRead, listError := client.ListAllowlists(context.Background())
-	if listError != nil || allowlistRead.Supported || len(allowlistRead.Allowlists) != 0 {
-		testing.Fatalf("unexpected result: %+v, %v", allowlistRead, listError)
+	if !errors.Is(listError, ErrAllowlistsUnreadable) || len(allowlistRead.Allowlists) != 0 {
+		testing.Fatalf("a JSON message 404 must fail closed: %+v, %v", allowlistRead, listError)
 	}
 }
 
@@ -210,7 +210,7 @@ func serveStatusAndBody(status int, body string) func(http.ResponseWriter, *http
 }
 
 func TestListAllowlistsUnreadableResponsesFailClosed(parentTest *testing.T) {
-	paddedMessage := `{"message":"x","padding":"` + strings.Repeat("a", maxUnsupportedBodyBytes) + `"}`
+	paddedMessage := `{"message":"x","padding":"` + strings.Repeat("a", 4<<10) + `"}`
 	unreadableCases := []struct {
 		caseName string
 		status   int
@@ -229,7 +229,7 @@ func TestListAllowlistsUnreadableResponsesFailClosed(parentTest *testing.T) {
 			if !errors.Is(listError, ErrAllowlistsUnreadable) {
 				subTest.Fatalf("expected ErrAllowlistsUnreadable, got %v", listError)
 			}
-			if allowlistRead.Supported || len(allowlistRead.Allowlists) != 0 {
+			if len(allowlistRead.Allowlists) != 0 {
 				subTest.Fatalf("an unreadable response must not look like a success: %+v", allowlistRead)
 			}
 		})
@@ -241,7 +241,7 @@ func TestListAllowlistsEmptyBodiesAreSuccessful(parentTest *testing.T) {
 		parentTest.Run(emptyBody, func(subTest *testing.T) {
 			_, client := newAllowlistClient(subTest, serveBody(emptyBody))
 			allowlistRead, listError := client.ListAllowlists(context.Background())
-			if listError != nil || !allowlistRead.Supported || allowlistRead.Truncated || len(allowlistRead.Allowlists) != 0 {
+			if listError != nil || allowlistRead.Truncated || len(allowlistRead.Allowlists) != 0 {
 				subTest.Fatalf("unexpected result: %+v, %v", allowlistRead, listError)
 			}
 		})

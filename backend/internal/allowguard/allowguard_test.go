@@ -16,7 +16,6 @@ const permanentExpiration = "0001-01-01T00:00:00.000Z"
 func readWithEntries(entries ...lapi.AllowlistItem) lapi.AllowlistRead {
 	return lapi.AllowlistRead{
 		Allowlists: []lapi.Allowlist{{Name: "trusted", Items: entries}},
-		Supported:  true,
 	}
 }
 
@@ -123,7 +122,7 @@ func TestUnparseableEntryFailsClosed(testContext *testing.T) {
 }
 
 func TestReadErrorFailsClosed(testContext *testing.T) {
-	guard := FromRead(lapi.AllowlistRead{Supported: true}, errors.New("boom"), referenceTime)
+	guard := FromRead(lapi.AllowlistRead{}, errors.New("boom"), referenceTime)
 	verdict := checkTarget(guard, "198.51.100.1/32")
 	if guard.Available() || verdict.Allowed || verdict.Reason != ReasonAllowlistUnavailable {
 		testContext.Errorf("expected unavailable, got %+v", verdict)
@@ -138,26 +137,18 @@ func TestTruncatedReadFailsClosed(testContext *testing.T) {
 	if guard.Available() || verdict.Allowed || verdict.Reason != ReasonAllowlistUnavailable {
 		testContext.Errorf("expected unavailable, got %+v", verdict)
 	}
-	emptyTruncated := FromRead(lapi.AllowlistRead{Supported: true, Truncated: true}, nil, referenceTime)
-	unsupportedTruncated := FromRead(lapi.AllowlistRead{Supported: false, Truncated: true}, nil, referenceTime)
-	if emptyTruncated.Available() || unsupportedTruncated.Available() {
-		testContext.Error("a truncated read is unavailable whatever its content or support flag")
+	emptyTruncated := FromRead(lapi.AllowlistRead{Truncated: true}, nil, referenceTime)
+	if emptyTruncated.Available() {
+		testContext.Error("a truncated read is unavailable whatever its content")
 	}
 	if Unavailable().Available() {
 		testContext.Error("Unavailable() must be unavailable")
 	}
 }
 
-func TestUnsupportedRouteIsEmptyAvailableAndFlagged(testContext *testing.T) {
-	guard := FromRead(lapi.AllowlistRead{Supported: false}, nil, referenceTime)
-	if !guard.Available() || guard.Supported() || !checkTarget(guard, "203.0.113.7/32").Allowed {
-		testContext.Errorf("unexpected guard %+v", guard)
-	}
-}
-
 func TestZeroGuardIsAvailableAndEmpty(testContext *testing.T) {
 	var guard Guard
-	if !guard.Available() || !guard.Supported() || !checkTarget(guard, "203.0.113.7/32").Allowed {
+	if !guard.Available() || !checkTarget(guard, "203.0.113.7/32").Allowed {
 		testContext.Errorf("unexpected zero guard %+v", guard)
 	}
 }
@@ -186,7 +177,7 @@ func TestCheckRefusesInvalidTarget(testContext *testing.T) {
 }
 
 func TestVerdictReportsFirstMatchInListOrder(testContext *testing.T) {
-	read := lapi.AllowlistRead{Supported: true, Allowlists: []lapi.Allowlist{
+	read := lapi.AllowlistRead{Allowlists: []lapi.Allowlist{
 		{Name: "first", Items: []lapi.AllowlistItem{permanentEntry("203.0.113.0/24"), permanentEntry("203.0.113.7")}},
 		{Name: "second", Items: []lapi.AllowlistItem{permanentEntry("203.0.113.7/32")}},
 	}}

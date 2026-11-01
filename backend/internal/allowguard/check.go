@@ -7,10 +7,9 @@ import (
 )
 
 const (
-	ReasonAllowlisted           = "allowlisted"
-	ReasonAllowlistUnavailable  = "allowlist_unavailable"
-	ReasonInvalidTarget         = "invalid_target"
-	ReasonAllowlistsUnsupported = "allowlists_unsupported"
+	ReasonAllowlisted          = "allowlisted"
+	ReasonAllowlistUnavailable = "allowlist_unavailable"
+	ReasonInvalidTarget        = "invalid_target"
 )
 
 type Verdict struct {
