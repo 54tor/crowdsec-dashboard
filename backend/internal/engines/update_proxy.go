@@ -32,6 +32,9 @@ func (repository *Repository) planProxy(currentRow engineRow, input Input) ([]co
 	changes := []columnChange{{"engine_proxy_kind = ?", input.Proxy.Kind}, {"engine_proxy_url = ?", input.Proxy.URL}}
 	destinationChanged := currentRow.ProxyKind == nil || *currentRow.ProxyKind != input.Proxy.Kind ||
 		currentRow.ProxyURL == nil || *currentRow.ProxyURL != input.Proxy.URL
+	if destinationChanged && usesPlainHTTP(currentRow, input) && input.MachinePassword == nil {
+		return nil, ErrSecretRequired
+	}
 	credentialChanges, credentialError := repository.planProxyCredentials(currentRow, *input.Proxy, destinationChanged)
 	if credentialError != nil {
 		return nil, credentialError
@@ -81,4 +84,12 @@ func (repository *Repository) planProxyCredentials(currentRow engineRow, proxyIn
 		{"engine_proxy_credential_sealed = ?", sealedCredential.ciphertext},
 		{"engine_proxy_credential_key_id = ?", sealedCredential.keyID},
 	}, nil
+}
+
+func usesPlainHTTP(currentRow engineRow, input Input) bool {
+	effectiveURL := currentRow.LAPIURL
+	if input.LAPIURL != "" {
+		effectiveURL = input.LAPIURL
+	}
+	return parseValidatedURL(effectiveURL).Scheme == "http"
 }

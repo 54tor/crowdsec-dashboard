@@ -495,3 +495,158 @@ func TestErrorsNeverContainSecretValues(testContext *testing.T) {
 		}
 	}
 }
+
+func plainHTTPInput(name, rawURL string) Input {
+	allowInsecure := true
+	input := remoteInput(name, rawURL)
+	input.AllowInsecureHTTP = &allowInsecure
+	return input
+}
+
+func TestProxyChangeOnPlainHTTPEngineRequiresMachinePassword(testContext *testing.T) {
+	proxyChanges := map[string]*ProxyInput{
+		"add proxy":        {Kind: "socks5", URL: "socks5://proxy.example.com:1080"},
+		"change proxy url": {Kind: "socks5", URL: "socks5://other.example.com:1080"},
+		"change kind":      {Kind: "http", URL: "http://proxy.example.com:3128"},
+	}
+	for caseName, proxyChange := range proxyChanges {
+		fixture := newFixture(testContext)
+		createInput := plainHTTPInput("edge-1", "http://one.example.com")
+		if caseName != "add proxy" {
+			createInput.Proxy = &ProxyInput{Kind: "socks5", URL: "socks5://proxy.example.com:1080"}
+		}
+		createdEngine := mustCreate(testContext, fixture, createInput)
+		before, _ := fixture.repository.Get(context.Background(), "edge-1")
+
+		_, refusedError := fixture.repository.Update(context.Background(), "edge-1", Input{Proxy: proxyChange})
+		if !errors.Is(refusedError, ErrSecretRequired) {
+			testContext.Errorf("%s: expected ErrSecretRequired, got %v", caseName, refusedError)
+		}
+		if refusedError != nil && strings.Contains(refusedError.Error(), markerPassword) {
+			testContext.Errorf("%s: error leaks secret", caseName)
+		}
+		after, _ := fixture.repository.Get(context.Background(), "edge-1")
+		if fmt.Sprintf("%+v", before.Proxy) != fmt.Sprintf("%+v", after.Proxy) {
+			testContext.Errorf("%s: proxy changed despite refusal", caseName)
+		}
+
+		_, acceptedError := fixture.repository.Update(context.Background(), "edge-1",
+			Input{Proxy: proxyChange, MachinePassword: stringPointer("re-entered-password")})
+		if acceptedError != nil {
+			testContext.Fatalf("%s: with password: %v", caseName, acceptedError)
+		}
+		credentials, _ := fixture.repository.Credentials(context.Background(), createdEngine.ID)
+		if credentials.MachinePassword != "re-entered-password" {
+			testContext.Errorf("%s: password must be re-sealed", caseName)
+		}
+	}
+}
+
+func TestProxyChangeOnHTTPSEngineAndRemovalNeedNoPassword(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	mustCreate(testContext, fixture, remoteInput("edge-1", "https://one.example.com"))
+	if _, addError := fixture.repository.Update(context.Background(), "edge-1",
+		Input{Proxy: &ProxyInput{Kind: "socks5", URL: "socks5://proxy.example.com:1080"}}); addError != nil {
+		testContext.Errorf("https engine must not require a password: %v", addError)
+	}
+	mustCreate(testContext, fixture, withProxy(plainHTTPInput("edge-2", "http://two.example.com")))
+	if _, removeError := fixture.repository.Update(context.Background(), "edge-2", Input{RemoveProxy: true}); removeError != nil {
+		testContext.Errorf("removing a proxy must not require a password: %v", removeError)
+	}
+}
+
+func TestProxyAndURLChangeTogetherOnPlainHTTPEngine(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	mustCreate(testContext, fixture, plainHTTPInput("edge-1", "http://one.example.com"))
+	proxyChange := &ProxyInput{Kind: "socks5", URL: "socks5://proxy.example.com:1080"}
+
+	_, refusedError := fixture.repository.Update(context.Background(), "edge-1", Input{LAPIURL: "http://moved.example.com", Proxy: proxyChange})
+	_, acceptedError := fixture.repository.Update(context.Background(), "edge-1",
+		Input{LAPIURL: "http://moved.example.com", Proxy: proxyChange, MachinePassword: stringPointer("re-entered-password")})
+
+	if !errors.Is(refusedError, ErrSecretRequired) || acceptedError != nil {
+		testContext.Errorf("unexpected results: %v / %v", refusedError, acceptedError)
+	}
+}
+
+func TestConcurrentCreateOfSameNameYieldsOneEngine(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	const attempts = 8
+	results := make(chan error, attempts)
+	for attemptIndex := 0; attemptIndex < attempts; attemptIndex++ {
+		go func() {
+			_, createError := fixture.repository.Create(context.Background(),
+				remoteInput("edge-1", fmt.Sprintf("https://host-%d.example.com", attemptIndex)))
+			results <- createError
+		}()
+	}
+	successCount := 0
+	for attemptIndex := 0; attemptIndex < attempts; attemptIndex++ {
+		createError := <-results
+		if createError == nil {
+			successCount++
+		} else if !errors.Is(createError, ErrEngineExists) {
+			testContext.Errorf("unexpected error: %v", createError)
+		}
+	}
+	if successCount != 1 {
+		testContext.Errorf("exactly one create must succeed, got %d", successCount)
+	}
+}
+
+func TestConcurrentCreateAndEnsureLocalBothSucceed(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	results := make(chan error, 2)
+	go func() {
+		_, createError := fixture.repository.Create(context.Background(), remoteInput("edge-1", "https://one.example.com"))
+		results <- createError
+	}()
+	go func() {
+		_, localError := fixture.repository.EnsureLocal(context.Background(), "http://crowdsec:8080", "dashboard")
+		results <- localError
+	}()
+	for resultIndex := 0; resultIndex < 2; resultIndex++ {
+		if concurrentError := <-results; concurrentError != nil {
+			testContext.Errorf("concurrent write failed: %v", concurrentError)
+		}
+	}
+}
+
+func TestUpdateDoesNotDeadlockWithCollectorRowLock(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	createdEngine := mustCreate(testContext, fixture, remoteInput("edge-1", "https://one.example.com"))
+	ctx := context.Background()
+	collectorTransaction, beginError := fixture.database.BeginTx(ctx, nil)
+	if beginError != nil {
+		testContext.Fatalf("begin: %v", beginError)
+	}
+	if _, lockError := collectorTransaction.ExecContext(ctx, `SELECT 1 FROM engine WHERE engine_id = ? FOR UPDATE`, createdEngine.ID); lockError != nil {
+		testContext.Fatalf("collector lock: %v", lockError)
+	}
+	disabled := false
+	updateFinished := make(chan error, 1)
+	go func() {
+		_, updateError := fixture.repository.Update(ctx, "edge-1", Input{Enabled: &disabled})
+		updateFinished <- updateError
+	}()
+	time.Sleep(300 * time.Millisecond)
+
+	_, cursorError := collectorTransaction.ExecContext(ctx, `UPDATE engine SET engine_collection_cursor = 5 WHERE engine_id = ?`, createdEngine.ID)
+	commitError := collectorTransaction.Commit()
+
+	if cursorError != nil || commitError != nil {
+		testContext.Fatalf("collector write failed: %v / %v", cursorError, commitError)
+	}
+	select {
+	case updateError := <-updateFinished:
+		if updateError != nil {
+			testContext.Errorf("update failed: %v", updateError)
+		}
+	case <-time.After(10 * time.Second):
+		testContext.Fatal("update did not finish")
+	}
+	finalEngine, _ := fixture.repository.Get(ctx, "edge-1")
+	if finalEngine.CollectionCursor != 5 || finalEngine.Enabled {
+		testContext.Errorf("both writes must apply: %+v", finalEngine)
+	}
+}

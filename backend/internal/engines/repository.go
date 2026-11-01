@@ -21,9 +21,11 @@ func NewRepository(database *bun.DB, keyring *secrets.Keyring) *Repository {
 	return &Repository{database: database, keyring: keyring}
 }
 
-func lockEngineTable(ctx context.Context, transaction bun.Tx) error {
-	if _, lockError := transaction.ExecContext(ctx, `LOCK TABLE engine IN SHARE ROW EXCLUSIVE MODE`); lockError != nil {
-		return fmt.Errorf("lock engines: %w", lockError)
+const engineWriteLockKey int64 = 7311290001
+
+func lockEngineWriters(ctx context.Context, transaction bun.Tx) error {
+	if _, lockError := transaction.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, engineWriteLockKey); lockError != nil {
+		return fmt.Errorf("lock engine writers: %w", lockError)
 	}
 	return nil
 }

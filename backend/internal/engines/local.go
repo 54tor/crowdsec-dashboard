@@ -10,7 +10,7 @@ import (
 func (repository *Repository) EnsureLocal(ctx context.Context, lapiURL, machineID string) (Engine, error) {
 	var localEngine Engine
 	transactionError := repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
-		if lockError := lockEngineTable(ctx, transaction); lockError != nil {
+		if lockError := lockEngineWriters(ctx, transaction); lockError != nil {
 			return lockError
 		}
 		if insertError := insertLocalIfAbsent(ctx, transaction, lapiURL, machineID); insertError != nil {

@@ -14,7 +14,7 @@ func (repository *Repository) Create(ctx context.Context, input Input) (Engine, 
 	}
 	var createdEngine Engine
 	transactionError := repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
-		if lockError := lockEngineTable(ctx, transaction); lockError != nil {
+		if lockError := lockEngineWriters(ctx, transaction); lockError != nil {
 			return lockError
 		}
 		if conflictError := ensureNameAndURLFree(ctx, transaction, input.Name, input.LAPIURL, 0); conflictError != nil {

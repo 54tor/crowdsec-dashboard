@@ -15,7 +15,7 @@ type columnChange struct {
 func (repository *Repository) Update(ctx context.Context, name string, input Input) (Engine, error) {
 	var updatedEngine Engine
 	transactionError := repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
-		if lockError := lockEngineTable(ctx, transaction); lockError != nil {
+		if lockError := lockEngineWriters(ctx, transaction); lockError != nil {
 			return lockError
 		}
 		currentRow, loadError := loadLockedRow(ctx, transaction, name)
