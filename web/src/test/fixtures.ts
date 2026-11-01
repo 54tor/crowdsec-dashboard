@@ -1,4 +1,4 @@
-import type { Alert, Bouncer, Decision, HealthReport, HubItem, Machine, Page } from '@/api/types'
+import type { Alert, Bouncer, Decision, EngineView, HealthReport, HubItem, Machine, Page } from '@/api/types'
 
 export const MALICIOUS_SCENARIO = '<img src=x onerror=alert(1)>'
 
@@ -89,6 +89,34 @@ export function makeHubItem(overrides: Partial<HubItem> = {}): HubItem {
     status: 'enabled',
     local_version: '0.2',
     description: 'core linux',
+    ...overrides,
+  }
+}
+
+export function makeEngine(overrides: Partial<EngineView> = {}): EngineView {
+  return {
+    name: 'remote-one',
+    is_local: false,
+    lapi_url: 'https://lapi.example.com:8080',
+    machine_id: 'dashboard-machine',
+    proxy: null,
+    has_proxy_credentials: false,
+    allow_insecure_http: false,
+    public_addresses: [],
+    enabled: true,
+    sync_enabled: false,
+    collection: {
+      cursor: 0,
+      last_collected_at: null,
+      last_error_code: null,
+      consecutive_failures: 0,
+      next_attempt_at: null,
+      inserted: 0,
+      duplicates: 0,
+      skipped: 0,
+      gaps: 0,
+      resets: 0,
+    },
     ...overrides,
   }
 }

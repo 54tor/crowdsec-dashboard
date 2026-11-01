@@ -1,4 +1,12 @@
-export const NAV_ITEMS = [
+import type { AccountRole } from '@/auth/AuthContext'
+
+export interface NavItem {
+  path: string
+  labelKey: string
+  requiredRole?: AccountRole
+}
+
+export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/alerts', labelKey: 'nav.alerts' },
   { path: '/decisions', labelKey: 'nav.decisions' },
   { path: '/health', labelKey: 'nav.health' },
@@ -7,4 +15,9 @@ export const NAV_ITEMS = [
   { path: '/bouncers', labelKey: 'nav.bouncers' },
   { path: '/machines', labelKey: 'nav.machines' },
   { path: '/hub', labelKey: 'nav.hub' },
-] as const
+  { path: '/engines', labelKey: 'nav.engines', requiredRole: 'admin' },
+]
+
+export function visibleNavItems(accountRole: AccountRole | null): readonly NavItem[] {
+  return NAV_ITEMS.filter((navItem) => navItem.requiredRole === undefined || navItem.requiredRole === accountRole)
+}

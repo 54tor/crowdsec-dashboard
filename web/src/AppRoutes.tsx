@@ -13,10 +13,12 @@ import { Bouncers } from '@/pages/Bouncers'
 import { Config } from '@/pages/Config'
 import { Decisions } from '@/pages/Decisions'
 import { Health } from '@/pages/Health'
+import { RequireRole } from '@/auth/RequireRole'
+import { Engines } from '@/pages/Engines'
 import { Hub } from '@/pages/Hub'
 import { Machines } from '@/pages/Machines'
 import { Metrics } from '@/pages/Metrics'
-import { NAV_ITEMS } from '@/routes'
+import { NAV_ITEMS, type NavItem } from '@/routes'
 
 const READ_PAGES: Record<string, ReactElement> = {
   '/alerts': <Alerts />,
@@ -27,10 +29,12 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/bouncers': <Bouncers />,
   '/machines': <Machines />,
   '/hub': <Hub />,
+  '/engines': <Engines />,
 }
 
-function pageFor(path: string, labelKey: string): ReactElement {
-  return READ_PAGES[path] ?? <Placeholder titleKey={labelKey} />
+function pageFor(navItem: NavItem): ReactElement {
+  const page = READ_PAGES[navItem.path] ?? <Placeholder titleKey={navItem.labelKey} />
+  return navItem.requiredRole ? <RequireRole role={navItem.requiredRole}>{page}</RequireRole> : page
 }
 
 export function AppRoutes() {
@@ -44,7 +48,7 @@ export function AppRoutes() {
             <Route element={<Layout />}>
               <Route index element={<Navigate to="/alerts" replace />} />
               {NAV_ITEMS.map((navItem) => (
-                <Route key={navItem.path} path={navItem.path} element={pageFor(navItem.path, navItem.labelKey)} />
+                <Route key={navItem.path} path={navItem.path} element={pageFor(navItem)} />
               ))}
               <Route path="/account/security" element={<AccountSecurity />} />
             </Route>

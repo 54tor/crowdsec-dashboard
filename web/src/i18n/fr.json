@@ -12,7 +12,8 @@
     "config": "Configuration",
     "bouncers": "Bouncers",
     "machines": "Machines",
-    "hub": "Hub"
+    "hub": "Hub",
+    "engines": "Moteurs"
   },
   "common": {
     "retry": "Réessayer",
@@ -122,7 +123,18 @@
     "invalid_access_rule": "Saisissez une adresse IP, un CIDR ou un code pays à deux lettres valides. Les règles qui couvrent tout sont refusées.",
     "access_rule_exists": "Cette règle existe déjà.",
     "would_lock_out_current_client": "Refusé : cette modification vous exclurait de votre connexion actuelle. Ajoutez d'abord une règle qui couvre votre adresse.",
-    "geolocation_unavailable": "La base GeoLite2 n'est pas disponible : les règles par pays ne peuvent pas être gérées pour le moment."
+    "geolocation_unavailable": "La base GeoLite2 n'est pas disponible : les règles par pays ne peuvent pas être gérées pour le moment.",
+    "engine_exists": "Un moteur porte déjà ce nom.",
+    "engine_not_found": "Moteur introuvable.",
+    "engine_local_readonly": "Le moteur local est configuré par le serveur et ne se modifie pas ici.",
+    "invalid_engine": "Les paramètres du moteur sont invalides. Vérifiez le nom, les URL et les adresses ; les adresses de bouclage, de lien local et de métadonnées cloud sont refusées.",
+    "engine_secret_required": "Ressaisissez le mot de passe machine ou les identifiants du proxy : la destination a changé, les secrets stockés ne sont pas réutilisés.",
+    "engine_unreachable": "Le moteur est injoignable.",
+    "engine_auth_failed": "Le moteur a refusé les identifiants de la machine.",
+    "engine_blocked_address": "L'adresse du moteur est bloquée par la politique de sécurité réseau.",
+    "engine_secret_unreadable": "Le secret stocké de ce moteur ne peut pas être déchiffré. Ressaisissez-le pour rétablir la collecte.",
+    "archive_write_failed": "Les alertes collectées n'ont pas pu être écrites dans l'archive.",
+    "registry_reload_failed": "La modification est enregistrée, mais le collecteur n'a pas pu recharger sa liste de moteurs. L'ancien ensemble reste actif jusqu'au prochain rechargement réussi."
   },
   "filters": {
     "label": "Filtres",
@@ -363,5 +375,67 @@
     "deleteTitle": "Supprimer cette règle",
     "deleteDescription": "Les connexions que seule cette règle autorisait seront refusées. La modification est refusée si elle vous excluait de votre connexion actuelle.",
     "deleteLastDescription": "C'est la dernière règle : la supprimer désactive la liste blanche et autorise la connexion de partout."
+  },
+  "engines": {
+    "title": "Moteurs",
+    "add": "Ajouter un moteur",
+    "addTitle": "Ajouter un moteur",
+    "editTitle": "Modifier le moteur {{name}}",
+    "description": "Moteurs CrowdSec dont le tableau de bord archive les alertes.",
+    "caption": "Moteurs",
+    "actions": "Actions",
+    "local": "Local",
+    "remote": "Distant",
+    "columns": {
+      "name": "Nom",
+      "destination": "Destination",
+      "state": "État",
+      "collection": "Collecte"
+    },
+    "machine": "Machine {{machineId}}",
+    "proxy": "Proxy {{kind}} {{url}}",
+    "proxyCredentials": "identifiants de proxy définis",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "syncEnabled": "Synchro active",
+    "edit": "Modifier",
+    "editAria": "Modifier {{name}}",
+    "deleteAria": "Supprimer {{name}}",
+    "deleteTitle": "Supprimer le moteur {{name}}",
+    "deleteDescription": "Supprimer le moteur {{name}} supprime aussi toute son archive : alertes, événements et décisions. Pour conserver l'archive, désactivez plutôt le moteur.",
+    "test": "Tester la connexion",
+    "testAria": "Tester {{name}}",
+    "testing": "Test en cours…",
+    "testOk": "Connexion réussie.",
+    "fields": {
+      "name": "Nom",
+      "lapiUrl": "URL de la LAPI",
+      "machineId": "Identifiant machine",
+      "machinePassword": "Mot de passe machine",
+      "machinePasswordKeepHint": "Laissez vide pour conserver le mot de passe stocké.",
+      "machinePasswordRequired": "Obligatoire : l'URL de la LAPI a changé.",
+      "proxyKind": "Proxy",
+      "proxyNone": "Aucun proxy",
+      "proxyUrl": "URL du proxy",
+      "proxyUsername": "Utilisateur du proxy",
+      "proxyPassword": "Mot de passe du proxy",
+      "proxyCredentialsHint": "Écriture seule. Laissez les deux vides pour conserver les identifiants stockés.",
+      "proxyCredentialsRequired": "Obligatoire : le proxy a changé, ressaisissez les deux ou supprimez les identifiants.",
+      "clearProxyCredentials": "Supprimer les identifiants de proxy stockés",
+      "allowInsecureHttp": "Autoriser le HTTP en clair vers ce moteur",
+      "publicAddresses": "Adresses publiques",
+      "publicAddressesHint": "Adresses IP ou plages CIDR, séparées par des virgules ou des espaces.",
+      "enabled": "Collecter depuis ce moteur",
+      "syncEnabled": "Utiliser comme pair de synchronisation"
+    },
+    "save": "Enregistrer",
+    "create": "Créer",
+    "status": {
+      "never": "Jamais collecté",
+      "lastCollected": "Dernière collecte",
+      "incomplete": "Historique incomplet",
+      "failures": "{{count}} échec(s) consécutif(s)",
+      "inserted": "{{count}} alertes archivées depuis le démarrage"
+    }
   }
 }

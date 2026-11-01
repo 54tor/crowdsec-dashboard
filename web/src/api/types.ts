@@ -142,3 +142,62 @@ export interface CreatedMachine {
   name: string
   password: string
 }
+
+export interface EngineProxyView {
+  kind: 'socks5' | 'http'
+  url: string
+}
+
+export interface EngineCollection {
+  cursor: number
+  last_collected_at: string | null
+  last_error_code: string | null
+  consecutive_failures: number
+  next_attempt_at: string | null
+  inserted: number
+  duplicates: number
+  skipped: number
+  gaps: number
+  resets: number
+}
+
+export interface EngineView {
+  name: string
+  is_local: boolean
+  lapi_url: string
+  machine_id: string
+  proxy: EngineProxyView | null
+  has_proxy_credentials: boolean
+  allow_insecure_http: boolean
+  public_addresses: string[]
+  enabled: boolean
+  sync_enabled: boolean
+  collection: EngineCollection
+  warning?: string
+}
+
+export interface EngineName {
+  name: string
+  is_local: boolean
+  enabled: boolean
+}
+
+export interface EngineProxyInput {
+  kind: 'socks5' | 'http'
+  url: string
+  username?: string
+  password?: string
+  clear_credentials?: boolean
+}
+
+export interface EngineInput {
+  name?: string
+  lapi_url?: string
+  machine_id?: string
+  machine_password?: string
+  proxy?: EngineProxyInput | null
+  allow_insecure_http?: boolean
+  public_addresses?: string[]
+  enabled?: boolean
+  sync_enabled?: boolean
+}

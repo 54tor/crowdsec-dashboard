@@ -7,11 +7,11 @@ import { LanguageSwitch } from '@/components/LanguageSwitch'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { errorMessage } from '@/i18n'
-import { NAV_ITEMS } from '@/routes'
+import { visibleNavItems } from '@/routes'
 
 export function Layout() {
   const { t } = useTranslation()
-  const { accountName, logout } = useAuth()
+  const { accountName, accountRole, logout } = useAuth()
   const [logoutError, setLogoutError] = useState<{ failure: unknown } | null>(null)
 
   async function requestLogout() {
@@ -45,7 +45,7 @@ export function Layout() {
           </div>
         </div>
         <nav aria-label={t('nav.label')} className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-3">
-          {NAV_ITEMS.map((navItem) => (
+          {visibleNavItems(accountRole).map((navItem) => (
             <NavLink
               key={navItem.path}
               to={navItem.path}
