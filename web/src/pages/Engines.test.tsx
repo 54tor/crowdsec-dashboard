@@ -49,6 +49,12 @@ describe('engines page', () => {
     expect(screen.queryByRole('button', { name: 'Delete local' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete remote-one' })).toBeInTheDocument()
 
+    const remoteRow = screen.getByText('remote-one', { selector: 'td' }).closest('tr')!
+    const destinationCell = within(remoteRow).getByText('https://lapi.example.com:8080').closest('td')!
+    expect(destinationCell).toHaveTextContent(
+      `https://lapi.example.com:8080Machine dashboard-machineProxy socks5 socks5://198.51.100.5:1080 (${en.engines.proxyCredentials})`,
+    )
+
     const dialog = await openEditDialog(user)
     for (const secretLabel of [en.engines.fields.machinePassword, en.engines.fields.proxyUsername, en.engines.fields.proxyPassword]) {
       const secretField = within(dialog).getByLabelText(secretLabel)
@@ -184,10 +190,12 @@ describe('engines page', () => {
     await user.type(within(dialog).getByLabelText(en.engines.fields.lapiUrl), 'https://lapi.example.com:8080')
     await user.type(within(dialog).getByLabelText(en.engines.fields.machineId), 'machine')
     await user.type(within(dialog).getByLabelText(en.engines.fields.machinePassword), 'typed-test-password')
+    const fetchMock = vi.mocked(fetch)
     for (const expectedMessage of [en.errors.engine_blocked_address, en.errors.engine_secret_required, en.errors.forbidden]) {
       await user.click(within(dialog).getByRole('button', { name: en.engines.create }))
       expect(await within(dialog).findByText(expectedMessage)).toBeInTheDocument()
     }
+    expect(lastJsonBody(fetchMock, 'POST', '/api/engines').machine_password).toBe('typed-test-password')
   })
 
   it("affiche l'état de collecte et l'avertissement de rechargement", async () => {
@@ -212,5 +220,50 @@ describe('engines page', () => {
     await user.type(within(dialog).getByLabelText('Type remote-one to confirm'), 'remote-one')
     await user.click(within(dialog).getByRole('button', { name: en.common.delete }))
     expect(await screen.findByText(en.errors.registry_reload_failed)).toBeInTheDocument()
+  })
+
+  it('exige le mot de passe machine pour un changement de proxy seul sur un moteur http', async () => {
+    const httpEngine = makeEngine({
+      name: 'remote-one',
+      lapi_url: 'http://lapi.example.com:8080',
+      allow_insecure_http: true,
+      proxy: { kind: 'socks5', url: 'socks5://198.51.100.5:1080' },
+    })
+    stubFetch(engineRoutes({ 'GET /api/engines': { status: 200, body: { items: [httpEngine] } } }))
+    const user = userEvent.setup()
+    renderApp('/engines')
+
+    const dialog = await openEditDialog(user)
+    await user.clear(within(dialog).getByLabelText(en.engines.fields.proxyUrl))
+    await user.type(within(dialog).getByLabelText(en.engines.fields.proxyUrl), 'socks5://198.51.100.6:1080')
+    expect(within(dialog).getByRole('button', { name: en.engines.save })).toBeDisabled()
+    await user.type(within(dialog).getByLabelText(en.engines.fields.machinePassword), 'typed-test-password')
+    expect(within(dialog).getByRole('button', { name: en.engines.save })).toBeEnabled()
+  })
+
+  it('ne exige pas le mot de passe machine pour un changement de proxy seul sur un moteur https', async () => {
+    stubFetch(engineRoutes())
+    const user = userEvent.setup()
+    renderApp('/engines')
+
+    const dialog = await openEditDialog(user)
+    await user.clear(within(dialog).getByLabelText(en.engines.fields.proxyUrl))
+    await user.type(within(dialog).getByLabelText(en.engines.fields.proxyUrl), 'socks5://198.51.100.6:1080')
+    await user.click(within(dialog).getByLabelText(en.engines.fields.clearProxyCredentials))
+    expect(within(dialog).getByRole('button', { name: en.engines.save })).toBeEnabled()
+  })
+
+  it('masque la navigation Moteurs tant que le rôle est inconnu', async () => {
+    stubFetch(engineRoutes({ 'GET /api/auth/me': { status: 200, body: { status: 'ok' } }, 'GET /api/alerts': { status: 200, body: { items: [], total: 0 } } }))
+    renderApp('/alerts')
+    await waitFor(() => expect(screen.getByRole('link', { name: en.nav.bouncers })).toBeInTheDocument())
+    expect(screen.queryByRole('link', { name: en.nav.engines })).not.toBeInTheDocument()
+  })
+
+  it('redirige /engines tant que le rôle est inconnu', async () => {
+    const fetchMock = stubFetch(engineRoutes({ 'GET /api/auth/me': { status: 200, body: { status: 'ok' } }, 'GET /api/alerts': { status: 200, body: { items: [], total: 0 } } }))
+    const { visitedPaths } = renderApp('/engines')
+    await waitFor(() => expect(visitedPaths[visitedPaths.length - 1]).toBe('/alerts'))
+    expect(requestsTo(fetchMock, 'GET', '/api/engines')).toHaveLength(0)
   })
 })

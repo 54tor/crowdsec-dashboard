@@ -49,6 +49,14 @@ function destinationOf(rawUrl: string): string {
   }
 }
 
+function isPlainHttp(rawUrl: string): boolean {
+  try {
+    return new URL(rawUrl).protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
 function parsePublicAddresses(rawAddresses: string): string[] {
   return rawAddresses.split(/[\s,]+/).filter((address) => address !== '')
 }
@@ -64,7 +72,7 @@ export function requiredSecrets(values: EngineFormValues, engine?: EngineView): 
   const isUrlChanged = destinationOf(values.lapiUrl) !== destinationOf(engine.lapi_url)
   const isProxyChanged = values.proxyKind !== '' && hasProxyDestinationChanged(values, engine)
   return {
-    machinePassword: isUrlChanged,
+    machinePassword: isUrlChanged || (isProxyChanged && isPlainHttp(values.lapiUrl)),
     proxyCredentials: engine.has_proxy_credentials && isProxyChanged && !values.clearProxyCredentials,
   }
 }

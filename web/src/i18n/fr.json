@@ -433,9 +433,8 @@
     "status": {
       "never": "Jamais collecté",
       "lastCollected": "Dernière collecte",
-      "incomplete": "Historique incomplet",
-      "failures": "{{count}} échec(s) consécutif(s)",
-      "inserted": "{{count}} alertes archivées depuis le démarrage"
+      "incomplete": "Historique incomplet depuis le démarrage du tableau de bord",
+      "failures": "{{count}} échec(s) consécutif(s)"
     }
   }
 }

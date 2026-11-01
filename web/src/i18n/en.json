@@ -433,9 +433,8 @@
     "status": {
       "never": "Never collected",
       "lastCollected": "Last collection",
-      "incomplete": "History incomplete",
-      "failures": "{{count}} consecutive failure(s)",
-      "inserted": "{{count}} alerts archived since start"
+      "incomplete": "History incomplete since the dashboard started",
+      "failures": "{{count}} consecutive failure(s)"
     }
   }
 }
