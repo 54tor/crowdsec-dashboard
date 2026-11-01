@@ -50,7 +50,7 @@ describe('alerts page', () => {
       ...alertsRoutes(makePage([makeAlert()], { window_size: 20 })),
     })
     renderApp('/alerts')
-    await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td' })
+    await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td bdi' })
 
     expect(screen.getByRole('button', { name: en.list.previous })).toBeDisabled()
     expect(screen.getByRole('button', { name: en.list.next })).toBeDisabled()
@@ -84,7 +84,7 @@ describe('alerts page', () => {
   it('doesNotFireRequestForInvalidIpFilter', async () => {
     const fetchMock = stubFetch(alertsRoutes(makePage([makeAlert()])))
     renderApp('/alerts')
-    await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td' })
+    await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td bdi' })
     const callsBeforeTyping = fetchMock.mock.calls.length
 
     await userEvent.type(screen.getByLabelText(en.filters.ip), '1.2.3.4/33')
@@ -102,7 +102,7 @@ describe('alerts page', () => {
       [`GET ${filteredUrl}`]: { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/filtered-row' })]) },
     })
     renderApp('/alerts')
-    await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td' })
+    await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td bdi' })
 
     await userEvent.type(screen.getByLabelText(en.filters.ip), '203.0.113.7')
 

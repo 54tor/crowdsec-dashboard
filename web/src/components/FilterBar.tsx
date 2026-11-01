@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import type { ListFilters } from '@/api/types'
 import type { FilterErrors } from '@/lib/filterValidation'
+import { EngineFilter } from '@/components/EngineFilter'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -15,7 +16,7 @@ const FILTER_FIELDS = ['scenario', 'ip', 'since'] as const
 export function FilterBar({ values, errors, onChange }: FilterBarProps) {
   const { t } = useTranslation()
   return (
-    <form role="search" aria-label={t('filters.label')} onSubmit={(submitEvent) => submitEvent.preventDefault()} className="grid gap-3 sm:grid-cols-3">
+    <form role="search" aria-label={t('filters.label')} onSubmit={(submitEvent) => submitEvent.preventDefault()} className="grid gap-3 sm:grid-cols-4">
       {FILTER_FIELDS.map((fieldName) => {
         const errorKey = errors[fieldName]
         const inputId = `filter-${fieldName}`
@@ -41,6 +42,7 @@ export function FilterBar({ values, errors, onChange }: FilterBarProps) {
           </div>
         )
       })}
+      <EngineFilter value={values.engine} onChange={(engineName) => onChange('engine', engineName)} />
     </form>
   )
 }

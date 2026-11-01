@@ -9,8 +9,8 @@ export interface Decision {
   until?: string
   scenario: string
   simulated: boolean
-  engine?: string
-  live?: boolean
+  engine: string
+  live: boolean
 }
 
 export interface AlertSource {
@@ -26,8 +26,9 @@ export interface AlertSource {
 export interface Alert {
   id: number
   uuid?: string
-  engine?: string
-  live?: boolean
+  engine: string
+  archive_id: number | null
+  live: boolean
   created_at: string
   machine_id: string
   scenario: string
@@ -46,6 +47,19 @@ export interface Page<Item> {
   per_page: number
   window_size: number
   may_be_truncated: boolean
+  total?: number
+  total_capped?: boolean
+  live_status?: 'ok' | 'unavailable'
+}
+
+export interface AlertEvent {
+  timestamp: string
+  meta: Record<string, string>
+}
+
+export interface AlertDetail extends Alert {
+  events_truncated: boolean
+  events: AlertEvent[]
 }
 
 export interface Bouncer {
@@ -117,6 +131,7 @@ export interface ListFilters {
   scenario: string
   ip: string
   since: string
+  engine: string
 }
 
 export interface HubItem {

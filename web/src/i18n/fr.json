@@ -144,7 +144,9 @@
     "sincePlaceholder": "ex. 24h",
     "scenarioInvalid": "Nom de scénario invalide.",
     "ipInvalid": "Saisissez une IPv4, IPv6 ou un CIDR valide.",
-    "sinceInvalid": "Utilisez un nombre suivi de s, m, h ou d (ex. 24h)."
+    "sinceInvalid": "Utilisez un nombre suivi de s, m, h ou d (ex. 24h).",
+    "engine": "Moteur",
+    "allEngines": "Tous les moteurs"
   },
   "list": {
     "truncated": "Seules les {{count}} entrées les plus récentes sont affichées ; les plus anciennes ne le sont pas.",
@@ -158,7 +160,11 @@
     "loading": "Chargement des données",
     "yes": "Oui",
     "no": "Non",
-    "unknown": "Inconnu"
+    "unknown": "Inconnu",
+    "liveUnavailable": "LAPI injoignable, affichage depuis l'archive.",
+    "totalInfo": "{{total}} entrées au total",
+    "totalCapped": "{{total}}+ entrées (seules celles-ci sont consultables)",
+    "invalidRequest": "Le serveur a refusé cette page ou ces filtres : revenez à la première page ou corrigez les filtres."
   },
   "alerts": {
     "title": "Alertes",
@@ -171,14 +177,19 @@
       "machine": "Machine",
       "events": "Événements",
       "decisions": "Décisions",
-      "message": "Message"
+      "message": "Message",
+      "engine": "Moteur"
     },
     "simulated": "Simulée",
     "actions": "Actions",
     "delete": "Supprimer",
     "deleteAria": "Supprimer l'alerte {{id}}",
     "deleteTitle": "Supprimer l'alerte {{id}}",
-    "deleteDescription": "L'alerte {{id}} et ses décisions seront supprimées définitivement."
+    "deleteDescription": "L'alerte {{id}} et ses décisions seront supprimées définitivement. Cela supprime aussi la copie archivée.",
+    "liveBadge": "En direct",
+    "archivedBadge": "Archivée",
+    "details": "Détail",
+    "detailsAria": "Détail de l'alerte {{id}} du moteur {{engine}}"
   },
   "decisions": {
     "title": "Décisions",
@@ -436,5 +447,15 @@
       "incomplete": "Historique incomplet depuis le démarrage du tableau de bord",
       "failures": "{{count}} échec(s) consécutif(s)"
     }
+  },
+  "alertDetail": {
+    "title": "Alerte {{id}} du moteur {{engine}}",
+    "description": "Contenu archivé tel que reçu du moteur, affiché en texte brut.",
+    "events": "Événements",
+    "eventAt": "Événement du {{date}}",
+    "noEvents": "Aucun événement : ils ont été purgés par la rétention ou n'ont pas été archivés.",
+    "truncated": "Une partie des événements de cette alerte n'a pas été archivée (limite de taille).",
+    "noMeta": "Aucune métadonnée.",
+    "close": "Fermer"
   }
 }

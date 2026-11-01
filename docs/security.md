@@ -254,6 +254,12 @@ Known consequence: the dialog library injects an inline `<style>` to lock page s
 policy blocks. A console message "Applying inline style violates ... Content Security Policy" appears
 when a dialog opens, and the page behind a modal dialog can still scroll. Dialogs themselves work.
 
+Engine data (alert scenario, source, message, machine id, decision value, event meta keys and
+values) is attacker-controlled. The front end renders it as plain React text only: no HTML
+injection, no link built from it, no link detection. Each free-text value sits in a `<bdi>` bidi
+isolate, so a right-to-left override (U+202E) cannot reorder neighbouring cells, and long unbroken
+strings wrap (`break-all`).
+
 HSTS is not sent: terminate TLS at the reverse proxy and set it there.
 
 ## Command allowlist: the security boundary

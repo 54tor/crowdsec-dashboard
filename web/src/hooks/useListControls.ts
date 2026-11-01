@@ -4,7 +4,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { validateFilters } from '@/lib/filterValidation'
 
 const FILTER_DEBOUNCE_MILLISECONDS = 300
-const EMPTY_FILTERS: ListFilters = { scenario: '', ip: '', since: '' }
+const EMPTY_FILTERS: ListFilters = { scenario: '', ip: '', since: '', engine: '' }
 
 export function useListControls() {
   const [draftFilters, setDraftFilters] = useState<ListFilters>(EMPTY_FILTERS)

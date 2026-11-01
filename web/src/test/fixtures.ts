@@ -1,6 +1,8 @@
-import type { Alert, Bouncer, Decision, EngineView, HealthReport, HubItem, Machine, Page } from '@/api/types'
+import type { Alert, AlertDetail, Bouncer, Decision, EngineView, HealthReport, HubItem, Machine, Page } from '@/api/types'
 
 export const MALICIOUS_SCENARIO = '<img src=x onerror=alert(1)>'
+export const JAVASCRIPT_URL = 'javascript:alert(1)'
+export const BIDI_OVERRIDE_SAMPLE = 'evil\u202Egnp.exe'
 
 export function makeAlert(overrides: Partial<Alert> = {}): Alert {
   return {
@@ -15,6 +17,18 @@ export function makeAlert(overrides: Partial<Alert> = {}): Alert {
     simulated: false,
     source: { scope: 'Ip', value: '203.0.113.7', ip: '203.0.113.7', cn: 'FR', as_name: 'Example AS' },
     decisions: [],
+    engine: 'local',
+    archive_id: null,
+    live: true,
+    ...overrides,
+  }
+}
+
+export function makeAlertDetail(overrides: Partial<AlertDetail> = {}): AlertDetail {
+  return {
+    ...makeAlert({ engine: 'edge-1', archive_id: 77, live: false }),
+    events_truncated: false,
+    events: [],
     ...overrides,
   }
 }
@@ -31,6 +45,8 @@ export function makeDecision(overrides: Partial<Decision> = {}): Decision {
     until: '2026-10-31T14:15:00Z',
     scenario: 'crowdsecurity/ssh-bf',
     simulated: false,
+    engine: 'local',
+    live: true,
     ...overrides,
   }
 }

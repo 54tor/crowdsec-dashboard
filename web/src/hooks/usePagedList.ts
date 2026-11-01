@@ -11,10 +11,11 @@ export function usePagedList<Item>(
   page: number,
   perPage: number,
   isEnabled: boolean,
+  includeExpired = false,
 ) {
   return useQuery({
-    queryKey: [resource, filters, page, perPage],
-    queryFn: () => apiFetch<Page<Item>>(buildListUrl(`/api/${resource}`, filters, page, perPage)),
+    queryKey: [resource, filters, page, perPage, includeExpired],
+    queryFn: () => apiFetch<Page<Item>>(buildListUrl(`/api/${resource}`, filters, page, perPage, includeExpired)),
     placeholderData: keepPreviousData,
     enabled: isEnabled,
   })

@@ -28,7 +28,7 @@ export function isValidTarget(target: string): boolean {
   return PREFIX_PATTERN.test(prefix) && Number(prefix) <= maxPrefixFor(address)
 }
 
-export function validateFilters(filters: ListFilters): FilterErrors {
+export function validateFilters(filters: Pick<ListFilters, 'scenario' | 'ip' | 'since'>): FilterErrors {
   const errors: FilterErrors = {}
   if (filters.scenario !== '' && !SCENARIO_PATTERN.test(filters.scenario)) {
     errors.scenario = 'scenarioInvalid'

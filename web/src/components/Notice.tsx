@@ -27,14 +27,14 @@ export function WarningNotice({ title, children }: { title?: string; children: R
   )
 }
 
-export function ErrorNotice({ error }: { error: unknown }) {
+export function ErrorNotice({ error, message }: { error: unknown; message?: string }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   return (
     <Alert variant="destructive" role="alert">
       <TriangleAlert aria-hidden="true" />
       <AlertDescription>
-        {errorMessage(error)}
+        {message ?? errorMessage(error)}
         {isTimeoutError(error) && (
           <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void queryClient.invalidateQueries({ queryKey: HUB_QUERY_KEY })}>
             {t('errors.refresh')}

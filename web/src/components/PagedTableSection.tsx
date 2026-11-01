@@ -2,9 +2,11 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import type { Page } from '@/api/types'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
+import { ListSummary } from '@/components/ListSummary'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { PaginationBar } from '@/components/PaginationBar'
 import { TableSkeleton } from '@/components/TableSkeleton'
+import { isInvalidRequestError } from '@/lib/apiErrors'
 
 interface PagedTableSectionProps<Row> {
   query: UseQueryResult<Page<Row>>
@@ -15,27 +17,38 @@ interface PagedTableSectionProps<Row> {
   rowKey: (row: Row) => string | number
 }
 
+function totalPagesOf<Row>(data: Page<Row>): number {
+  const reachableRows = data.total ?? data.window_size
+  return Math.max(1, Math.ceil(reachableRows / data.per_page))
+}
+
+function ListErrorNotice({ error }: { error: unknown }) {
+  const { t } = useTranslation()
+  return <ErrorNotice error={error} message={isInvalidRequestError(error) ? t('list.invalidRequest') : undefined} />
+}
+
 export function PagedTableSection<Row>({ query, page, onPageChange, caption, columns, rowKey }: PagedTableSectionProps<Row>) {
   const { t } = useTranslation()
   const { data, error, isPending } = query
   if (error && !data) {
-    return <ErrorNotice error={error} />
+    return <ListErrorNotice error={error} />
   }
   if (isPending || !data) {
     return <TableSkeleton />
   }
-  const totalPages = Math.max(1, Math.ceil(data.window_size / data.per_page))
   return (
     <div className="space-y-3">
-      {error && <ErrorNotice error={error} />}
+      {error && <ListErrorNotice error={error} />}
+      {data.live_status === 'unavailable' && <WarningNotice>{t('list.liveUnavailable')}</WarningNotice>}
       {data.may_be_truncated && <WarningNotice>{t('list.truncated', { count: data.window_size })}</WarningNotice>}
       {data.items.length === 0 ? (
         <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{t('list.empty')}</p>
       ) : (
         <DataTable caption={caption} columns={columns} rows={data.items} rowKey={rowKey} />
       )}
+      <ListSummary data={data} />
       <p className="text-sm text-muted-foreground">{t('list.windowInfo', { count: data.window_size })}</p>
-      <PaginationBar page={page} totalPages={totalPages} onPageChange={onPageChange} />
+      <PaginationBar page={page} totalPages={totalPagesOf(data)} onPageChange={onPageChange} />
     </div>
   )
 }

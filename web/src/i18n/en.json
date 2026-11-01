@@ -144,7 +144,9 @@
     "sincePlaceholder": "e.g. 24h",
     "scenarioInvalid": "Invalid scenario name.",
     "ipInvalid": "Enter a valid IPv4, IPv6 or CIDR.",
-    "sinceInvalid": "Use a number followed by s, m, h or d (e.g. 24h)."
+    "sinceInvalid": "Use a number followed by s, m, h or d (e.g. 24h).",
+    "engine": "Engine",
+    "allEngines": "All engines"
   },
   "list": {
     "truncated": "Only the most recent {{count}} entries are shown; older entries are not displayed.",
@@ -158,7 +160,11 @@
     "loading": "Loading data",
     "yes": "Yes",
     "no": "No",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "liveUnavailable": "Local API unreachable, showing the archive.",
+    "totalInfo": "{{total}} entries in total",
+    "totalCapped": "{{total}}+ entries (only these can be browsed)",
+    "invalidRequest": "The server refused this page or these filters: go back to the first page or fix the filters."
   },
   "alerts": {
     "title": "Alerts",
@@ -171,14 +177,19 @@
       "machine": "Machine",
       "events": "Events",
       "decisions": "Decisions",
-      "message": "Message"
+      "message": "Message",
+      "engine": "Engine"
     },
     "simulated": "Simulated",
     "actions": "Actions",
     "delete": "Delete",
     "deleteAria": "Delete alert {{id}}",
     "deleteTitle": "Delete alert {{id}}",
-    "deleteDescription": "The alert {{id}} and its decisions will be permanently deleted."
+    "deleteDescription": "The alert {{id}} and its decisions will be permanently deleted. This also deletes the archived copy.",
+    "liveBadge": "Live",
+    "archivedBadge": "Archived",
+    "details": "Details",
+    "detailsAria": "Details of alert {{id}} from engine {{engine}}"
   },
   "decisions": {
     "title": "Decisions",
@@ -436,5 +447,15 @@
       "incomplete": "History incomplete since the dashboard started",
       "failures": "{{count}} consecutive failure(s)"
     }
+  },
+  "alertDetail": {
+    "title": "Alert {{id}} from engine {{engine}}",
+    "description": "Archived content as received from the engine, shown as plain text.",
+    "events": "Events",
+    "eventAt": "Event at {{date}}",
+    "noEvents": "No events: they were purged by retention or never archived.",
+    "truncated": "Some events of this alert were not archived (size limit).",
+    "noMeta": "No metadata.",
+    "close": "Close"
   }
 }

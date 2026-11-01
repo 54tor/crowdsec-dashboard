@@ -1,23 +1,27 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Alert } from '@/api/types'
+import { AlertRowActions } from '@/components/AlertRowActions'
 import type { DataTableColumn } from '@/components/DataTable'
+import { EngineCell } from '@/components/EngineCell'
 import { FilterBar } from '@/components/FilterBar'
 import { PagedTableSection } from '@/components/PagedTableSection'
-import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { TimelineChart } from '@/components/TimelineChart'
+import { UntrustedText } from '@/components/UntrustedText'
 import { Badge } from '@/components/ui/badge'
-import { deleteAlert } from '@/api/writeApi'
 import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
 import { formatDateTime, formatNumber } from '@/lib/format'
-import { isLiveLocalRow } from '@/lib/liveRow'
 
 const CHART_WINDOW_SIZE = 100
 
 function sourceLabel(alertRow: Alert): string {
   const details = [alertRow.source.cn, alertRow.source.as_name].filter(Boolean).join(' · ')
   return details ? `${alertRow.source.value} (${details})` : alertRow.source.value
+}
+
+function alertRowKey(alertRow: Alert): string {
+  return `${alertRow.engine}/${alertRow.id}/${alertRow.uuid ?? ''}`
 }
 
 export function Alerts() {
@@ -30,36 +34,26 @@ export function Alerts() {
     () => [
       { key: 'createdAt', header: t('alerts.columns.createdAt'), className: 'whitespace-nowrap', cell: (alertRow) => formatDateTime(alertRow.created_at, i18n.language) },
       {
+        key: 'engine',
+        header: t('alerts.columns.engine'),
+        cell: (alertRow) => <EngineCell engineName={alertRow.engine} badgeLabel={alertRow.live ? t('alerts.liveBadge') : t('alerts.archivedBadge')} />,
+      },
+      {
         key: 'scenario',
         header: t('alerts.columns.scenario'),
         cell: (alertRow) => (
           <>
-            {alertRow.scenario}
+            <UntrustedText value={alertRow.scenario} />
             {alertRow.simulated && <Badge variant="outline" className="ml-2">{t('alerts.simulated')}</Badge>}
           </>
         ),
       },
-      { key: 'source', header: t('alerts.columns.source'), cell: sourceLabel },
-      { key: 'machine', header: t('alerts.columns.machine'), cell: (alertRow) => alertRow.machine_id },
+      { key: 'source', header: t('alerts.columns.source'), cell: (alertRow) => <UntrustedText value={sourceLabel(alertRow)} /> },
+      { key: 'machine', header: t('alerts.columns.machine'), cell: (alertRow) => <UntrustedText value={alertRow.machine_id} /> },
       { key: 'events', header: t('alerts.columns.events'), cell: (alertRow) => formatNumber(alertRow.events_count, i18n.language) },
       { key: 'decisions', header: t('alerts.columns.decisions'), cell: (alertRow) => formatNumber(alertRow.decisions.length, i18n.language) },
-      { key: 'message', header: t('alerts.columns.message'), cell: (alertRow) => alertRow.message },
-      {
-        key: 'actions',
-        header: t('alerts.actions'),
-        cell: (alertRow) =>
-          isLiveLocalRow(alertRow) ? (
-            <RowDeleteAction
-              buttonLabel={t('alerts.delete')}
-              ariaLabel={t('alerts.deleteAria', { id: alertRow.id })}
-              title={t('alerts.deleteTitle', { id: alertRow.id })}
-              description={t('alerts.deleteDescription', { id: alertRow.id })}
-              target={String(alertRow.id)}
-              request={(confirm) => deleteAlert(String(alertRow.id), alertRow.uuid ?? '', confirm)}
-              invalidates={[['alerts'], ['decisions']]}
-            />
-          ) : null,
-      },
+      { key: 'message', header: t('alerts.columns.message'), cell: (alertRow) => <UntrustedText value={alertRow.message} /> },
+      { key: 'actions', header: t('alerts.actions'), cell: (alertRow) => <AlertRowActions alertRow={alertRow} /> },
     ],
     [t, i18n.language],
   )
@@ -78,7 +72,7 @@ export function Alerts() {
         onPageChange={controls.setPage}
         caption={t('alerts.caption')}
         columns={columns}
-        rowKey={(alertRow) => alertRow.id}
+        rowKey={alertRowKey}
       />
     </section>
   )
