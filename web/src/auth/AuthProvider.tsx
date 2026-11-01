@@ -5,21 +5,26 @@ import { ApiError, apiFetch, resetUnauthenticatedGuard, setUnauthenticatedHandle
 import { beginLogin, completeLoginSetup, verifyLoginSecondFactor } from '@/api/loginApi'
 import { completeSetup } from '@/api/secondFactorApi'
 import { Button } from '@/components/ui/button'
-import { AuthContext, type AuthState } from './AuthContext'
+import { AuthContext, type AccountRole, type AuthState } from './AuthContext'
 import { ENROLLMENT_STATUS_QUERY_KEY } from './useEnrollmentStatus'
 
 const SESSION_QUERY_KEY = ['session']
 
 interface SessionIdentity {
   accountName: string | null
+  accountRole: AccountRole | null
+}
+
+function parseAccountRole(rawRole: string | undefined): AccountRole | null {
+  return rawRole === 'admin' || rawRole === 'read_only' ? rawRole : null
 }
 
 type SessionState = SessionIdentity | false
 
 async function fetchSessionState(): Promise<SessionState> {
   try {
-    const meResponse = await apiFetch<{ account_name?: string }>('/api/auth/me')
-    return { accountName: meResponse.account_name ?? null }
+    const meResponse = await apiFetch<{ account_name?: string; account_role?: string }>('/api/auth/me')
+    return { accountName: meResponse.account_name ?? null, accountRole: parseAccountRole(meResponse.account_role) }
   } catch (sessionError) {
     if (sessionError instanceof ApiError && sessionError.code === 'unauthenticated') {
       return false
@@ -28,9 +33,25 @@ async function fetchSessionState(): Promise<SessionState> {
   }
 }
 
+async function refreshAccountRole(queryClient: QueryClient): Promise<void> {
+  try {
+    const meResponse = await fetch('/api/auth/me', { credentials: 'same-origin' })
+    if (!meResponse.ok) {
+      return
+    }
+    const sessionIdentity = (await meResponse.json()) as { account_name?: string; account_role?: string }
+    queryClient.setQueryData<SessionState>(SESSION_QUERY_KEY, (currentState) =>
+      currentState ? { ...currentState, accountRole: parseAccountRole(sessionIdentity.account_role) } : currentState,
+    )
+  } catch {
+    return
+  }
+}
+
 function openSession(queryClient: QueryClient, accountName: string | null): void {
   resetUnauthenticatedGuard()
-  queryClient.setQueryData(SESSION_QUERY_KEY, { accountName } satisfies SessionIdentity as SessionState)
+  queryClient.setQueryData(SESSION_QUERY_KEY, { accountName, accountRole: null } satisfies SessionIdentity as SessionState)
+  void refreshAccountRole(queryClient)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -48,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       isAuthenticated: Boolean(sessionQuery.data),
       accountName: sessionQuery.data ? sessionQuery.data.accountName : null,
+      accountRole: sessionQuery.data ? sessionQuery.data.accountRole : null,
       async login(accountName, password) {
         const loginProgress = await beginLogin(accountName, password)
         pendingAccountName.current = accountName

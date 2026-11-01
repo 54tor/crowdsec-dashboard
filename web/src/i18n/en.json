@@ -81,6 +81,7 @@
   "logout": "Log out",
   "errors": {
     "unauthenticated": "Your session has expired. Please sign in again.",
+    "forbidden": "You do not have permission to do this.",
     "invalid_credentials": "Incorrect account name or password.",
     "too_many_attempts": "Too many attempts. Please try again later.",
     "cross_origin": "Request blocked: cross-origin requests are not allowed.",

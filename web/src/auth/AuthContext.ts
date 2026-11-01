@@ -1,9 +1,12 @@
 import { createContext } from 'react'
 import type { LoginProgress, LoginSecondFactorMethod } from '@/api/loginApi'
 
+export type AccountRole = 'admin' | 'read_only'
+
 export interface AuthState {
   isAuthenticated: boolean
   accountName: string | null
+  accountRole: AccountRole | null
   login(accountName: string, password: string): Promise<LoginProgress>
   verifySecondFactor(method: LoginSecondFactorMethod, value?: string): Promise<void>
   completeLoginSetup(): Promise<void>

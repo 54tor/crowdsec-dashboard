@@ -81,6 +81,7 @@
   "logout": "Se déconnecter",
   "errors": {
     "unauthenticated": "Votre session a expiré. Veuillez vous reconnecter.",
+    "forbidden": "Vous n'avez pas l'autorisation d'effectuer cette action.",
     "invalid_credentials": "Nom de compte ou mot de passe incorrect.",
     "too_many_attempts": "Trop de tentatives. Réessayez plus tard.",
     "cross_origin": "Requête bloquée : les requêtes inter-origines sont interdites.",
