@@ -67,6 +67,7 @@ type Decision struct {
 	Until     string `json:"until,omitempty"`
 	Scenario  string `json:"scenario"`
 	Simulated bool   `json:"simulated"`
+	AlertUUID string `json:"-"`
 }
 
 type MetaEntry struct {

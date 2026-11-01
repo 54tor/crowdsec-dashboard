@@ -111,6 +111,7 @@ func flattenDecisions(alerts []Alert, filter DecisionFilter, now time.Time) []De
 	for _, alert := range alerts {
 		for _, decision := range alert.Decisions {
 			decision.AlertID = alert.ID
+			decision.AlertUUID = alert.UUID
 			if decision.Scenario == "" {
 				decision.Scenario = alert.Scenario
 			}
@@ -167,6 +168,18 @@ func (client *Client) AddDecision(ctx context.Context, newDecision NewDecision) 
 		}},
 	}
 	return client.authorizedRequest(ctx, http.MethodPost, "/v1/alerts", nil, []any{alert}, nil)
+}
+
+func (client *Client) GetAlert(ctx context.Context, alertID int64) (Alert, error) {
+	if alertID <= 0 {
+		return Alert{}, ErrInvalidTarget
+	}
+	var alert Alert
+	path := "/v1/alerts/" + strconv.FormatInt(alertID, 10)
+	if requestError := client.authorizedRequest(ctx, http.MethodGet, path, nil, nil, &alert); requestError != nil {
+		return Alert{}, requestError
+	}
+	return alert, nil
 }
 
 func (client *Client) DeleteDecision(ctx context.Context, decisionID int64) error {

@@ -482,3 +482,43 @@ func TestListAlertsAndDecisionsDecodeFrozenLAPIResponse(testing *testing.T) {
 		testing.Errorf("scopes keep the casing returned by the LAPI: %v", scopesSeen)
 	}
 }
+
+// The archive keys an alert by (engine, id, uuid); a flattened decision keeps
+// the uuid of its parent alert so the API can match it, but never serialises it.
+func TestListDecisionsCarriesTheParentAlertUUIDOutOfJSON(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+	fake.alertsBody.Store(`[{"id":7,"uuid":"uuid-7","scenario":"crowdsecurity/ssh-bf","decisions":[{"id":11,"type":"ban","scope":"Ip","value":"203.0.113.9","duration":"3h"}]}]`)
+
+	decisionList, listError := client.ListDecisions(context.Background(), DecisionFilter{})
+
+	if listError != nil || len(decisionList.Decisions) != 1 {
+		testing.Fatalf("unexpected result %+v (%v)", decisionList, listError)
+	}
+	if decisionList.Decisions[0].AlertUUID != "uuid-7" {
+		testing.Errorf("parent alert uuid not carried: %+v", decisionList.Decisions[0])
+	}
+	encodedDecision, _ := json.Marshal(decisionList.Decisions[0])
+	if strings.Contains(string(encodedDecision), "uuid-7") {
+		testing.Errorf("the parent uuid must not be serialised: %s", encodedDecision)
+	}
+}
+
+func TestGetAlertReadsOneAlertByID(testing *testing.T) {
+	fake, client := newFakeLAPI(testing)
+
+	_, getError := client.GetAlert(context.Background(), 42)
+
+	if getError != nil {
+		testing.Fatalf("unexpected error: %v", getError)
+	}
+	if fake.lastMethod.Load() != http.MethodGet || fake.lastPath.Load() != "/v1/alerts/42" {
+		testing.Errorf("unexpected request %v %v", fake.lastMethod.Load(), fake.lastPath.Load())
+	}
+	callsBefore := fake.alertCount.Load()
+	if _, invalidError := client.GetAlert(context.Background(), 0); !errors.Is(invalidError, ErrInvalidTarget) {
+		testing.Errorf("a non-positive id must be refused, got %v", invalidError)
+	}
+	if fake.alertCount.Load() != callsBefore {
+		testing.Error("a refused id must not reach the LAPI")
+	}
+}
