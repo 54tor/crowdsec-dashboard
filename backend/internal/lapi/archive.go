@@ -2,6 +2,7 @@ package lapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ type ArchiveRead struct {
 	Alerts       []Alert
 	Truncated    bool
 	LimitReached bool
+	Skipped      int
 }
 
 func (client *Client) ReadAlertsForArchive(ctx context.Context, limit int, maxBytes int64, timeout time.Duration) (ArchiveRead, error) {
@@ -36,14 +38,30 @@ func (client *Client) ReadAlertsForArchive(ctx context.Context, limit int, maxBy
 	if int64(len(responseBody)) > maxBytes {
 		return ArchiveRead{Alerts: []Alert{}, Truncated: true}, nil
 	}
-	alerts := []Alert{}
-	if decodeError := decodeResponse(status, responseBody, &alerts); decodeError != nil {
+	rawAlerts := []json.RawMessage{}
+	if decodeError := decodeResponse(status, responseBody, &rawAlerts); decodeError != nil {
 		return ArchiveRead{}, decodeError
 	}
-	if alerts == nil {
-		alerts = []Alert{}
+	alerts, skippedCount := decodeEachAlert(rawAlerts)
+	return ArchiveRead{
+		Alerts:       alerts,
+		LimitReached: limit > 0 && len(rawAlerts) >= limit,
+		Skipped:      skippedCount,
+	}, nil
+}
+
+func decodeEachAlert(rawAlerts []json.RawMessage) ([]Alert, int) {
+	alerts := make([]Alert, 0, len(rawAlerts))
+	skippedCount := 0
+	for _, rawAlert := range rawAlerts {
+		var decodedAlert Alert
+		if decodeError := json.Unmarshal(rawAlert, &decodedAlert); decodeError != nil {
+			skippedCount++
+			continue
+		}
+		alerts = append(alerts, decodedAlert)
 	}
-	return ArchiveRead{Alerts: alerts, LimitReached: limit > 0 && len(alerts) >= limit}, nil
+	return alerts, skippedCount
 }
 
 func IsTimeout(err error) bool {

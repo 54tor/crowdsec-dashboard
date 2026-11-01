@@ -271,3 +271,48 @@ func TestAlertEventsAreOmittedWhenEmpty(testContext *testing.T) {
 		testContext.Fatalf("an alert without events must not carry the key: %s", encodedAlert)
 	}
 }
+
+// A hostile or buggy engine may serve one element that does not fit the Go types
+// (an id beyond int64, an events_count beyond int32, a nested meta value, a bare
+// string instead of an object). Decoding the array as a whole would drop the entire
+// batch, so each element is decoded on its own: the bad ones are counted in Skipped,
+// the valid ones are kept in their original order, and LimitReached still counts
+// every element the engine sent (the skipped ones occupied a slot of the limit too).
+func TestReadAlertsForArchiveSkipsMalformedElementsAndKeepsValidOnes(testContext *testing.T) {
+	fake, client := newFakeLAPI(testContext)
+	fake.alertsBody.Store(`[
+		{"id":1,"uuid":"first"},
+		{"id":99999999999999999999,"uuid":"id-beyond-int64"},
+		{"id":3,"uuid":"count-beyond-int32","events_count":3000000000},
+		{"id":4,"uuid":"nested-meta","events":[{"meta":[{"key":"k","value":{"nested":1}}]}]},
+		"not an object",
+		{"id":6,"uuid":"last"}
+	]`)
+
+	archiveRead, readError := client.ReadAlertsForArchive(context.Background(), 6, archiveTestMaxBytes, time.Second)
+
+	if readError != nil {
+		testContext.Fatalf("one malformed element must not fail the batch: %v", readError)
+	}
+	if len(archiveRead.Alerts) != 2 || archiveRead.Alerts[0].ID != 1 || archiveRead.Alerts[1].ID != 6 {
+		testContext.Fatalf("expected alerts 1 and 6 in order, got %+v", archiveRead.Alerts)
+	}
+	if archiveRead.Skipped != 4 {
+		testContext.Errorf("expected 4 skipped elements, got %d", archiveRead.Skipped)
+	}
+	if !archiveRead.LimitReached {
+		testContext.Errorf("six elements answer a limit of six, skipped ones included")
+	}
+}
+
+// A body that is not a JSON array at all is still an unavailable LAPI, as before.
+func TestReadAlertsForArchiveRefusesNonArrayBody(testContext *testing.T) {
+	fake, client := newFakeLAPI(testContext)
+	fake.alertsBody.Store(`{"id":1}`)
+
+	_, readError := client.ReadAlertsForArchive(context.Background(), 0, archiveTestMaxBytes, time.Second)
+
+	if !errors.Is(readError, ErrLAPIUnavailable) {
+		testContext.Fatalf("expected ErrLAPIUnavailable, got %v", readError)
+	}
+}
