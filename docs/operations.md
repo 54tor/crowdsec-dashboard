@@ -6,7 +6,7 @@
 |---|---|
 | Alerts | The 100 most recent alerts of the local LAPI are fetched live, followed by the archive (older local alerts and the alerts of remote engines). Filters (`scenario`, IP/CIDR, `since` such as `24h`, `7d`) are applied by the LAPI inside that cap and by the database on the archive, with different IP scopes (see `docs/api.md`). When the local LAPI is unreachable the archive is still served, flagged `live_status:"unavailable"` (a banner says so and the archive stays paged). Each row shows its engine and a "Live" or "Archived" badge; an engine selector (any role) narrows the list. Pages are counted from `total`; when capped, the total (live window plus up to 10 000 archived rows) is shown with a "+", and paging stops at that reachable range. Archived alerts open a details dialog with their events as plain text; events purged by retention leave an explicit empty state. Only live rows of the `local` engine offer Delete, which also deletes the archived copy. |
 | Decisions | Built from the alerts that still have an active decision (same 100-alert window), expired ones dropped, followed by archived decisions still active at collection time, badged "Archived, not active" (the "Show expired decisions" checkbox sends `include_expired=true` for the history). Decisions of the community blocklist (CAPI) are not listed: they are not attached to local alerts. A manual ban shows up as origin `cscli`, scenario `manual/dashboard`. |
-| Unban | Deletes one decision by id. An id that does not exist makes the LAPI answer 500, which the dashboard reports as 502 `lapi_unavailable`, not as a 404. |
+| Unban | Deletes one decision by id; the request must carry the `scope` and `value` query parameters. Before deleting, the dashboard looks the id up (among the active decisions of that value, then among the newest 100 alerts): an unknown id answers 404 `not_found`, an id whose scope or value differs answers 409 `target_mismatch`, and nothing is deleted. The archived copy remains, shown "Archived, not active". |
 | Hub whitelists | Whitelist files that the hub installs as symlinks are not listed in the Config page; symlinks are never followed. |
 | Hub list | At most 1000 items are returned. |
 | Hub operations | `update`, `upgrade`, `install` and `remove` can take up to 120 s (others 30 s); the HTTP write deadline is extended to match. Other requests have a 60 s write deadline. |
@@ -251,8 +251,10 @@ detects it (an id it already holds with another uuid, or a newest id below the c
 the received alerts is already archived), sets the cursor back to 0 and counts a `reset`; nothing
 is duplicated and the old alerts stay in the archive. Residual case: when every alert the engine
 still serves has already left the archive by retention and its newest alert was deleted, a reset
-is assumed wrongly and that window is archived once more (purged again by retention). Changing the
+is assumed wrongly and that window is archived once more (purged again by retention). Re-archiving after a reset gives the old alerts a new collection time, hence a fresh retention period. If an engine's database is reset while the dashboard is not running and its new ids exceed the old cursor, the reset goes undetected and the alerts in between are never archived: the gap is silent and not counted. Changing the
 host, port or scheme of an engine's URL also resets its cursor.
+
+**Dates.** An archived alert whose engine date (`created_at`) is missing, unparseable or in the future is dated by its collection time, so a skewed engine clock cannot pin its alerts at the top of the lists.
 
 **Retention.** Archived alerts, decisions and events are purged hourly by collection age
 ([configuration.md](configuration.md#environment-variables)). Alerts purged from the archive are

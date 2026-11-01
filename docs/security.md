@@ -433,11 +433,15 @@ it has no expiration (CrowdSec serialises a permanent entry as `0001-01-01T00:00
 expiration is not past. It fails closed: a read error, a truncated answer (over 4 MiB or 10 000
 entries), an unreadable entry value or a 404 (a real LAPI answers an unknown route with an empty
 404, which cannot be told apart from a wrong port or a proxy) makes the engine's allowlists
-unavailable and every target is refused (`allowlist_unavailable`). Only a 404 whose body is a JSON
-object with a string `message`, which no LAPI tested sends, is read as "no allowlist support" and
-lets targets through. Consequence: an engine whose CrowdSec is too old to have allowlists
-refuses the writes guarded this way. No write path uses it in this release; it is the shared filter
-for the dashboard-initiated writes of later releases.
+unavailable and every target is refused (`allowlist_unavailable`). This holds for EVERY 404 on
+`/v1/allowlists`, including one whose body is a JSON object with a `message` (an API gateway can send
+that too): it is never read as "allowlists unsupported". Consequence: an engine whose CrowdSec is too
+old to have allowlists refuses the writes guarded this way.
+
+No write path uses the filter in this release. In particular the manual ban `POST /api/decisions`
+does NOT check allowlists yet: it writes through `POST /v1/alerts`, and the LAPI stores a ban on an
+allowlisted IP and serves it to bouncers. Wrapping that write with the filter is planned for a later
+release (lot 5); the filter is the shared one for all dashboard-initiated writes.
 
 ## Honest limits
 

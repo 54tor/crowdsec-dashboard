@@ -82,10 +82,15 @@ cd deploy/dev
 ./up.sh metrics      # Prometheus on, for the Metrics page
 ./up.sh peer         # also start the demo engine peer-a
 ./seed.sh            # fake alerts and decisions (run once per fresh stack)
-SEED_ENGINE=peer-a ./seed.sh   # the same on peer-a (10 alerts per run)
+SEED_ENGINE=peer-a ./seed.sh   # the same on peer-a (about 10 alerts per run)
 ./check-proxy.sh     # proves the socket proxy denies everything except the three exec calls
-docker compose -p csdash-dev down -v --remove-orphans
+docker compose -p csdash-dev --env-file .env.local \
+  -f compose.yaml -f peer/compose.override.yaml down -v --remove-orphans
 ```
+
+The teardown with `down -v` deletes the volumes (database, secrets): it is for a throwaway project only, and
+never for a stack whose data you want to keep. The `peer/compose.override.yaml` file is part of it so the
+`peer-a` volumes are removed too.
 
 The first `up.sh` generates the git-ignored `.env.local` (random machine and database passwords) and
 `secrets/dashboard-secrets.key` (the secrets key, `openssl rand -base64 32`; do not delete it while

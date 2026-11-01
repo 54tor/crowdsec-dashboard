@@ -138,7 +138,7 @@ ever holds active decisions). Lists never carry alert `events`.
   (`alert_source_value`), so a range alert is found with the range itself, not with an IP inside it.
 - `since` is forwarded to the LAPI, which compares it with the alert `start_at`
   (`started_at >= now - since`, CrowdSec `pkg/database/alertfilter.go`); on the archive it bounds the
-  alert `created_at`.
+  alert `created_at`. An archived alert whose engine date is missing, unparseable or in the future is dated by its collection time, so it neither sorts first nor escapes this bound.
 - Order: live items in LAPI order, then archived alerts by `created_at` descending (archive id as
   tie-break) and archived decisions by archive decision id descending (insertion order).
 - Paging is by offset over "live window, then archive": if the live window changes between two
@@ -192,7 +192,7 @@ or to an older generation of the local LAPI (ids are reused after a reset):
   value differs.
 
 Only `live:true` rows of the `local` engine can be deleted this way. `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
-from the archive only (a remote engine is never contacted). Both are audited `alert_deleted` with
+from the archive only (a remote engine is never contacted). Both alert routes (`DELETE /api/alerts/{id}` and `DELETE /api/alerts/archive/{archive_id}`) are audited `alert_deleted` with
 target `<engine>/<upstream id>` and refuse a `read_only` account (403 `forbidden`).
 
 In this release the routes marked "yes" above (decisions, bouncers, machines, hub, reload) still
