@@ -99,7 +99,7 @@ func TestDefaultGuardianAllowsPrivateRanges(t *testing.T) {
 
 func TestDialControlRefusesMetadataInsideAllowedRanges(t *testing.T) {
 	controlFunction := dialControl(DefaultGuardian())
-	for _, metadataAddress := range []string{"100.100.100.200:80", "[fd00:ec2::254]:80", "[::ffff:100.100.100.200]:80"} {
+	for _, metadataAddress := range []string{"100.100.100.200:80", "[fd00:ec2::254]:80", "[::ffff:100.100.100.200]:80", "168.63.129.16:80", "[::ffff:168.63.129.16]:80"} {
 		controlError := controlFunction("tcp6", metadataAddress, nil)
 		if !errors.Is(controlError, ErrBlockedAddress) {
 			t.Errorf("%s: expected ErrBlockedAddress, got %v", metadataAddress, controlError)

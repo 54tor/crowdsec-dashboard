@@ -377,8 +377,8 @@ client per engine, never through `HTTP_PROXY` / `HTTPS_PROXY` of the environment
   `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, carrier-grade NAT `100.64.0.0/10`, IPv6 ULA
   `fc00::/7`) and public unicast addresses, on any port. Refused: loopback, link-local (including
   `169.254.169.254`), unspecified, multicast and the reserved and documentation ranges
-  (the built-in list of `code.dny.dev/ssrf`), plus two metadata endpoints that sit inside allowed
-  ranges: `100.100.100.200` (Alibaba Cloud) and `fd00:ec2::254` (AWS IPv6). A refusal is reported
+  (the built-in list of `code.dny.dev/ssrf`), plus three metadata endpoints that sit inside allowed
+  ranges: `100.100.100.200` (Alibaba Cloud), `fd00:ec2::254` (AWS IPv6) and `168.63.129.16` (Azure wire server). A refusal is reported
   as `engine_blocked_address`. A literal forbidden address in `lapi_url` or `proxy.url` is refused
   when the engine is saved. IPv4-mapped IPv6 forms are unmapped before the check.
 - **Proxy as a trust boundary.** With a proxy (`socks5` or `http`), the check applies to the proxy

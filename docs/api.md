@@ -234,7 +234,7 @@ out of the collection until it is fixed); never a raw error text.
 
 - `lapi_url` must be `https` unless `allow_insecure_http` is true, and carries no credentials,
   query or fragment. A literal loopback, link-local, unspecified, multicast, reserved or cloud
-  metadata address (`127.0.0.1`, `[::1]`, `169.254.169.254`, `100.100.100.200`, `[fd00:ec2::254]`…)
+  metadata address (`127.0.0.1`, `[::1]`, `169.254.169.254`, `100.100.100.200`, `[fd00:ec2::254]`, `168.63.129.16`…)
   in `lapi_url` or `proxy.url` is refused at write time with `invalid_engine`; private ranges
   (RFC 1918, `100.64.0.0/10`, `fc00::/7`) are accepted. Host names are checked when the connection
   is made, after DNS resolution.

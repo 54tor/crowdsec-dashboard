@@ -26,6 +26,7 @@ var ErrBlockedAddress = errors.New("egress: blocked address")
 var metadataPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("100.100.100.200/32"),
 	netip.MustParsePrefix("fd00:ec2::254/128"),
+	netip.MustParsePrefix("168.63.129.16/32"),
 }
 
 type Settings struct {
