@@ -48,10 +48,34 @@ describe('decisions page with archive', () => {
     renderApp('/decisions')
     await screen.findByText('203.0.113.7', { selector: 'td bdi' })
 
+    expect(screen.getByRole('table', { name: en.decisions.caption })).toBeInTheDocument()
+
     await user.click(screen.getByLabelText(en.decisions.includeExpired))
 
     expect(await screen.findByText('198.51.100.44')).toBeInTheDocument()
     expect(requestedUrls(fetchMock)).toContain(EXPIRED_DECISIONS_URL)
+    expect(screen.getByRole('table', { name: en.decisions.captionWithExpired })).toBeInTheDocument()
+  })
+
+  it("revient à la première page quand on affiche les décisions expirées", async () => {
+    const fetchMock = stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      [`GET ${DECISIONS_URL}`]: { status: 200, body: makePage([makeDecision()], { total: 45 }) },
+      'GET /api/decisions?page=2&per_page=20': { status: 200, body: makePage([makeDecision({ id: 30, value: '203.0.113.30' })], { page: 2, total: 45 }) },
+      [`GET ${EXPIRED_DECISIONS_URL}`]: { status: 200, body: makePage([makeDecision({ id: 31, value: '198.51.100.31', live: false, duration: '' })], { total: 45 }) },
+    })
+    const user = userEvent.setup()
+    renderApp('/decisions')
+    await screen.findByText('203.0.113.7', { selector: 'td bdi' })
+    await user.click(screen.getByRole('button', { name: en.list.next }))
+    expect(await screen.findByText('Page 2 of 3')).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText(en.decisions.includeExpired))
+
+    expect(await screen.findByText('198.51.100.31')).toBeInTheDocument()
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+    expect(requestedUrls(fetchMock)).toContain(EXPIRED_DECISIONS_URL)
+    expect(requestedUrls(fetchMock)).not.toContain('/api/decisions?page=2&per_page=20&include_expired=true')
   })
 
   // A live decision and an archived one can share engine and upstream id.

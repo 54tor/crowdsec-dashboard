@@ -70,6 +70,7 @@ export function Alerts() {
         query={tableQuery}
         page={controls.page}
         onPageChange={controls.setPage}
+        isLiveWindowRead={controls.isLiveWindowRead}
         caption={t('alerts.caption')}
         columns={columns}
         rowKey={alertRowKey}

@@ -4,6 +4,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { validateFilters } from '@/lib/filterValidation'
 
 const FILTER_DEBOUNCE_MILLISECONDS = 300
+const LOCAL_ENGINE_NAME = 'local'
 const EMPTY_FILTERS: ListFilters = { scenario: '', ip: '', since: '', engine: '' }
 
 export function useListControls() {
@@ -17,8 +18,11 @@ export function useListControls() {
     setPage(1)
   }
 
+  const isLiveWindowRead = filters.engine === '' || filters.engine === LOCAL_ENGINE_NAME
+
   return {
     draftFilters,
+    isLiveWindowRead,
     filters,
     errors,
     isValid: Object.keys(errors).length === 0,

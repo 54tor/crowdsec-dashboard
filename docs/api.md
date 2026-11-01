@@ -124,7 +124,7 @@ is in the future are listed; `include_expired=true` adds the expired history (th
 ever holds active decisions). Lists never carry alert `events`.
 
 - `total` is the live window size plus the matching archive rows, counted up to 10 000;
-  `total_capped:true` means there are more (show "10 000+"). A page whose archive offset would pass
+  `total_capped:true` means there are more (the client shows the total with a "+"). A page whose archive offset would pass
   10 000 answers 400 `invalid_request`.
 - `live_status` is `ok`, or `unavailable` when the local LAPI could not be read: the page is then
   served from the archive alone with status 200 (an empty `items` with `live_status:"ok"` means

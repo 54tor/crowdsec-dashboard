@@ -15,6 +15,7 @@ interface PagedTableSectionProps<Row> {
   caption: string
   columns: DataTableColumn<Row>[]
   rowKey: (row: Row) => string | number
+  isLiveWindowRead?: boolean
 }
 
 function totalPagesOf<Row>(data: Page<Row>): number {
@@ -27,7 +28,7 @@ function ListErrorNotice({ error }: { error: unknown }) {
   return <ErrorNotice error={error} message={isInvalidRequestError(error) ? t('list.invalidRequest') : undefined} />
 }
 
-export function PagedTableSection<Row>({ query, page, onPageChange, caption, columns, rowKey }: PagedTableSectionProps<Row>) {
+export function PagedTableSection<Row>({ query, page, onPageChange, caption, columns, rowKey, isLiveWindowRead = true }: PagedTableSectionProps<Row>) {
   const { t } = useTranslation()
   const { data, error, isPending } = query
   if (error && !data) {
@@ -47,7 +48,7 @@ export function PagedTableSection<Row>({ query, page, onPageChange, caption, col
         <DataTable caption={caption} columns={columns} rows={data.items} rowKey={rowKey} />
       )}
       <ListSummary data={data} />
-      <p className="text-sm text-muted-foreground">{t('list.windowInfo', { count: data.window_size })}</p>
+      {isLiveWindowRead && data.live_status !== 'unavailable' && <p className="text-sm text-muted-foreground">{t('list.windowInfo', { count: data.window_size })}</p>}
       <PaginationBar page={page} totalPages={totalPagesOf(data)} onPageChange={onPageChange} />
     </div>
   )

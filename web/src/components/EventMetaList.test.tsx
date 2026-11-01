@@ -20,7 +20,7 @@ describe('event meta list', () => {
 
   // No link detection: a javascript: URL in a value is plain text, so no anchor
   // and no href can ever carry it.
-  it('rendsJavascriptUrlAsTextWithoutAnchor', () => {
+  it('rend une URL javascript: comme texte sans lien', () => {
     const { container } = render(<EventMetaList meta={{ target_uri: JAVASCRIPT_URL }} />)
 
     expect(container.querySelector('a')).toBeNull()

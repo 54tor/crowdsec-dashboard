@@ -149,8 +149,8 @@
     "allEngines": "All engines"
   },
   "list": {
-    "truncated": "Only the most recent {{count}} entries are shown; older entries are not displayed.",
-    "windowInfo": "{{count}} entries in the current window",
+    "truncated": "The live part holds only the {{count}} most recent entries of the local LAPI; older entries are listed from the archive.",
+    "windowInfo": "{{count}} live entries from the local LAPI",
     "pageOf": "Page {{page}} of {{total}}",
     "previous": "Previous",
     "next": "Next",
@@ -211,7 +211,8 @@
     "unbanTitle": "Unban {{target}}",
     "unbanDescription": "The decision {{id}} will be deleted and the target will no longer be blocked. Retype the address or range {{target}} below to confirm.",
     "archivedBadge": "Archived, not active",
-    "includeExpired": "Show expired decisions"
+    "includeExpired": "Show expired decisions",
+    "captionWithExpired": "Decisions, expired ones included"
   },
   "chart": {
     "label": "Alerts per hour chart",

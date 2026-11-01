@@ -60,7 +60,7 @@ describe('alerts page', () => {
     stubFetch(alertsRoutes(makePage([makeAlert()], { window_size: 100, may_be_truncated: true })))
     renderApp('/alerts')
 
-    expect(await screen.findByText('Only the most recent 100 entries are shown; older entries are not displayed.')).toBeInTheDocument()
+    expect(await screen.findByText('The live part holds only the 100 most recent entries of the local LAPI; older entries are listed from the archive.')).toBeInTheDocument()
   })
 
   it('showsEmptyStateWhenNoAlertMatches', async () => {

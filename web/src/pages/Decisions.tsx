@@ -91,7 +91,8 @@ export function Decisions() {
         query={query}
         page={controls.page}
         onPageChange={controls.setPage}
-        caption={t('decisions.caption')}
+        isLiveWindowRead={controls.isLiveWindowRead}
+        caption={includeExpired ? t('decisions.captionWithExpired') : t('decisions.caption')}
         columns={columns}
         rowKey={decisionRowKey}
       />

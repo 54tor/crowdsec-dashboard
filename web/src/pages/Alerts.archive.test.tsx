@@ -61,6 +61,7 @@ describe('alerts page with archive', () => {
 
     expect(await screen.findByText(en.list.liveUnavailable)).toBeInTheDocument()
     expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+    expect(screen.queryByText('0 live entries from the local LAPI')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: en.list.next }))
     expect(await screen.findByText('crowdsecurity/page-two')).toBeInTheDocument()
     expect(requestedUrls(fetchMock)).toContain(SECOND_PAGE_URL)
@@ -73,6 +74,7 @@ describe('alerts page with archive', () => {
     renderApp('/alerts')
 
     expect(await screen.findByText('Page 1 of 4')).toBeInTheDocument()
+    expect(screen.getByText('20 live entries from the local LAPI')).toBeInTheDocument()
     expect(screen.getByText('61 entries in total')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: en.list.next })).toBeEnabled()
   })
@@ -99,15 +101,15 @@ describe('alerts page with archive', () => {
     expect(screen.queryByText('invalid_request')).not.toBeInTheDocument()
   })
 
-  // Two engines can report the same upstream id: both rows must render with
-  // distinct React keys.
+  // Two engines can report the same upstream id and uuid (same id space, e.g. a
+  // cloned engine): only the engine prefix keeps their React keys distinct.
   it('keepsRowsOfTwoEnginesSharingAnUpstreamId', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     stubFetch(
       alertRoutes(
         makePage([
-          makeAlert({ id: 5, engine: 'local', uuid: 'uuid-a', scenario: 'crowdsecurity/local-five' }),
-          makeAlert({ id: 5, engine: 'edge-1', uuid: 'uuid-b', archive_id: 12, live: false, scenario: 'crowdsecurity/remote-five' }),
+          makeAlert({ id: 5, engine: 'local', uuid: 'uuid-shared', scenario: 'crowdsecurity/local-five' }),
+          makeAlert({ id: 5, engine: 'edge-1', uuid: 'uuid-shared', archive_id: 12, live: false, scenario: 'crowdsecurity/remote-five' }),
         ]),
       ),
     )
@@ -219,6 +221,7 @@ describe('alerts page with archive', () => {
 
     expect(await screen.findByText('crowdsecurity/remote-scan')).toBeInTheDocument()
     expect(requestedUrls(fetchMock)).toContain(filteredUrl)
+    expect(screen.queryByText(/live entries from the local LAPI/)).not.toBeInTheDocument()
     expect(requestsTo(fetchMock, 'GET', '/api/engines/names')).not.toHaveLength(0)
   })
 })

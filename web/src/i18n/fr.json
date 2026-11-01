@@ -149,8 +149,8 @@
     "allEngines": "Tous les moteurs"
   },
   "list": {
-    "truncated": "Seules les {{count}} entrées les plus récentes sont affichées ; les plus anciennes ne le sont pas.",
-    "windowInfo": "{{count}} entrées dans la fenêtre courante",
+    "truncated": "La partie en direct ne contient que les {{count}} entrées les plus récentes de la LAPI locale ; les plus anciennes sont listées depuis l'archive.",
+    "windowInfo": "{{count}} entrées en direct de la LAPI locale",
     "pageOf": "Page {{page}} sur {{total}}",
     "previous": "Précédent",
     "next": "Suivant",
@@ -211,7 +211,8 @@
     "unbanTitle": "Débannir {{target}}",
     "unbanDescription": "La décision {{id}} sera supprimée et la cible ne sera plus bloquée. Retapez l'adresse ou la plage {{target}} ci-dessous pour confirmer.",
     "archivedBadge": "Archivée, non active",
-    "includeExpired": "Afficher les décisions expirées"
+    "includeExpired": "Afficher les décisions expirées",
+    "captionWithExpired": "Décisions, expirées comprises"
   },
   "chart": {
     "label": "Graphique des alertes par heure",
