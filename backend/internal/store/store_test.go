@@ -27,7 +27,7 @@ func TestMigrateCreatesAllTables(testContext *testing.T) {
 	}
 	sort.Strings(tableNames)
 
-	expectedTableNames := []string{"access_rule", "account", "api_token", "audit_event", "credential", "recovery_code", "session", "setting"}
+	expectedTableNames := []string{"access_rule", "account", "alert", "api_token", "audit_event", "credential", "decision", "engine", "event", "recovery_code", "session", "setting"}
 	if strings.Join(tableNames, ",") != strings.Join(expectedTableNames, ",") {
 		testContext.Fatalf("tables = %v, want %v", tableNames, expectedTableNames)
 	}
@@ -327,4 +327,233 @@ func TestMigrationDownThenUpRestoresSchema(testContext *testing.T) {
 	if totpAgainError != nil {
 		testContext.Fatalf("totp after up: %v", totpAgainError)
 	}
+}
+
+const insertRemoteEngineQuery = "INSERT INTO engine (engine_name, engine_lapi_url, engine_machine_id, engine_machine_password_sealed, engine_machine_password_key_id) VALUES (?, 'https://lapi.example.com', 'machine', '\\x01', 'key1') RETURNING engine_id"
+
+func insertTestEngine(testContext *testing.T, database *bun.DB, engineName string) int64 {
+	testContext.Helper()
+	var engineIdentifier int64
+	insertError := database.NewRaw(insertRemoteEngineQuery, engineName).Scan(context.Background(), &engineIdentifier)
+	if insertError != nil {
+		testContext.Fatalf("insert engine %s: %v", engineName, insertError)
+	}
+	return engineIdentifier
+}
+
+func insertTestAlert(testContext *testing.T, database *bun.DB, engineIdentifier int64, upstreamIdentifier int64, upstreamUUID string) (int64, error) {
+	testContext.Helper()
+	var alertIdentifier int64
+	insertError := database.NewRaw(
+		"INSERT INTO alert (alert_engine_id, alert_upstream_id, alert_upstream_uuid, alert_scenario_name) VALUES (?, ?, ?, 'crowdsecurity/ssh-bf') RETURNING alert_id",
+		engineIdentifier, upstreamIdentifier, upstreamUUID,
+	).Scan(context.Background(), &alertIdentifier)
+	return alertIdentifier, insertError
+}
+
+func requireSQLState(testContext *testing.T, actualError error, expectedState string, expectedConstraint string) {
+	testContext.Helper()
+	if actualError == nil || !strings.Contains(actualError.Error(), expectedState) || !strings.Contains(actualError.Error(), expectedConstraint) {
+		testContext.Fatalf("error = %v, want SQLSTATE %s on %s", actualError, expectedState, expectedConstraint)
+	}
+}
+
+func TestEngineRequiresSealedPasswordUnlessLocal(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+
+	_, remoteError := database.ExecContext(ctx,
+		"INSERT INTO engine (engine_name, engine_lapi_url, engine_machine_id) VALUES ('remote', 'https://lapi.example.com', 'machine')")
+	requireSQLState(testContext, remoteError, "23514", "engine_password_required_unless_local_check")
+
+	_, localError := database.ExecContext(ctx,
+		"INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id) VALUES ('local', true, 'http://crowdsec:8080', 'machine')")
+	if localError != nil {
+		testContext.Fatalf("local engine without password: %v", localError)
+	}
+}
+
+func TestEngineNameMustBeASlug(testContext *testing.T) {
+	database := storetest.New(testContext)
+
+	for _, invalidName := range []string{"Upper", "-dash", "has space", "", strings.Repeat("a", 33)} {
+		_, insertError := database.ExecContext(context.Background(),
+			"INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id) VALUES (?, true, 'http://x', 'm')", invalidName)
+		requireSQLState(testContext, insertError, "23514", "engine_engine_name_check")
+	}
+}
+
+func TestOnlyOneLocalEngine(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	insertLocalQuery := "INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id) VALUES (?, true, 'http://crowdsec:8080', 'machine')"
+
+	if _, firstError := database.ExecContext(ctx, insertLocalQuery, "local"); firstError != nil {
+		testContext.Fatalf("first local: %v", firstError)
+	}
+	_, secondError := database.ExecContext(ctx, insertLocalQuery, "local-two")
+	requireSQLState(testContext, secondError, "23505", "engine_one_local_index")
+}
+
+func TestEngineProxyKindAndURLGoTogether(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	insertProxyQuery := "INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id, engine_proxy_kind, engine_proxy_url) VALUES (?, true, 'http://x', 'm', ?, ?)"
+
+	_, kindOnlyError := database.ExecContext(ctx, insertProxyQuery, "kind-only", "socks5", nil)
+	requireSQLState(testContext, kindOnlyError, "23514", "engine_proxy_pair_check")
+
+	_, urlOnlyError := database.ExecContext(ctx, insertProxyQuery, "url-only", nil, "socks5://proxy.example.com:1080")
+	requireSQLState(testContext, urlOnlyError, "23514", "engine_proxy_pair_check")
+
+	_, unknownKindError := database.ExecContext(ctx, insertProxyQuery, "unknown", "ftp", "ftp://proxy.example.com")
+	requireSQLState(testContext, unknownKindError, "23514", "engine_engine_proxy_kind_check")
+
+	_, credentialWithoutProxyError := database.ExecContext(ctx,
+		"INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id, engine_proxy_credential_sealed, engine_proxy_credential_key_id) VALUES ('orphan', true, 'http://x', 'm', '\\x01', 'key1')")
+	requireSQLState(testContext, credentialWithoutProxyError, "23514", "engine_proxy_credential_requires_proxy_check")
+
+	_, validError := database.ExecContext(ctx, insertProxyQuery, "valid", "socks5", "socks5://proxy.example.com:1080")
+	if validError != nil {
+		testContext.Fatalf("valid proxy: %v", validError)
+	}
+}
+
+func TestEngineRejectsInvalidCursorAndAddressList(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+
+	_, cursorError := database.ExecContext(ctx,
+		"INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id, engine_collection_cursor) VALUES ('cursor', true, 'http://x', 'm', -1)")
+	requireSQLState(testContext, cursorError, "23514", "engine_engine_collection_cursor_check")
+
+	_, addressListError := database.ExecContext(ctx,
+		"INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id, engine_public_address_list) VALUES ('addresses', true, 'http://x', 'm', '{}')")
+	requireSQLState(testContext, addressListError, "23514", "engine_engine_public_address_list_check")
+}
+
+func TestAlertUpstreamKeyIsUnique(testContext *testing.T) {
+	database := storetest.New(testContext)
+	engineIdentifier := insertTestEngine(testContext, database, "remote")
+	otherEngineIdentifier := insertTestEngine(testContext, database, "other")
+
+	if _, firstError := insertTestAlert(testContext, database, engineIdentifier, 7, "uuid-a"); firstError != nil {
+		testContext.Fatalf("first alert: %v", firstError)
+	}
+	_, duplicateError := insertTestAlert(testContext, database, engineIdentifier, 7, "uuid-a")
+	requireSQLState(testContext, duplicateError, "23505", "alert_alert_engine_id_alert_upstream_id_alert_upstream_uuid_key")
+
+	if _, resetError := insertTestAlert(testContext, database, engineIdentifier, 7, "uuid-b"); resetError != nil {
+		testContext.Fatalf("same id with another uuid: %v", resetError)
+	}
+	if _, otherEngineError := insertTestAlert(testContext, database, otherEngineIdentifier, 7, "uuid-a"); otherEngineError != nil {
+		testContext.Fatalf("same key on another engine: %v", otherEngineError)
+	}
+	_, nonPositiveError := insertTestAlert(testContext, database, engineIdentifier, 0, "uuid-c")
+	requireSQLState(testContext, nonPositiveError, "23514", "alert_alert_upstream_id_check")
+}
+
+func TestEventMetaMustBeABoundedObject(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	engineIdentifier := insertTestEngine(testContext, database, "remote")
+	alertIdentifier, alertError := insertTestAlert(testContext, database, engineIdentifier, 1, "uuid-a")
+	if alertError != nil {
+		testContext.Fatalf("alert: %v", alertError)
+	}
+	insertEventQuery := "INSERT INTO event (event_alert_id, event_meta) VALUES (?, ?::jsonb)"
+	objectOfSize := func(targetTextSize int) string {
+		const objectOverhead = len(`{"k": ""}`)
+		return `{"k": "` + strings.Repeat("a", targetTextSize-objectOverhead) + `"}`
+	}
+
+	_, arrayError := database.ExecContext(ctx, insertEventQuery, alertIdentifier, "[]")
+	requireSQLState(testContext, arrayError, "23514", "event_meta_bounded_object_check")
+
+	_, oversizedError := database.ExecContext(ctx, insertEventQuery, alertIdentifier, objectOfSize(70000))
+	requireSQLState(testContext, oversizedError, "23514", "event_meta_bounded_object_check")
+
+	_, justOverError := database.ExecContext(ctx, insertEventQuery, alertIdentifier, objectOfSize(65537))
+	requireSQLState(testContext, justOverError, "23514", "event_meta_bounded_object_check")
+
+	_, budgetError := database.ExecContext(ctx, insertEventQuery, alertIdentifier, objectOfSize(61440))
+	if budgetError != nil {
+		testContext.Fatalf("61440-byte object: %v", budgetError)
+	}
+	_, limitError := database.ExecContext(ctx, insertEventQuery, alertIdentifier, objectOfSize(65536))
+	if limitError != nil {
+		testContext.Fatalf("65536-byte object: %v", limitError)
+	}
+}
+
+func TestDecisionUpstreamKeyIsUniquePerAlert(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	engineIdentifier := insertTestEngine(testContext, database, "remote")
+	alertIdentifier, alertError := insertTestAlert(testContext, database, engineIdentifier, 1, "uuid-a")
+	if alertError != nil {
+		testContext.Fatalf("alert: %v", alertError)
+	}
+	insertDecisionQuery := "INSERT INTO decision (decision_alert_id, decision_upstream_id, decision_type, decision_origin, decision_scope, decision_value) VALUES (?, 5, 'ban', 'crowdsec', 'Ip', '203.0.113.7')"
+
+	if _, firstError := database.ExecContext(ctx, insertDecisionQuery, alertIdentifier); firstError != nil {
+		testContext.Fatalf("first decision: %v", firstError)
+	}
+	_, duplicateError := database.ExecContext(ctx, insertDecisionQuery, alertIdentifier)
+	requireSQLState(testContext, duplicateError, "23505", "decision_decision_alert_id_decision_upstream_id_key")
+}
+
+func TestDeletingEngineCascadesArchive(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	engineIdentifier := insertTestEngine(testContext, database, "remote")
+	alertIdentifier, alertError := insertTestAlert(testContext, database, engineIdentifier, 1, "uuid-a")
+	if alertError != nil {
+		testContext.Fatalf("alert: %v", alertError)
+	}
+	if _, eventError := database.ExecContext(ctx, "INSERT INTO event (event_alert_id) VALUES (?)", alertIdentifier); eventError != nil {
+		testContext.Fatalf("event: %v", eventError)
+	}
+	_, decisionError := database.ExecContext(ctx,
+		"INSERT INTO decision (decision_alert_id, decision_upstream_id, decision_type, decision_origin, decision_scope, decision_value) VALUES (?, 5, 'ban', 'crowdsec', 'Ip', '203.0.113.7')",
+		alertIdentifier)
+	if decisionError != nil {
+		testContext.Fatalf("decision: %v", decisionError)
+	}
+
+	if _, deleteError := database.ExecContext(ctx, "DELETE FROM engine WHERE engine_id = ?", engineIdentifier); deleteError != nil {
+		testContext.Fatalf("delete engine: %v", deleteError)
+	}
+
+	for _, tableName := range []string{"alert", "event", "decision"} {
+		var remainingRows int
+		if countError := database.NewRaw("SELECT count(*) FROM "+tableName).Scan(ctx, &remainingRows); countError != nil {
+			testContext.Fatalf("count %s: %v", tableName, countError)
+		}
+		if remainingRows != 0 {
+			testContext.Fatalf("%s rows = %d, want 0", tableName, remainingRows)
+		}
+	}
+}
+
+func TestMigrationDownRemovesArchiveTablesAndUpRestoresThem(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	provider := newMigrationProvider(testContext, database)
+
+	if _, downError := provider.DownTo(ctx, 2); downError != nil {
+		testContext.Fatalf("down to 2: %v", downError)
+	}
+	var archiveTableCount int
+	countError := database.NewRaw(
+		"SELECT count(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('engine', 'alert', 'event', 'decision')",
+	).Scan(ctx, &archiveTableCount)
+	if countError != nil || archiveTableCount != 0 {
+		testContext.Fatalf("archive tables after down = %d (error %v), want 0", archiveTableCount, countError)
+	}
+
+	if _, upError := provider.Up(ctx); upError != nil {
+		testContext.Fatalf("up again: %v", upError)
+	}
+	insertTestEngine(testContext, database, "remote")
 }
