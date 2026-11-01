@@ -46,9 +46,16 @@ func main() {
 	}
 	defer database.Close()
 	accountServices, accountsError := initialiseAccounts(startupContext, database, keyring, log.Printf)
-	cancelStartup()
 	if accountsError != nil {
+		cancelStartup()
 		log.Fatalf("startup: %v", accountsError)
+	}
+	localLAPIClient := lapi.NewClient(loadedConfig.LAPIURL, loadedConfig.LAPIMachineID, loadedConfig.LAPIMachinePassword, nil)
+	engineRepository, engineRegistry, enginesError := initialiseEngines(startupContext, database, keyring,
+		localEngineSettings{lapiURL: loadedConfig.LAPIURL, machineID: loadedConfig.LAPIMachineID, client: localLAPIClient}, log.Printf)
+	cancelStartup()
+	if enginesError != nil {
+		log.Fatalf("startup: %v", enginesError)
 	}
 	webAuthn, webAuthnError := openWebAuthn(loadedConfig.WebAuthnRPID, loadedConfig.WebAuthnRPOrigins)
 	if webAuthnError != nil {
@@ -58,7 +65,7 @@ func main() {
 	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
 
 	services := api.NewServices(
-		lapi.NewClient(loadedConfig.LAPIURL, loadedConfig.LAPIMachineID, loadedConfig.LAPIMachinePassword, nil),
+		localLAPIClient,
 		cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer),
 		loadedConfig.ConfDir,
 	)
@@ -71,6 +78,7 @@ func main() {
 	services.Geolocator = accountServices.geolocator
 	services.AccessRules = accessrule.NewRepository(database)
 	services.WebAuthn = webAuthn
+	services.Engines = api.NewEngineService(engineRepository, engineRegistry)
 
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,

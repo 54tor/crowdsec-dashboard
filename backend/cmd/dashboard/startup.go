@@ -11,7 +11,9 @@ import (
 	"crowdsec-dashboard/internal/accounts"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/geo"
+	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/login"
 	"crowdsec-dashboard/internal/secondfactor"
 	"crowdsec-dashboard/internal/secrets"
@@ -81,6 +83,24 @@ func initialiseAccounts(ctx context.Context, database *bun.DB, keyring *secrets.
 		logLine("no account yet: open %s and enroll the first account with token %s", enrollmentPath, token)
 	}
 	return accountServices{repository: repository, enrollment: enrollment, secondFactors: secondFactors, keyring: keyring}, nil
+}
+
+func initialiseEngines(ctx context.Context, database *bun.DB, keyring *secrets.Keyring, localSettings localEngineSettings, logLine logFunction) (*engines.Repository, *engines.Registry, error) {
+	repository := engines.NewRepository(database, keyring)
+	if _, ensureError := repository.EnsureLocal(ctx, localSettings.lapiURL, localSettings.machineID); ensureError != nil {
+		return nil, nil, fmt.Errorf("ensure local engine: %w", ensureError)
+	}
+	registry := engines.NewRegistry(repository, localSettings.client, nil)
+	if reloadError := registry.Reload(ctx); reloadError != nil {
+		logLine("engine registry: %v", reloadError)
+	}
+	return repository, registry, nil
+}
+
+type localEngineSettings struct {
+	lapiURL   string
+	machineID string
+	client    *lapi.Client
 }
 
 func newLoginService(database *bun.DB, services accountServices, sessionStore auth.SessionStore, webAuthn *secondfactor.WebAuthn, recorder audit.Recorder) *login.Service {

@@ -72,6 +72,14 @@ func IsBlocked(err error) bool {
 		errors.Is(err, ssrf.ErrProhibitedNetwork)
 }
 
+func CheckAddress(address netip.Addr) error {
+	normalisedAddress := address.WithZone("").Unmap()
+	if isMetadataAddress(normalisedAddress) {
+		return fmt.Errorf("%w: %s", ErrBlockedAddress, normalisedAddress)
+	}
+	return DefaultGuardian().SafeAddr(normalisedAddress)
+}
+
 func refuseRedirect(_ *http.Request, _ []*http.Request) error {
 	return http.ErrUseLastResponse
 }

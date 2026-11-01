@@ -283,6 +283,13 @@ func (client *Client) refreshToken(ctx context.Context, rejectedToken string) (s
 	return client.loginLocked(ctx)
 }
 
+func (client *Client) Login(ctx context.Context) error {
+	client.tokenMutex.Lock()
+	defer client.tokenMutex.Unlock()
+	_, loginError := client.loginLocked(ctx)
+	return loginError
+}
+
 func (client *Client) loginLocked(ctx context.Context) (string, error) {
 	credentials := map[string]any{
 		"machine_id": client.machineID,

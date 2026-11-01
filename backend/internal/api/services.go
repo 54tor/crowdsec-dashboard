@@ -38,6 +38,7 @@ type Services struct {
 	Audit          audit.Recorder
 	Geolocator     geo.Geolocator
 	AccessRules    AccessRuleService
+	Engines        EngineService
 	WebAuthn       *secondfactor.WebAuthn
 }
 

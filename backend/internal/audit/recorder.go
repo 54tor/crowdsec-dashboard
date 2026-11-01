@@ -23,6 +23,11 @@ const (
 	ActionSecondFactorEnrolled Action = "second_factor_enrolled"
 	ActionAccessRuleAdded      Action = "access_rule_added"
 	ActionAccessRuleRemoved    Action = "access_rule_removed"
+	ActionEngineCreated        Action = "engine_created"
+	ActionEngineUpdated        Action = "engine_updated"
+	ActionEngineDeleted        Action = "engine_deleted"
+	ActionEngineTested         Action = "engine_tested"
+	ActionAlertDeleted         Action = "alert_deleted"
 )
 
 const maximumTargetRunes = 64

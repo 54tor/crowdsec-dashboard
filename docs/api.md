@@ -139,6 +139,49 @@ Machine names match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; bouncer names also allo
 The machine self-check runs before the confirmation check, so `self_account` wins over
 `confirmation_required`.
 
+## Engines
+
+CrowdSec engines whose alerts the dashboard archives. The `local` engine comes from `LAPI_URL` /
+`LAPI_MACHINE_ID` at start-up and is read-only here. Every route needs a session; all but
+`/api/engines/names` also need the `admin` role (403 `forbidden` otherwise, before any read or
+write). Bodies are capped at 8 KiB and unknown fields are refused (400 `invalid_request`).
+No response, error or audit entry ever contains a machine password or proxy credential: the only
+trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted URL.
+
+| Method | Path | Body | Success response | Errors |
+|---|---|---|---|---|
+| GET | `/api/engines/names` | none | `200 {"items":[{name,is_local,enabled}]}`, any role | 401, 503 `database_unavailable` |
+| GET | `/api/engines` | none | `200 {"items":[engine]}` | 403, 503 |
+| POST | `/api/engines` | `{name, lapi_url, machine_id, machine_password, proxy?{kind,url,username?,password?}, allow_insecure_http, public_addresses, enabled, sync_enabled}` | `201 engine` | 400 `invalid_engine`, `invalid_request`; 409 `engine_exists`; 403; 503 |
+| PATCH | `/api/engines/{name}` | same fields, all optional; absent = unchanged; `"proxy": null` removes the proxy; `proxy.clear_credentials: true` drops the proxy credentials | `200 engine` | 400 `invalid_engine`, `engine_secret_required`, `invalid_request`; 404 `engine_not_found`; 409 `engine_exists`, `engine_local_readonly`; 403; 503 |
+| DELETE | `/api/engines/{name}` | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400 `confirmation_required`; 404; 409 `engine_local_readonly`; 403; 503 |
+| POST | `/api/engines/{name}/test` | none | `200 {"status":"ok"}` | 502 `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`; 404; 403; 503 |
+
+`engine` is `{name, is_local, lapi_url, machine_id, proxy:{kind,url}|null, has_proxy_credentials,
+allow_insecure_http, public_addresses, enabled, sync_enabled, collection:{cursor,
+last_collected_at, last_error_code, consecutive_failures, next_attempt_at, inserted, duplicates,
+skipped, gaps, resets}}`. Until the collector reports its counters, `collection` carries the stored
+cursor, last collection time and last error code; the other fields are `0` or `null`.
+
+- `lapi_url` must be `https` unless `allow_insecure_http` is true, and carries no credentials,
+  query or fragment. A literal loopback, link-local, unspecified, multicast, reserved or cloud
+  metadata address (`127.0.0.1`, `[::1]`, `169.254.169.254`, `100.100.100.200`, `[fd00:ec2::254]`…)
+  in `lapi_url` or `proxy.url` is refused at write time with `invalid_engine`; private ranges
+  (RFC 1918, `100.64.0.0/10`, `fc00::/7`) are accepted. Host names are checked when the connection
+  is made, after DNS resolution.
+- `engine_secret_required`: a `lapi_url` change of scheme, host or port without `machine_password`
+  in the same request; a `proxy.url` or `proxy.kind` change on an engine that has proxy credentials
+  without new credentials or `clear_credentials`; a proxy change on an `http` engine without
+  `machine_password`. Nothing is written and no connection is made.
+- Deleting an engine deletes its whole archive; disable it (`"enabled": false`) to keep the archive.
+- `test` logs in as the machine (`POST /v1/watchers/login`) through the engine's own guarded
+  client and proxy. The engine's answer is never returned, only the outcome.
+- Every successful create, update and delete, and every test of an existing engine, is audited
+  (`engine_created`, `engine_updated`, `engine_deleted`, `engine_tested`) with the engine name as
+  target. After each successful write the engine registry is reloaded; when that reload fails the
+  write is kept, the failure is logged and the response carries `"warning":"registry_reload_failed"`
+  (the previous engine set stays active until the next successful reload).
+
 ## Everything else
 
 Any other `/api/...` path answers 404 `not_found` (401 without a session). Any other path serves the
