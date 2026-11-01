@@ -2,12 +2,15 @@
 # Use ./up.sh to start it (it generates .env.local, registers the dashboard machine and
 # prints the one-time enrolment token of the first account). Tear down with:
 #   docker compose -p csdash-dev down -v --remove-orphans
+# CSDASH_PROJECT (default csdash-dev) prefixes every container and image name and
+# CSDASH_DASHBOARD_PORT (default 18080) is the host port, so a second isolated copy can run
+# beside the default one (see up.sh). Without them the stack is exactly csdash-dev on 18080.
 name: csdash-dev
 
 services:
   crowdsec:
     image: crowdsecurity/crowdsec:latest
-    container_name: csdash-dev-crowdsec
+    container_name: ${CSDASH_PROJECT:-csdash-dev}-crowdsec
     restart: "no"
     mem_limit: 768m
     pids_limit: 256
@@ -27,7 +30,7 @@ services:
 
   postgres:
     image: postgres:latest
-    container_name: csdash-dev-postgres
+    container_name: ${CSDASH_PROJECT:-csdash-dev}-postgres
     restart: "no"
     environment:
       POSTGRES_USER: dashboard
@@ -50,7 +53,7 @@ services:
 
   socket-proxy:
     image: wollomatic/socket-proxy:1
-    container_name: csdash-dev-socket-proxy
+    container_name: ${CSDASH_PROJECT:-csdash-dev}-socket-proxy
     restart: "no"
     user: "65534:${DOCKER_GID:?run up.sh first}"
     mem_limit: 64m
@@ -62,9 +65,9 @@ services:
     command:
       - -loglevel=debug
       - -listenip=0.0.0.0
-      - -allowfrom=csdash-dev-dashboard
+      - -allowfrom=${CSDASH_PROJECT:-csdash-dev}-dashboard
       - -allowGET=(/v[0-9.]+)?/exec/[0-9a-f]{64}/json
-      - -allowPOST=(/v[0-9.]+)?/(containers/csdash-dev-crowdsec/exec|exec/[0-9a-f]{64}/start)
+      - -allowPOST=(/v[0-9.]+)?/(containers/${CSDASH_PROJECT:-csdash-dev}-crowdsec/exec|exec/[0-9a-f]{64}/start)
       - -shutdowngracetime=5
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -74,8 +77,8 @@ services:
     build:
       context: ../..
       dockerfile: deploy/Dockerfile
-    image: csdash-dev-dashboard:local
-    container_name: csdash-dev-dashboard
+    image: ${CSDASH_PROJECT:-csdash-dev}-dashboard:local
+    container_name: ${CSDASH_PROJECT:-csdash-dev}-dashboard
     restart: "no"
     mem_limit: 256m
     pids_limit: 128
@@ -99,15 +102,15 @@ services:
       timeout: 3s
       retries: 10
       start_period: 20s
-    env_file: .env.local
+    env_file: ${CSDASH_ENV_FILE:-.env.local}
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       LISTEN_ADDR: ":8080"
-      LAPI_URL: http://csdash-dev-crowdsec:8080
+      LAPI_URL: http://${CSDASH_PROJECT:-csdash-dev}-crowdsec:8080
       LAPI_MACHINE_ID: dashboard-dev
-      CROWDSEC_CONTAINER: csdash-dev-crowdsec
+      CROWDSEC_CONTAINER: ${CSDASH_PROJECT:-csdash-dev}-crowdsec
       DOCKER_HOST: tcp://socket-proxy:2375
       CROWDSEC_CONF_DIR: /etc/crowdsec
       TRUSTED_PROXY_CIDRS: ""
@@ -120,7 +123,7 @@ services:
       - crowdsec-config:/etc/crowdsec:ro
       - geoip-data:/var/lib/geoip
     ports:
-      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:${CSDASH_DASHBOARD_PORT:-18080}:8080"
     networks: [core, egress]
 
   # Not started by default. Shares the dashboard network namespace (same source IP) so
@@ -128,8 +131,8 @@ services:
   probe:
     profiles: [probe]
     image: curlimages/curl:latest
-    container_name: csdash-dev-probe
-    network_mode: "container:csdash-dev-dashboard"
+    container_name: ${CSDASH_PROJECT:-csdash-dev}-probe
+    network_mode: "container:${CSDASH_PROJECT:-csdash-dev}-dashboard"
     mem_limit: 32m
     pids_limit: 32
     cpus: 0.25
@@ -147,7 +150,7 @@ volumes:
 
 secrets:
   dashboard-secrets-key:
-    file: ./secrets/dashboard-secrets.key
+    file: ${CSDASH_SECRETS_KEY_FILE:-./secrets/dashboard-secrets.key}
   # maxmind-account-id:
   #   file: ./secrets/maxmind-account-id
   # maxmind-license-key:

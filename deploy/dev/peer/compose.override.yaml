@@ -8,7 +8,7 @@
 services:
   peer-a:
     image: crowdsecurity/crowdsec:latest
-    container_name: csdash-dev-peer-a
+    container_name: ${CSDASH_PROJECT:-csdash-dev}-peer-a
     restart: "no"
     mem_limit: 512m
     pids_limit: 256
@@ -30,7 +30,7 @@ services:
   spike-curl:
     profiles: [spike]
     image: curlimages/curl:latest
-    container_name: csdash-dev-spike-curl
+    container_name: ${CSDASH_PROJECT:-csdash-dev}-spike-curl
     restart: "no"
     mem_limit: 32m
     pids_limit: 32

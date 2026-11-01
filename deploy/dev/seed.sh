@@ -2,9 +2,11 @@
 # Fills the dev CrowdSec with fake alerts and decisions. Only documentation
 # addresses are used: 203.0.113.0/24, 198.51.100.0/24 (RFC 5737), 2001:db8::/32 (RFC 3849).
 # Run it once per fresh stack (a second run adds the same fake data again).
+# CSDASH_PROJECT (default csdash-dev) selects the stack, SEED_ENGINE=peer-a seeds the demo engine
+# instead of the local one (each run adds 10 alerts: 3 manual ones and 7 pushed ones).
 set -euo pipefail
 
-container=csdash-dev-crowdsec
+container="${CSDASH_PROJECT:-csdash-dev}-${SEED_ENGINE:-crowdsec}"
 seed_machine=dev-agent
 
 crowdsec() {
