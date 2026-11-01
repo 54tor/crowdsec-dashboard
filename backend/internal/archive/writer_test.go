@@ -617,3 +617,68 @@ func TestStoreRefusesStaleEngineHandle(testContext *testing.T) {
 		})
 	}
 }
+
+func (fixture archiveFixture) rejectMarkerScenario(testContext *testing.T) {
+	testContext.Helper()
+	fixture.exec(testContext, `CREATE FUNCTION reject_marker_alert() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF NEW.alert_scenario_name = 'test/rejected-by-trigger' THEN RAISE EXCEPTION 'marker alert rejected'; END IF;
+			RETURN NEW;
+		END $$`)
+	fixture.exec(testContext, `CREATE TRIGGER reject_marker_alert BEFORE INSERT ON alert FOR EACH ROW EXECUTE FUNCTION reject_marker_alert()`)
+}
+
+// After a rejected alert is rolled back to its savepoint, the savepoint itself must
+// be released: otherwise every skipped alert leaves one more nested subtransaction
+// open until the end of a long import. The probe is a second ROLLBACK TO, which only
+// succeeds while the savepoint still exists.
+func TestRejectedAlertReleasesItsSavepoint(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.rejectMarkerScenario(testContext)
+	rejectedAlert := sampleAlert(1, "uuid-rejected")
+	rejectedAlert.Scenario = "test/rejected-by-trigger"
+	rejectedRows := buildAlertRows(fixture.engineID, "uuid-rejected", rejectedAlert, DefaultBounds, fixedCollectionTime)
+
+	transactionError := fixture.database.RunInTx(context.Background(), nil, func(ctx context.Context, transaction bun.Tx) error {
+		outcome, storeError := storeAlertUnderSavepoint(ctx, transaction, rejectedRows)
+		if storeError != nil || outcome != alertRejected {
+			testContext.Fatalf("expected a rejected alert, got outcome %v error %v", outcome, storeError)
+		}
+		_, probeError := transaction.ExecContext(ctx, `ROLLBACK TO SAVEPOINT archive_alert`)
+		if probeError == nil {
+			testContext.Error("the savepoint of a rejected alert is still open")
+		}
+		return errors.New("roll the probe back")
+	})
+
+	if transactionError == nil {
+		testContext.Fatal("the probe transaction must be rolled back")
+	}
+}
+
+// A long import with many rejected alerts still completes and archives every valid
+// alert around them.
+func TestStoreCompletesImportWithManyRejectedAlerts(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.rejectMarkerScenario(testContext)
+	const rejectedCount = 300
+	const validCount = 50
+	alerts := sampleAlerts(1, rejectedCount+validCount)
+	for alertIndex := 0; alertIndex < rejectedCount; alertIndex++ {
+		alerts[alertIndex].Scenario = "test/rejected-by-trigger"
+	}
+	logBuffer := &bytes.Buffer{}
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logBuffer, nil)))
+	testContext.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	storeResult := fixture.mustStore(testContext, alerts)
+
+	expectedResult := StoreResult{Inserted: validCount, Skipped: rejectedCount, Cursor: rejectedCount + validCount}
+	if storeResult != expectedResult {
+		testContext.Fatalf("expected %+v, got %+v", expectedResult, storeResult)
+	}
+	if obtainedCounts := fixture.tableCounts(testContext); obtainedCounts != [3]int{validCount, validCount, validCount} {
+		testContext.Errorf("expected %d complete alerts, got %v", validCount, obtainedCounts)
+	}
+}

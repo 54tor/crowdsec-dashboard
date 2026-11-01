@@ -207,6 +207,9 @@ func storeAlertUnderSavepoint(ctx context.Context, transaction bun.Tx, rows aler
 	if _, rollbackError := transaction.ExecContext(ctx, `ROLLBACK TO SAVEPOINT archive_alert`); rollbackError != nil {
 		return 0, rollbackError
 	}
+	if _, releaseError := transaction.ExecContext(ctx, `RELEASE SAVEPOINT archive_alert`); releaseError != nil {
+		return 0, releaseError
+	}
 	slog.Warn("archive_alert_rejected", "engine_id", rows.alert.EngineID, "upstream_id", rows.alert.UpstreamID, "sqlstate", errorCode)
 	return alertRejected, nil
 }
