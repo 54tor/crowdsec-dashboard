@@ -27,11 +27,12 @@ type Writer struct {
 }
 
 type StoreResult struct {
-	Inserted      int
-	Duplicates    int
-	Skipped       int
-	Cursor        int64
-	ResetDetected bool
+	Inserted         int
+	Duplicates       int
+	Skipped          int
+	DecisionsDropped int
+	Cursor           int64
+	ResetDetected    bool
 }
 
 type alertOutcome int
@@ -108,6 +109,10 @@ func (writer *Writer) storeInTransaction(ctx context.Context, transaction bun.Tx
 			return StoreResult{}, alertError
 		}
 		storeResult.countOutcome(outcome)
+		if outcome == alertInserted && rows.droppedDecisions > 0 {
+			storeResult.DecisionsDropped += rows.droppedDecisions
+			slog.Warn("archive_decisions_dropped", "engine_id", engineID, "upstream_id", receivedAlert.ID, "dropped", rows.droppedDecisions)
+		}
 	}
 	if advanceError := advanceCursor(ctx, transaction, engineID, highestProcessedID, collectedAt); advanceError != nil {
 		return StoreResult{}, advanceError

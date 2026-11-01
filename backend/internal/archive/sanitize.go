@@ -9,23 +9,25 @@ import (
 )
 
 type Bounds struct {
-	MaxEventsPerAlert   int
-	MaxMetaKeys         int
-	MaxMetaKeyBytes     int
-	MaxMetaValueBytes   int
-	MaxMetaEncodedBytes int
-	MaxTextBytes        int
-	MaxMessageBytes     int
+	MaxEventsPerAlert    int
+	MaxDecisionsPerAlert int
+	MaxMetaKeys          int
+	MaxMetaKeyBytes      int
+	MaxMetaValueBytes    int
+	MaxMetaEncodedBytes  int
+	MaxTextBytes         int
+	MaxMessageBytes      int
 }
 
 var DefaultBounds = Bounds{
-	MaxEventsPerAlert:   200,
-	MaxMetaKeys:         64,
-	MaxMetaKeyBytes:     128,
-	MaxMetaValueBytes:   4096,
-	MaxMetaEncodedBytes: 61440,
-	MaxTextBytes:        512,
-	MaxMessageBytes:     4096,
+	MaxEventsPerAlert:    200,
+	MaxDecisionsPerAlert: 200,
+	MaxMetaKeys:          64,
+	MaxMetaKeyBytes:      128,
+	MaxMetaValueBytes:    4096,
+	MaxMetaEncodedBytes:  61440,
+	MaxTextBytes:         512,
+	MaxMessageBytes:      4096,
 }
 
 const emptyObjectEncodedBytes = len("{}")

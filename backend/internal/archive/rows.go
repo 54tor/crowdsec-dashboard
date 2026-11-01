@@ -69,9 +69,10 @@ type decisionRow struct {
 }
 
 type alertRows struct {
-	alert     alertRow
-	events    []eventRow
-	decisions []decisionRow
+	alert            alertRow
+	events           []eventRow
+	decisions        []decisionRow
+	droppedDecisions int
 }
 
 func normalizedUUID(rawUUID string) (string, bool) {
@@ -84,6 +85,10 @@ func normalizedUUID(rawUUID string) (string, bool) {
 
 func buildAlertRows(engineID int64, upstreamUUID string, receivedAlert lapi.Alert, bounds Bounds, collectedAt time.Time) alertRows {
 	events, eventsTruncated := buildEventRows(receivedAlert.Events, bounds)
+	keptDecisions := receivedAlert.Decisions
+	if len(keptDecisions) > bounds.MaxDecisionsPerAlert {
+		keptDecisions = keptDecisions[:bounds.MaxDecisionsPerAlert]
+	}
 	return alertRows{
 		alert: alertRow{
 			EngineID:        engineID,
@@ -106,8 +111,9 @@ func buildAlertRows(engineID int64, upstreamUUID string, receivedAlert lapi.Aler
 			CreatedAt:       parseUpstreamTimestamp(receivedAlert.CreatedAt),
 			CollectedAt:     collectedAt.UTC(),
 		},
-		events:    events,
-		decisions: buildDecisionRows(receivedAlert.Decisions, bounds, collectedAt),
+		events:           events,
+		decisions:        buildDecisionRows(keptDecisions, bounds, collectedAt),
+		droppedDecisions: len(receivedAlert.Decisions) - len(keptDecisions),
 	}
 }
 

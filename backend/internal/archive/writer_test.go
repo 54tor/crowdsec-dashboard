@@ -547,3 +547,34 @@ func TestStoreUnknownEngineFails(testContext *testing.T) {
 		testContext.Errorf("nothing may be written for an unknown engine, got %d", alertCount)
 	}
 }
+
+// A hostile engine can attach tens of thousands of decisions to one alert; the
+// archive keeps the first MaxDecisionsPerAlert of them and counts the rest, so one
+// alert cannot make the INSERT slow enough to stall the engine's collection.
+func TestStoreCapsDecisionsPerAlert(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	oversizedAlert := sampleAlert(1, "uuid-oversized")
+	oversizedAlert.Decisions = make([]lapi.Decision, 0, 5000)
+	for decisionNumber := int64(1); decisionNumber <= 5000; decisionNumber++ {
+		oversizedAlert.Decisions = append(oversizedAlert.Decisions, lapi.Decision{
+			ID: decisionNumber, Origin: "crowdsec", Type: "ban", Scope: "Ip", Value: "203.0.113.10", Duration: "4h0m0s",
+		})
+	}
+
+	storeResult := fixture.mustStore(testContext, []lapi.Alert{oversizedAlert, sampleAlert(2, "uuid-next")})
+
+	if DefaultBounds.MaxDecisionsPerAlert != 200 {
+		testContext.Fatalf("expected a default cap of 200, got %d", DefaultBounds.MaxDecisionsPerAlert)
+	}
+	storedDecisions := fixture.countRows(testContext,
+		`SELECT count(*) FROM decision JOIN alert ON alert_id = decision_alert_id WHERE alert_upstream_id = 1`)
+	if storedDecisions != DefaultBounds.MaxDecisionsPerAlert {
+		testContext.Fatalf("expected %d stored decisions, got %d", DefaultBounds.MaxDecisionsPerAlert, storedDecisions)
+	}
+	if storeResult.DecisionsDropped != 5000-DefaultBounds.MaxDecisionsPerAlert {
+		testContext.Fatalf("expected the dropped decisions to be counted, got %d", storeResult.DecisionsDropped)
+	}
+	if storeResult.Inserted != 2 {
+		testContext.Fatalf("the capped alert and the next one must both be archived: %+v", storeResult)
+	}
+}
