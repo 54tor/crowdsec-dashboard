@@ -99,11 +99,11 @@ func (repository *Repository) engineWithCredentials(ctx context.Context, engineI
 	}
 	credentials, openError := repository.openCredentials(row)
 	if openError != nil {
-		return Engine{}, Credentials{}, openError
+		return Engine{}, Credentials{}, errors.Join(errUnusableEngine, openError)
 	}
 	loadedEngine, convertError := row.toEngine()
 	if convertError != nil {
-		return Engine{}, Credentials{}, convertError
+		return Engine{}, Credentials{}, errors.Join(errUnusableEngine, convertError)
 	}
 	return loadedEngine, credentials, nil
 }

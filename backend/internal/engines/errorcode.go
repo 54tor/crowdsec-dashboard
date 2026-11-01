@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	ErrorCodeUnreachable    = "engine_unreachable"
-	ErrorCodeAuthFailed     = "engine_auth_failed"
-	ErrorCodeBlockedAddress = "engine_blocked_address"
+	ErrorCodeUnreachable      = "engine_unreachable"
+	ErrorCodeAuthFailed       = "engine_auth_failed"
+	ErrorCodeBlockedAddress   = "engine_blocked_address"
+	ErrorCodeSecretUnreadable = "engine_secret_unreadable"
 )
 
 func ErrorCode(engineError error) string {

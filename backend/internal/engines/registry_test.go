@@ -1,9 +1,11 @@
 package engines
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -278,40 +280,73 @@ func TestRegistrySnapshotNeverCarriesCollectionCursor(testContext *testing.T) {
 	}
 }
 
-// A Reload that cannot decrypt a secret returns the error and leaves the previous
-// snapshot in place; the error never contains the secret.
-func TestFailedReloadKeepsPreviousSnapshot(testContext *testing.T) {
+// A remote engine whose sealed secret cannot be opened is left out of the snapshot,
+// reported through UnavailableEngines with a closed error code, and logged without
+// any secret; the local engine and every healthy remote engine are still published.
+func TestReloadSkipsEngineWhoseSecretCannotBeOpened(testContext *testing.T) {
 	fixture := newFixture(testContext)
 	_, server := startFakeEngine(testContext)
-	createdEngine := mustCreate(testContext, fixture, insecureInput("edge-kept", server.URL))
-	registry := newTestRegistry(testContext, fixture, nil)
-	mustReload(testContext, registry)
-	previousClient, _ := registry.Client("edge-kept")
-
+	if _, ensureError := fixture.repository.EnsureLocal(context.Background(), "http://127.0.0.1:8080", "dashboard"); ensureError != nil {
+		testContext.Fatalf("ensure local: %v", ensureError)
+	}
+	brokenEngine := mustCreate(testContext, fixture, withProxy(insecureInput("edge-broken", server.URL+"/broken")))
+	mustCreate(testContext, fixture, insecureInput("edge-healthy", server.URL+"/healthy"))
 	if _, corruptError := fixture.database.ExecContext(context.Background(),
-		`UPDATE engine SET engine_machine_password_key_id = 'unknown-key' WHERE engine_id = ?`, createdEngine.ID); corruptError != nil {
+		`UPDATE engine SET engine_machine_password_key_id = 'unknown-key' WHERE engine_id = ?`, brokenEngine.ID); corruptError != nil {
 		testContext.Fatalf("corrupt key id: %v", corruptError)
 	}
-	mustCreate(testContext, fixture, insecureInput("edge-added", server.URL+"/added"))
+	localClient := lapi.NewClient("http://127.0.0.1:8080", "dashboard", "local-password", nil)
+	registry := newTestRegistry(testContext, fixture, localClient)
+	capturedLog := captureDefaultLog(testContext)
 
 	reloadError := registry.Reload(context.Background())
 
-	if reloadError == nil {
-		testContext.Fatal("expected the reload to fail")
+	if reloadError != nil {
+		testContext.Fatalf("one broken engine must not fail the reload: %v", reloadError)
 	}
-	if strings.Contains(reloadError.Error(), markerPassword) {
-		testContext.Fatalf("reload error leaks the password: %v", reloadError)
+	publishedNames := handleNames(registry.Handles())
+	if strings.Join(publishedNames, ",") != "local,edge-healthy" {
+		testContext.Fatalf("expected local and the healthy engine, got %v", publishedNames)
 	}
-	keptClient, found := registry.Client("edge-kept")
-	if !found || keptClient != previousClient {
-		testContext.Fatal("the previous snapshot must be kept")
+	if _, published := registry.Client("edge-broken"); published {
+		testContext.Fatal("the broken engine must not be published")
 	}
-	if _, added := registry.Client("edge-added"); added {
-		testContext.Fatal("a failed reload must not publish a partial snapshot")
+	unavailableEngines := registry.UnavailableEngines()
+	if unavailableEngines["edge-broken"] != ErrorCodeSecretUnreadable || len(unavailableEngines) != 1 {
+		testContext.Fatalf("the broken engine must be reported, got %v", unavailableEngines)
 	}
-	if _, stillUsable := readThrough(testContext, keptClient); stillUsable != nil {
-		testContext.Fatalf("the kept client must still work: %v", stillUsable)
+	healthyClient, _ := registry.Client("edge-healthy")
+	if _, readError := readThrough(testContext, healthyClient); readError != nil {
+		testContext.Fatalf("the healthy engine must stay usable: %v", readError)
 	}
+	logOutput := capturedLog.String()
+	if !strings.Contains(logOutput, "edge-broken") || !strings.Contains(logOutput, ErrorCodeSecretUnreadable) {
+		testContext.Fatalf("the skip must be logged with the engine and its code: %q", logOutput)
+	}
+	for _, secretValue := range []string{markerPassword, markerProxyUsername, markerProxyPassword} {
+		if strings.Contains(logOutput, secretValue) {
+			testContext.Fatalf("the log leaks a secret: %q", logOutput)
+		}
+	}
+
+	if _, repairError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_enabled = false WHERE engine_id = ?`, brokenEngine.ID); repairError != nil {
+		testContext.Fatalf("disable broken engine: %v", repairError)
+	}
+	mustReload(testContext, registry)
+	if remaining := registry.UnavailableEngines(); len(remaining) != 0 {
+		testContext.Fatalf("a later reload must forget engines no longer broken, got %v", remaining)
+	}
+}
+
+// captureDefaultLog redirects slog's default logger into a buffer for one test.
+func captureDefaultLog(testContext *testing.T) *bytes.Buffer {
+	testContext.Helper()
+	capturedOutput := &bytes.Buffer{}
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(capturedOutput, nil)))
+	testContext.Cleanup(func() { slog.SetDefault(previousLogger) })
+	return capturedOutput
 }
 
 // connectionTracker counts connections a server sees closed, so a test can prove the

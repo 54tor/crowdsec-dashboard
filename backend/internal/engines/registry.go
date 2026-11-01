@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"maps"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -14,6 +16,8 @@ import (
 	"crowdsec-dashboard/internal/lapi"
 )
 
+var errUnusableEngine = errors.New("engine stored settings cannot be used")
+
 type Handle struct {
 	// Engine.CollectionCursor is always 0: read the cursor with Repository.CollectionCursor.
 	Engine Engine
@@ -21,8 +25,9 @@ type Handle struct {
 }
 
 type registrySnapshot struct {
-	handles       []Handle
-	clientsByName map[string]*lapi.Client
+	handles           []Handle
+	clientsByName     map[string]*lapi.Client
+	unavailableByName map[string]string
 }
 
 type Registry struct {
@@ -45,6 +50,10 @@ func (registry *Registry) Handles() []Handle {
 	return append([]Handle(nil), registry.current.Load().handles...)
 }
 
+func (registry *Registry) UnavailableEngines() map[string]string {
+	return maps.Clone(registry.current.Load().unavailableByName)
+}
+
 func (registry *Registry) Client(name string) (*lapi.Client, bool) {
 	client, found := registry.current.Load().clientsByName[name]
 	return client, found
@@ -60,7 +69,7 @@ func (registry *Registry) Reload(ctx context.Context) error {
 	if registry.afterList != nil {
 		registry.afterList()
 	}
-	nextSnapshot := &registrySnapshot{clientsByName: map[string]*lapi.Client{}}
+	nextSnapshot := &registrySnapshot{clientsByName: map[string]*lapi.Client{}, unavailableByName: map[string]string{}}
 	builtRemoteClients := []*lapi.Client{}
 	for _, listedEngine := range engineList {
 		if !listedEngine.Enabled {
@@ -70,6 +79,11 @@ func (registry *Registry) Reload(ctx context.Context) error {
 		if !listedEngine.IsLocal {
 			currentEngine, remoteClient, buildError := registry.buildRemoteHandle(ctx, listedEngine.ID)
 			if errors.Is(buildError, ErrEngineNotFound) {
+				continue
+			}
+			if errors.Is(buildError, errUnusableEngine) {
+				nextSnapshot.unavailableByName[listedEngine.Name] = ErrorCodeSecretUnreadable
+				slog.Warn("engine_skipped", "engine", listedEngine.Name, "error_code", ErrorCodeSecretUnreadable)
 				continue
 			}
 			if buildError != nil {
@@ -104,7 +118,7 @@ func (registry *Registry) buildRemoteHandle(ctx context.Context, engineID int64)
 	if remoteEngine.Proxy != nil {
 		proxyURL, parseError := url.Parse(remoteEngine.Proxy.URL)
 		if parseError != nil {
-			return Engine{}, nil, fmt.Errorf("engine %s: invalid stored proxy url", remoteEngine.Name)
+			return Engine{}, nil, fmt.Errorf("engine %s: invalid stored proxy url: %w", remoteEngine.Name, errUnusableEngine)
 		}
 		if credentials.ProxyUsername != "" || credentials.ProxyPassword != "" {
 			proxyURL.User = url.UserPassword(credentials.ProxyUsername, credentials.ProxyPassword)
