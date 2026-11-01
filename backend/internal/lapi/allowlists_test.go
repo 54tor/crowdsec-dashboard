@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const allowlistFixturePath = "../../../deploy/dev/fixtures/allowlists.json"
@@ -197,5 +198,117 @@ func TestListAllowlistsErrorNeverContainsBody(testing *testing.T) {
 	_, listError := client.ListAllowlists(context.Background())
 	if listError == nil || strings.Contains(listError.Error(), "body-must-not-leak") {
 		testing.Fatalf("unexpected error: %v", listError)
+	}
+}
+
+func serveStatusAndBody(status int, body string) func(http.ResponseWriter, *http.Request) {
+	return func(responseWriter http.ResponseWriter, request *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		responseWriter.WriteHeader(status)
+		responseWriter.Write([]byte(body))
+	}
+}
+
+func TestListAllowlistsUnreadableResponsesFailClosed(parentTest *testing.T) {
+	paddedMessage := `{"message":"x","padding":"` + strings.Repeat("a", maxUnsupportedBodyBytes) + `"}`
+	unreadableCases := []struct {
+		caseName string
+		status   int
+		body     string
+	}{
+		{"200-invalid-json", http.StatusOK, `[{"name":`},
+		{"200-object-instead-of-array", http.StatusOK, `{"name":"probe"}`},
+		{"200-empty-body", http.StatusOK, ``},
+		{"404-json-array", http.StatusNotFound, `[{"message":"x"}]`},
+		{"404-body-above-4-kib", http.StatusNotFound, paddedMessage},
+	}
+	for _, unreadableCase := range unreadableCases {
+		parentTest.Run(unreadableCase.caseName, func(subTest *testing.T) {
+			_, client := newAllowlistClient(subTest, serveStatusAndBody(unreadableCase.status, unreadableCase.body))
+			allowlistRead, listError := client.ListAllowlists(context.Background())
+			if !errors.Is(listError, ErrAllowlistsUnreadable) {
+				subTest.Fatalf("expected ErrAllowlistsUnreadable, got %v", listError)
+			}
+			if allowlistRead.Supported || len(allowlistRead.Allowlists) != 0 {
+				subTest.Fatalf("an unreadable response must not look like a success: %+v", allowlistRead)
+			}
+		})
+	}
+}
+
+func TestListAllowlistsEmptyBodiesAreSuccessful(parentTest *testing.T) {
+	for _, emptyBody := range []string{`null`, `[]`} {
+		parentTest.Run(emptyBody, func(subTest *testing.T) {
+			_, client := newAllowlistClient(subTest, serveBody(emptyBody))
+			allowlistRead, listError := client.ListAllowlists(context.Background())
+			if listError != nil || !allowlistRead.Supported || allowlistRead.Truncated || len(allowlistRead.Allowlists) != 0 {
+				subTest.Fatalf("unexpected result: %+v, %v", allowlistRead, listError)
+			}
+		})
+	}
+}
+
+func buildAllowlistsJSON(entryCounts []int) string {
+	allowlistsJSON := []string{}
+	for allowlistNumber, entryCount := range entryCounts {
+		itemsJSON := []string{}
+		for entryNumber := 0; entryNumber < entryCount; entryNumber++ {
+			itemsJSON = append(itemsJSON, fmt.Sprintf(`{"value":"10.%d.%d.1"}`, allowlistNumber, entryNumber))
+		}
+		allowlistsJSON = append(allowlistsJSON, fmt.Sprintf(`{"name":"list_%d","items":[%s]}`, allowlistNumber, strings.Join(itemsJSON, ",")))
+	}
+	return "[" + strings.Join(allowlistsJSON, ",") + "]"
+}
+
+func TestListAllowlistsEntryCapBoundary(parentTest *testing.T) {
+	boundaryCases := []struct {
+		caseName          string
+		entryCounts       []int
+		expectedTruncated bool
+	}{
+		{"exactly-10000-over-two-lists", []int{6000, 4000}, false},
+		{"10001-over-two-lists", []int{6000, 4001}, true},
+	}
+	for _, boundaryCase := range boundaryCases {
+		parentTest.Run(boundaryCase.caseName, func(subTest *testing.T) {
+			_, client := newAllowlistClient(subTest, serveBody(buildAllowlistsJSON(boundaryCase.entryCounts)))
+			allowlistRead, listError := client.ListAllowlists(context.Background())
+			if listError != nil {
+				subTest.Fatal(listError)
+			}
+			totalEntries := 0
+			for _, allowlist := range allowlistRead.Allowlists {
+				totalEntries += len(allowlist.Items)
+			}
+			if totalEntries != 10000 || allowlistRead.Truncated != boundaryCase.expectedTruncated {
+				subTest.Fatalf("entries=%d truncated=%v", totalEntries, allowlistRead.Truncated)
+			}
+		})
+	}
+}
+
+func TestListAllowlistsReturnsPromptlyWhenContextIsCancelled(testing *testing.T) {
+	releaseServer := make(chan struct{})
+	_, client := newAllowlistClient(testing, func(responseWriter http.ResponseWriter, request *http.Request) {
+		select {
+		case <-releaseServer:
+		case <-request.Context().Done():
+		}
+	})
+	testing.Cleanup(func() { close(releaseServer) })
+	cancellableContext, cancelRead := context.WithCancel(context.Background())
+	time.AfterFunc(100*time.Millisecond, cancelRead)
+	outcome := make(chan error, 1)
+	go func() {
+		_, listError := client.ListAllowlists(cancellableContext)
+		outcome <- listError
+	}()
+	select {
+	case listError := <-outcome:
+		if listError == nil {
+			testing.Fatal("a cancelled read must not succeed")
+		}
+	case <-time.After(5 * time.Second):
+		testing.Fatal("ListAllowlists did not return after cancellation")
 	}
 }
