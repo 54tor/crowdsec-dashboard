@@ -54,3 +54,25 @@ func TestMeetsBanPrefixFloorAppliesManualBanLimits(testContext *testing.T) {
 		}
 	}
 }
+
+func TestParseAllowlistValueCanonicalises(testContext *testing.T) {
+	expectations := map[string]string{
+		"203.0.113.7":            "203.0.113.7/32",
+		"::ffff:203.0.113.7":     "203.0.113.7/32",
+		"198.51.100.9/24":        "198.51.100.0/24",
+		"2001:db8::1":            "2001:db8::1/128",
+		"2001:db8::5/32":         "2001:db8::/32",
+		"::ffff:203.0.113.0/120": "203.0.113.0/24",
+	}
+	for rawValue, expectedPrefix := range expectations {
+		parsedPrefix, parseError := ParseAllowlistValue(rawValue)
+		if parseError != nil || parsedPrefix.String() != expectedPrefix {
+			testContext.Errorf("%s: expected %s, got %v %v", rawValue, expectedPrefix, parsedPrefix, parseError)
+		}
+	}
+	for _, rejectedValue := range []string{"fe80::1%eth0", "nope", ""} {
+		if _, rejectionError := ParseAllowlistValue(rejectedValue); rejectionError == nil {
+			testContext.Errorf("%q must be refused", rejectedValue)
+		}
+	}
+}

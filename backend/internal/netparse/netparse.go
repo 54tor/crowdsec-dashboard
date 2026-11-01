@@ -3,6 +3,7 @@ package netparse
 import (
 	"errors"
 	"net/netip"
+	"strings"
 )
 
 const (
@@ -42,4 +43,15 @@ func MeetsBanPrefixFloor(prefix netip.Prefix) bool {
 		return prefix.Bits() >= minIPv4BanPrefixBits
 	}
 	return prefix.Bits() >= minIPv6BanPrefixBits
+}
+
+func ParseAllowlistValue(rawValue string) (netip.Prefix, error) {
+	if strings.Contains(rawValue, "/") {
+		return ParsePrefix(rawValue)
+	}
+	address, addressError := ParseAddr(rawValue)
+	if addressError != nil {
+		return netip.Prefix{}, addressError
+	}
+	return netip.PrefixFrom(address, address.BitLen()), nil
 }
