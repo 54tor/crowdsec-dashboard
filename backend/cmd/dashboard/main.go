@@ -107,6 +107,12 @@ func main() {
 		purgeArchivePeriodically(signalContext, newArchivePurge(database, loadedConfig), archivePurgeInterval, time.Now, log.Printf)
 	}()
 
+	reloadDone := make(chan struct{})
+	go func() {
+		defer close(reloadDone)
+		reloadRegistryUntilComplete(signalContext, engineRegistry, reloadBackoff(), log.Printf)
+	}()
+
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
@@ -125,4 +131,5 @@ func main() {
 	<-shutdownDone
 	<-collectorDone
 	<-purgeDone
+	<-reloadDone
 }

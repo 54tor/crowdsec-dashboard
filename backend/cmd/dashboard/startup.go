@@ -97,6 +97,9 @@ func initialiseEngines(ctx context.Context, database *bun.DB, keyring *secrets.K
 	registry := engines.NewRegistry(repository, localSettings.client, nil)
 	if reloadError := registry.Reload(ctx); reloadError != nil {
 		logLine("engine registry: %v", reloadError)
+		if publishError := registry.PublishLocalOnly(ctx); publishError != nil {
+			logLine("engine registry: local engine not published: %v", publishError)
+		}
 	}
 	return repository, registry, nil
 }

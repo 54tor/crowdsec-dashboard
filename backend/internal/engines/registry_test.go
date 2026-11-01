@@ -611,3 +611,37 @@ func TestReloadNeverPairsAnOldDestinationWithANewSecret(testContext *testing.T) 
 		testContext.Fatalf("the handle must describe the row its secret came from: %+v", handles)
 	}
 }
+
+func TestPublishLocalOnlyKeepsLocalAvailableAfterAFailedReload(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	if _, ensureError := fixture.repository.EnsureLocal(context.Background(), "http://127.0.0.1:8080", "dashboard"); ensureError != nil {
+		testContext.Fatalf("ensure local: %v", ensureError)
+	}
+	_, server := startFakeEngine(testContext)
+	mustCreate(testContext, fixture, insecureInput("edge-late", server.URL))
+	localClient := lapi.NewClient("http://127.0.0.1:8080", "dashboard", "local-password", nil)
+	registry := NewRegistry(fixture.repository, localClient, loopbackTestGuardian())
+	cancelledContext, cancelReload := context.WithCancel(context.Background())
+	cancelReload()
+
+	if reloadError := registry.Reload(cancelledContext); reloadError == nil {
+		testContext.Fatal("a reload with a cancelled context must fail")
+	}
+	if publishError := registry.PublishLocalOnly(context.Background()); publishError != nil {
+		testContext.Fatalf("publish local: %v", publishError)
+	}
+
+	if registeredClient, found := registry.Client(ReservedLocalName); !found || registeredClient != localClient || registry.Complete() {
+		testContext.Fatalf("local must be published and the registry still incomplete (found=%v)", found)
+	}
+	if names := handleNames(registry.Handles()); len(names) != 1 || names[0] != ReservedLocalName {
+		testContext.Fatalf("expected only local, got %v", names)
+	}
+	mustReload(testContext, registry)
+	if names := handleNames(registry.Handles()); len(names) != 2 || !registry.Complete() {
+		testContext.Fatalf("a later reload must add the remote engines, got %v", names)
+	}
+	if publishError := registry.PublishLocalOnly(context.Background()); publishError != nil || len(registry.Handles()) != 2 {
+		testContext.Fatal("PublishLocalOnly must not shrink a complete registry")
+	}
+}

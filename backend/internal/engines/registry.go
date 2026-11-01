@@ -38,6 +38,7 @@ type Registry struct {
 	current       atomic.Pointer[registrySnapshot]
 	remoteClients []*lapi.Client
 	afterList     func()
+	complete      atomic.Bool
 }
 
 func NewRegistry(repository *Repository, localClient *lapi.Client, guardian *ssrf.Guardian) *Registry {
@@ -103,6 +104,33 @@ func (registry *Registry) Reload(ctx context.Context) error {
 	registry.current.Store(nextSnapshot)
 	closeAll(registry.remoteClients)
 	registry.remoteClients = builtRemoteClients
+	registry.complete.Store(true)
+	return nil
+}
+
+func (registry *Registry) Complete() bool {
+	return registry.complete.Load()
+}
+
+func (registry *Registry) PublishLocalOnly(ctx context.Context) error {
+	registry.reloadMutex.Lock()
+	defer registry.reloadMutex.Unlock()
+	if registry.complete.Load() {
+		return nil
+	}
+	localEngine, getError := registry.repository.Get(ctx, ReservedLocalName)
+	if getError != nil {
+		return getError
+	}
+	if !localEngine.Enabled {
+		return nil
+	}
+	localEngine.CollectionCursor = 0
+	registry.current.Store(&registrySnapshot{
+		handles:           []Handle{{Engine: localEngine, Client: registry.localClient}},
+		clientsByName:     map[string]*lapi.Client{localEngine.Name: registry.localClient},
+		unavailableByName: map[string]string{},
+	})
 	return nil
 }
 
