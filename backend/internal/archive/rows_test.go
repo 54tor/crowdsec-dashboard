@@ -3,13 +3,15 @@ package archive
 import (
 	"testing"
 	"time"
+
+	"crowdsec-dashboard/internal/lapi"
 )
 
 // Upstream timestamps come in two shapes: RFC 3339 (created_at, start_at, stop_at)
 // and Go's time.String() layout for event timestamps ("2026-10-30 17:34:06 +0000
 // UTC", captured from a real LAPI). Anything else, the zero time, and years outside
-// 1..9999 once converted to UTC become NULL instead of failing the alert. A date in
-// the future is kept as it is: engine clocks drift, the archive does not judge.
+// 1..9999 once converted to UTC become NULL instead of failing the alert. The parser
+// keeps a future date; only alert_created_at replaces it (see the test below).
 func TestParseUpstreamTimestamp(testContext *testing.T) {
 	casesDeTest := []struct {
 		name          string
@@ -37,6 +39,38 @@ func TestParseUpstreamTimestamp(testContext *testing.T) {
 			}
 			if obtainedValue != nil && !obtainedValue.Equal(*casDeTestCourant.expectedValue) {
 				subTest.Errorf("got %v, want %v", *obtainedValue, *casDeTestCourant.expectedValue)
+			}
+		})
+	}
+}
+
+// alert_created_at orders every archive list and filters `since`: an engine with a
+// skewed or hostile clock must not pin its alerts at the top for the whole
+// retention. A date that is missing, unreadable or later than the collection is
+// replaced by the collection time; an earlier valid date is kept as the engine sent it.
+func TestAlertCreatedAtFallsBackToCollectionTime(testContext *testing.T) {
+	collectedAt := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	casesDeTest := []struct {
+		name          string
+		raw           string
+		expectedValue time.Time
+	}{
+		{name: "earlier date kept", raw: "2026-10-31T13:34:06Z", expectedValue: time.Date(2026, 10, 31, 13, 34, 6, 0, time.UTC)},
+		{name: "date equal to collection kept", raw: "2026-11-01T12:00:00Z", expectedValue: collectedAt},
+		{name: "future date", raw: "2099-01-01T00:00:00Z", expectedValue: collectedAt},
+		{name: "one second ahead", raw: "2026-11-01T12:00:01Z", expectedValue: collectedAt},
+		{name: "missing", raw: "", expectedValue: collectedAt},
+		{name: "unparseable", raw: "not a date", expectedValue: collectedAt},
+		{name: "zero time", raw: "0001-01-01T00:00:00Z", expectedValue: collectedAt},
+	}
+	for _, casDeTestCourant := range casesDeTest {
+		testContext.Run(casDeTestCourant.name, func(subTest *testing.T) {
+			receivedAlert := lapi.Alert{ID: 1, UUID: "uuid-1", CreatedAt: casDeTestCourant.raw}
+
+			builtRows := buildAlertRows(1, "uuid-1", receivedAlert, DefaultBounds, collectedAt)
+
+			if builtRows.alert.CreatedAt == nil || !builtRows.alert.CreatedAt.Equal(casDeTestCourant.expectedValue) {
+				subTest.Errorf("got %v, want %v", builtRows.alert.CreatedAt, casDeTestCourant.expectedValue)
 			}
 		})
 	}

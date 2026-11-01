@@ -404,8 +404,8 @@ func TestStoreSkipsInvalidAlertsButKeepsValidOnes(testContext *testing.T) {
 	if len(storedHostile.SourceValue) != DefaultBounds.MaxTextBytes || !storedHostile.Truncated {
 		testContext.Errorf("source value must be cut and events flagged truncated: %d bytes, truncated=%v", len(storedHostile.SourceValue), storedHostile.Truncated)
 	}
-	if !storedHostile.CreatedAt.Equal(time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)) || storedHostile.StartedAt != nil {
-		testContext.Errorf("future date kept, unreadable date NULL: %v / %v", storedHostile.CreatedAt, storedHostile.StartedAt)
+	if !storedHostile.CreatedAt.Equal(fixedCollectionTime) || storedHostile.StartedAt != nil {
+		testContext.Errorf("future created_at replaced by the collection time, unreadable start NULL: %v / %v", storedHostile.CreatedAt, storedHostile.StartedAt)
 	}
 	hostileEvents := fixture.countRows(testContext, `SELECT count(*) FROM event JOIN alert ON alert_id = event_alert_id WHERE alert_upstream_id = 13 AND event_timestamp IS NULL`)
 	if hostileEvents != DefaultBounds.MaxEventsPerAlert {

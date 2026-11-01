@@ -108,7 +108,7 @@ func buildAlertRows(engineID int64, upstreamUUID string, receivedAlert lapi.Aler
 			Simulated:       receivedAlert.Simulated,
 			StartedAt:       parseUpstreamTimestamp(receivedAlert.StartAt),
 			StoppedAt:       parseUpstreamTimestamp(receivedAlert.StopAt),
-			CreatedAt:       parseUpstreamTimestamp(receivedAlert.CreatedAt),
+			CreatedAt:       alertCreatedAt(receivedAlert.CreatedAt, collectedAt),
 			CollectedAt:     collectedAt.UTC(),
 		},
 		events:           events,
@@ -163,6 +163,15 @@ func parseUpstreamTimestamp(rawTimestamp string) *time.Time {
 		return &utcTimestamp
 	}
 	return nil
+}
+
+func alertCreatedAt(rawTimestamp string, collectedAt time.Time) *time.Time {
+	collectionTime := collectedAt.UTC()
+	upstreamTimestamp := parseUpstreamTimestamp(rawTimestamp)
+	if upstreamTimestamp == nil || upstreamTimestamp.After(collectionTime) {
+		return &collectionTime
+	}
+	return upstreamTimestamp
 }
 
 func decisionUntil(rawDuration string, collectedAt time.Time) *time.Time {

@@ -51,6 +51,26 @@ func (fixture readerFixture) storeFor(testContext *testing.T, engineID int64, al
 	}
 }
 
+// An engine announcing a far-future created_at must not hold the first rows of every
+// archive page: the alert is dated by its collection and sorts among the others.
+func TestListAlertsDoesNotPinFutureDatedAlertFirst(testContext *testing.T) {
+	fixture := newReaderFixture(testContext)
+	earlierCollectionTime := fixedCollectionTime.Add(-2 * time.Hour)
+	futureDatedAlerts := []lapi.Alert{alertWith(1, "2099-01-01T00:00:00Z", "crowdsecurity/ssh-bf", "203.0.113.1")}
+	if _, storeError := fixture.writer.Store(context.Background(), fixture.engineID, fixtureEngineURL, futureDatedAlerts, earlierCollectionTime); storeError != nil {
+		testContext.Fatalf("store the future-dated alert: %v", storeError)
+	}
+	fixture.storeFor(testContext, fixture.remoteEngineID, []lapi.Alert{
+		alertWith(2, "2026-11-01T11:59:00Z", "crowdsecurity/ssh-bf", "203.0.113.2"),
+	})
+
+	everyAlert, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Limit: 50})
+
+	if upstreamIDsOf(everyAlert) != "edge-1:2,local:1" {
+		testContext.Errorf("the future-dated alert must sort by its collection time, got %s", upstreamIDsOf(everyAlert))
+	}
+}
+
 func alertWith(upstreamID int64, createdAt string, scenario string, sourceIP string) lapi.Alert {
 	customAlert := sampleAlert(upstreamID, fmt.Sprintf("uuid-%d", upstreamID))
 	customAlert.CreatedAt = createdAt
