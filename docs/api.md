@@ -250,7 +250,7 @@ out of the collection until it is fixed); never a raw error text.
   client). The engine's answer is never returned, only the outcome: `ok`, `engine_unreachable`,
   `engine_auth_failed` or `engine_blocked_address` (see the oracle note in
   [security.md](security.md#engines-and-outbound-connections)).
-- `name` can be changed by `PATCH` (rename); the audit target is the new name.
+- `name` can be changed by `PATCH` (rename); the audit target is `old>new` (names cannot contain `>`).
 - Every successful create, update and delete, and every test of an existing engine, is audited
   (`engine_created`, `engine_updated`, `engine_deleted`, `engine_tested`) with the engine name as
   target. After each successful write the engine registry is reloaded; when that reload fails the

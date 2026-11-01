@@ -214,7 +214,7 @@ of control characters and cut at 64 characters. Recorded actions:
 | `enrollment_completed` | the first account was created | account name |
 | `second_factor_enrolled` | a factor was confirmed at enrolment or at setup | `totp` or `webauthn` |
 | `access_rule_added`, `access_rule_removed` | a rule changed | `ip:<cidr>` or `country:<code>` |
-| `engine_created`, `engine_updated`, `engine_deleted` | an engine was written (after a rename, the new name) | engine name |
+| `engine_created`, `engine_updated`, `engine_deleted` | an engine was written | engine name, `old>new` after a rename |
 | `engine_tested` | a connection test of an existing engine, successful or not | engine name |
 | `alert_deleted` | a live local alert (with its archived copy) or an archived alert was deleted | `<engine>/<upstream alert id>` |
 

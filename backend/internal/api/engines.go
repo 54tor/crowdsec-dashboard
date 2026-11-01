@@ -16,6 +16,7 @@ import (
 
 const (
 	engineReloadTimeout       = 30 * time.Second
+	engineAuditTimeout        = 5 * time.Second
 	registryReloadFailedValue = "registry_reload_failed"
 )
 
@@ -118,7 +119,7 @@ func (handlers engineHandlers) update(responseWriter http.ResponseWriter, reques
 		writeEngineError(responseWriter, "update engine", updateError)
 		return
 	}
-	handlers.record(request, audit.ActionEngineUpdated, updatedEngine.Name)
+	handlers.record(request, audit.ActionEngineUpdated, renameAuditTarget(request.PathValue("name"), updatedEngine.Name))
 	view := newEngineView(updatedEngine)
 	view.Warning = handlers.reloadRegistry(request.Context())
 	writeJSON(responseWriter, http.StatusOK, view)
@@ -160,7 +161,16 @@ func (handlers engineHandlers) test(responseWriter http.ResponseWriter, request 
 func (handlers engineHandlers) record(request *http.Request, action audit.Action, engineName string) {
 	identity, _ := auth.IdentityFromContext(request.Context())
 	clientIP := auth.ClientIP(request, handlers.trustedCIDRs)
-	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, action, engineName, clientIP)
+	auditContext, cancelAudit := context.WithTimeout(context.WithoutCancel(request.Context()), engineAuditTimeout)
+	defer cancelAudit()
+	audit.RecordOrLog(auditContext, handlers.recorder, identity.AccountID, action, engineName, clientIP)
+}
+
+func renameAuditTarget(previousName, currentName string) string {
+	if previousName == currentName {
+		return currentName
+	}
+	return previousName + ">" + currentName
 }
 
 func (handlers engineHandlers) reloadRegistry(requestContext context.Context) string {

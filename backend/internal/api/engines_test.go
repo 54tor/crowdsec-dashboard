@@ -663,3 +663,42 @@ func TestCreateRefusesUnknownFields(testContext *testing.T) {
 		testContext.Errorf("unknown fields reached the repository")
 	}
 }
+
+type contextCheckingRecorder struct {
+	contextErrors []error
+	deadlineSet   bool
+}
+
+func (recorder *contextCheckingRecorder) Record(recordContext context.Context, _ int64, _ audit.Action, _, _ string) error {
+	recorder.contextErrors = append(recorder.contextErrors, recordContext.Err())
+	_, recorder.deadlineSet = recordContext.Deadline()
+	return nil
+}
+
+func TestEngineAuditSurvivesACancelledRequest(testContext *testing.T) {
+	recorder := &contextCheckingRecorder{}
+	handlers := engineHandlers{recorder: recorder}
+	cancelledContext, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+	request := httptest.NewRequest(http.MethodDelete, "https://dashboard.example.com/api/engines/edge-1", nil).WithContext(cancelledContext)
+
+	handlers.record(request, audit.ActionEngineDeleted, "edge-1")
+
+	if len(recorder.contextErrors) != 1 || recorder.contextErrors[0] != nil || !recorder.deadlineSet {
+		testContext.Fatalf("the audit write must use a live, bounded context: %+v deadline=%v", recorder.contextErrors, recorder.deadlineSet)
+	}
+}
+
+func TestRenameAuditsPreviousAndNewName(testContext *testing.T) {
+	fixture := newEngineFixture(testContext, auth.RoleAdmin)
+
+	recorder := fixture.send(http.MethodPatch, "/api/engines/edge-1", `{"name":"edge-2"}`)
+
+	if recorder.Code != http.StatusOK {
+		testContext.Fatalf("expected 200, got %d %q", recorder.Code, recorder.Body.String())
+	}
+	expectedEvent := recordedAuditEvent{action: audit.ActionEngineUpdated, target: "edge-1>edge-2", clientIP: testClientIP}
+	if len(fixture.recorder.events) != 1 || fixture.recorder.events[0] != expectedEvent {
+		testContext.Fatalf("unexpected audit events %+v", fixture.recorder.events)
+	}
+}
