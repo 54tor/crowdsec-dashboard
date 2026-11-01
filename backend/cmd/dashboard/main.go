@@ -78,7 +78,8 @@ func main() {
 	services.Geolocator = accountServices.geolocator
 	services.AccessRules = accessrule.NewRepository(database)
 	services.WebAuthn = webAuthn
-	services.Engines = api.NewEngineService(engineRepository, engineRegistry)
+	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
+	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
 
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,
@@ -93,6 +94,11 @@ func main() {
 	defer stopSignals()
 
 	go pruneSessionsPeriodically(signalContext, sessionStore, sessionPruneInterval, log.Printf)
+	collectorDone := make(chan struct{})
+	go func() {
+		defer close(collectorDone)
+		engineCollector.Run(signalContext)
+	}()
 
 	shutdownDone := make(chan struct{})
 	go func() {
@@ -110,4 +116,5 @@ func main() {
 		log.Fatal(serveError)
 	}
 	<-shutdownDone
+	<-collectorDone
 }

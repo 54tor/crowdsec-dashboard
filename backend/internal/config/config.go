@@ -39,6 +39,12 @@ type Config struct {
 	ShareExcludeCIDRs   []netip.Prefix
 	ConfigImportEnabled bool
 	ConfigImportDir     string
+
+	CollectorInterval        time.Duration
+	CollectorPollLimit       int
+	ArchiveAlertRetention    time.Duration
+	ArchiveDecisionRetention time.Duration
+	ArchiveEventRetention    time.Duration
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -72,6 +78,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, syncError
 	}
 
+	archiveConfig, archiveError := loadArchiveSettings(getenv)
+	if archiveError != nil {
+		return Config{}, archiveError
+	}
+
 	listenAddr := getenv("LISTEN_ADDR")
 	if listenAddr == "" {
 		listenAddr = defaultListenAddr
@@ -102,6 +113,12 @@ func Load(getenv func(string) string) (Config, error) {
 		ShareExcludeCIDRs:   syncConfig.ShareExcludeCIDRs,
 		ConfigImportEnabled: syncConfig.ImportEnabled,
 		ConfigImportDir:     syncConfig.ImportDir,
+
+		CollectorInterval:        archiveConfig.CollectorInterval,
+		CollectorPollLimit:       archiveConfig.CollectorPollLimit,
+		ArchiveAlertRetention:    archiveConfig.AlertRetention,
+		ArchiveDecisionRetention: archiveConfig.DecisionRetention,
+		ArchiveEventRetention:    archiveConfig.EventRetention,
 	}, nil
 }
 

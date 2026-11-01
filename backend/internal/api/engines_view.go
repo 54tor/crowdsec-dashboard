@@ -3,6 +3,7 @@ package api
 import (
 	"time"
 
+	"crowdsec-dashboard/internal/collector"
 	"crowdsec-dashboard/internal/engines"
 )
 
@@ -85,6 +86,27 @@ func newEngineViews(engineList []engines.Engine) []engineView {
 		views = append(views, newEngineView(listedEngine))
 	}
 	return views
+}
+
+func applyCollectionState(views []engineView, statsByName map[string]collector.EngineStats, unavailableByName map[string]string) {
+	for viewIndex := range views {
+		collectionView := &views[viewIndex].Collection
+		if engineStats, found := statsByName[views[viewIndex].Name]; found {
+			collectionView.ConsecutiveFailures = engineStats.ConsecutiveFailures
+			collectionView.Inserted = int64(engineStats.Inserted)
+			collectionView.Duplicates = int64(engineStats.Duplicates)
+			collectionView.Skipped = int64(engineStats.Skipped)
+			collectionView.Gaps = int64(engineStats.Gaps)
+			collectionView.Resets = int64(engineStats.Resets)
+			if !engineStats.NextAttemptAt.IsZero() {
+				nextAttemptAt := engineStats.NextAttemptAt.UTC()
+				collectionView.NextAttemptAt = &nextAttemptAt
+			}
+		}
+		if unavailableCode, found := unavailableByName[views[viewIndex].Name]; found {
+			collectionView.LastErrorCode = &unavailableCode
+		}
+	}
 }
 
 func newEngineNameViews(engineList []engines.Engine) []engineNameView {

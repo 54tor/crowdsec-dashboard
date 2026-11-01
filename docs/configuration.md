@@ -35,9 +35,14 @@ these files, which compose would otherwise expand.
 | `SHARE_EXCLUDE_CIDRS` | empty | Comma-separated CIDRs that are never shared with other engines, for example `203.0.113.0/24`. An invalid entry stops the start. |
 | `CONFIG_IMPORT_ENABLED` | `false` | Allows importing configuration files from a bundle. |
 | `CONFIG_IMPORT_DIR` | none | Absolute, clean path of the directory the import may write to, at least two components deep (`/` and top-level directories such as `/etc` are refused). Required when `CONFIG_IMPORT_ENABLED` is `true`. |
+| `COLLECTOR_INTERVAL` | `1m` | Delay between two archive collections of each enabled engine, a Go duration. Any value below `15s` is refused. A failing engine is retried with an exponential backoff (doubling from this interval, ±20 %, at most 1 h) without delaying the others. |
+| `COLLECTOR_POLL_LIMIT` | `1000` | Number of newest alerts read from an engine on each collection, from 100 to 5000. The first collection, and any collection that finds a gap since the last one, reads the whole history instead (at most 16 MiB and 120 s); when that full read is truncated or too slow the collection falls back to this limit and the engine is marked `history_incomplete`. |
+| `ARCHIVE_ALERT_RETENTION_DAYS` | `365` | Days an archived alert is kept, counted from its collection time, from 1 to 3650. |
+| `ARCHIVE_DECISION_RETENTION_DAYS` | `365` | Days an archived decision is kept, from 1 to 3650, never more than `ARCHIVE_ALERT_RETENTION_DAYS`. |
+| `ARCHIVE_EVENT_RETENTION_DAYS` | `90` | Days the archived events (attacker-controlled data, the largest part) are kept, from 1 to 3650, never more than `ARCHIVE_ALERT_RETENTION_DAYS`. |
 
-`DATABASE_URL`, `SECRETS_KEY_FILE`, `WEBAUTHN_RP_*`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS` and
-`CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,
+`DATABASE_URL`, `SECRETS_KEY_FILE`, `WEBAUTHN_RP_*`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS`,
+`COLLECTOR_*`, `ARCHIVE_*` and `CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,
 Docker and configuration variables have no default and no start-time check: a
 wrong value shows up as an error code on the pages that need it (see
 [operations.md](operations.md#troubleshooting)).

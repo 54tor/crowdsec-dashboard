@@ -50,7 +50,7 @@ func newStoredEngineFixture(testContext *testing.T, guardian *ssrf.Guardian) sto
 	}
 	repository := engines.NewRepository(database, keyring)
 	registry := engines.NewRegistry(repository, nil, guardian)
-	service := &reloadCountingEngineService{EngineService: NewEngineService(repository, registry)}
+	service := &reloadCountingEngineService{EngineService: NewEngineService(repository, registry, nil)}
 	recorder := &fakeAuditRecorder{}
 	handler, cookie := newEngineHandler(testContext, service, recorder, auth.RoleAdmin)
 	return storedEngineFixture{handler: handler, cookie: cookie, repository: repository, registry: registry, service: service, recorder: recorder}

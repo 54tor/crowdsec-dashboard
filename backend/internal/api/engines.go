@@ -10,6 +10,7 @@ import (
 
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/collector"
 	"crowdsec-dashboard/internal/engines"
 )
 
@@ -25,15 +26,25 @@ type EngineService interface {
 	Delete(ctx context.Context, name string) error
 	Reload(ctx context.Context) error
 	Probe(ctx context.Context, name string) (string, error)
+	CollectionStats() map[string]collector.EngineStats
+	UnavailableEngines() map[string]string
 }
 
 type engineService struct {
 	*engines.Repository
 	*engines.Registry
+	engineCollector *collector.Collector
 }
 
-func NewEngineService(repository *engines.Repository, registry *engines.Registry) EngineService {
-	return engineService{Repository: repository, Registry: registry}
+func NewEngineService(repository *engines.Repository, registry *engines.Registry, engineCollector *collector.Collector) EngineService {
+	return engineService{Repository: repository, Registry: registry, engineCollector: engineCollector}
+}
+
+func (service engineService) CollectionStats() map[string]collector.EngineStats {
+	if service.engineCollector == nil {
+		return nil
+	}
+	return service.engineCollector.Stats()
 }
 
 type engineHandlers struct {
@@ -57,7 +68,9 @@ func (handlers engineHandlers) list(responseWriter http.ResponseWriter, request 
 		writeEngineError(responseWriter, "list engines", listError)
 		return
 	}
-	writeJSON(responseWriter, http.StatusOK, engineListResponse[engineView]{Items: newEngineViews(engineList)})
+	views := newEngineViews(engineList)
+	applyCollectionState(views, handlers.service.CollectionStats(), handlers.service.UnavailableEngines())
+	writeJSON(responseWriter, http.StatusOK, engineListResponse[engineView]{Items: views})
 }
 
 func (handlers engineHandlers) create(responseWriter http.ResponseWriter, request *http.Request) {

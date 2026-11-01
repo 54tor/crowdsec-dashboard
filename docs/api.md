@@ -160,8 +160,13 @@ trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted 
 `engine` is `{name, is_local, lapi_url, machine_id, proxy:{kind,url}|null, has_proxy_credentials,
 allow_insecure_http, public_addresses, enabled, sync_enabled, collection:{cursor,
 last_collected_at, last_error_code, consecutive_failures, next_attempt_at, inserted, duplicates,
-skipped, gaps, resets}}`. Until the collector reports its counters, `collection` carries the stored
-cursor, last collection time and last error code; the other fields are `0` or `null`.
+skipped, gaps, resets}}`. `cursor`, `last_collected_at` (last successful collection) and
+`last_error_code` come from the database; `consecutive_failures`, `next_attempt_at` and the counters
+come from the running collector and restart at zero with the process (`0` or `null` before the
+first collection). `last_error_code` is one of `engine_unreachable`, `engine_auth_failed`,
+`engine_blocked_address`, `archive_write_failed` (the archive write failed) or
+`engine_secret_unreadable` (the stored secret of the engine cannot be decrypted: the engine is left
+out of the collection until it is fixed); never a raw error text.
 
 - `lapi_url` must be `https` unless `allow_insecure_http` is true, and carries no credentials,
   query or fragment. A literal loopback, link-local, unspecified, multicast, reserved or cloud

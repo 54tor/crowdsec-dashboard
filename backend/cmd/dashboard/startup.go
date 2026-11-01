@@ -3,14 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/uptrace/bun"
 
 	"crowdsec-dashboard/internal/accessrule"
 	"crowdsec-dashboard/internal/accounts"
+	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/collector"
+	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
@@ -95,6 +99,12 @@ func initialiseEngines(ctx context.Context, database *bun.DB, keyring *secrets.K
 		logLine("engine registry: %v", reloadError)
 	}
 	return repository, registry, nil
+}
+
+func newEngineCollector(database *bun.DB, repository *engines.Repository, registry *engines.Registry, loadedConfig config.Config) *collector.Collector {
+	settings := collector.DefaultSettings(loadedConfig.CollectorInterval, loadedConfig.CollectorPollLimit)
+	writer := archive.NewWriter(database, archive.DefaultBounds)
+	return collector.New(registry, repository, writer, repository, settings, time.Now, log.Printf)
 }
 
 type localEngineSettings struct {

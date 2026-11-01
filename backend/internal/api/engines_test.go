@@ -14,6 +14,7 @@ import (
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/auth/authtest"
+	"crowdsec-dashboard/internal/collector"
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/engines"
 )
@@ -42,6 +43,16 @@ type fakeEngineService struct {
 	probeCode     string
 	probeError    error
 	reloadCount   int
+	statsByName   map[string]collector.EngineStats
+	unavailable   map[string]string
+}
+
+func (service *fakeEngineService) CollectionStats() map[string]collector.EngineStats {
+	return service.statsByName
+}
+
+func (service *fakeEngineService) UnavailableEngines() map[string]string {
+	return service.unavailable
 }
 
 func (service *fakeEngineService) repositoryCalls() int {
@@ -235,6 +246,34 @@ func TestListEnginesShowsCollectionStateWithoutSecrets(testContext *testing.T) {
 		`"last_error_code":"engine_unreachable","consecutive_failures":0,"next_attempt_at":null,"inserted":0,"duplicates":0,"skipped":0,"gaps":0,"resets":0}}]}`
 	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != expectedBody {
 		testContext.Fatalf("unexpected response %d\n got %s\nwant %s", recorder.Code, recorder.Body.String(), expectedBody)
+	}
+}
+
+// The collection counters come from the collector's in-memory stats; an engine the
+// registry could not open is shown with its closed error code.
+func TestListEnginesShowsCollectorCountersAndUnavailableEngines(testContext *testing.T) {
+	fixture := newEngineFixture(testContext, auth.RoleAdmin)
+	nextAttemptAt := time.Date(2026, 11, 1, 12, 5, 0, 0, time.UTC)
+	fixture.service.engineList = []engines.Engine{
+		{Name: "edge-1", LAPIURL: "https://edge.example.com", MachineID: "dashboard", Enabled: true, CollectionCursor: 7},
+		{Name: "edge-2", LAPIURL: "https://edge-two.example.com", MachineID: "dashboard", Enabled: true},
+	}
+	fixture.service.statsByName = map[string]collector.EngineStats{"edge-1": {
+		Inserted: 5, Duplicates: 1, Skipped: 2, Gaps: 3, Resets: 4, ConsecutiveFailures: 6, NextAttemptAt: nextAttemptAt,
+	}}
+	fixture.service.unavailable = map[string]string{"edge-2": engines.ErrorCodeSecretUnreadable}
+
+	recorder := fixture.send(http.MethodGet, "/api/engines", "")
+
+	responseBody := recorder.Body.String()
+	expectedFragments := []string{
+		`"collection":{"cursor":7,"last_collected_at":null,"last_error_code":null,"consecutive_failures":6,"next_attempt_at":"2026-11-01T12:05:00Z","inserted":5,"duplicates":1,"skipped":2,"gaps":3,"resets":4}`,
+		`"collection":{"cursor":0,"last_collected_at":null,"last_error_code":"engine_secret_unreadable","consecutive_failures":0,"next_attempt_at":null`,
+	}
+	for _, expectedFragment := range expectedFragments {
+		if recorder.Code != http.StatusOK || !strings.Contains(responseBody, expectedFragment) {
+			testContext.Fatalf("expected %s in %d %s", expectedFragment, recorder.Code, responseBody)
+		}
 	}
 }
 
