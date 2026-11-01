@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrEngineNotFound = errors.New("archive: engine not found")
-	ErrStoreFailed    = errors.New("archive: store failed")
+	ErrEngineNotFound    = errors.New("archive: engine not found")
+	ErrStaleEngineHandle = errors.New("archive: engine handle is stale")
+	ErrStoreFailed       = errors.New("archive: store failed")
 )
 
 var alertScopedErrorClasses = map[string]bool{"22": true, "23": true, "54": true, "P0": true}
@@ -59,15 +60,18 @@ func NewWriter(database *bun.DB, bounds Bounds) *Writer {
 	return &Writer{database: database, bounds: bounds}
 }
 
-func (writer *Writer) Store(ctx context.Context, engineID int64, alerts []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
+func (writer *Writer) Store(ctx context.Context, engineID int64, lapiURL string, alerts []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
 	var storeResult StoreResult
 	transactionError := writer.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
 		var storeError error
-		storeResult, storeError = writer.storeInTransaction(ctx, transaction, engineID, alerts, collectedAt)
+		storeResult, storeError = writer.storeInTransaction(ctx, transaction, engineID, lapiURL, alerts, collectedAt)
 		return storeError
 	})
 	if errors.Is(transactionError, ErrEngineNotFound) {
 		return StoreResult{}, ErrEngineNotFound
+	}
+	if errors.Is(transactionError, ErrStaleEngineHandle) {
+		return StoreResult{}, ErrStaleEngineHandle
 	}
 	if transactionError != nil {
 		return StoreResult{}, &storeFailure{cause: transactionError}
@@ -75,8 +79,8 @@ func (writer *Writer) Store(ctx context.Context, engineID int64, alerts []lapi.A
 	return storeResult, nil
 }
 
-func (writer *Writer) storeInTransaction(ctx context.Context, transaction bun.Tx, engineID int64, alerts []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
-	cursor, lockError := lockEngineCursor(ctx, transaction, engineID)
+func (writer *Writer) storeInTransaction(ctx context.Context, transaction bun.Tx, engineID int64, lapiURL string, alerts []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
+	cursor, lockError := lockEngineCursor(ctx, transaction, engineID, lapiURL)
 	if lockError != nil {
 		return StoreResult{}, lockError
 	}
@@ -132,13 +136,23 @@ func (storeResult *StoreResult) countOutcome(outcome alertOutcome) {
 	}
 }
 
-func lockEngineCursor(ctx context.Context, transaction bun.Tx, engineID int64) (int64, error) {
+func lockEngineCursor(ctx context.Context, transaction bun.Tx, engineID int64, lapiURL string) (int64, error) {
 	var cursor int64
-	lockError := transaction.NewRaw(`SELECT engine_collection_cursor FROM engine WHERE engine_id = ? FOR UPDATE`, engineID).Scan(ctx, &cursor)
+	var handleIsCurrent bool
+	lockError := transaction.NewRaw(
+		`SELECT engine_collection_cursor, engine_lapi_url = ? AND engine_enabled FROM engine WHERE engine_id = ? FOR UPDATE`,
+		lapiURL, engineID,
+	).Scan(ctx, &cursor, &handleIsCurrent)
 	if errors.Is(lockError, sql.ErrNoRows) {
 		return 0, ErrEngineNotFound
 	}
-	return cursor, lockError
+	if lockError != nil {
+		return 0, lockError
+	}
+	if !handleIsCurrent {
+		return 0, ErrStaleEngineHandle
+	}
+	return cursor, nil
 }
 
 func detectEngineReset(ctx context.Context, transaction bun.Tx, engineID int64, cursor int64, alerts []lapi.Alert) (bool, error) {

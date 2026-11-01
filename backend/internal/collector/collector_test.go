@@ -223,6 +223,10 @@ func newCollectorFixture(testContext *testing.T, settings Settings) collectorFix
 	return fixture
 }
 
+// testEngineURL is the destination stored in every engine row the fixture inserts;
+// handles carry it so the writer accepts them as current.
+const testEngineURL = "https://edge.example.com"
+
 // insertEngine adds a remote engine row; the sealed password is a placeholder because
 // the collector never opens secrets, the registry does.
 func (fixture collectorFixture) insertEngine(testContext *testing.T, name string) int64 {
@@ -230,7 +234,7 @@ func (fixture collectorFixture) insertEngine(testContext *testing.T, name string
 	var engineID int64
 	insertError := fixture.database.NewRaw(
 		`INSERT INTO engine (engine_name, engine_lapi_url, engine_machine_id, engine_machine_password_sealed, engine_machine_password_key_id)
-		 VALUES (?, 'https://edge.example.com', 'dashboard', '\x00'::bytea, 'test-key') RETURNING engine_id`, name,
+		 VALUES (?, ?, 'dashboard', '\x00'::bytea, 'test-key') RETURNING engine_id`, name, testEngineURL,
 	).Scan(context.Background(), &engineID)
 	if insertError != nil {
 		testContext.Fatalf("insert engine: %v", insertError)
@@ -240,7 +244,7 @@ func (fixture collectorFixture) insertEngine(testContext *testing.T, name string
 
 func handleFor(engineID int64, name string, server *httptest.Server) engines.Handle {
 	return engines.Handle{
-		Engine: engines.Engine{ID: engineID, Name: name, Enabled: true},
+		Engine: engines.Engine{ID: engineID, Name: name, LAPIURL: testEngineURL, Enabled: true},
 		Client: lapi.NewClient(server.URL, "dashboard", testMachinePassword, server.Client()),
 	}
 }
@@ -673,11 +677,11 @@ type panickingStore struct {
 
 const panicEngineDataMarker = "marker-engine-data-in-panic-3b7f"
 
-func (store *panickingStore) Store(ctx context.Context, engineID int64, alerts []lapi.Alert, collectedAt time.Time) (archive.StoreResult, error) {
+func (store *panickingStore) Store(ctx context.Context, engineID int64, lapiURL string, alerts []lapi.Alert, collectedAt time.Time) (archive.StoreResult, error) {
 	if engineID == store.panicEngineID && store.panicsRemaining.Add(-1) >= 0 {
 		panic("decode " + panicEngineDataMarker)
 	}
-	return store.delegate.Store(ctx, engineID, alerts, collectedAt)
+	return store.delegate.Store(ctx, engineID, lapiURL, alerts, collectedAt)
 }
 
 func TestPanickingCollectionIsRecoveredAndCountedAsFailure(testContext *testing.T) {
@@ -730,11 +734,11 @@ type switchableStore struct {
 	failing  atomic.Bool
 }
 
-func (store *switchableStore) Store(ctx context.Context, engineID int64, alerts []lapi.Alert, collectedAt time.Time) (archive.StoreResult, error) {
+func (store *switchableStore) Store(ctx context.Context, engineID int64, lapiURL string, alerts []lapi.Alert, collectedAt time.Time) (archive.StoreResult, error) {
 	if store.failing.Load() {
 		return archive.StoreResult{}, archive.ErrStoreFailed
 	}
-	return store.delegate.Store(ctx, engineID, alerts, collectedAt)
+	return store.delegate.Store(ctx, engineID, lapiURL, alerts, collectedAt)
 }
 
 func TestSameEngineNeverCollectedConcurrently(testContext *testing.T) {
@@ -891,7 +895,7 @@ func TestCollectionLogsNeverContainSecrets(testContext *testing.T) {
 	unreachableProxy, _ := url.Parse("http://operator:" + testProxyPassword + "@127.0.0.1:1")
 	proxiedTransport := &http.Transport{Proxy: http.ProxyURL(unreachableProxy)}
 	handle := engines.Handle{
-		Engine: engines.Engine{ID: engineID, Name: "edge-1", Enabled: true},
+		Engine: engines.Engine{ID: engineID, Name: "edge-1", LAPIURL: testEngineURL, Enabled: true},
 		Client: lapi.NewClient("http://edge.example.com", "dashboard", testMachinePassword, &http.Client{Transport: proxiedTransport}),
 	}
 	fixture.source.set(handle)
@@ -924,4 +928,44 @@ func (collector *Collector) inFlightCount() int {
 		}
 	}
 	return runningCount
+}
+
+// A destination change or a disable lands while a handle is still in use: the writer
+// refuses the stale handle. The registry reload replaces it, so the refusal must not
+// count as a failure, back off, log, or overwrite the engine's recorded outcome; the
+// next attempt simply waits one interval.
+func TestStaleHandleIsNeitherAFailureNorRecorded(testContext *testing.T) {
+	fixture := newCollectorFixture(testContext, testSettings())
+	fake := &fakeEngine{}
+	fake.addAlerts(1, 3)
+	engineID := fixture.insertEngine(testContext, "edge-1")
+	staleHandle := handleFor(engineID, "edge-1", startFakeEngine(testContext, fake))
+	fixture.source.set(staleHandle)
+	if _, updateError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_lapi_url = 'https://moved.example.com' WHERE engine_id = ?`, engineID); updateError != nil {
+		testContext.Fatalf("move the engine: %v", updateError)
+	}
+
+	collectError := fixture.collector.CollectOnce(context.Background(), staleHandle)
+
+	if !errors.Is(collectError, archive.ErrStaleEngineHandle) {
+		testContext.Fatalf("expected the stale handle to be reported, got %v", collectError)
+	}
+	engineStats := fixture.statsOf(testContext, "edge-1")
+	if engineStats.Failures != 0 || engineStats.ConsecutiveFailures != 0 || engineStats.LastErrorCode != "" {
+		testContext.Fatalf("a stale handle is not a failure: %+v", engineStats)
+	}
+	if !engineStats.NextAttemptAt.Equal(fixture.clock.now().Add(time.Minute)) {
+		testContext.Fatalf("the next attempt must wait one interval, got %v", engineStats.NextAttemptAt)
+	}
+	storedEngine, _ := fixture.repository.Get(context.Background(), "edge-1")
+	if storedEngine.LastCollectionError != "" || storedEngine.LastCollectedAt != nil {
+		testContext.Fatalf("a stale handle must not record an outcome: %+v", storedEngine)
+	}
+	if fixture.countAlerts(testContext, engineID) != 0 || fixture.cursor(testContext, engineID) != 0 {
+		testContext.Fatal("nothing may be archived through a stale handle")
+	}
+	if logText := fixture.logs.text(); logText != "" {
+		testContext.Fatalf("a stale handle must not be logged, got %q", logText)
+	}
 }

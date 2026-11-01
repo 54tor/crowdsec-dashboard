@@ -19,7 +19,7 @@ var (
 
 func (fixture archiveFixture) storeCollectedAt(testContext *testing.T, firstID int64, lastID int64, age time.Duration) {
 	testContext.Helper()
-	_, storeError := fixture.writer.Store(context.Background(), fixture.engineID, sampleAlerts(firstID, lastID), purgeNow.Add(-age))
+	_, storeError := fixture.writer.Store(context.Background(), fixture.engineID, fixtureEngineURL, sampleAlerts(firstID, lastID), purgeNow.Add(-age))
 	if storeError != nil {
 		testContext.Fatalf("store: %v", storeError)
 	}
@@ -222,7 +222,7 @@ func TestPurgeConcurrentWithStore(testContext *testing.T) {
 	go func() {
 		defer waitGroup.Done()
 		for firstID := int64(1); firstID <= 30; firstID += 5 {
-			_, storeError := fixture.writer.Store(context.Background(), fixture.engineID, sampleAlerts(firstID, firstID+4), time.Now())
+			_, storeError := fixture.writer.Store(context.Background(), fixture.engineID, fixtureEngineURL, sampleAlerts(firstID, firstID+4), time.Now())
 			if storeError != nil {
 				errorsSeen <- storeError
 				return

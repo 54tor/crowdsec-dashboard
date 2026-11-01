@@ -37,7 +37,7 @@ type CursorReader interface {
 }
 
 type AlertStore interface {
-	Store(ctx context.Context, engineID int64, alerts []lapi.Alert, collectedAt time.Time) (archive.StoreResult, error)
+	Store(ctx context.Context, engineID int64, lapiURL string, alerts []lapi.Alert, collectedAt time.Time) (archive.StoreResult, error)
 }
 
 type CollectionRecorder interface {
@@ -182,6 +182,12 @@ func (collector *Collector) collectClaimed(ctx context.Context, handle engines.H
 		collector.release(handle.Engine.ID, func(*engineState) {})
 		return collectError
 	}
+	if errors.Is(collectError, archive.ErrStaleEngineHandle) {
+		collector.release(handle.Engine.ID, func(currentState *engineState) {
+			currentState.stats.NextAttemptAt = collectedAt.Add(collector.settings.Interval)
+		})
+		return collectError
+	}
 	if collectError != nil {
 		errorCode := collectionErrorCode(collectError)
 		collector.release(handle.Engine.ID, func(currentState *engineState) {
@@ -224,23 +230,23 @@ func (collector *Collector) collectRecoveringPanics(ctx context.Context, handle 
 			outcome, collectError = collectionOutcome{}, errCollectionPanicked
 		}
 	}()
-	return collector.collect(ctx, handle.Engine.ID, handle.Client, collectedAt)
+	return collector.collect(ctx, handle, collectedAt)
 }
 
-func (collector *Collector) collect(ctx context.Context, engineID int64, client *lapi.Client, collectedAt time.Time) (collectionOutcome, error) {
+func (collector *Collector) collect(ctx context.Context, handle engines.Handle, collectedAt time.Time) (collectionOutcome, error) {
 	var outcome collectionOutcome
-	cursor, cursorError := collector.cursors.CollectionCursor(ctx, engineID)
+	cursor, cursorError := collector.cursors.CollectionCursor(ctx, handle.Engine.ID)
 	if cursorError != nil {
 		return outcome, fmt.Errorf("%w: %w", errStoreFailed, cursorError)
 	}
-	archiveRead, readError := collector.readAlerts(ctx, client, cursor, &outcome)
+	archiveRead, readError := collector.readAlerts(ctx, handle.Client, cursor, &outcome)
 	if readError != nil {
 		return outcome, readError
 	}
 	outcome.skippedByRead = archiveRead.Skipped
 	storeContext, cancelStore := context.WithTimeout(ctx, collector.settings.FullReadTimeout)
 	defer cancelStore()
-	storeResult, storeError := collector.store.Store(storeContext, engineID, archiveRead.Alerts, collectedAt)
+	storeResult, storeError := collector.store.Store(storeContext, handle.Engine.ID, handle.Engine.LAPIURL, archiveRead.Alerts, collectedAt)
 	if storeError != nil {
 		return outcome, fmt.Errorf("%w: %w", errStoreFailed, storeError)
 	}

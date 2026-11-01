@@ -116,7 +116,11 @@ func (fixture *mergedFixture) insertEngine(testContext *testing.T, query string,
 
 func (fixture *mergedFixture) archiveAlerts(testContext *testing.T, engineID int64, collectedAt time.Time, alerts ...lapi.Alert) {
 	testContext.Helper()
-	if _, storeError := fixture.writer.Store(context.Background(), engineID, alerts, collectedAt); storeError != nil {
+	engineURL := remoteEngineURL
+	if engineID == fixture.localEngineID {
+		engineURL = localEngineURL
+	}
+	if _, storeError := fixture.writer.Store(context.Background(), engineID, engineURL, alerts, collectedAt); storeError != nil {
 		testContext.Fatalf("store: %v", storeError)
 	}
 }

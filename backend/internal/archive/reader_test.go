@@ -42,7 +42,11 @@ func newReaderFixture(testContext *testing.T) readerFixture {
 
 func (fixture readerFixture) storeFor(testContext *testing.T, engineID int64, alerts []lapi.Alert) {
 	testContext.Helper()
-	if _, storeError := fixture.writer.Store(context.Background(), engineID, alerts, fixedCollectionTime); storeError != nil {
+	var engineURL string
+	if queryError := fixture.database.NewRaw(`SELECT engine_lapi_url FROM engine WHERE engine_id = ?`, engineID).Scan(context.Background(), &engineURL); queryError != nil {
+		testContext.Fatalf("read engine url: %v", queryError)
+	}
+	if _, storeError := fixture.writer.Store(context.Background(), engineID, engineURL, alerts, fixedCollectionTime); storeError != nil {
 		testContext.Fatalf("store: %v", storeError)
 	}
 }

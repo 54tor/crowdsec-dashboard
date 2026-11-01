@@ -18,6 +18,10 @@ import (
 
 var fixedCollectionTime = time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
 
+// fixtureEngineURL is the destination of the fixture's engine row; a Store call
+// must present the same destination to be accepted as current.
+const fixtureEngineURL = "http://crowdsec:8080"
+
 type archiveFixture struct {
 	database *bun.DB
 	writer   *Writer
@@ -32,7 +36,7 @@ func newArchiveFixture(testContext *testing.T) archiveFixture {
 	var engineID int64
 	insertError := database.NewRaw(
 		`INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id)
-		 VALUES ('local', true, 'http://crowdsec:8080', 'dashboard') RETURNING engine_id`,
+		 VALUES ('local', true, ?, 'dashboard') RETURNING engine_id`, fixtureEngineURL,
 	).Scan(context.Background(), &engineID)
 	if insertError != nil {
 		testContext.Fatalf("insert engine: %v", insertError)
@@ -75,7 +79,7 @@ func sampleAlerts(firstID int64, lastID int64) []lapi.Alert {
 
 func (fixture archiveFixture) mustStore(testContext *testing.T, alerts []lapi.Alert) StoreResult {
 	testContext.Helper()
-	storeResult, storeError := fixture.writer.Store(context.Background(), fixture.engineID, alerts, fixedCollectionTime)
+	storeResult, storeError := fixture.writer.Store(context.Background(), fixture.engineID, fixtureEngineURL, alerts, fixedCollectionTime)
 	if storeError != nil {
 		testContext.Fatalf("store: %v", storeError)
 	}
@@ -516,7 +520,7 @@ func TestStoreRollsBackCursorOnFailure(testContext *testing.T) {
 	shortContext, cancelShortContext := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancelShortContext()
 
-	_, storeError := fixture.writer.Store(shortContext, fixture.engineID, nextAlerts, fixedCollectionTime)
+	_, storeError := fixture.writer.Store(shortContext, fixture.engineID, fixtureEngineURL, nextAlerts, fixedCollectionTime)
 
 	if storeError == nil {
 		testContext.Fatal("a cancelled context must fail the store")
@@ -538,7 +542,7 @@ func TestStoreRollsBackCursorOnFailure(testContext *testing.T) {
 func TestStoreUnknownEngineFails(testContext *testing.T) {
 	fixture := newArchiveFixture(testContext)
 
-	_, storeError := fixture.writer.Store(context.Background(), fixture.engineID+1000, sampleAlerts(1, 1), fixedCollectionTime)
+	_, storeError := fixture.writer.Store(context.Background(), fixture.engineID+1000, fixtureEngineURL, sampleAlerts(1, 1), fixedCollectionTime)
 
 	if !errors.Is(storeError, ErrEngineNotFound) {
 		testContext.Fatalf("expected ErrEngineNotFound, got %v", storeError)
@@ -576,5 +580,40 @@ func TestStoreCapsDecisionsPerAlert(testContext *testing.T) {
 	}
 	if storeResult.Inserted != 2 {
 		testContext.Fatalf("the capped alert and the next one must both be archived: %+v", storeResult)
+	}
+}
+
+// A handle is built from one read of the engine row. If an admin changes the
+// destination (which resets the cursor) or disables the engine while a collection is
+// in flight, the old handle's alerts belong to the old destination: the writer must
+// refuse them without writing anything, so the reset is not undone.
+func TestStoreRefusesStaleEngineHandle(testContext *testing.T) {
+	staleChanges := map[string]string{
+		"destination changed": `UPDATE engine SET engine_lapi_url = 'http://other-engine:8080', engine_collection_cursor = 0`,
+		"engine disabled":     `UPDATE engine SET engine_enabled = false`,
+	}
+	for changeName, staleChange := range staleChanges {
+		testContext.Run(changeName, func(subTestContext *testing.T) {
+			fixture := newArchiveFixture(subTestContext)
+			fixture.exec(subTestContext, staleChange)
+
+			storeResult, storeError := fixture.writer.Store(context.Background(), fixture.engineID, fixtureEngineURL, sampleAlerts(1, 3), fixedCollectionTime)
+
+			if !errors.Is(storeError, ErrStaleEngineHandle) {
+				subTestContext.Fatalf("expected ErrStaleEngineHandle, got %v", storeError)
+			}
+			if errors.Is(storeError, ErrStoreFailed) {
+				subTestContext.Errorf("a stale handle is not a store failure: %v", storeError)
+			}
+			if storeResult != (StoreResult{}) {
+				subTestContext.Errorf("a refused store reports nothing, got %+v", storeResult)
+			}
+			if tableCounts := fixture.tableCounts(subTestContext); tableCounts != [3]int{} {
+				subTestContext.Errorf("nothing may be archived for a stale handle, got %v", tableCounts)
+			}
+			if fixture.cursor(subTestContext) != 0 {
+				subTestContext.Errorf("the cursor must stay 0, got %d", fixture.cursor(subTestContext))
+			}
+		})
 	}
 }
