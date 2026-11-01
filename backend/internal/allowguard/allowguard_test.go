@@ -138,6 +138,11 @@ func TestTruncatedReadFailsClosed(testContext *testing.T) {
 	if guard.Available() || verdict.Allowed || verdict.Reason != ReasonAllowlistUnavailable {
 		testContext.Errorf("expected unavailable, got %+v", verdict)
 	}
+	emptyTruncated := FromRead(lapi.AllowlistRead{Supported: true, Truncated: true}, nil, referenceTime)
+	unsupportedTruncated := FromRead(lapi.AllowlistRead{Supported: false, Truncated: true}, nil, referenceTime)
+	if emptyTruncated.Available() || unsupportedTruncated.Available() {
+		testContext.Error("a truncated read is unavailable whatever its content or support flag")
+	}
 	if Unavailable().Available() {
 		testContext.Error("Unavailable() must be unavailable")
 	}
@@ -162,5 +167,31 @@ func TestVerdictReportsMatchedEntry(testContext *testing.T) {
 	verdict := checkTarget(guard, "198.51.100.77/32")
 	if verdict.MatchedEntry != "198.51.100.9/24" {
 		testContext.Errorf("expected the original value, got %q", verdict.MatchedEntry)
+	}
+}
+
+func TestCheckRefusesInvalidTarget(testContext *testing.T) {
+	guards := map[string]Guard{
+		"empty":       guardWith(testContext),
+		"populated":   guardWith(testContext, permanentEntry("203.0.113.7")),
+		"zero":        {},
+		"unavailable": Unavailable(),
+	}
+	for guardName, guard := range guards {
+		verdict := guard.Check(netip.Prefix{})
+		if verdict.Allowed || verdict.Reason != ReasonInvalidTarget {
+			testContext.Errorf("%s: expected invalid_target refusal, got %+v", guardName, verdict)
+		}
+	}
+}
+
+func TestVerdictReportsFirstMatchInListOrder(testContext *testing.T) {
+	read := lapi.AllowlistRead{Supported: true, Allowlists: []lapi.Allowlist{
+		{Name: "first", Items: []lapi.AllowlistItem{permanentEntry("203.0.113.0/24"), permanentEntry("203.0.113.7")}},
+		{Name: "second", Items: []lapi.AllowlistItem{permanentEntry("203.0.113.7/32")}},
+	}}
+	verdict := checkTarget(FromRead(read, nil, referenceTime), "203.0.113.7/32")
+	if verdict.MatchedEntry != "203.0.113.0/24" {
+		testContext.Errorf("expected the first entry in list order, got %q", verdict.MatchedEntry)
 	}
 }
