@@ -402,6 +402,9 @@ client per engine, never through `HTTP_PROXY` / `HTTPS_PROXY` of the environment
   so a stored secret is never sent to a destination an administrator just typed. A change of the
   URL **path** alone keeps the stored password: a gateway that routes engines by path could then
   receive it, so treat path-routed gateways as one destination.
+- **Collection racing a destination change.** A collection already running when the destination
+  of an engine changes, or when the engine is disabled, is discarded without writing anything and
+  is not counted as a failure: the next attempt uses the new destination.
 - **Connection test oracle.** `POST /api/engines/{name}/test` returns only the outcome (`ok`,
   `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`), never the body of the
   answer, and errors never repeat the submitted URL. An administrator can still use it, and the

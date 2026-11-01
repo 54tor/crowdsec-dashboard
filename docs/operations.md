@@ -230,7 +230,8 @@ the counters (`inserted`, `duplicates`, `skipped`, `gaps`, `resets`) live in mem
 cannot be stored (for example a meta value that is not a string, or a value the database refuses)
 is skipped and counted, and the next valid alert is still archived. Events are bounded per alert
 (see [security.md](security.md#engines-and-outbound-connections)); an alert whose events or meta
-were cut has `events_truncated:true` in its detail.
+were cut has `events_truncated:true` in its detail; this includes a meta key cut to a length that
+collides with an earlier key.
 
 **History incomplete.** When the newest alerts read do not reach back to the cursor (more new
 alerts than the poll limit since the last collection), the collector reads the whole history
