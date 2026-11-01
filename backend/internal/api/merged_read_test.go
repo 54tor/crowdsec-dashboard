@@ -17,6 +17,7 @@ import (
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/auth/authtest"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/store/storetest"
 )
@@ -32,9 +33,13 @@ const (
 type fakeAlertLookup struct {
 	alertsByID map[int64]lapi.Alert
 	failWith   error
+	onLookup   func()
 }
 
 func (fake *fakeAlertLookup) GetAlert(_ context.Context, alertID int64) (lapi.Alert, error) {
+	if fake.onLookup != nil {
+		fake.onLookup()
+	}
 	if fake.failWith != nil {
 		return lapi.Alert{}, fake.failWith
 	}
@@ -58,6 +63,7 @@ type mergedFixture struct {
 	alertLister    *fakeAlertLister
 	decisionLister *fakeDecisionLister
 	alertLookup    *fakeAlertLookup
+	decisions      *fakeDecisions
 	runner         *recordingRunner
 	recorder       *fakeAuditRecorder
 }
@@ -71,6 +77,7 @@ func newMergedFixture(testContext *testing.T, accountRole string) *mergedFixture
 		alertLister:    &fakeAlertLister{},
 		decisionLister: &fakeDecisionLister{},
 		alertLookup:    &fakeAlertLookup{alertsByID: map[int64]lapi.Alert{}},
+		decisions:      &fakeDecisions{},
 		runner:         &recordingRunner{},
 		recorder:       &fakeAuditRecorder{},
 	}
@@ -90,6 +97,7 @@ func newMergedFixture(testContext *testing.T, accountRole string) *mergedFixture
 		DecisionReader: fixture.decisionLister,
 		AlertLookup:    fixture.alertLookup,
 		Alerts:         cscliAlerts{runner: fixture.runner},
+		Decisions:      fixture.decisions,
 		Archive:        archive.NewReader(database),
 		Audit:          fixture.recorder,
 	})
@@ -249,7 +257,7 @@ func TestDeletingLiveLocalAlertRemovesArchivedCopy(testContext *testing.T) {
 	fixture.alertLister.alerts = []lapi.Alert{mergedAlert(1, 1, "203.0.113.1")}
 	fixture.alertLookup.alertsByID[1] = mergedAlert(1, 1, "203.0.113.1")
 
-	deleteRecorder := fixture.send(http.MethodDelete, "/api/alerts/1", `{"confirm":"1"}`)
+	deleteRecorder := fixture.send(http.MethodDelete, "/api/alerts/1?uuid=uuid-1", `{"confirm":"1"}`)
 
 	if deleteRecorder.Code != http.StatusOK || strings.TrimSpace(deleteRecorder.Body.String()) != `{"archive_deleted":true,"status":"deleted"}` {
 		testContext.Fatalf("unexpected delete answer %d %q", deleteRecorder.Code, deleteRecorder.Body.String())
@@ -267,17 +275,92 @@ func TestDeletingLiveLocalAlertRemovesArchivedCopy(testContext *testing.T) {
 	}
 }
 
+// The archive copy is removed after the LAPI deletion; closing the database
+// during the uuid lookup makes that second step fail while cscli succeeds.
 func TestDeletingLiveAlertReportsArchiveFailureButKeepsAudit(testContext *testing.T) {
 	fixture := newMergedFixture(testContext, auth.RoleAdmin)
-	fixture.alertLookup.failWith = lapi.ErrLAPIUnavailable
+	fixture.alertLookup.alertsByID[1] = mergedAlert(1, 1, "203.0.113.1")
+	fixture.alertLookup.onLookup = func() { fixture.database.Close() }
 
-	deleteRecorder := fixture.send(http.MethodDelete, "/api/alerts/1", `{"confirm":"1"}`)
+	deleteRecorder := fixture.send(http.MethodDelete, "/api/alerts/1?uuid=uuid-1", `{"confirm":"1"}`)
 
 	if deleteRecorder.Code != http.StatusOK || strings.TrimSpace(deleteRecorder.Body.String()) != `{"archive_deleted":false,"status":"deleted"}` {
 		testContext.Fatalf("unexpected delete answer %d %q", deleteRecorder.Code, deleteRecorder.Body.String())
 	}
-	if len(fixture.recorder.events) != 1 || fixture.recorder.events[0].target != "local/1" {
-		testContext.Errorf("the LAPI deletion happened, so it is audited, got %+v", fixture.recorder.events)
+	if len(fixture.runner.argvCalls) != 1 || len(fixture.recorder.events) != 1 || fixture.recorder.events[0].target != "local/1" {
+		testContext.Errorf("the LAPI deletion happened, so it is audited, got %v %+v", fixture.runner.argvCalls, fixture.recorder.events)
+	}
+}
+
+// A remote row shares its upstream id with an unrelated local alert: the uuid
+// of the remote row does not match the local alert, so nothing is deleted.
+func TestDeletingWithAnotherEngineIdentityNeverReachesCscli(testContext *testing.T) {
+	fixture := newMergedFixture(testContext, auth.RoleAdmin)
+	fixture.archiveAlerts(testContext, fixture.remoteEngineID, time.Now(), mergedAlert(5, 5, "203.0.113.5"))
+	unrelatedLocalAlert := mergedAlert(5, 6, "198.51.100.5")
+	unrelatedLocalAlert.UUID = "local-uuid-5"
+	fixture.alertLookup.alertsByID[5] = unrelatedLocalAlert
+
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/5?uuid=uuid-5", `{"confirm":"5"}`), http.StatusConflict, "target_mismatch")
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/5?uuid=LOCAL-UUID-5", `{"confirm":"5"}`), http.StatusConflict, "target_mismatch")
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/5", `{"confirm":"5"}`), http.StatusBadRequest, "invalid_request")
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/6?uuid=uuid-6", `{"confirm":"6"}`), http.StatusNotFound, "not_found")
+
+	if len(fixture.runner.argvCalls) != 0 || len(fixture.recorder.events) != 0 {
+		testContext.Fatalf("a refused deletion runs nothing and audits nothing, got %v %+v", fixture.runner.argvCalls, fixture.recorder.events)
+	}
+	if remoteRow := fixture.archiveIDOf(testContext, fixture.remoteEngineID, 5); remoteRow == 0 {
+		testContext.Error("the remote archived alert must survive")
+	}
+	matchingRecorder := fixture.send(http.MethodDelete, "/api/alerts/5?uuid=local-uuid-5", `{"confirm":"5"}`)
+	if matchingRecorder.Code != http.StatusOK || len(fixture.runner.argvCalls) != 1 {
+		testContext.Errorf("the matching uuid deletes the local alert, got %d %v", matchingRecorder.Code, fixture.runner.argvCalls)
+	}
+}
+
+func TestFailingCscliKeepsTheArchivedCopyAndAuditsNothing(testContext *testing.T) {
+	fixture := newMergedFixture(testContext, auth.RoleAdmin)
+	fixture.archiveAlerts(testContext, fixture.localEngineID, time.Now(), mergedAlert(1, 1, "203.0.113.1"))
+	fixture.alertLookup.alertsByID[1] = mergedAlert(1, 1, "203.0.113.1")
+	fixture.runner.failWith = cscli.ErrCscliFailed
+
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/1?uuid=uuid-1", `{"confirm":"1"}`), http.StatusBadGateway, "cscli_failed")
+
+	if archiveID := fixture.archiveIDOf(testContext, fixture.localEngineID, 1); archiveID == 0 {
+		testContext.Error("the archived copy must stay when the LAPI deletion failed")
+	}
+	if len(fixture.recorder.events) != 0 {
+		testContext.Errorf("a failed deletion is not audited, got %+v", fixture.recorder.events)
+	}
+}
+
+// An archived remote decision shares its id with an unrelated live local one:
+// the target named by the row (scope and value) must match the live decision.
+func TestDecisionDeleteRequiresTheLiveTarget(testContext *testing.T) {
+	fixture := newMergedFixture(testContext, auth.RoleAdmin)
+	fixture.decisionLister.decisions = []lapi.Decision{{ID: 30, AlertID: 9, Type: "ban", Scope: "Ip", Value: "198.51.100.30"}}
+
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/decisions/30?scope=Ip&value=203.0.113.3", `{"confirm":"30"}`), http.StatusConflict, "target_mismatch")
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/decisions/30?scope=Range&value=198.51.100.30", `{"confirm":"30"}`), http.StatusConflict, "target_mismatch")
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/decisions/30?scope=Ip", `{"confirm":"30"}`), http.StatusBadRequest, "invalid_request")
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/decisions/31?scope=Ip&value=198.51.100.31", `{"confirm":"31"}`), http.StatusNotFound, "not_found")
+	if len(fixture.decisions.deletedIDs) != 0 {
+		testContext.Fatalf("a refused unban never reaches the LAPI, got %v", fixture.decisions.deletedIDs)
+	}
+
+	matchingRecorder := fixture.send(http.MethodDelete, "/api/decisions/30?scope=ip&value=198.51.100.30", `{"confirm":"30"}`)
+
+	if matchingRecorder.Code != http.StatusOK || len(fixture.decisions.deletedIDs) != 1 || fixture.decisions.deletedIDs[0] != 30 {
+		testContext.Errorf("the matching target unbans decision 30, got %d %v", matchingRecorder.Code, fixture.decisions.deletedIDs)
+	}
+}
+
+func TestArchiveQueryRejectsAnUnparsableSince(testContext *testing.T) {
+	if _, sinceError := archiveQueryFor(listQuery{Since: "soon"}, time.Now()); sinceError == nil {
+		testContext.Error("a since the duration parser rejects must not be silently ignored")
+	}
+	if archiveQuery, sinceError := archiveQueryFor(listQuery{}, time.Now()); sinceError != nil || !archiveQuery.Since.IsZero() {
+		testContext.Errorf("no since means no bound, got %v %v", archiveQuery.Since, sinceError)
 	}
 }
 
@@ -442,7 +525,7 @@ func TestReadOnlyAccountCanReadMergedLists(testContext *testing.T) {
 		}
 	}
 	rawArchiveID := strings.TrimPrefix(archivePath, "/api/alerts/archive/")
-	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/1", `{"confirm":"1"}`), http.StatusForbidden, "forbidden")
+	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/1?uuid=uuid-1", `{"confirm":"1"}`), http.StatusForbidden, "forbidden")
 	expectError(testContext, fixture.send(http.MethodDelete, archivePath, `{"confirm":"`+rawArchiveID+`"}`), http.StatusForbidden, "forbidden")
 	if len(fixture.runner.argvCalls) != 0 || len(fixture.recorder.events) != 0 {
 		testContext.Errorf("a refused deletion runs nothing and audits nothing, got %v %+v", fixture.runner.argvCalls, fixture.recorder.events)

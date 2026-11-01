@@ -79,7 +79,7 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 	router.Handle("GET /api/config/files", requireSession(http.HandlerFunc(configFileHandlers{files: services.ConfigFiles}.list)))
 	router.Handle("GET /api/config/files/{name...}", requireSession(http.HandlerFunc(configFileHandlers{files: services.ConfigFiles}.get)))
 	router.Handle("POST /api/decisions", requireSession(http.HandlerFunc(decisionHandlers{service: services.Decisions, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}.add)))
-	router.Handle("DELETE /api/decisions/{id}", requireSession(http.HandlerFunc(decisionHandlers{service: services.Decisions}.remove)))
+	router.Handle("DELETE /api/decisions/{id}", requireSession(http.HandlerFunc(decisionHandlers{service: services.Decisions, lister: services.DecisionReader}.remove)))
 	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	router.Handle("DELETE /api/alerts/{id}", requireSession(requireAdmin(http.HandlerFunc(liveAlerts.remove))))
 	router.Handle("POST /api/bouncers", requireSession(http.HandlerFunc(bouncerHandlers{service: services.Bouncers}.create)))

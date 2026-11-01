@@ -17,7 +17,7 @@ func TestUpstreamFailureIsLoggedWithItsErrorClass(testContext *testing.T) {
 	fixture.decisions.failWith = lapi.ErrLAPIUnavailable
 	logBuffer := captureLogs(testContext)
 
-	recorder := fixture.send(http.MethodDelete, "/api/decisions/5", `{"confirm":"5"}`, true)
+	recorder := fixture.send(http.MethodDelete, deleteDecisionPath("5"), `{"confirm":"5"}`, true)
 
 	expectError(testContext, recorder, http.StatusBadGateway, "lapi_unavailable")
 	if !strings.Contains(logBuffer.String(), "upstream error") || !strings.Contains(logBuffer.String(), "lapi_unavailable") {
@@ -30,7 +30,7 @@ func TestCscliFailureLogsOnlyItsClassAndKnownText(testContext *testing.T) {
 	fixture.runner.failWith = errors.New("stdout dump " + secretInsideErrorText)
 	logBuffer := captureLogs(testContext)
 
-	recorder := fixture.send(http.MethodDelete, "/api/alerts/7", `{"confirm":"7"}`, true)
+	recorder := fixture.send(http.MethodDelete, deleteAlertPath("7"), `{"confirm":"7"}`, true)
 
 	expectError(testContext, recorder, http.StatusBadGateway, "cscli_failed")
 	if strings.Contains(recorder.Body.String(), secretInsideErrorText) {
@@ -49,7 +49,7 @@ func TestCscliExitCodeFailureLogsItsText(testContext *testing.T) {
 	fixture.runner.failWith = cscli.ErrCscliFailed
 	logBuffer := captureLogs(testContext)
 
-	fixture.send(http.MethodDelete, "/api/alerts/7", `{"confirm":"7"}`, true)
+	fixture.send(http.MethodDelete, deleteAlertPath("7"), `{"confirm":"7"}`, true)
 
 	if !strings.Contains(logBuffer.String(), cscli.ErrCscliFailed.Error()) {
 		testContext.Errorf("expected sentinel text in the log, got %q", logBuffer.String())

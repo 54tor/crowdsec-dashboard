@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -22,6 +23,7 @@ const (
 
 type decisionHandlers struct {
 	service      DecisionService
+	lister       DecisionLister
 	trustedCIDRs []*net.IPNet
 }
 
@@ -109,8 +111,28 @@ func (handlers decisionHandlers) remove(responseWriter http.ResponseWriter, requ
 		return
 	}
 	decisionID, parseError := strconv.ParseInt(rawID, 10, 64)
-	if parseError != nil || decisionID <= 0 {
+	expectedScope := request.URL.Query().Get("scope")
+	expectedValue := request.URL.Query().Get("value")
+	if parseError != nil || decisionID <= 0 || expectedScope == "" || expectedValue == "" {
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if handlers.lister == nil {
+		writeError(responseWriter, http.StatusBadGateway, "lapi_unavailable")
+		return
+	}
+	liveDecision, found, lookupError := findLiveDecision(request.Context(), handlers.lister, decisionID, expectedScope, expectedValue)
+	if lookupError != nil {
+		writeUpstreamError(responseWriter, lookupError)
+		return
+	}
+	if !found {
+		writeError(responseWriter, http.StatusNotFound, "not_found")
+		return
+	}
+	isSameTarget := strings.EqualFold(liveDecision.Scope, expectedScope) && liveDecision.Value == expectedValue
+	if !isSameTarget {
+		writeError(responseWriter, http.StatusConflict, "target_mismatch")
 		return
 	}
 	if deleteError := handlers.service.Delete(request.Context(), decisionID); deleteError != nil {

@@ -161,8 +161,8 @@ ever holds active decisions). Lists never carry alert `events`.
 | Method | Path | Auth | Body | Success response | Errors |
 |---|---|---|---|---|---|
 | POST | `/api/decisions` | yes | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 502 |
-| DELETE | `/api/decisions/{id}` | yes | `{"confirm":"<id>"}` | `200 {"status":"deleted"}` | 400 `confirmation_required`, `invalid_request`; 502 |
-| DELETE | `/api/alerts/{id}` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted","archive_deleted":true}` | 400; 403 `forbidden`; 502 `cscli_failed` |
+| DELETE | `/api/decisions/{id}?scope=<scope>&value=<value>` | yes | `{"confirm":"<id>"}` | `200 {"status":"deleted"}` | 400 `confirmation_required`, `invalid_request`; 404 `not_found`; 409 `target_mismatch`; 502 |
+| DELETE | `/api/alerts/{id}?uuid=<uuid>` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted","archive_deleted":true}` | 400; 403 `forbidden`; 404 `not_found`; 409 `target_mismatch`; 502 `cscli_failed` |
 | DELETE | `/api/alerts/archive/{archive_id}` | admin | `{"confirm":"<archive_id>"}` | `200 {"status":"deleted"}` | 400 `invalid_request`, `confirmation_required`; 403; 404 `not_found`; 503 |
 | POST | `/api/bouncers` | yes | `{"name"}` | `200 {"name","key"}`, `Cache-Control: no-store` | 400 `invalid_request`; 502; 504 |
 | DELETE | `/api/bouncers/{name}` | yes | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400; 502; 504 |
@@ -175,10 +175,23 @@ ever holds active decisions). Lists never carry alert `events`.
 | DELETE | `/api/hub/collections/{name...}` | yes | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400; 502; 504 |
 | POST | `/api/crowdsec/reload` | yes | none | `200 {"status":"reload_requested"}` | 502; 504 |
 
-`DELETE /api/alerts/{id}` deletes a live alert of the local engine with `cscli alerts delete`, then
-its archived copy (same engine, id and uuid) in the same request, so it does not come back from
-the archive; `archive_deleted:false` means the LAPI copy is gone but the archive copy could not be
-removed (logged). `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
+Both live deletions name the target they mean, because an `id` alone may belong to another engine
+or to an older generation of the local LAPI (ids are reused after a reset):
+
+- `DELETE /api/alerts/{id}` needs `uuid` (lowercase, as listed). The dashboard reads the alert from
+  the local LAPI (`GET /v1/alerts/{id}`) first: 404 `not_found` when the LAPI has no such alert,
+  409 `target_mismatch` when its uuid differs, and in both cases nothing is deleted or audited. It
+  then deletes the alert with `cscli alerts delete` and its archived copy (same engine, id and uuid)
+  in the same request, so it does not come back from the archive. `archive_deleted:true` means no
+  archived copy is left (including when none existed); `false` means the LAPI copy is gone but the
+  archive copy could not be removed (logged).
+- `DELETE /api/decisions/{id}` needs `scope` and `value`. The machine API has no route to read one
+  decision, so the dashboard looks for the id among the active decisions on that value (the alerts
+  route filtered on the target), then among the newest 100 alerts with an active decision: 404
+  `not_found` when it is in neither, 409 `target_mismatch` when its scope (case-insensitive) or
+  value differs.
+
+Only `live:true` rows of the `local` engine can be deleted this way. `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
 from the archive only (a remote engine is never contacted). Both are audited `alert_deleted` with
 target `<engine>/<upstream id>` and refuse a `read_only` account (403 `forbidden`).
 

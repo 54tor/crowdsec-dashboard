@@ -69,7 +69,7 @@ func TestTrailingDataAndUnknownFieldsAreRejected(testContext *testing.T) {
 		expectError(testContext, recorder, http.StatusBadRequest, "invalid_request")
 	}
 	for _, body := range []string{`{"confirm":"12","extra":1}`, `{"confirm":"12"}x`, `{"confirm":"12"}{"confirm":"12"}`} {
-		recorder := fixture.send(http.MethodDelete, "/api/decisions/12", body, true)
+		recorder := fixture.send(http.MethodDelete, deleteDecisionPath("12"), body, true)
 		expectError(testContext, recorder, http.StatusBadRequest, "confirmation_required")
 	}
 	if len(fixture.runner.argvCalls) != 0 {

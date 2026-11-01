@@ -59,7 +59,11 @@ func (handlers alertReadHandlers) listMerged(responseWriter http.ResponseWriter,
 		writeArchiveError(responseWriter, "match live alerts with the archive", knownError)
 		return
 	}
-	archiveQuery := archiveQueryFor(query, time.Now())
+	archiveQuery, sinceError := archiveQueryFor(query, time.Now())
+	if sinceError != nil {
+		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return
+	}
 	archiveQuery.ExcludedKeys = keysOf(archivedIDs)
 	totalCapped := false
 	readArchivePage := func(offset, limit int) ([]alertItem, int, error) {

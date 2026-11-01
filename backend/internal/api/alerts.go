@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"crowdsec-dashboard/internal/archive"
@@ -30,35 +31,36 @@ func (handlers alertHandlers) remove(responseWriter http.ResponseWriter, request
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
-	liveKey, liveKeyKnown := handlers.liveAlertKey(request.Context(), rawID)
+	upstreamID, parseError := strconv.ParseInt(rawID, 10, 64)
+	expectedUUID := request.URL.Query().Get("uuid")
+	if parseError != nil || upstreamID <= 0 || expectedUUID == "" {
+		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if handlers.lookup == nil {
+		writeError(responseWriter, http.StatusBadGateway, "lapi_unavailable")
+		return
+	}
+	liveAlert, lookupError := handlers.lookup.GetAlert(request.Context(), upstreamID)
+	if lookupError != nil {
+		writeUpstreamError(responseWriter, lookupError)
+		return
+	}
+	if strings.ToLower(liveAlert.UUID) != expectedUUID {
+		writeError(responseWriter, http.StatusConflict, "target_mismatch")
+		return
+	}
 	if deleteError := handlers.service.Delete(request.Context(), rawID); deleteError != nil {
 		writeUpstreamError(responseWriter, deleteError)
 		return
 	}
-	upstreamID, _ := strconv.ParseInt(rawID, 10, 64)
 	recordAlertDeletion(request, handlers.recorder, handlers.trustedCIDRs, engines.ReservedLocalName, upstreamID)
 	response := map[string]any{"status": "deleted"}
 	if handlers.archiveReader != nil {
-		response["archive_deleted"] = liveKeyKnown && handlers.deleteArchivedCopy(request.Context(), liveKey)
+		liveKey := archive.UpstreamKey{UpstreamID: upstreamID, UUID: liveAlert.UUID}
+		response["archive_deleted"] = handlers.deleteArchivedCopy(request.Context(), liveKey)
 	}
 	writeJSON(responseWriter, http.StatusOK, response)
-}
-
-func (handlers alertHandlers) liveAlertKey(ctx context.Context, rawID string) (archive.UpstreamKey, bool) {
-	if handlers.archiveReader == nil || handlers.lookup == nil {
-		return archive.UpstreamKey{}, false
-	}
-	upstreamID, parseError := strconv.ParseInt(rawID, 10, 64)
-	if parseError != nil || upstreamID <= 0 {
-		return archive.UpstreamKey{}, false
-	}
-	liveAlert, lookupError := handlers.lookup.GetAlert(ctx, upstreamID)
-	if lookupError != nil {
-		_, code := classifyUpstreamError(lookupError)
-		log.Printf("look up live alert %d before deletion: class=%s", upstreamID, code)
-		return archive.UpstreamKey{}, false
-	}
-	return archive.UpstreamKey{UpstreamID: upstreamID, UUID: liveAlert.UUID}, true
 }
 
 func (handlers alertHandlers) deleteArchivedCopy(requestContext context.Context, liveKey archive.UpstreamKey) bool {

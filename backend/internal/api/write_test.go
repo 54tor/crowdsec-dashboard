@@ -47,13 +47,38 @@ type writeFixture struct {
 	runner    *recordingRunner
 }
 
+// writeFixtureAlertIDs and writeFixtureDecisionIDs exist on the fake local LAPI:
+// alert N has uuid "uuid-N", decision N bans 203.0.113.N, so a delete must name
+// that identity (see deleteAlertPath / deleteDecisionPath) to be accepted.
+var (
+	writeFixtureAlertIDs    = []int64{1, 7, 42}
+	writeFixtureDecisionIDs = []int64{1, 5, 12}
+)
+
 func newWriteFixture(testContext *testing.T) writeFixture {
 	testContext.Helper()
 	decisions := &fakeDecisions{}
 	runner := &recordingRunner{}
-	handler, sessions := newTestHandlerAndSessions(testContext, Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}}, "")
+	alertLookup := &fakeAlertLookup{alertsByID: map[int64]lapi.Alert{}}
+	for _, alertID := range writeFixtureAlertIDs {
+		alertLookup.alertsByID[alertID] = lapi.Alert{ID: alertID, UUID: fmt.Sprintf("uuid-%d", alertID)}
+	}
+	decisionLister := &fakeDecisionLister{}
+	for _, decisionID := range writeFixtureDecisionIDs {
+		decisionLister.decisions = append(decisionLister.decisions, lapi.Decision{ID: decisionID, Scope: "Ip", Value: fmt.Sprintf("203.0.113.%d", decisionID)})
+	}
+	services := Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}, AlertLookup: alertLookup, DecisionReader: decisionLister}
+	handler, sessions := newTestHandlerAndSessions(testContext, services, "")
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return writeFixture{handler: handler, cookie: cookie, decisions: decisions, runner: runner}
+}
+
+func deleteAlertPath(alertID string) string {
+	return "/api/alerts/" + alertID + "?uuid=uuid-" + alertID
+}
+
+func deleteDecisionPath(decisionID string) string {
+	return "/api/decisions/" + decisionID + "?scope=Ip&value=203.0.113." + decisionID
 }
 
 func (fixture writeFixture) send(method, path, body string, withSession bool) *httptest.ResponseRecorder {
@@ -79,7 +104,7 @@ func expectError(testContext *testing.T, recorder *httptest.ResponseRecorder, st
 func TestDeleteDecisionWithoutConfirmReturns400(testContext *testing.T) {
 	fixture := newWriteFixture(testContext)
 
-	recorder := fixture.send(http.MethodDelete, "/api/decisions/12", "", true)
+	recorder := fixture.send(http.MethodDelete, deleteDecisionPath("12"), "", true)
 
 	expectError(testContext, recorder, http.StatusBadRequest, "confirmation_required")
 	if len(fixture.decisions.deletedIDs) != 0 {
@@ -92,7 +117,7 @@ func TestDeleteDecisionWithWrongConfirmReturns400(testContext *testing.T) {
 	wrongConfirmations := []string{`{"confirm":"13"}`, `{"confirm":"12 "}`, `{"confirm":"012"}`, `{"confirm":12}`, `{"confirm":""}`, `{}`, `nope`}
 
 	for _, body := range wrongConfirmations {
-		recorder := fixture.send(http.MethodDelete, "/api/decisions/12", body, true)
+		recorder := fixture.send(http.MethodDelete, deleteDecisionPath("12"), body, true)
 		expectError(testContext, recorder, http.StatusBadRequest, "confirmation_required")
 	}
 	if len(fixture.decisions.deletedIDs) != 0 {
@@ -103,7 +128,7 @@ func TestDeleteDecisionWithWrongConfirmReturns400(testContext *testing.T) {
 func TestDeleteDecisionWithOversizedConfirmBodyReturns400(testContext *testing.T) {
 	fixture := newWriteFixture(testContext)
 
-	recorder := fixture.send(http.MethodDelete, "/api/decisions/12", `{"confirm":"12","pad":"`+strings.Repeat("a", 5000)+`"}`, true)
+	recorder := fixture.send(http.MethodDelete, deleteDecisionPath("12"), `{"confirm":"12","pad":"`+strings.Repeat("a", 5000)+`"}`, true)
 
 	expectError(testContext, recorder, http.StatusBadRequest, "confirmation_required")
 }
@@ -111,7 +136,7 @@ func TestDeleteDecisionWithOversizedConfirmBodyReturns400(testContext *testing.T
 func TestDeleteDecisionWithMatchingConfirmDeletes(testContext *testing.T) {
 	fixture := newWriteFixture(testContext)
 
-	recorder := fixture.send(http.MethodDelete, "/api/decisions/12", `{"confirm":"12"}`, true)
+	recorder := fixture.send(http.MethodDelete, deleteDecisionPath("12"), `{"confirm":"12"}`, true)
 
 	if recorder.Code != http.StatusOK || len(fixture.decisions.deletedIDs) != 1 || fixture.decisions.deletedIDs[0] != 12 {
 		testContext.Errorf("unexpected %d %v", recorder.Code, fixture.decisions.deletedIDs)
@@ -181,7 +206,7 @@ func TestAddDecisionRejectsMalformedAndOversizedBody(testContext *testing.T) {
 func TestDeleteAlertCallsCscliAlertsDelete(testContext *testing.T) {
 	fixture := newWriteFixture(testContext)
 
-	recorder := fixture.send(http.MethodDelete, "/api/alerts/42", `{"confirm":"42"}`, true)
+	recorder := fixture.send(http.MethodDelete, deleteAlertPath("42"), `{"confirm":"42"}`, true)
 
 	expectedArgv := []string{"cscli", "alerts", "delete", "--id", "42"}
 	if recorder.Code != http.StatusOK || len(fixture.runner.argvCalls) != 1 || strings.Join(fixture.runner.argvCalls[0], " ") != strings.Join(expectedArgv, " ") {
@@ -192,8 +217,8 @@ func TestDeleteAlertCallsCscliAlertsDelete(testContext *testing.T) {
 func TestDeleteAlertRequiresExactConfirmAndValidID(testContext *testing.T) {
 	fixture := newWriteFixture(testContext)
 
-	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/42", `{"confirm":"042"}`, true), http.StatusBadRequest, "confirmation_required")
-	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/abc", `{"confirm":"abc"}`, true), http.StatusBadRequest, "invalid_request")
+	expectError(testContext, fixture.send(http.MethodDelete, deleteAlertPath("42"), `{"confirm":"042"}`, true), http.StatusBadRequest, "confirmation_required")
+	expectError(testContext, fixture.send(http.MethodDelete, deleteAlertPath("abc"), `{"confirm":"abc"}`, true), http.StatusBadRequest, "invalid_request")
 	if len(fixture.runner.argvCalls) != 0 {
 		testContext.Error("cscli must not run")
 	}
@@ -215,7 +240,7 @@ func TestWriteEndpointsMapUpstreamErrors(testContext *testing.T) {
 	for _, testCase := range testCases {
 		fixture := newWriteFixture(testContext)
 		fixture.decisions.failWith = testCase.failWith
-		recorder := fixture.send(http.MethodDelete, "/api/decisions/5", `{"confirm":"5"}`, true)
+		recorder := fixture.send(http.MethodDelete, deleteDecisionPath("5"), `{"confirm":"5"}`, true)
 		expectError(testContext, recorder, testCase.status, testCase.code)
 	}
 }
@@ -224,7 +249,7 @@ func TestAlertDeletionMapsCscliFailures(testContext *testing.T) {
 	for _, failure := range []error{cscli.ErrCscliFailed, cscli.ErrOutputTooLarge, cscli.ErrExecStillRunning, errors.New("secret stderr")} {
 		fixture := newWriteFixture(testContext)
 		fixture.runner.failWith = failure
-		recorder := fixture.send(http.MethodDelete, "/api/alerts/7", `{"confirm":"7"}`, true)
+		recorder := fixture.send(http.MethodDelete, deleteAlertPath("7"), `{"confirm":"7"}`, true)
 		expectError(testContext, recorder, http.StatusBadGateway, "cscli_failed")
 	}
 }
@@ -233,8 +258,8 @@ func TestWriteEndpointsWithoutSessionReturn401(testContext *testing.T) {
 	fixture := newWriteFixture(testContext)
 	requests := [][3]string{
 		{http.MethodPost, "/api/decisions", `{"ip":"203.0.113.9","duration":"4h","reason":""}`},
-		{http.MethodDelete, "/api/decisions/1", `{"confirm":"1"}`},
-		{http.MethodDelete, "/api/alerts/1", `{"confirm":"1"}`},
+		{http.MethodDelete, deleteDecisionPath("1"), `{"confirm":"1"}`},
+		{http.MethodDelete, deleteAlertPath("1"), `{"confirm":"1"}`},
 	}
 
 	for _, requestSpec := range requests {
@@ -246,7 +271,7 @@ func TestCrossOriginWritesAreRejectedAsJSON(testContext *testing.T) {
 	fixture := newWriteFixture(testContext)
 	requests := [][3]string{
 		{http.MethodPost, "/api/decisions", `{"ip":"203.0.113.9","duration":"4h","reason":""}`},
-		{http.MethodDelete, "/api/decisions/1", `{"confirm":"1"}`},
+		{http.MethodDelete, deleteDecisionPath("1"), `{"confirm":"1"}`},
 	}
 
 	for _, requestSpec := range requests {

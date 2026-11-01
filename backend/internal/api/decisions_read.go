@@ -57,7 +57,11 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 		writeArchiveError(responseWriter, "match live decisions with the archive", knownError)
 		return
 	}
-	archiveQuery := archiveQueryFor(query, time.Now())
+	archiveQuery, sinceError := archiveQueryFor(query, time.Now())
+	if sinceError != nil {
+		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return
+	}
 	archiveQuery.ExcludedDecisionIDs = excludedDecisionIDs
 	totalCapped := false
 	readArchivePage := func(offset, limit int) ([]decisionItem, int, error) {

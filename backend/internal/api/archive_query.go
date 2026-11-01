@@ -12,7 +12,7 @@ import (
 	"crowdsec-dashboard/internal/engines"
 )
 
-func archiveQueryFor(query listQuery, now time.Time) archive.AlertQuery {
+func archiveQueryFor(query listQuery, now time.Time) (archive.AlertQuery, error) {
 	archiveQuery := archive.AlertQuery{
 		Engine:         query.Engine,
 		Scenario:       query.Scenario,
@@ -20,10 +20,15 @@ func archiveQueryFor(query listQuery, now time.Time) archive.AlertQuery {
 		IncludeExpired: query.IncludeExpired,
 		ExcludedEngine: engines.ReservedLocalName,
 	}
-	if sinceDuration, parseError := cstime.ParseDurationWithDays(query.Since); parseError == nil {
-		archiveQuery.Since = now.Add(-sinceDuration)
+	if query.Since == "" {
+		return archiveQuery, nil
 	}
-	return archiveQuery
+	sinceDuration, parseError := cstime.ParseDurationWithDays(query.Since)
+	if parseError != nil {
+		return archive.AlertQuery{}, parseError
+	}
+	archiveQuery.Since = now.Add(-sinceDuration)
+	return archiveQuery, nil
 }
 
 func withArchiveWindow(archiveQuery archive.AlertQuery, offset, limit int) archive.AlertQuery {
