@@ -11,6 +11,7 @@ import { deleteAlert } from '@/api/writeApi'
 import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
 import { formatDateTime, formatNumber } from '@/lib/format'
+import { isLiveLocalRow } from '@/lib/liveRow'
 
 const CHART_WINDOW_SIZE = 100
 
@@ -46,17 +47,18 @@ export function Alerts() {
       {
         key: 'actions',
         header: t('alerts.actions'),
-        cell: (alertRow) => (
-          <RowDeleteAction
-            buttonLabel={t('alerts.delete')}
-            ariaLabel={t('alerts.deleteAria', { id: alertRow.id })}
-            title={t('alerts.deleteTitle', { id: alertRow.id })}
-            description={t('alerts.deleteDescription', { id: alertRow.id })}
-            target={String(alertRow.id)}
-            request={(confirm) => deleteAlert(String(alertRow.id), confirm)}
-            invalidates={[['alerts'], ['decisions']]}
-          />
-        ),
+        cell: (alertRow) =>
+          isLiveLocalRow(alertRow) ? (
+            <RowDeleteAction
+              buttonLabel={t('alerts.delete')}
+              ariaLabel={t('alerts.deleteAria', { id: alertRow.id })}
+              title={t('alerts.deleteTitle', { id: alertRow.id })}
+              description={t('alerts.deleteDescription', { id: alertRow.id })}
+              target={String(alertRow.id)}
+              request={(confirm) => deleteAlert(String(alertRow.id), alertRow.uuid ?? '', confirm)}
+              invalidates={[['alerts'], ['decisions']]}
+            />
+          ) : null,
       },
     ],
     [t, i18n.language],

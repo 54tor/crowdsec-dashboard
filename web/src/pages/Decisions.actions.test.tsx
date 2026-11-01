@@ -54,7 +54,7 @@ describe('decision actions', () => {
     const fetchMock = stubFetch(
       decisionRoutes({
         [DECISIONS_URL]: { status: 200, body: makePage([rangeDecision]) },
-        'DELETE /api/decisions/11': { status: 200, body: { status: 'deleted' } },
+        'DELETE /api/decisions/11?scope=Range&value=198.51.100.0%2F24': { status: 200, body: { status: 'deleted' } },
       }),
     )
     const user = userEvent.setup()
@@ -70,12 +70,12 @@ describe('decision actions', () => {
     expect(confirmButton).toBeEnabled()
     await user.click(confirmButton)
 
-    await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/11')).toHaveLength(1))
-    expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/11')[0].body).toBe('{"confirm":"11"}')
+    await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/11?scope=Range&value=198.51.100.0%2F24')).toHaveLength(1))
+    expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/11?scope=Range&value=198.51.100.0%2F24')[0].body).toBe('{"confirm":"11"}')
   })
 
   it('unbanSendsOnlyConfirmBodyAtDecisionIdPathThenRefreshesList', async () => {
-    const fetchMock = stubFetch(decisionRoutes({ 'DELETE /api/decisions/10': { status: 200, body: { status: 'deleted' } } }))
+    const fetchMock = stubFetch(decisionRoutes({ 'DELETE /api/decisions/10?scope=Ip&value=203.0.113.7': { status: 200, body: { status: 'deleted' } } }))
     const user = userEvent.setup()
     renderApp('/decisions')
 
@@ -85,11 +85,27 @@ describe('decision actions', () => {
     await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    const deleteRequests = requestsTo(fetchMock, 'DELETE', '/api/decisions/10')
+    const deleteRequests = requestsTo(fetchMock, 'DELETE', '/api/decisions/10?scope=Ip&value=203.0.113.7')
     expect(deleteRequests).toHaveLength(1)
     expect(deleteRequests[0].body).toBe('{"confirm":"10"}')
     expect(deleteRequests[0].credentials).toBe('same-origin')
     await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/decisions?page=1&per_page=20').length).toBeGreaterThan(1))
+  })
+
+  // Archived decisions and decisions of a remote engine may reuse the id of an
+  // unrelated live local decision: only live local rows offer the unban.
+  it('offersUnbanOnlyOnLiveLocalRows', async () => {
+    const decisionRows = [
+      makeDecision({ id: 30, value: '203.0.113.30', engine: 'edge-1', live: false }),
+      makeDecision({ id: 20, value: '203.0.113.20', engine: 'local', live: false }),
+      makeDecision({ id: 10, value: '203.0.113.10', engine: 'local', live: true }),
+    ]
+    stubFetch(decisionRoutes({ [DECISIONS_URL]: { status: 200, body: makePage(decisionRows) } }))
+    renderApp('/decisions')
+
+    expect(await screen.findByRole('button', { name: 'Unban 203.0.113.10' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Unban 203.0.113.30' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Unban 203.0.113.20' })).not.toBeInTheDocument()
   })
 
   it('escapeClosesConfirmDialogAndReturnsFocusToRowButton', async () => {
@@ -107,7 +123,7 @@ describe('decision actions', () => {
   })
 
   it('unbanErrorIsTranslatedAndDialogIsNotStuckPending', async () => {
-    stubFetch(decisionRoutes({ 'DELETE /api/decisions/10': { status: 502, body: { error: 'lapi_unavailable' } } }))
+    stubFetch(decisionRoutes({ 'DELETE /api/decisions/10?scope=Ip&value=203.0.113.7': { status: 502, body: { error: 'lapi_unavailable' } } }))
     const user = userEvent.setup()
     renderApp('/decisions')
 
@@ -208,7 +224,7 @@ describe('decision actions', () => {
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByLabelText('Type 203.0.113.7 to confirm'), '203.0.113.7')
     await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
-    await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/10')).toHaveLength(1))
+    await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/decisions/10?scope=Ip&value=203.0.113.7')).toHaveLength(1))
 
     await user.keyboard('{Escape}')
     fireEvent.pointerDown(document.body)

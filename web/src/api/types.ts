@@ -9,6 +9,8 @@ export interface Decision {
   until?: string
   scenario: string
   simulated: boolean
+  engine?: string
+  live?: boolean
 }
 
 export interface AlertSource {
@@ -23,6 +25,9 @@ export interface AlertSource {
 
 export interface Alert {
   id: number
+  uuid?: string
+  engine?: string
+  live?: boolean
   created_at: string
   machine_id: string
   scenario: string

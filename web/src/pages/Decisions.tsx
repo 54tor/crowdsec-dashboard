@@ -12,6 +12,7 @@ import { deleteDecision } from '@/api/writeApi'
 import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
 import { formatDateTime } from '@/lib/format'
+import { isLiveLocalRow } from '@/lib/liveRow'
 
 export function Decisions() {
   const { t, i18n } = useTranslation()
@@ -43,18 +44,19 @@ export function Decisions() {
       {
         key: 'actions',
         header: t('decisions.actions'),
-        cell: (decision) => (
-          <RowDeleteAction
-            buttonLabel={t('decisions.unban')}
-            ariaLabel={t('decisions.unbanAria', { target: decision.value })}
-            title={t('decisions.unbanTitle', { target: decision.value })}
-            description={t('decisions.unbanDescription', { id: decision.id, target: decision.value })}
-            target={decision.value}
-            confirmValue={String(decision.id)}
-            request={(confirm) => deleteDecision(String(decision.id), confirm)}
-            invalidates={[['decisions']]}
-          />
-        ),
+        cell: (decision) =>
+          isLiveLocalRow(decision) ? (
+            <RowDeleteAction
+              buttonLabel={t('decisions.unban')}
+              ariaLabel={t('decisions.unbanAria', { target: decision.value })}
+              title={t('decisions.unbanTitle', { target: decision.value })}
+              description={t('decisions.unbanDescription', { id: decision.id, target: decision.value })}
+              target={decision.value}
+              confirmValue={String(decision.id)}
+              request={(confirm) => deleteDecision(String(decision.id), decision.scope, decision.value, confirm)}
+              invalidates={[['decisions']]}
+            />
+          ) : null,
       },
     ],
     [t, i18n.language],

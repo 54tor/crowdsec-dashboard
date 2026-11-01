@@ -24,8 +24,10 @@ function encodeSegments(name: string): string {
 }
 
 export const banIp = (ban: BanRequest) => sendJson<StatusResponse>('POST', '/api/decisions', ban)
-export const deleteDecision = (decisionId: string, confirm: string) => deleteConfirmed(`/api/decisions/${encodeURIComponent(decisionId)}`, confirm)
-export const deleteAlert = (alertId: string, confirm: string) => deleteConfirmed(`/api/alerts/${encodeURIComponent(alertId)}`, confirm)
+export const deleteDecision = (decisionId: string, scope: string, value: string, confirm: string) =>
+  deleteConfirmed(`/api/decisions/${encodeURIComponent(decisionId)}?${new URLSearchParams({ scope, value })}`, confirm)
+export const deleteAlert = (alertId: string, uuid: string, confirm: string) =>
+  deleteConfirmed(`/api/alerts/${encodeURIComponent(alertId)}?${new URLSearchParams({ uuid: uuid.toLowerCase() })}`, confirm)
 
 export const createBouncer = (name: string) => sendJson<CreatedBouncer>('POST', '/api/bouncers', { name })
 export const deleteBouncer = (name: string, confirm: string) => deleteConfirmed(`/api/bouncers/${encodeURIComponent(name)}`, confirm)
