@@ -86,6 +86,9 @@ func NewReader(database *bun.DB) *Reader {
 }
 
 func (reader *Reader) ListAlerts(ctx context.Context, query AlertQuery) ([]ArchivedAlert, int, bool, error) {
+	if !isValidWindow(query) {
+		return nil, 0, false, ErrInvalidPagination
+	}
 	alerts := []ArchivedAlert{}
 	if hasUnstorableFilter(query) {
 		return alerts, 0, false, nil
@@ -97,7 +100,7 @@ func (reader *Reader) ListAlerts(ctx context.Context, query AlertQuery) ([]Archi
 	if countError != nil {
 		return nil, 0, false, countError
 	}
-	offset, limit := clampedWindow(query)
+	offset, limit := query.Offset, query.Limit
 	if limit == 0 {
 		return alerts, total, totalCapped, nil
 	}
@@ -115,6 +118,9 @@ func (reader *Reader) ListAlerts(ctx context.Context, query AlertQuery) ([]Archi
 }
 
 func (reader *Reader) ListDecisions(ctx context.Context, query AlertQuery) ([]ArchivedDecision, int, bool, error) {
+	if !isValidWindow(query) {
+		return nil, 0, false, ErrInvalidPagination
+	}
 	decisions := []ArchivedDecision{}
 	if hasUnstorableFilter(query) {
 		return decisions, 0, false, nil
@@ -126,7 +132,7 @@ func (reader *Reader) ListDecisions(ctx context.Context, query AlertQuery) ([]Ar
 	if countError != nil {
 		return nil, 0, false, countError
 	}
-	offset, limit := clampedWindow(query)
+	offset, limit := query.Offset, query.Limit
 	if limit == 0 {
 		return decisions, total, totalCapped, nil
 	}
@@ -238,8 +244,10 @@ func (reader *Reader) decisionsOf(ctx context.Context, alertIDs []int64) (map[in
 	return decisionsByAlert, nil
 }
 
-func clampedWindow(query AlertQuery) (int, int) {
-	return max(query.Offset, 0), min(max(query.Limit, 0), MaxQueryLimit)
+func isValidWindow(query AlertQuery) bool {
+	isValidLimit := query.Limit >= 0 && query.Limit <= MaxQueryLimit
+	isValidOffset := query.Offset >= 0 && query.Offset <= totalCountCap
+	return isValidLimit && isValidOffset
 }
 
 func hasUnstorableFilter(query AlertQuery) bool {

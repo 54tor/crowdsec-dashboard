@@ -228,24 +228,88 @@ func TestListAlertsTreatsFilterTextLiterally(testContext *testing.T) {
 	}
 }
 
-func TestListAlertsClampsLimitAndOffset(testContext *testing.T) {
+// Limit 0 stays valid: MergePage asks for it when the live part fills the page,
+// to read the archive total alone. Anything beyond the page bound or the count
+// cap is refused rather than clamped, so a caller can never skip rows silently.
+func TestListRejectsOversizedPagesAndOffsetsBeyondTheCap(testContext *testing.T) {
 	fixture := newReaderFixture(testContext)
 	fixture.exec(testContext, fmt.Sprintf(
 		`INSERT INTO alert (alert_engine_id, alert_upstream_id, alert_upstream_uuid, alert_scenario_name, alert_created_at)
 		 SELECT %d, generated_id, 'uuid-' || generated_id, 'crowdsecurity/ssh-bf', now()
 		 FROM generate_series(1, 150) AS generated_id`, fixture.engineID))
 
-	largeLimitAlerts, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Limit: 1_000_000})
-	if len(largeLimitAlerts) != MaxQueryLimit {
-		testContext.Errorf("the limit must be clamped to %d, got %d", MaxQueryLimit, len(largeLimitAlerts))
+	fullPage, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Limit: MaxQueryLimit})
+	if len(fullPage) != MaxQueryLimit {
+		testContext.Errorf("a limit of exactly %d is served whole, got %d", MaxQueryLimit, len(fullPage))
 	}
 	zeroLimitAlerts, zeroLimitTotal, _ := fixture.mustListAlerts(testContext, AlertQuery{Limit: 0})
 	if len(zeroLimitAlerts) != 0 || zeroLimitTotal != 150 || zeroLimitAlerts == nil {
 		testContext.Errorf("limit 0 returns an empty page and the total, got %d items total %d", len(zeroLimitAlerts), zeroLimitTotal)
 	}
-	negativeOffsetAlerts, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Offset: -10, Limit: 5})
-	if len(negativeOffsetAlerts) != 5 {
-		testContext.Errorf("a negative offset is read as 0, got %d items", len(negativeOffsetAlerts))
+	lastAllowedOffset, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Offset: totalCountCap, Limit: 5})
+	if len(lastAllowedOffset) != 0 {
+		testContext.Errorf("an offset at the cap is allowed and past the 150 rows, got %d items", len(lastAllowedOffset))
+	}
+
+	invalidQueries := []AlertQuery{
+		{Limit: MaxQueryLimit + 1},
+		{Limit: 1_000_000},
+		{Limit: -1},
+		{Offset: -10, Limit: 5},
+		{Offset: totalCountCap + 1, Limit: 5},
+		{Offset: 1_000_000, Limit: 5},
+	}
+	for _, invalidQuery := range invalidQueries {
+		_, _, _, alertsError := fixture.reader.ListAlerts(context.Background(), invalidQuery)
+		if !errors.Is(alertsError, ErrInvalidPagination) {
+			testContext.Errorf("alerts %+v must be refused, got %v", invalidQuery, alertsError)
+		}
+		_, _, _, decisionsError := fixture.reader.ListDecisions(context.Background(), invalidQuery)
+		if !errors.Is(decisionsError, ErrInvalidPagination) {
+			testContext.Errorf("decisions %+v must be refused, got %v", invalidQuery, decisionsError)
+		}
+	}
+}
+
+// Real reader behind MergePage: 7 live items and 250 archived alerts, pages of
+// exactly MaxQueryLimit, so the live part crosses the first page boundary.
+func TestMergePageWithReaderServesEveryItemOnceAtMaxPageSize(testContext *testing.T) {
+	fixture := newReaderFixture(testContext)
+	fixture.exec(testContext, fmt.Sprintf(
+		`INSERT INTO alert (alert_engine_id, alert_upstream_id, alert_upstream_uuid, alert_scenario_name, alert_created_at)
+		 SELECT %d, generated_id, 'uuid-' || generated_id, 'crowdsecurity/ssh-bf', '2026-10-01'::timestamptz + (generated_id / 10) * interval '1 minute'
+		 FROM generate_series(1, 250) AS generated_id`, fixture.remoteEngineID))
+	liveItems := labelledItems("live", 7)
+	archivePage := func(offset int, limit int) ([]string, int, error) {
+		archivedAlerts, total, _, listError := fixture.reader.ListAlerts(context.Background(), AlertQuery{Offset: offset, Limit: limit})
+		pageItems := make([]string, 0, len(archivedAlerts))
+		for _, archivedAlert := range archivedAlerts {
+			pageItems = append(pageItems, fmt.Sprintf("archived-%d", archivedAlert.UpstreamID))
+		}
+		return pageItems, total, listError
+	}
+
+	seenItems := map[string]int{}
+	for pageNumber := 1; pageNumber <= 4; pageNumber++ {
+		pageItems, total, mergeError := MergePage(liveItems, archivePage, pageNumber, MaxQueryLimit)
+		if mergeError != nil {
+			testContext.Fatalf("page %d: %v", pageNumber, mergeError)
+		}
+		if total != 257 {
+			testContext.Errorf("page %d: total must be 257, got %d", pageNumber, total)
+		}
+		for _, pageItem := range pageItems {
+			seenItems[pageItem]++
+		}
+	}
+
+	if len(seenItems) != 257 {
+		testContext.Errorf("every live and archived item must be served, got %d distinct", len(seenItems))
+	}
+	for seenItem, seenCount := range seenItems {
+		if seenCount != 1 {
+			testContext.Errorf("%s served %d times", seenItem, seenCount)
+		}
 	}
 }
 

@@ -5,7 +5,7 @@ import "errors"
 var ErrInvalidPagination = errors.New("archive: invalid pagination")
 
 func MergePage[T any](fresh []T, archivePage func(offset, limit int) ([]T, int, error), page, perPage int) ([]T, int, error) {
-	if page < 1 || perPage < 1 {
+	if page < 1 || perPage < 1 || perPage > MaxQueryLimit {
 		return nil, 0, ErrInvalidPagination
 	}
 	pageStart := (page - 1) * perPage

@@ -142,10 +142,13 @@ func TestMergePageReturnsArchiveError(testContext *testing.T) {
 func TestMergePageRejectsInvalidPagination(testContext *testing.T) {
 	archiveDouble := &fakeArchive{items: labelledItems("archived", 3)}
 
-	for _, invalidPagination := range [][2]int{{0, 10}, {1, 0}, {-1, 10}, {1, -5}} {
+	for _, invalidPagination := range [][2]int{{0, 10}, {1, 0}, {-1, 10}, {1, -5}, {1, MaxQueryLimit + 1}, {1, 200}} {
 		_, _, mergeError := MergePage(labelledItems("live", 2), archiveDouble.page, invalidPagination[0], invalidPagination[1])
 		if !errors.Is(mergeError, ErrInvalidPagination) {
 			testContext.Errorf("page %d per_page %d must be refused, got %v", invalidPagination[0], invalidPagination[1], mergeError)
 		}
+	}
+	if len(archiveDouble.calledWith) != 0 {
+		testContext.Errorf("a refused page must not reach the archive, got calls %v", archiveDouble.calledWith)
 	}
 }
