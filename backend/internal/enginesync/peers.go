@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/netip"
-	"net/url"
 	"os"
 	"regexp"
-	"strings"
 
+	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/netparse"
 	"go.yaml.in/yaml/v3"
 )
@@ -20,12 +18,9 @@ const (
 	maxPeersFileBytes = 64 * 1024
 	maxPeers          = 16
 	minPasswordLength = 8
-	reservedLocalName = "local"
 )
 
 var (
-	defaultPorts    = map[string]string{"https": "443", "http": "80"}
-	peerNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 	yamlLinePattern = regexp.MustCompile(`line (\d+)`)
 )
 
@@ -133,7 +128,7 @@ func buildPeerSet(document peersDocument) (PeerSet, error) {
 		if peerError != nil {
 			return PeerSet{}, peerError
 		}
-		urlKey := normalizedURLKey(peer.URL)
+		urlKey := engines.NormalizedURLKey(peer.URL)
 		if otherName, duplicated := seenURLs[urlKey]; duplicated {
 			return PeerSet{}, fmt.Errorf("peers %q and %q: url is the same", otherName, peer.Name)
 		}
@@ -152,16 +147,16 @@ func buildPeerSet(document peersDocument) (PeerSet, error) {
 }
 
 func validatePeer(peerIndex int, entry peerEntry, seenNames map[string]bool) (Peer, error) {
-	if !peerNamePattern.MatchString(entry.Name) {
-		return Peer{}, fmt.Errorf("peer #%d: name must match %s", peerIndex+1, peerNamePattern)
-	}
-	if entry.Name == reservedLocalName {
-		return Peer{}, fmt.Errorf("peer %q: name is reserved", entry.Name)
+	if nameError := engines.ValidateName(entry.Name); nameError != nil {
+		if errors.Is(nameError, engines.ErrNameReserved) {
+			return Peer{}, fmt.Errorf("peer %q: %w", entry.Name, nameError)
+		}
+		return Peer{}, fmt.Errorf("peer #%d: %w", peerIndex+1, nameError)
 	}
 	if seenNames[entry.Name] {
 		return Peer{}, fmt.Errorf("peer %q: name is duplicated", entry.Name)
 	}
-	if urlError := validatePeerURL(entry); urlError != nil {
+	if urlError := engines.ValidateLAPIURL(entry.URL, entry.AllowInsecureHTTP); urlError != nil {
 		return Peer{}, fmt.Errorf("peer %q: url %w", entry.Name, urlError)
 	}
 	if entry.MachineID == "" {
@@ -184,24 +179,6 @@ func validatePeer(peerIndex int, entry peerEntry, seenNames map[string]bool) (Pe
 	}, nil
 }
 
-func validatePeerURL(entry peerEntry) error {
-	parsedURL, parseError := url.Parse(entry.URL)
-	if parseError != nil || parsedURL.Host == "" || parsedURL.Hostname() == "" {
-		return errors.New("is not a valid absolute URL")
-	}
-	schemeAllowed := parsedURL.Scheme == "https" || (parsedURL.Scheme == "http" && entry.AllowInsecureHTTP)
-	if !schemeAllowed {
-		return errors.New("must use https unless allow_insecure_http is true")
-	}
-	if parsedURL.User != nil {
-		return errors.New("must not contain credentials")
-	}
-	if parsedURL.RawQuery != "" || parsedURL.ForceQuery || parsedURL.Fragment != "" {
-		return errors.New("must not contain a query or fragment")
-	}
-	return nil
-}
-
 func parsePublicIPs(rawAddresses []string) ([]netip.Addr, error) {
 	var addresses []netip.Addr
 	for _, rawAddress := range rawAddresses {
@@ -212,13 +189,4 @@ func parsePublicIPs(rawAddresses []string) ([]netip.Addr, error) {
 		addresses = append(addresses, address)
 	}
 	return addresses, nil
-}
-
-func normalizedURLKey(rawURL string) string {
-	parsedURL, _ := url.Parse(rawURL)
-	port := parsedURL.Port()
-	if port == "" {
-		port = defaultPorts[parsedURL.Scheme]
-	}
-	return parsedURL.Scheme + "://" + net.JoinHostPort(strings.ToLower(parsedURL.Hostname()), port) + strings.TrimRight(parsedURL.EscapedPath(), "/")
 }
