@@ -501,3 +501,78 @@ func TestErrorCodeClassifiesEngineFailures(testContext *testing.T) {
 		testContext.Error("unknown failures are reported as unreachable")
 	}
 }
+
+// passwordWitness records, for one fake engine, every machine password it received
+// at login, so a test can prove which destination saw which secret.
+type passwordWitness struct {
+	mutex             sync.Mutex
+	receivedPasswords []string
+}
+
+func (witness *passwordWitness) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) {
+	if strings.HasSuffix(request.URL.Path, "/v1/watchers/login") {
+		loginBody := readAll(request)
+		witness.mutex.Lock()
+		witness.receivedPasswords = append(witness.receivedPasswords, loginBody)
+		witness.mutex.Unlock()
+		_, _ = responseWriter.Write([]byte(`{"token":"jwt-engine"}`))
+		return
+	}
+	_, _ = responseWriter.Write([]byte(`[]`))
+}
+
+func (witness *passwordWitness) sawPassword(password string) bool {
+	witness.mutex.Lock()
+	defer witness.mutex.Unlock()
+	for _, loginBody := range witness.receivedPasswords {
+		if strings.Contains(loginBody, `"password":"`+password+`"`) {
+			return true
+		}
+	}
+	return false
+}
+
+func startPasswordWitness(testContext *testing.T) (*passwordWitness, *httptest.Server) {
+	testContext.Helper()
+	witness := &passwordWitness{}
+	server := httptest.NewServer(witness)
+	testContext.Cleanup(server.Close)
+	return witness, server
+}
+
+// Decision 12: a secret is only ever sent to the destination it was stored with.
+// The hook commits an Update (new URL and new password) between the List and the
+// per-engine read of Reload; the handle must still pair one row's URL with that same
+// row's password, so the old destination never receives the new password.
+func TestReloadNeverPairsAnOldDestinationWithANewSecret(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	oldWitness, oldServer := startPasswordWitness(testContext)
+	newWitness, newServer := startPasswordWitness(testContext)
+	mustCreate(testContext, fixture, insecureInput("edge-moving", oldServer.URL))
+	const rotatedPassword = "rotated-password-for-new-destination"
+	registry := newTestRegistry(testContext, fixture, nil)
+	registry.afterList = func() {
+		_, updateError := fixture.repository.Update(context.Background(), "edge-moving",
+			Input{LAPIURL: newServer.URL, MachinePassword: stringPointer(rotatedPassword)})
+		if updateError != nil {
+			testContext.Errorf("update during reload: %v", updateError)
+		}
+	}
+
+	mustReload(testContext, registry)
+	engineClient, _ := registry.Client("edge-moving")
+	if _, readError := readThrough(testContext, engineClient); readError != nil {
+		testContext.Fatalf("read: %v", readError)
+	}
+
+	if oldWitness.sawPassword(rotatedPassword) {
+		testContext.Fatal("the new password was sent to the old destination")
+	}
+	if !newWitness.sawPassword(rotatedPassword) {
+		testContext.Fatal("the handle must use the destination its secret was stored with")
+	}
+	handles := registry.Handles()
+	if len(handles) != 1 || handles[0].Engine.LAPIURL != newServer.URL {
+		testContext.Fatalf("the handle must describe the row its secret came from: %+v", handles)
+	}
+}

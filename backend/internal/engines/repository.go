@@ -84,24 +84,41 @@ func (repository *Repository) Delete(ctx context.Context, name string) error {
 }
 
 func (repository *Repository) Credentials(ctx context.Context, engineID int64) (Credentials, error) {
+	_, credentials, loadError := repository.engineWithCredentials(ctx, engineID)
+	return credentials, loadError
+}
+
+func (repository *Repository) engineWithCredentials(ctx context.Context, engineID int64) (Engine, Credentials, error) {
 	var row engineRow
 	queryError := repository.database.NewRaw(`SELECT `+engineColumns+` FROM engine WHERE engine_id = ?`, engineID).Scan(ctx, &row)
 	if errors.Is(queryError, sql.ErrNoRows) {
-		return Credentials{}, ErrEngineNotFound
+		return Engine{}, Credentials{}, ErrEngineNotFound
 	}
 	if queryError != nil {
-		return Credentials{}, fmt.Errorf("load engine: %w", queryError)
+		return Engine{}, Credentials{}, fmt.Errorf("load engine: %w", queryError)
 	}
+	credentials, openError := repository.openCredentials(row)
+	if openError != nil {
+		return Engine{}, Credentials{}, openError
+	}
+	loadedEngine, convertError := row.toEngine()
+	if convertError != nil {
+		return Engine{}, Credentials{}, convertError
+	}
+	return loadedEngine, credentials, nil
+}
+
+func (repository *Repository) openCredentials(row engineRow) (Credentials, error) {
 	var credentials Credentials
 	if row.PasswordKeyID != nil {
-		plaintext, openError := repository.keyring.Open(row.PasswordSealed, *row.PasswordKeyID, machinePasswordAssociatedData(engineID))
+		plaintext, openError := repository.keyring.Open(row.PasswordSealed, *row.PasswordKeyID, machinePasswordAssociatedData(row.ID))
 		if openError != nil {
 			return Credentials{}, fmt.Errorf("open machine password: %w", openError)
 		}
 		credentials.MachinePassword = string(plaintext)
 	}
 	if row.ProxyCredentialKeyID != nil {
-		payload, openError := openProxyCredential(repository.keyring, engineID, row.ProxyCredentialBytes, *row.ProxyCredentialKeyID)
+		payload, openError := openProxyCredential(repository.keyring, row.ID, row.ProxyCredentialBytes, *row.ProxyCredentialKeyID)
 		if openError != nil {
 			return Credentials{}, openError
 		}
