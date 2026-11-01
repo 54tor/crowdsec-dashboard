@@ -219,7 +219,8 @@ func TestStoreTwiceIsIdempotent(testContext *testing.T) {
 }
 
 // The LAPI serves the most recent alerts first, so every poll re-serves alerts that
-// are already archived: those at or below the cursor are ignored without a query.
+// are already archived: those at or below the cursor are never written again. They
+// still feed the single reset-detection query run once per poll, nothing else.
 func TestStoreIgnoresReplayedIdsBelowCursor(testContext *testing.T) {
 	fixture := newArchiveFixture(testContext)
 	fixture.mustStore(testContext, sampleAlerts(1, 5))
@@ -274,6 +275,61 @@ func TestResetDetectedWhenOldIdsWerePurged(testContext *testing.T) {
 	}
 	if alertCount := fixture.countRows(testContext, `SELECT count(*) FROM alert`); alertCount != 30 {
 		testContext.Errorf("expected 30 alerts, got %d", alertCount)
+	}
+}
+
+// The newest alert was deleted on the engine (cscli alerts delete, or the dashboard
+// deleting a live local alert, decision 10): the highest id served (4) is now below
+// the cursor (5). The served pairs are already archived with the same uuid, which a
+// reset engine can never produce (uuids are random), so this is not a reset: the
+// cursor stays, nothing is processed again.
+func TestNewestAlertDeletedOnEngineIsNotAReset(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.mustStore(testContext, sampleAlerts(1, 5))
+
+	afterDeletionResult := fixture.mustStore(testContext, sampleAlerts(1, 4))
+
+	if afterDeletionResult != (StoreResult{Cursor: 5}) {
+		testContext.Errorf("expected no reset and the cursor kept at 5, got %+v", afterDeletionResult)
+	}
+	if fixture.cursor(testContext) != 5 {
+		testContext.Errorf("cursor must stay 5, got %d", fixture.cursor(testContext))
+	}
+	if obtainedCounts := fixture.tableCounts(testContext); obtainedCounts != [3]int{5, 5, 5} {
+		testContext.Errorf("nothing may be inserted again, got %v", obtainedCounts)
+	}
+}
+
+// Retention removed the archive rows of ids 1-3 while the engine still serves 1-4
+// (its newest, 5, was deleted). Id 4 is still archived with the same uuid, so this
+// is not a reset and the purged ids 1-3 are NOT re-inserted. Only when every served
+// pair is gone from the archive (TestResetDetectedWhenOldIdsWerePurged) is the
+// situation indistinguishable from a reset, and then the served alerts are archived.
+func TestPartlyPurgedArchiveAfterNewestDeletionIsNotAReset(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.mustStore(testContext, sampleAlerts(1, 5))
+	fixture.exec(testContext, `DELETE FROM alert WHERE alert_upstream_id <= 3`)
+
+	afterPurgeResult := fixture.mustStore(testContext, sampleAlerts(1, 4))
+
+	if afterPurgeResult != (StoreResult{Cursor: 5}) {
+		testContext.Errorf("expected no reset, got %+v", afterPurgeResult)
+	}
+	if alertCount := fixture.countRows(testContext, `SELECT count(*) FROM alert`); alertCount != 2 {
+		testContext.Errorf("purged alerts must not be resurrected, got %d alerts", alertCount)
+	}
+}
+
+// A real remote reset whose served ids stay below the cursor (ids restart with new
+// uuids, the engine has fewer alerts than before) is still detected.
+func TestRemoteResetBelowCursorWithNewUUIDsIsDetected(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.mustStore(testContext, sampleAlerts(1, 5))
+
+	resetResult := fixture.mustStore(testContext, []lapi.Alert{sampleAlert(1, "uuid-1-new"), sampleAlert(2, "uuid-2-new")})
+
+	if resetResult != (StoreResult{Inserted: 2, Cursor: 2, ResetDetected: true}) {
+		testContext.Errorf("expected a reset with two new alerts, got %+v", resetResult)
 	}
 }
 

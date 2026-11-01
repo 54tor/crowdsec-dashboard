@@ -148,24 +148,28 @@ func detectEngineReset(ctx context.Context, transaction bun.Tx, engineID int64, 
 			replayedUUIDs = append(replayedUUIDs, upstreamUUID)
 		}
 	}
-	if highestReceivedID > 0 && highestReceivedID < cursor {
-		return true, nil
-	}
+	receivedBelowCursor := highestReceivedID > 0 && highestReceivedID < cursor
 	if len(replayedIDs) == 0 {
-		return false, nil
+		return receivedBelowCursor, nil
 	}
-	var reusedIDFound bool
+	var knownPairFound, reusedIDFound bool
 	queryError := transaction.NewRaw(`
-		SELECT EXISTS (
-			SELECT 1 FROM unnest(?::bigint[], ?::text[]) AS received (upstream_id, upstream_uuid)
-			WHERE EXISTS (
-				SELECT 1 FROM alert WHERE alert_engine_id = ? AND alert_upstream_id = received.upstream_id
-			) AND NOT EXISTS (
-				SELECT 1 FROM alert
-				WHERE alert_engine_id = ? AND alert_upstream_id = received.upstream_id AND alert_upstream_uuid = received.upstream_uuid
-			)
-		)`, pgdialect.Array(replayedIDs), pgdialect.Array(replayedUUIDs), engineID, engineID).Scan(ctx, &reusedIDFound)
-	return reusedIDFound, queryError
+		SELECT coalesce(bool_or(archived_pair), false), coalesce(bool_or(archived_id AND NOT archived_pair), false)
+		FROM (
+			SELECT
+				EXISTS (
+					SELECT 1 FROM alert
+					WHERE alert_engine_id = ? AND alert_upstream_id = received.upstream_id AND alert_upstream_uuid = received.upstream_uuid
+				) AS archived_pair,
+				EXISTS (
+					SELECT 1 FROM alert WHERE alert_engine_id = ? AND alert_upstream_id = received.upstream_id
+				) AS archived_id
+			FROM unnest(?::bigint[], ?::text[]) AS received (upstream_id, upstream_uuid)
+		) AS checked`, engineID, engineID, pgdialect.Array(replayedIDs), pgdialect.Array(replayedUUIDs)).Scan(ctx, &knownPairFound, &reusedIDFound)
+	if queryError != nil {
+		return false, queryError
+	}
+	return reusedIDFound || (receivedBelowCursor && !knownPairFound), nil
 }
 
 func storeAlertUnderSavepoint(ctx context.Context, transaction bun.Tx, rows alertRows) (alertOutcome, error) {
