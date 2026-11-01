@@ -136,6 +136,21 @@ describe('decision actions', () => {
     expect(within(dialog).getByRole('button', { name: en.decisions.unban })).toBeEnabled()
   })
 
+  it('unbanTargetMismatchShowsTheTranslatedReloadMessage', async () => {
+    stubFetch(decisionRoutes({ 'DELETE /api/decisions/10?scope=Ip&value=203.0.113.7': { status: 409, body: { error: 'target_mismatch' } } }))
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    await user.click(await screen.findByRole('button', { name: 'Unban 203.0.113.7' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Type 203.0.113.7 to confirm'), '203.0.113.7')
+    await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
+
+    const alertText = await within(dialog).findByRole('alert')
+    expect(alertText).toHaveTextContent(en.errors.target_mismatch)
+    expect(alertText).not.toHaveTextContent(en.errors.unknown)
+  })
+
   it('banDialogShowsSelfBanErrorTranslated', async () => {
     stubFetch(decisionRoutes({ 'POST /api/decisions': { status: 409, body: { error: 'self_ban' } } }))
     const user = userEvent.setup()

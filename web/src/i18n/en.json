@@ -88,6 +88,7 @@
     "cross_origin": "Request blocked: cross-origin requests are not allowed.",
     "not_found": "Resource not found.",
     "invalid_request": "The request is invalid.",
+    "target_mismatch": "This item has changed since the list was loaded. Reload the page.",
     "invalid_target": "The target must be a valid IP address or CIDR range.",
     "invalid_duration": "The duration is invalid.",
     "invalid_reason": "The reason is invalid.",
@@ -193,7 +194,7 @@
   },
   "decisions": {
     "title": "Decisions",
-    "caption": "Active decisions",
+    "caption": "Decisions",
     "communityNotice": "Decisions from the community blocklist (CAPI) are not included here.",
     "columns": {
       "value": "Target",
@@ -428,7 +429,7 @@
       "machineId": "Machine ID",
       "machinePassword": "Machine password",
       "machinePasswordKeepHint": "Leave empty to keep the stored password.",
-      "machinePasswordRequired": "Required: the LAPI URL changed.",
+      "machinePasswordRequired": "Required: the LAPI URL or the proxy changed.",
       "proxyKind": "Proxy",
       "proxyNone": "No proxy",
       "proxyUrl": "Proxy URL",
@@ -447,9 +448,10 @@
     "create": "Create",
     "status": {
       "never": "Never collected",
-      "lastCollected": "Last collection",
+      "lastCollected": "Last collection:",
       "incomplete": "History incomplete since the dashboard started",
-      "failures": "{{count}} consecutive failure(s)"
+      "failures_one": "{{count}} consecutive failure",
+      "failures_other": "{{count}} consecutive failures"
     }
   },
   "alertDetail": {

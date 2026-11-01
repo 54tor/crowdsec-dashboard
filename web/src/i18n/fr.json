@@ -88,6 +88,7 @@
     "cross_origin": "Requête bloquée : les requêtes inter-origines sont interdites.",
     "not_found": "Ressource introuvable.",
     "invalid_request": "La requête est invalide.",
+    "target_mismatch": "Cet élément a changé depuis le chargement de la liste. Rechargez la page.",
     "invalid_target": "La cible doit être une adresse IP ou une plage CIDR valide.",
     "invalid_duration": "La durée est invalide.",
     "invalid_reason": "Le motif est invalide.",
@@ -193,7 +194,7 @@
   },
   "decisions": {
     "title": "Décisions",
-    "caption": "Décisions actives",
+    "caption": "Décisions",
     "communityNotice": "Les décisions de la liste de blocage communautaire (CAPI) ne sont pas incluses ici.",
     "columns": {
       "value": "Cible",
@@ -428,7 +429,7 @@
       "machineId": "Identifiant machine",
       "machinePassword": "Mot de passe machine",
       "machinePasswordKeepHint": "Laissez vide pour conserver le mot de passe stocké.",
-      "machinePasswordRequired": "Obligatoire : l'URL de la LAPI a changé.",
+      "machinePasswordRequired": "Obligatoire : l'URL de la LAPI ou le proxy a changé.",
       "proxyKind": "Proxy",
       "proxyNone": "Aucun proxy",
       "proxyUrl": "URL du proxy",
@@ -447,9 +448,10 @@
     "create": "Créer",
     "status": {
       "never": "Jamais collecté",
-      "lastCollected": "Dernière collecte",
+      "lastCollected": "Dernière collecte :",
       "incomplete": "Historique incomplet depuis le démarrage du tableau de bord",
-      "failures": "{{count}} échec(s) consécutif(s)"
+      "failures_one": "{{count}} échec consécutif",
+      "failures_other": "{{count}} échecs consécutifs"
     }
   },
   "alertDetail": {
