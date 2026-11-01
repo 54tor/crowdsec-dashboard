@@ -55,6 +55,7 @@ type fakeEngine struct {
 	slowFullRead      time.Duration
 	hangReads         bool
 	refuseLogin       bool
+	down              atomic.Bool
 	activeReads       atomic.Int64
 	maximumConcurrent atomic.Int64
 	releaseReads      chan struct{}
@@ -68,6 +69,10 @@ func (fake *fakeEngine) ServeHTTP(responseWriter http.ResponseWriter, request *h
 			return
 		}
 		_, _ = responseWriter.Write([]byte(`{"token":"jwt-collector"}`))
+		return
+	}
+	if fake.down.Load() {
+		http.Error(responseWriter, `{"message":"unavailable"}`, http.StatusServiceUnavailable)
 		return
 	}
 	concurrentReads := fake.activeReads.Add(1)
@@ -443,11 +448,46 @@ func TestTruncatedPollReadCountsAFailure(testContext *testing.T) {
 		testContext.Fatal("a truncated poll must fail the collection")
 	}
 	engineStats := fixture.statsOf(testContext, "edge-1")
-	if engineStats.Failures != 1 || engineStats.ConsecutiveFailures != 1 || !engineStats.HistoryIncomplete || engineStats.LastErrorCode == "" {
+	if engineStats.Failures != 1 || engineStats.ConsecutiveFailures != 1 || engineStats.LastErrorCode == "" {
 		testContext.Fatalf("the truncated poll must be counted: %+v", engineStats)
+	}
+	if engineStats.Gaps != 0 || engineStats.HistoryIncomplete {
+		testContext.Fatalf("a failed attempt loses no range: no gap, history not flagged: %+v", engineStats)
 	}
 	if fixture.cursor(testContext, engineID) != 25 {
 		testContext.Fatal("a truncated poll must not move the cursor")
+	}
+}
+
+// An engine that is simply down at cursor 0 fails its full read and its fallback
+// poll: nothing was lost, so retries count no gap and never flag the history, and
+// the import that succeeds once it is back leaves the history complete.
+func TestUnreachableEngineAtCursorZeroCountsNoGap(testContext *testing.T) {
+	fixture := newCollectorFixture(testContext, testSettings())
+	fake := &fakeEngine{}
+	fake.addAlerts(1, 20)
+	fake.down.Store(true)
+	engineID := fixture.insertEngine(testContext, "edge-1")
+	handle := handleFor(engineID, "edge-1", startFakeEngine(testContext, fake))
+	fixture.source.set(handle)
+
+	for retryNumber := 1; retryNumber <= 3; retryNumber++ {
+		if collectError := fixture.collector.CollectOnce(context.Background(), handle); collectError == nil {
+			testContext.Fatalf("retry %d: a down engine must fail", retryNumber)
+		}
+		fixture.clock.advance(time.Hour)
+	}
+	downStats := fixture.statsOf(testContext, "edge-1")
+	if downStats.Failures != 3 || downStats.Gaps != 0 || downStats.HistoryIncomplete {
+		testContext.Fatalf("failed retries must not count gaps: %+v", downStats)
+	}
+
+	fake.down.Store(false)
+	fixture.mustCollect(testContext, handle)
+
+	recoveredStats := fixture.statsOf(testContext, "edge-1")
+	if recoveredStats.Gaps != 0 || recoveredStats.HistoryIncomplete || recoveredStats.Inserted != 20 {
+		testContext.Fatalf("the full import must leave the history complete: %+v", recoveredStats)
 	}
 }
 
@@ -620,6 +660,66 @@ func TestBackoffIsCappedAtMaxBackoff(testContext *testing.T) {
 	waitBeforeNextAttempt := fixture.statsOf(testContext, "edge-1").NextAttemptAt.Sub(fixture.clock.now())
 	if waitBeforeNextAttempt > 216*time.Second || waitBeforeNextAttempt < 144*time.Second {
 		testContext.Fatalf("expected the cap of 3m ±20%%, got %v", waitBeforeNextAttempt)
+	}
+}
+
+// panickingStore panics for one engine, as a bug on attacker-controlled data
+// would, with a panic value that carries engine data the log must never show.
+type panickingStore struct {
+	delegate        *archive.Writer
+	panicEngineID   int64
+	panicsRemaining atomic.Int64
+}
+
+const panicEngineDataMarker = "marker-engine-data-in-panic-3b7f"
+
+func (store *panickingStore) Store(ctx context.Context, engineID int64, alerts []lapi.Alert, collectedAt time.Time) (archive.StoreResult, error) {
+	if engineID == store.panicEngineID && store.panicsRemaining.Add(-1) >= 0 {
+		panic("decode " + panicEngineDataMarker)
+	}
+	return store.delegate.Store(ctx, engineID, alerts, collectedAt)
+}
+
+func TestPanickingCollectionIsRecoveredAndCountedAsFailure(testContext *testing.T) {
+	fixture := newCollectorFixture(testContext, testSettings())
+	poisonFake, healthyFake := &fakeEngine{}, &fakeEngine{}
+	poisonFake.addAlerts(1, 3)
+	healthyFake.addAlerts(1, 4)
+	poisonID := fixture.insertEngine(testContext, "edge-poison")
+	healthyID := fixture.insertEngine(testContext, "edge-ok")
+	store := &panickingStore{delegate: archive.NewWriter(fixture.database, archive.DefaultBounds), panicEngineID: poisonID}
+	store.panicsRemaining.Store(1)
+	fixture.collector = New(fixture.source, fixture.repository, store, fixture.repository, testSettings(), fixture.clock.now, fixture.logs.logLine)
+	fixture.source.set(
+		handleFor(poisonID, "edge-poison", startFakeEngine(testContext, poisonFake)),
+		handleFor(healthyID, "edge-ok", startFakeEngine(testContext, healthyFake)),
+	)
+	ticks := make(chan time.Time)
+	fixture.collector.ticks = ticks
+	runContext, cancelRun := context.WithCancel(context.Background())
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		fixture.collector.Run(runContext)
+	}()
+
+	waitUntil(testContext, "the panic to be counted and the healthy engine archived", func() bool {
+		return fixture.collector.Stats()["edge-poison"].Failures == 1 && fixture.countAlerts(testContext, healthyID) == 4
+	})
+	poisonStats := fixture.collector.Stats()["edge-poison"]
+	if poisonStats.LastErrorCode != engines.ErrorCodeArchiveWriteFailed || poisonStats.ConsecutiveFailures != 1 || !poisonStats.NextAttemptAt.After(fixture.clock.now()) {
+		testContext.Fatalf("the panic must be a backed-off archive_write_failed: %+v", poisonStats)
+	}
+	waitUntil(testContext, "the poisoned engine to be released", func() bool { return fixture.collector.inFlightCount() == 0 })
+	fixture.clock.advance(time.Hour)
+	ticks <- fixture.clock.now()
+	waitUntil(testContext, "the poisoned engine to be retried", func() bool {
+		return fixture.countAlerts(testContext, poisonID) == 3
+	})
+	cancelRun()
+	<-runDone
+	if logText := fixture.logs.text(); strings.Contains(logText, panicEngineDataMarker) || !strings.Contains(logText, "edge-poison") {
+		testContext.Fatalf("the log must name the engine and never show the panic value: %q", logText)
 	}
 }
 

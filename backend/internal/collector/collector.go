@@ -25,6 +25,7 @@ var (
 	ErrCollectionInProgress = errors.New("collector: collection already in progress")
 	errStoreFailed          = errors.New("collector: archive write failed")
 	errTruncatedRead        = errors.New("collector: engine response exceeds the read bound")
+	errCollectionPanicked   = errors.New("collector: collection panicked")
 )
 
 type HandleSource interface {
@@ -176,7 +177,7 @@ func (collector *Collector) forgetRemovedEngines(handles []engines.Handle) {
 
 func (collector *Collector) collectClaimed(ctx context.Context, handle engines.Handle) error {
 	collectedAt := collector.now()
-	outcome, collectError := collector.collect(ctx, handle.Engine.ID, handle.Client, collectedAt)
+	outcome, collectError := collector.collectRecoveringPanics(ctx, handle, collectedAt)
 	if collectError != nil && ctx.Err() != nil {
 		collector.release(handle.Engine.ID, func(*engineState) {})
 		return collectError
@@ -216,6 +217,16 @@ func (collector *Collector) record(ctx context.Context, collectedEngine engines.
 	}
 }
 
+func (collector *Collector) collectRecoveringPanics(ctx context.Context, handle engines.Handle, collectedAt time.Time) (outcome collectionOutcome, collectError error) {
+	defer func() {
+		if recover() != nil {
+			collector.logLine("collector: engine %s collection panicked", handle.Engine.Name)
+			outcome, collectError = collectionOutcome{}, errCollectionPanicked
+		}
+	}()
+	return collector.collect(ctx, handle.Engine.ID, handle.Client, collectedAt)
+}
+
 func (collector *Collector) collect(ctx context.Context, engineID int64, client *lapi.Client, collectedAt time.Time) (collectionOutcome, error) {
 	var outcome collectionOutcome
 	cursor, cursorError := collector.cursors.CollectionCursor(ctx, engineID)
@@ -240,7 +251,7 @@ func (collector *Collector) collect(ctx context.Context, engineID int64, client 
 func (collector *Collector) readAlerts(ctx context.Context, client *lapi.Client, cursor int64, outcome *collectionOutcome) (lapi.ArchiveRead, error) {
 	var fallbackRead *lapi.ArchiveRead
 	if cursor > 0 {
-		pollRead, pollError := collector.pollRead(ctx, client, outcome)
+		pollRead, pollError := collector.pollRead(ctx, client)
 		if pollError != nil || !hasGap(pollRead, cursor) {
 			return pollRead, pollError
 		}
@@ -253,21 +264,23 @@ func (collector *Collector) readAlerts(ctx context.Context, client *lapi.Client,
 	if fullReadError != nil && (!canFallBackToPoll(fullReadError) || ctx.Err() != nil) {
 		return lapi.ArchiveRead{}, fullReadError
 	}
-	outcome.gapCounted = true
-	outcome.historyIncomplete = true
-	if fallbackRead != nil {
-		return *fallbackRead, nil
+	if fallbackRead == nil {
+		pollRead, pollError := collector.pollRead(ctx, client)
+		if pollError != nil {
+			return lapi.ArchiveRead{}, pollError
+		}
+		fallbackRead = &pollRead
 	}
-	return collector.pollRead(ctx, client, outcome)
+	outcome.gapCounted = true
+	return *fallbackRead, nil
 }
 
-func (collector *Collector) pollRead(ctx context.Context, client *lapi.Client, outcome *collectionOutcome) (lapi.ArchiveRead, error) {
+func (collector *Collector) pollRead(ctx context.Context, client *lapi.Client) (lapi.ArchiveRead, error) {
 	pollRead, pollError := client.ReadAlertsForArchive(ctx, collector.settings.PollLimit, collector.settings.FullReadMaxBytes, collector.settings.PollTimeout)
 	if pollError != nil {
 		return lapi.ArchiveRead{}, pollError
 	}
 	if pollRead.Truncated {
-		outcome.historyIncomplete = true
 		return lapi.ArchiveRead{}, errTruncatedRead
 	}
 	return pollRead, nil
@@ -292,7 +305,7 @@ func canFallBackToPoll(fullReadError error) bool {
 
 func collectionErrorCode(collectError error) engines.CollectionErrorCode {
 	switch {
-	case errors.Is(collectError, errStoreFailed):
+	case errors.Is(collectError, errStoreFailed), errors.Is(collectError, errCollectionPanicked):
 		return engines.ErrorCodeArchiveWriteFailed
 	case errors.Is(collectError, errTruncatedRead):
 		return engines.ErrorCodeUnreachable

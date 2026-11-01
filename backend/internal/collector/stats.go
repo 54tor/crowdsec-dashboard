@@ -24,10 +24,9 @@ type engineState struct {
 }
 
 type collectionOutcome struct {
-	storeResult       archive.StoreResult
-	skippedByRead     int
-	gapCounted        bool
-	historyIncomplete bool
+	storeResult   archive.StoreResult
+	skippedByRead int
+	gapCounted    bool
 }
 
 func newEngineState(settings Settings) *engineState {
@@ -42,18 +41,16 @@ func newEngineState(settings Settings) *engineState {
 func (state *engineState) countAttempt(outcome collectionOutcome) {
 	state.stats.Polls++
 	state.stats.Skipped += uint64(outcome.skippedByRead)
-	if outcome.gapCounted {
-		state.stats.Gaps++
-	}
-	if outcome.historyIncomplete {
-		state.stats.HistoryIncomplete = true
-	}
 }
 
 func (state *engineState) countSuccess(outcome collectionOutcome, collectedAt time.Time, interval time.Duration) {
 	state.stats.Inserted += uint64(outcome.storeResult.Inserted)
 	state.stats.Duplicates += uint64(outcome.storeResult.Duplicates)
 	state.stats.Skipped += uint64(outcome.storeResult.Skipped)
+	if outcome.gapCounted {
+		state.stats.Gaps++
+		state.stats.HistoryIncomplete = true
+	}
 	if outcome.storeResult.ResetDetected {
 		state.stats.Resets++
 	}
