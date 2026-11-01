@@ -38,7 +38,6 @@ type Client struct {
 func NewClient(baseURL, machineID, machinePassword string, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{
-			Timeout: defaultTimeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -200,29 +199,54 @@ func setIfNotEmpty(query url.Values, key, value string) {
 	}
 }
 
+type exchangeLimits struct {
+	timeout  time.Duration
+	maxBytes int64
+}
+
+var defaultLimits = exchangeLimits{timeout: defaultTimeout, maxBytes: maxResponseBytes}
+
+func (client *Client) CloseIdleConnections() {
+	client.httpClient.CloseIdleConnections()
+}
+
 func (client *Client) authorizedRequest(ctx context.Context, method, path string, query url.Values, body, out any) error {
-	token, err := client.currentToken(ctx)
+	status, responseBody, err := client.authorizedExchange(ctx, method, path, query, body, defaultLimits)
 	if err != nil {
 		return err
 	}
-	status, responseBody, err := client.send(ctx, method, path, query, body, token)
-	if err != nil {
-		return err
-	}
-	if status == http.StatusUnauthorized {
-		token, err = client.refreshToken(ctx, token)
-		if err != nil {
-			return err
-		}
-		status, responseBody, err = client.send(ctx, method, path, query, body, token)
-		if err != nil {
-			return err
-		}
-		if status == http.StatusUnauthorized {
-			return ErrLAPIUnavailable
-		}
+	if int64(len(responseBody)) > defaultLimits.maxBytes {
+		responseBody = responseBody[:defaultLimits.maxBytes]
 	}
 	return decodeResponse(status, responseBody, out)
+}
+
+func (client *Client) authorizedExchange(ctx context.Context, method, path string, query url.Values, body any, limits exchangeLimits) (int, []byte, error) {
+	ctx, cancelExchange := context.WithTimeout(ctx, limits.timeout)
+	defer cancelExchange()
+	token, err := client.currentToken(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	status, responseBody, err := client.send(ctx, method, path, query, body, token, limits.maxBytes)
+	if err != nil {
+		return 0, nil, err
+	}
+	if status != http.StatusUnauthorized {
+		return status, responseBody, nil
+	}
+	token, err = client.refreshToken(ctx, token)
+	if err != nil {
+		return 0, nil, err
+	}
+	status, responseBody, err = client.send(ctx, method, path, query, body, token, limits.maxBytes)
+	if err != nil {
+		return 0, nil, err
+	}
+	if status == http.StatusUnauthorized {
+		return 0, nil, ErrAuthFailed
+	}
+	return status, responseBody, nil
 }
 
 func decodeResponse(status int, responseBody []byte, out any) error {
@@ -265,9 +289,12 @@ func (client *Client) loginLocked(ctx context.Context) (string, error) {
 		"password":   client.machinePassword,
 		"scenarios":  []string{},
 	}
-	status, responseBody, err := client.send(ctx, http.MethodPost, "/v1/watchers/login", nil, credentials, "")
+	status, responseBody, err := client.send(ctx, http.MethodPost, "/v1/watchers/login", nil, credentials, "", maxResponseBytes)
 	if err != nil {
 		return "", err
+	}
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		return "", ErrAuthFailed
 	}
 	if status != http.StatusOK {
 		return "", ErrLAPIUnavailable
@@ -282,7 +309,7 @@ func (client *Client) loginLocked(ctx context.Context) (string, error) {
 	return client.token, nil
 }
 
-func (client *Client) send(ctx context.Context, method, path string, query url.Values, body any, token string) (int, []byte, error) {
+func (client *Client) send(ctx context.Context, method, path string, query url.Values, body any, token string, maxBytes int64) (int, []byte, error) {
 	target := client.baseURL + path
 	if len(query) > 0 {
 		target += "?" + query.Encode()
@@ -308,12 +335,12 @@ func (client *Client) send(ctx context.Context, method, path string, query url.V
 	}
 	response, err := client.httpClient.Do(request)
 	if err != nil {
-		return 0, nil, ErrLAPIUnavailable
+		return 0, nil, &transportError{cause: err}
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes))
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
 	if err != nil {
-		return 0, nil, ErrLAPIUnavailable
+		return 0, nil, &transportError{cause: err}
 	}
 	return response.StatusCode, responseBody, nil
 }

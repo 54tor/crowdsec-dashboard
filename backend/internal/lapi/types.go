@@ -11,7 +11,20 @@ var (
 	ErrNotFound        = errors.New("lapi: not found")
 	ErrBadRequest      = errors.New("lapi: bad request")
 	ErrForbidden       = errors.New("lapi: forbidden")
+	ErrAuthFailed      = fmt.Errorf("lapi: authentication failed: %w", ErrLAPIUnavailable)
 )
+
+type transportError struct {
+	cause error
+}
+
+func (failure *transportError) Error() string {
+	return ErrLAPIUnavailable.Error()
+}
+
+func (failure *transportError) Unwrap() []error {
+	return []error{ErrLAPIUnavailable, failure.cause}
+}
 
 type StatusError struct {
 	Code int
@@ -56,18 +69,31 @@ type Decision struct {
 	Simulated bool   `json:"simulated"`
 }
 
+type MetaEntry struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type Event struct {
+	Timestamp string      `json:"timestamp"`
+	Meta      []MetaEntry `json:"meta"`
+}
+
 type Alert struct {
-	ID          int64      `json:"id"`
-	CreatedAt   string     `json:"created_at"`
-	MachineID   string     `json:"machine_id"`
-	Scenario    string     `json:"scenario"`
-	Message     string     `json:"message"`
-	EventsCount int32      `json:"events_count"`
-	StartAt     string     `json:"start_at"`
-	StopAt      string     `json:"stop_at"`
-	Simulated   bool       `json:"simulated"`
-	Source      Source     `json:"source"`
-	Decisions   []Decision `json:"decisions"`
+	ID              int64      `json:"id"`
+	UUID            string     `json:"uuid"`
+	ScenarioVersion string     `json:"scenario_version"`
+	CreatedAt       string     `json:"created_at"`
+	MachineID       string     `json:"machine_id"`
+	Scenario        string     `json:"scenario"`
+	Message         string     `json:"message"`
+	EventsCount     int32      `json:"events_count"`
+	StartAt         string     `json:"start_at"`
+	StopAt          string     `json:"stop_at"`
+	Simulated       bool       `json:"simulated"`
+	Source          Source     `json:"source"`
+	Decisions       []Decision `json:"decisions"`
+	Events          []Event    `json:"events,omitempty"`
 }
 
 type AlertFilter struct {

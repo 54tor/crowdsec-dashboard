@@ -28,7 +28,7 @@ func (handlers alertReadHandlers) list(responseWriter http.ResponseWriter, reque
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, page[lapi.Alert]{
-		Items:          withEmptyDecisions(slicePage(window, query)),
+		Items:          prepareAlertsForResponse(slicePage(window, query)),
 		Page:           query.Page,
 		PerPage:        query.PerPage,
 		WindowSize:     len(window),
@@ -36,8 +36,9 @@ func (handlers alertReadHandlers) list(responseWriter http.ResponseWriter, reque
 	})
 }
 
-func withEmptyDecisions(alerts []lapi.Alert) []lapi.Alert {
+func prepareAlertsForResponse(alerts []lapi.Alert) []lapi.Alert {
 	for alertIndex := range alerts {
+		alerts[alertIndex].Events = nil
 		if alerts[alertIndex].Decisions == nil {
 			alerts[alertIndex].Decisions = []lapi.Decision{}
 		}

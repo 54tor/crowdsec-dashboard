@@ -429,3 +429,27 @@ func TestHealthNeverMarksAMachineAsSelfWhenNoMachineIDIsConfigured(testContext *
 		testContext.Errorf("unexpected body %q", recorder.Body.String())
 	}
 }
+
+// Events carry attacker-controlled data and are only meant for the archive: the
+// existing live alert route must not start emitting them now that lapi.Alert decodes them.
+func TestExistingAlertRoutesStillOmitEvents(testContext *testing.T) {
+	alertWithEvents := lapi.Alert{ID: 1, Scenario: "crowdsecurity/ssh-bf", Events: []lapi.Event{{
+		Timestamp: "2026-10-30 17:34:06 +0000 UTC",
+		Meta:      []lapi.MetaEntry{{Key: "source_ip", Value: "203.0.113.10"}},
+	}}}
+	lister := &fakeAlertLister{alerts: []lapi.Alert{alertWithEvents}}
+	fixture := newReadFixture(testContext, Services{AlertReader: lister})
+
+	recorder := fixture.get("/api/alerts", true)
+
+	if recorder.Code != http.StatusOK {
+		testContext.Fatalf("expected 200, got %d %q", recorder.Code, recorder.Body.String())
+	}
+	decoded := decodePage(testContext, recorder)
+	if len(decoded.Items) != 1 {
+		testContext.Fatalf("expected one alert, got %d", len(decoded.Items))
+	}
+	if _, hasEvents := decoded.Items[0]["events"]; hasEvents {
+		testContext.Fatalf("the alert route must not emit events: %s", recorder.Body.String())
+	}
+}
