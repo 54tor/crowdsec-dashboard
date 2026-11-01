@@ -59,6 +59,7 @@ func EventMeta(entries []lapi.MetaEntry, bounds Bounds) (map[string]string, bool
 	for _, entry := range entries {
 		key, keyCut := sanitizeTextReportingCut(entry.Key, bounds.MaxMetaKeyBytes)
 		if _, alreadyPresent := meta[key]; alreadyPresent {
+			truncated = truncated || keyCut
 			continue
 		}
 		value, valueCut := sanitizeTextReportingCut(entry.Value, bounds.MaxMetaValueBytes)

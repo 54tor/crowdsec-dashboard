@@ -171,3 +171,23 @@ func TestEventMetaKeepsFirstValueOfRepeatedKey(testContext *testing.T) {
 		testContext.Errorf("a repeated key is not a truncation")
 	}
 }
+
+// A key cut to the key bound can collide with an earlier key: the later value is
+// dropped, so the meta lost data and must be flagged as truncated (unlike an exact
+// repeat, which loses nothing the LAPI meant as a distinct key).
+func TestEventMetaFlagsCutKeyCollidingWithEarlierKey(testContext *testing.T) {
+	keyAtBound := strings.Repeat("k", DefaultBounds.MaxMetaKeyBytes)
+	collidingEntries := []lapi.MetaEntry{
+		{Key: keyAtBound, Value: "first value"},
+		{Key: keyAtBound + "-distinct-suffix", Value: "dropped value"},
+	}
+
+	boundedMeta, metaTruncated := EventMeta(collidingEntries, DefaultBounds)
+
+	if len(boundedMeta) != 1 || boundedMeta[keyAtBound] != "first value" {
+		testContext.Errorf("the first value must be kept, got %v", boundedMeta)
+	}
+	if !metaTruncated {
+		testContext.Error("a cut key that collides drops a value and must flag the meta as truncated")
+	}
+}
