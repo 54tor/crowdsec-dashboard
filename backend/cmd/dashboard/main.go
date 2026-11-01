@@ -99,6 +99,11 @@ func main() {
 		defer close(collectorDone)
 		engineCollector.Run(signalContext)
 	}()
+	purgeDone := make(chan struct{})
+	go func() {
+		defer close(purgeDone)
+		purgeArchivePeriodically(signalContext, newArchivePurge(database, loadedConfig), archivePurgeInterval, time.Now, log.Printf)
+	}()
 
 	shutdownDone := make(chan struct{})
 	go func() {
@@ -117,4 +122,5 @@ func main() {
 	}
 	<-shutdownDone
 	<-collectorDone
+	<-purgeDone
 }
