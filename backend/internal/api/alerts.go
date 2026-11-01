@@ -46,7 +46,7 @@ func (handlers alertHandlers) remove(responseWriter http.ResponseWriter, request
 		writeUpstreamError(responseWriter, lookupError)
 		return
 	}
-	if strings.ToLower(liveAlert.UUID) != expectedUUID {
+	if !strings.EqualFold(liveAlert.UUID, expectedUUID) {
 		writeError(responseWriter, http.StatusConflict, "target_mismatch")
 		return
 	}

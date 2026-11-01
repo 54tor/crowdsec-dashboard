@@ -296,6 +296,17 @@ func TestDeletingLiveAlertReportsArchiveFailureButKeepsAudit(testContext *testin
 	}
 }
 
+func TestDeletingAcceptsAnUppercaseQueryUUID(testContext *testing.T) {
+	fixture := newMergedFixture(testContext, auth.RoleAdmin)
+	fixture.alertLookup.alertsByID[1] = mergedAlert(1, 1, "203.0.113.1")
+
+	deleteRecorder := fixture.send(http.MethodDelete, "/api/alerts/1?uuid=UUID-1", `{"confirm":"1"}`)
+
+	if deleteRecorder.Code != http.StatusOK || len(fixture.runner.argvCalls) != 1 {
+		testContext.Fatalf("an uppercase uuid must match, got %d %q", deleteRecorder.Code, deleteRecorder.Body.String())
+	}
+}
+
 // A remote row shares its upstream id with an unrelated local alert: the uuid
 // of the remote row does not match the local alert, so nothing is deleted.
 func TestDeletingWithAnotherEngineIdentityNeverReachesCscli(testContext *testing.T) {
@@ -306,7 +317,6 @@ func TestDeletingWithAnotherEngineIdentityNeverReachesCscli(testContext *testing
 	fixture.alertLookup.alertsByID[5] = unrelatedLocalAlert
 
 	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/5?uuid=uuid-5", `{"confirm":"5"}`), http.StatusConflict, "target_mismatch")
-	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/5?uuid=LOCAL-UUID-5", `{"confirm":"5"}`), http.StatusConflict, "target_mismatch")
 	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/5", `{"confirm":"5"}`), http.StatusBadRequest, "invalid_request")
 	expectError(testContext, fixture.send(http.MethodDelete, "/api/alerts/6?uuid=uuid-6", `{"confirm":"6"}`), http.StatusNotFound, "not_found")
 
