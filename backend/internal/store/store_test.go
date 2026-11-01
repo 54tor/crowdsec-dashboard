@@ -557,3 +557,74 @@ func TestMigrationDownRemovesArchiveTablesAndUpRestoresThem(testContext *testing
 	}
 	insertTestEngine(testContext, database, "remote")
 }
+
+func TestEngineSealedSecretsRequireTheirKeyIdentifier(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	insertEngineQuery := "INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id, engine_machine_password_sealed, engine_machine_password_key_id, engine_proxy_kind, engine_proxy_url, engine_proxy_credential_sealed, engine_proxy_credential_key_id) VALUES (?, true, 'http://x', 'm', ?, ?, 'socks5', 'socks5://proxy.example.com:1080', ?, ?)"
+	sealedBytes := []byte{1}
+	keyIdentifier := "key1"
+
+	_, passwordWithoutKeyError := database.ExecContext(ctx, insertEngineQuery, "password-no-key", sealedBytes, nil, nil, nil)
+	requireSQLState(testContext, passwordWithoutKeyError, "23514", "engine_machine_password_pair_check")
+
+	_, keyWithoutPasswordError := database.ExecContext(ctx, insertEngineQuery, "key-no-password", nil, keyIdentifier, nil, nil)
+	requireSQLState(testContext, keyWithoutPasswordError, "23514", "engine_machine_password_pair_check")
+
+	_, credentialWithoutKeyError := database.ExecContext(ctx, insertEngineQuery, "credential-no-key", nil, nil, sealedBytes, nil)
+	requireSQLState(testContext, credentialWithoutKeyError, "23514", "engine_proxy_credential_pair_check")
+
+	_, keyWithoutCredentialError := database.ExecContext(ctx, insertEngineQuery, "key-no-credential", nil, nil, nil, keyIdentifier)
+	requireSQLState(testContext, keyWithoutCredentialError, "23514", "engine_proxy_credential_pair_check")
+
+	_, bothNullError := database.ExecContext(ctx, insertEngineQuery, "both-null", nil, nil, nil, nil)
+	if bothNullError != nil {
+		testContext.Fatalf("both null: %v", bothNullError)
+	}
+	_, remoteBothSetError := database.ExecContext(ctx,
+		"INSERT INTO engine (engine_name, engine_lapi_url, engine_machine_id, engine_machine_password_sealed, engine_machine_password_key_id, engine_proxy_kind, engine_proxy_url, engine_proxy_credential_sealed, engine_proxy_credential_key_id) VALUES ('both-set', 'http://x', 'm', ?, ?, 'http', 'http://proxy.example.com:3128', ?, ?)",
+		sealedBytes, keyIdentifier, sealedBytes, keyIdentifier)
+	if remoteBothSetError != nil {
+		testContext.Fatalf("both set: %v", remoteBothSetError)
+	}
+}
+
+func TestEngineNameIsUnique(testContext *testing.T) {
+	database := storetest.New(testContext)
+	insertTestEngine(testContext, database, "remote")
+
+	duplicateError := database.NewRaw(insertRemoteEngineQuery, "remote").Scan(context.Background(), new(int64))
+	requireSQLState(testContext, duplicateError, "23505", "engine_engine_name_key")
+}
+
+func TestDeletingAlertCascadesEventsAndDecisions(testContext *testing.T) {
+	database := storetest.New(testContext)
+	ctx := context.Background()
+	engineIdentifier := insertTestEngine(testContext, database, "remote")
+	alertIdentifier, alertError := insertTestAlert(testContext, database, engineIdentifier, 1, "uuid-a")
+	if alertError != nil {
+		testContext.Fatalf("alert: %v", alertError)
+	}
+	if _, eventError := database.ExecContext(ctx, "INSERT INTO event (event_alert_id) VALUES (?)", alertIdentifier); eventError != nil {
+		testContext.Fatalf("event: %v", eventError)
+	}
+	_, decisionError := database.ExecContext(ctx,
+		"INSERT INTO decision (decision_alert_id, decision_upstream_id, decision_type, decision_origin, decision_scope, decision_value) VALUES (?, 5, 'ban', 'crowdsec', 'Ip', '203.0.113.7')",
+		alertIdentifier)
+	if decisionError != nil {
+		testContext.Fatalf("decision: %v", decisionError)
+	}
+
+	if _, deleteError := database.ExecContext(ctx, "DELETE FROM alert WHERE alert_id = ?", alertIdentifier); deleteError != nil {
+		testContext.Fatalf("delete alert: %v", deleteError)
+	}
+	for _, tableName := range []string{"event", "decision"} {
+		var remainingRows int
+		if countError := database.NewRaw("SELECT count(*) FROM "+tableName).Scan(ctx, &remainingRows); countError != nil {
+			testContext.Fatalf("count %s: %v", tableName, countError)
+		}
+		if remainingRows != 0 {
+			testContext.Fatalf("%s rows = %d, want 0", tableName, remainingRows)
+		}
+	}
+}

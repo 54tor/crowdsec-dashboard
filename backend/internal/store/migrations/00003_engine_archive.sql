@@ -23,6 +23,12 @@ CREATE TABLE engine (
     CONSTRAINT engine_password_required_unless_local_check CHECK (
         engine_is_local OR (engine_machine_password_sealed IS NOT NULL AND engine_machine_password_key_id IS NOT NULL)
     ),
+    CONSTRAINT engine_machine_password_pair_check CHECK (
+        (engine_machine_password_sealed IS NULL) = (engine_machine_password_key_id IS NULL)
+    ),
+    CONSTRAINT engine_proxy_credential_pair_check CHECK (
+        (engine_proxy_credential_sealed IS NULL) = (engine_proxy_credential_key_id IS NULL)
+    ),
     CONSTRAINT engine_proxy_pair_check CHECK ((engine_proxy_kind IS NULL) = (engine_proxy_url IS NULL)),
     CONSTRAINT engine_proxy_credential_requires_proxy_check CHECK (
         engine_proxy_kind IS NOT NULL
