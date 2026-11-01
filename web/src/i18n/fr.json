@@ -202,13 +202,16 @@
       "origin": "Origine",
       "scenario": "Scénario",
       "expires": "Expire",
-      "simulated": "Simulée"
+      "simulated": "Simulée",
+      "engine": "Moteur"
     },
     "actions": "Actions",
     "unban": "Débannir",
     "unbanAria": "Débannir {{target}}",
     "unbanTitle": "Débannir {{target}}",
-    "unbanDescription": "La décision {{id}} sera supprimée et la cible ne sera plus bloquée. Retapez l'adresse ou la plage {{target}} ci-dessous pour confirmer."
+    "unbanDescription": "La décision {{id}} sera supprimée et la cible ne sera plus bloquée. Retapez l'adresse ou la plage {{target}} ci-dessous pour confirmer.",
+    "archivedBadge": "Archivée, non active",
+    "includeExpired": "Afficher les décisions expirées"
   },
   "chart": {
     "label": "Graphique des alertes par heure",

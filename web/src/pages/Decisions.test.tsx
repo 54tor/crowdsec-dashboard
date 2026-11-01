@@ -19,7 +19,7 @@ describe('decisions page', () => {
     })
     renderApp('/decisions')
 
-    expect(await screen.findByText('203.0.113.7', { selector: 'td' })).toBeInTheDocument()
+    expect(await screen.findByText('203.0.113.7', { selector: 'td bdi' })).toBeInTheDocument()
     expect(screen.getByText(en.decisions.communityNotice)).toBeInTheDocument()
   })
 
