@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 
+	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
@@ -20,6 +21,10 @@ type AlertService interface {
 	Delete(ctx context.Context, alertID string) error
 }
 
+type AlertLookup interface {
+	GetAlert(ctx context.Context, alertID int64) (lapi.Alert, error)
+}
+
 type Services struct {
 	Sessions       auth.SessionStore
 	Login          LoginService
@@ -29,6 +34,8 @@ type Services struct {
 	Alerts         AlertService
 	AlertReader    AlertLister
 	DecisionReader DecisionLister
+	AlertLookup    AlertLookup
+	Archive        *archive.Reader
 	Platform       Platform
 	ConfigFiles    ConfigFiles
 	Bouncers       BouncerService
@@ -48,6 +55,7 @@ func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) S
 		Alerts:         cscliAlerts{runner: runner},
 		AlertReader:    lapiClient,
 		DecisionReader: lapiClient,
+		AlertLookup:    lapiClient,
 		Platform:       cscliPlatform{runner: runner},
 		ConfigFiles:    dirConfigFiles{dir: confDir},
 		Bouncers:       cscliBouncers{runner: runner},

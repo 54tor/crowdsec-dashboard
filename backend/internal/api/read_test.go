@@ -37,10 +37,14 @@ type fakeDecisionLister struct {
 	receivedFilters []lapi.DecisionFilter
 	decisions       []lapi.Decision
 	mayBeTruncated  bool
+	failWith        error
 }
 
 func (fake *fakeDecisionLister) ListDecisions(_ context.Context, filter lapi.DecisionFilter) (lapi.DecisionList, error) {
 	fake.receivedFilters = append(fake.receivedFilters, filter)
+	if fake.failWith != nil {
+		return lapi.DecisionList{}, fake.failWith
+	}
 	return lapi.DecisionList{Decisions: append([]lapi.Decision(nil), fake.decisions...), MayBeTruncated: fake.mayBeTruncated}, nil
 }
 

@@ -4,8 +4,8 @@
 
 | Area | Behaviour |
 |---|---|
-| Alerts | Only the 100 most recent alerts of the LAPI are fetched, then paged in the dashboard. When the window is full the UI warns that older entries are not displayed. Filters (`scenario`, IP/CIDR, `since` such as `24h`, `7d`) are applied by the LAPI inside that cap. |
-| Decisions | Built from the alerts that still have an active decision (same 100-alert window), expired ones dropped. Decisions of the community blocklist (CAPI) are not listed: they are not attached to local alerts. A manual ban shows up as origin `cscli`, scenario `manual/dashboard`. |
+| Alerts | The 100 most recent alerts of the local LAPI are fetched live, followed by the archive (older local alerts and the alerts of remote engines). Filters (`scenario`, IP/CIDR, `since` such as `24h`, `7d`) are applied by the LAPI inside that cap and by the database on the archive, with different IP scopes (see `docs/api.md`). When the local LAPI is unreachable the archive is still served, flagged `live_status:"unavailable"`. |
+| Decisions | Built from the alerts that still have an active decision (same 100-alert window), expired ones dropped, followed by archived decisions still active at collection time (`include_expired=true` for the history). Decisions of the community blocklist (CAPI) are not listed: they are not attached to local alerts. A manual ban shows up as origin `cscli`, scenario `manual/dashboard`. |
 | Unban | Deletes one decision by id. An id that does not exist makes the LAPI answer 500, which the dashboard reports as 502 `lapi_unavailable`, not as a 404. |
 | Hub whitelists | Whitelist files that the hub installs as symlinks are not listed in the Config page; symlinks are never followed. |
 | Hub list | At most 1000 items are returned. |

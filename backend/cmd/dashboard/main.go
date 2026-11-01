@@ -12,6 +12,7 @@ import (
 
 	"crowdsec-dashboard/internal/accessrule"
 	"crowdsec-dashboard/internal/api"
+	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/cscli"
@@ -77,6 +78,7 @@ func main() {
 	services.Audit = auditRecorder
 	services.Geolocator = accountServices.geolocator
 	services.AccessRules = accessrule.NewRepository(database)
+	services.Archive = archive.NewReader(database)
 	services.WebAuthn = webAuthn
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)

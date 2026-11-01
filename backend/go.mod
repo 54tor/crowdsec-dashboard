@@ -6,6 +6,7 @@ require (
 	code.dny.dev/ssrf v0.3.0
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/cenkalti/backoff/v5 v5.0.3
+	github.com/crowdsecurity/go-cs-lib v0.0.25
 	github.com/descope/virtualwebauthn v1.0.5
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/jackc/pgx/v5 v5.12.0

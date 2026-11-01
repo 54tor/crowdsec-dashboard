@@ -103,14 +103,53 @@ Rules are checked at sign-in only: a change never ends an existing session, from
 
 List routes take `page` (1 to 10000, default 1), `per_page` (default 50, capped at 100) and the
 filters `scenario` (`^[A-Za-z0-9][A-Za-z0-9._/:-]{0,127}$`), `ip` (IP or CIDR) and `since` (`<1-4
-digits>` then `s`, `m`, `h` or `d`). Invalid values answer 400 `invalid_request`. The page object is
-`{"items": [...], "page", "per_page", "window_size", "may_be_truncated"}`; `window_size` is the
-number of entries fetched (at most 100), `may_be_truncated` is true when the window is full.
+digits>` then `s`, `m`, `h` or `d`). `/api/alerts` and `/api/decisions` also take `engine` (an
+engine name, `^[a-z0-9][a-z0-9-]{0,31}$`) and `/api/decisions` takes `include_expired` (`true` or
+`false`). Invalid values answer 400 `invalid_request`. The page object is `{"items": [...], "page",
+"per_page", "window_size", "may_be_truncated", "total", "total_capped", "live_status"}`;
+`window_size` is the number of entries fetched from the local LAPI (at most 100),
+`may_be_truncated` is true when that window is full.
+
+### Live and archived alerts and decisions
+
+`/api/alerts` and `/api/decisions` merge two parts: the live window of the **local** engine
+(newest 100 alerts of its LAPI, as before) first, then the archive (every engine, remote engines
+included, see [Engines](#engines)). Each item carries the LAPI fields plus `engine` (engine name,
+`local` for the live part), `live` and, for alerts, `archive_id` (null when the alert is not
+archived yet). A live alert already archived is listed once, from the live part, with `live:true`
+and its `archive_id`; an alert served by the archive alone has `live:false`. Archived decisions
+are listed with `live:false` and their `until` as known at collection time (`duration` is empty):
+they are never presented as currently enforced. By default only archived decisions whose `until`
+is in the future are listed; `include_expired=true` adds the expired history (the live part only
+ever holds active decisions). Lists never carry alert `events`.
+
+- `total` is the live window size plus the matching archive rows, counted up to 10 000;
+  `total_capped:true` means there are more (show "10 000+"). A page whose archive offset would pass
+  10 000 answers 400 `invalid_request`.
+- `live_status` is `ok`, or `unavailable` when the local LAPI could not be read: the page is then
+  served from the archive alone with status 200 (an empty `items` with `live_status:"ok"` means
+  there is nothing to show). The archive unreachable answers 503 `database_unavailable`.
+- `engine=local` lists the live window and the local archive; any other name lists that engine's
+  archive only (the live LAPI is not read, `live_status` stays `ok`); an unknown name lists nothing.
+- `ip` is normalised before use: canonical form, IPv4-mapped IPv6 unmapped, CIDR masked, zone
+  (`fe80::1%eth0`) refused. Scopes differ between the parts: on the live part the LAPI matches the
+  alerts whose decisions cover the IP (an IP inside a range-scoped ban matches it, an alert without
+  a decision does not); on the archive `ip` is an exact match on the alert source value
+  (`alert_source_value`), so a range alert is found with the range itself, not with an IP inside it.
+- `since` is forwarded to the LAPI, which compares it with the alert `start_at`
+  (`started_at >= now - since`, CrowdSec `pkg/database/alertfilter.go`); on the archive it bounds the
+  alert `created_at`.
+- Order: live items in LAPI order, then archived alerts by `created_at` descending (archive id as
+  tie-break) and archived decisions by archive decision id descending (insertion order).
+- Paging is by offset over "live window, then archive": if the live window changes between two
+  requests (new alert, or the collector archives in between), an item can repeat or be skipped at a
+  page boundary.
 
 | Method | Path | Auth | Response | Errors |
 |---|---|---|---|---|
-| GET | `/api/alerts` | yes | page of alerts: `id, created_at, machine_id, scenario, message, events_count, start_at, stop_at, simulated, source{scope,value,ip,range,cn,as_name,as_number}, decisions[]` (always an array) | 400, 502 `lapi_unavailable`, `lapi_error` |
-| GET | `/api/decisions` | yes | page of active decisions: `id, alert_id, origin, type, scope, value, duration, until, scenario, simulated` | 400, 502 |
+| GET | `/api/alerts` | yes | page of alerts: `id, uuid, scenario_version, created_at, machine_id, scenario, message, events_count, start_at, stop_at, simulated, source{scope,value,ip,range,cn,as_name,as_number}, decisions[]` (always an array), `engine, archive_id, live` | 400, 503 `database_unavailable` |
+| GET | `/api/alerts/archive/{archive_id}` | yes | one archived alert: the list fields plus `events_truncated` and `events: [{timestamp, meta:{key: value}}]` exactly as stored (`[]` once events were purged by retention); attacker-controlled values are plain JSON strings, never HTML | 400 `invalid_request`, 404 `not_found`, 503 |
+| GET | `/api/decisions` | yes | page of decisions: `id, alert_id, origin, type, scope, value, duration, until, scenario, simulated, engine, live` | 400, 503 |
 | GET | `/api/health` | yes | `{"version", "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}], "degraded":[...]}`; `self` is true only for the machine whose id equals `LAPI_MACHINE_ID` (always present, false otherwise); `degraded` lists sources that failed (`version`, `bouncers`, `machines`) | none: failures are reported in `degraded` |
 | GET | `/api/metrics` | yes | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
 | GET | `/api/config/files` | yes | `{"files":["acquis.yaml", ...]}` | 500 `config_unavailable` |
@@ -123,7 +162,8 @@ number of entries fetched (at most 100), `may_be_truncated` is true when the win
 |---|---|---|---|---|---|
 | POST | `/api/decisions` | yes | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 502 |
 | DELETE | `/api/decisions/{id}` | yes | `{"confirm":"<id>"}` | `200 {"status":"deleted"}` | 400 `confirmation_required`, `invalid_request`; 502 |
-| DELETE | `/api/alerts/{id}` | yes | `{"confirm":"<id>"}` | `200 {"status":"deleted"}` | 400; 502 `cscli_failed` |
+| DELETE | `/api/alerts/{id}` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted","archive_deleted":true}` | 400; 403 `forbidden`; 502 `cscli_failed` |
+| DELETE | `/api/alerts/archive/{archive_id}` | admin | `{"confirm":"<archive_id>"}` | `200 {"status":"deleted"}` | 400 `invalid_request`, `confirmation_required`; 403; 404 `not_found`; 503 |
 | POST | `/api/bouncers` | yes | `{"name"}` | `200 {"name","key"}`, `Cache-Control: no-store` | 400 `invalid_request`; 502; 504 |
 | DELETE | `/api/bouncers/{name}` | yes | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400; 502; 504 |
 | POST | `/api/machines` | yes | `{"name"}` | `200 {"name","password"}`, `Cache-Control: no-store` | 400; 502; 504 |
@@ -134,6 +174,13 @@ number of entries fetched (at most 100), `may_be_truncated` is true when the win
 | POST | `/api/hub/collections` | yes | `{"name"}` such as `crowdsecurity/linux` | `200 {"status":"installed"}` | 400; 502; 504 |
 | DELETE | `/api/hub/collections/{name...}` | yes | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400; 502; 504 |
 | POST | `/api/crowdsec/reload` | yes | none | `200 {"status":"reload_requested"}` | 502; 504 |
+
+`DELETE /api/alerts/{id}` deletes a live alert of the local engine with `cscli alerts delete`, then
+its archived copy (same engine, id and uuid) in the same request, so it does not come back from
+the archive; `archive_deleted:false` means the LAPI copy is gone but the archive copy could not be
+removed (logged). `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
+from the archive only (a remote engine is never contacted). Both are audited `alert_deleted` with
+target `<engine>/<upstream id>` and refuse a `read_only` account (403 `forbidden`).
 
 Machine names match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; bouncer names also allow `@` after the first character (bouncers registered over TLS are named `name@<address>`); hub names allow one `/`.
 The machine self-check runs before the confirmation check, so `self_account` wins over
