@@ -249,3 +249,78 @@ func TestPurgeConcurrentWithStore(testContext *testing.T) {
 func engineIDLiteral(fixture archiveFixture) string {
 	return strconv.FormatInt(fixture.engineID, 10)
 }
+
+func (fixture archiveFixture) setDecisionUntil(testContext *testing.T, upstreamAlertID int64, until string) {
+	testContext.Helper()
+	fixture.exec(testContext, `UPDATE decision SET decision_until = `+until+`
+		WHERE decision_alert_id = (SELECT alert_id FROM alert WHERE alert_upstream_id = `+strconv.FormatInt(upstreamAlertID, 10)+`)`)
+}
+
+func (fixture archiveFixture) alertExists(testContext *testing.T, upstreamAlertID int64) bool {
+	testContext.Helper()
+	return fixture.countRows(testContext, `SELECT count(*) FROM alert WHERE alert_upstream_id = ?`, upstreamAlertID) == 1
+}
+
+func TestPurgeKeepsAnExpiredAlertOwningAnActiveDecision(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.storeCollectedAt(testContext, 1, 1, daysAgoOneYear)
+	fixture.setDecisionUntil(testContext, 1, "now() + interval '1 hour'")
+
+	purgeResult, purgeError := Purge(context.Background(), fixture.database, testRetention, time.Now())
+
+	if purgeError != nil {
+		testContext.Fatalf("purge: %v", purgeError)
+	}
+	if purgeResult != (PurgeResult{Events: 1}) {
+		testContext.Errorf("only the event may be purged, got %+v", purgeResult)
+	}
+	if obtainedCounts := fixture.tableCounts(testContext); obtainedCounts != [3]int{1, 0, 1} {
+		testContext.Errorf("alert and active decision must stay, events go, got %v", obtainedCounts)
+	}
+}
+
+func TestPurgeRemovesAnExpiredAlertOnceItsDecisionExpired(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.storeCollectedAt(testContext, 1, 1, daysAgoOneYear)
+	fixture.setDecisionUntil(testContext, 1, "now() - interval '1 hour'")
+
+	purgeResult, purgeError := Purge(context.Background(), fixture.database, testRetention, time.Now())
+
+	if purgeError != nil || purgeResult != (PurgeResult{Alerts: 1, Decisions: 1, Events: 1}) {
+		testContext.Fatalf("unexpected result %+v %v", purgeResult, purgeError)
+	}
+	if obtainedCounts := fixture.tableCounts(testContext); obtainedCounts != [3]int{0, 0, 0} {
+		testContext.Errorf("everything must be purged, got %v", obtainedCounts)
+	}
+}
+
+func TestPurgeTreatsADecisionWithoutUntilAsInactive(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.storeCollectedAt(testContext, 1, 1, daysAgoOneYear)
+	fixture.setDecisionUntil(testContext, 1, "NULL")
+
+	purgeResult, purgeError := Purge(context.Background(), fixture.database, testRetention, time.Now())
+
+	if purgeError != nil || purgeResult != (PurgeResult{Alerts: 1, Decisions: 1, Events: 1}) {
+		testContext.Fatalf("unexpected result %+v %v", purgeResult, purgeError)
+	}
+}
+
+func TestPurgeIsSelectiveBetweenAlertsWithAndWithoutActiveDecision(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	fixture.storeCollectedAt(testContext, 1, 2, daysAgoOneYear)
+	fixture.setDecisionUntil(testContext, 1, "now() + interval '1 day'")
+	fixture.setDecisionUntil(testContext, 2, "now() - interval '1 day'")
+
+	purgeResult, purgeError := Purge(context.Background(), fixture.database, testRetention, time.Now())
+
+	if purgeError != nil || purgeResult != (PurgeResult{Alerts: 1, Decisions: 1, Events: 2}) {
+		testContext.Fatalf("unexpected result %+v %v", purgeResult, purgeError)
+	}
+	if !fixture.alertExists(testContext, 1) || fixture.alertExists(testContext, 2) {
+		testContext.Errorf("alert 1 (active decision) must stay and alert 2 must go")
+	}
+	if remainingDecisions := fixture.countRows(testContext, `SELECT count(*) FROM decision`); remainingDecisions != 1 {
+		testContext.Errorf("exactly the active decision must remain, got %d", remainingDecisions)
+	}
+}

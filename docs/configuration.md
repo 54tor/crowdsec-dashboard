@@ -47,9 +47,10 @@ resumes at the next one). All three horizons count from the time the dashboard c
 order and in batches of 5 000 rows, the events, then the decisions, then the alerts older than their
 horizon; deleting an alert also deletes whatever events and decisions it still has. A decision or
 event retention longer than the alert retention would be cut short silently by that cascade, so it
-is refused at start. Decisions are purged on collection time alone: with a short
-`ARCHIVE_DECISION_RETENTION_DAYS`, a long ban can leave the archive while it is still active on
-the engine.
+is refused at start. A decision still active on the engine (its expiry, computed at collection from
+the engine's remaining duration, is not past) is never purged, and the alert that owns it is kept
+until the decision expires, whatever the horizons; the events of that alert still follow their own
+horizon. A decision without a usable expiry is treated as inactive and follows its horizon.
 
 `DATABASE_URL`, `SECRETS_KEY_FILE`, `WEBAUTHN_RP_*`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS`,
 `COLLECTOR_*`, `ARCHIVE_*` and `CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,

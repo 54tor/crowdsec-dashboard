@@ -258,7 +258,8 @@ host, port or scheme of an engine's URL also resets its cursor, and the reset is
 **Dates.** An archived alert whose engine date (`created_at`) is missing, unparseable or in the future is dated by its collection time, so a skewed engine clock cannot pin its alerts at the top of the lists.
 
 **Retention.** Archived alerts, decisions and events are purged hourly by collection age
-([configuration.md](configuration.md#environment-variables)). Alerts purged from the archive are
+([configuration.md](configuration.md#environment-variables)). Decisions still active on the engine
+are never purged, and the alert that owns one is kept until that decision expires. Alerts purged from the archive are
 not collected again while the engine still serves them (they are below the cursor).
 
 **Deleting an engine deletes its archive** (alerts, events and decisions, in one cascade), after

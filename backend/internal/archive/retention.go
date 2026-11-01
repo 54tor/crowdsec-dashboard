@@ -39,10 +39,12 @@ const (
 	purgeDecisionsStatement = `
 		DELETE FROM decision WHERE decision_id IN (
 			SELECT decision_id FROM decision JOIN alert ON alert_id = decision_alert_id
-			WHERE alert_collected_at < ? LIMIT ?)`
+			WHERE alert_collected_at < ? AND (decision_until IS NULL OR decision_until < ?) LIMIT ?)`
 	purgeAlertsStatement = `
 		DELETE FROM alert WHERE alert_id IN (
-			SELECT alert_id FROM alert WHERE alert_collected_at < ? LIMIT ?)`
+			SELECT alert_id FROM alert WHERE alert_collected_at < ?
+			AND NOT EXISTS (SELECT 1 FROM decision WHERE decision_alert_id = alert_id AND decision_until >= ?)
+			LIMIT ?)`
 )
 
 func Purge(ctx context.Context, database *bun.DB, retention Retention, now time.Time) (PurgeResult, error) {
@@ -56,13 +58,18 @@ func (batchPurger purger) purge(ctx context.Context, retention Retention, now ti
 		statement string
 		horizon   time.Duration
 		deleted   *int64
+		withNow   bool
 	}{
-		{"events", purgeEventsStatement, retention.Event, &result.Events},
-		{"decisions", purgeDecisionsStatement, retention.Decision, &result.Decisions},
-		{"alerts", purgeAlertsStatement, retention.Alert, &result.Alerts},
+		{"events", purgeEventsStatement, retention.Event, &result.Events, false},
+		{"decisions", purgeDecisionsStatement, retention.Decision, &result.Decisions, true},
+		{"alerts", purgeAlertsStatement, retention.Alert, &result.Alerts, true},
 	}
 	for _, step := range steps {
-		deletedRows, purgeError := batchPurger.deleteInBatches(ctx, step.statement, now.Add(-step.horizon))
+		statementArguments := []any{now.Add(-step.horizon)}
+		if step.withNow {
+			statementArguments = append(statementArguments, now)
+		}
+		deletedRows, purgeError := batchPurger.deleteInBatches(ctx, step.statement, statementArguments)
 		*step.deleted = deletedRows
 		if purgeError != nil {
 			return result, fmt.Errorf("purge %s: %w", step.label, purgeError)
@@ -71,13 +78,13 @@ func (batchPurger purger) purge(ctx context.Context, retention Retention, now ti
 	return result, nil
 }
 
-func (batchPurger purger) deleteInBatches(ctx context.Context, statement string, cutoff time.Time) (int64, error) {
+func (batchPurger purger) deleteInBatches(ctx context.Context, statement string, statementArguments []any) (int64, error) {
 	var totalDeleted int64
 	for {
 		if contextError := ctx.Err(); contextError != nil {
 			return totalDeleted, contextError
 		}
-		batchResult, execError := batchPurger.database.ExecContext(ctx, statement, cutoff, batchPurger.batchSize)
+		batchResult, execError := batchPurger.database.ExecContext(ctx, statement, append(statementArguments, batchPurger.batchSize)...)
 		if execError != nil {
 			return totalDeleted, execError
 		}
