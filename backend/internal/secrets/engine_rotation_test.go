@@ -219,3 +219,26 @@ func TestRotateReportsUnreadableRowsAndContinues(testContext *testing.T) {
 		testContext.Errorf("the totp column must be rotated, got key id %q", totpKeyIDAfter)
 	}
 }
+
+func TestRotateNeverBindsToADestinationChangedAfterTheRead(testContext *testing.T) {
+	fixture := newRotationFixture(testContext)
+	engineID := insertProxiedEngine(testContext, fixture, fixture.retiredKeyring, "remote",
+		LegacyEngineMachinePasswordAssociatedData, LegacyEngineProxyCredentialAssociatedData)
+	passwordColumn := EncryptedColumns[1]
+	staleBatch, selectError := selectBatch(context.Background(), fixture.database, passwordColumn, fixture.rotatingKeyring.CurrentKeyID(), 0, testBatchSize)
+	if selectError != nil || len(staleBatch) != 1 {
+		testContext.Fatalf("select batch: %d rows, %v", len(staleBatch), selectError)
+	}
+
+	// The destination changes between the read and the rewrite while the
+	// ciphertext stays the same: only the pinned associated columns notice it.
+	if _, redirectError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_lapi_url = 'https://attacker.example.com' WHERE engine_id = ?`, engineID); redirectError != nil {
+		testContext.Fatalf("redirect: %v", redirectError)
+	}
+	outcome, rewriteError := rewriteBatch(context.Background(), fixture.database, fixture.rotatingKeyring, passwordColumn, staleBatch)
+
+	if rewriteError != nil || outcome.rewritten != 0 || outcome.skippedConcurrent != 1 {
+		testContext.Errorf("the rewrite must skip a row whose destination changed, got %+v %v", outcome, rewriteError)
+	}
+}

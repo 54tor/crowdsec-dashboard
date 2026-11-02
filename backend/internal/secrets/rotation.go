@@ -188,11 +188,16 @@ func rewriteRow(ctx context.Context, transaction bun.Tx, keyring *Keyring, colum
 	if sealError != nil {
 		return rowNotProcessed, fmt.Errorf("seal %s row %d: %w", column.Name(), row.ID, sealError)
 	}
-	result, updateError := transaction.NewRaw(
-		`UPDATE ? SET ? = ?, ? = ? WHERE ? = ? AND ? = ? AND ? = ?`,
-		bun.Ident(column.Table), bun.Ident(column.CiphertextColumn), ciphertext, bun.Ident(column.KeyIDColumn), keyID,
-		bun.Ident(column.IDColumn), row.ID, bun.Ident(column.KeyIDColumn), row.KeyID, bun.Ident(column.CiphertextColumn), row.Ciphertext,
-	).Exec(ctx)
+	updateQuery := transaction.NewUpdate().TableExpr("?", bun.Ident(column.Table)).
+		Set("? = ?", bun.Ident(column.CiphertextColumn), ciphertext).
+		Set("? = ?", bun.Ident(column.KeyIDColumn), keyID).
+		Where("? = ?", bun.Ident(column.IDColumn), row.ID).
+		Where("? = ?", bun.Ident(column.KeyIDColumn), row.KeyID).
+		Where("? = ?", bun.Ident(column.CiphertextColumn), row.Ciphertext)
+	for columnIndex, associatedColumn := range column.AssociatedDataColumns {
+		updateQuery = updateQuery.Where("CAST(? AS text) = ?", bun.Ident(associatedColumn), row.AssociatedValues[columnIndex])
+	}
+	result, updateError := updateQuery.Exec(ctx)
 	if updateError != nil {
 		return rowNotProcessed, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, updateError)
 	}
