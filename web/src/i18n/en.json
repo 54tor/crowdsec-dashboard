@@ -257,6 +257,22 @@
     "revoked": "Revoked",
     "validated": "Validated",
     "notValidated": "Not validated",
+    "database": {
+      "label": "Database",
+      "ok": "Available",
+      "unavailable": "Database unavailable",
+      "schemaVersion": "Schema version"
+    },
+    "collector": {
+      "caption": "Collector",
+      "empty": "No collection engine reported yet.",
+      "lastSuccess": "Last collection",
+      "lag": "Lag",
+      "errors": "Errors",
+      "seconds": "{{count}} s",
+      "stale": "Late: no recent successful collection",
+      "neverSinceStartup": "Never since startup"
+    },
     "degradedTitle": "Some information could not be retrieved",
     "degraded": {
       "version": "The CrowdSec version could not be read.",

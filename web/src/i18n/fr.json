@@ -257,6 +257,22 @@
     "revoked": "Révoqué",
     "validated": "Validée",
     "notValidated": "Non validée",
+    "database": {
+      "label": "Base de données",
+      "ok": "Disponible",
+      "unavailable": "Base de données indisponible",
+      "schemaVersion": "Version du schéma"
+    },
+    "collector": {
+      "caption": "Collecteur",
+      "empty": "Aucun moteur de collecte signalé pour l'instant.",
+      "lastSuccess": "Dernière collecte",
+      "lag": "Retard",
+      "errors": "Erreurs",
+      "seconds": "{{count}} s",
+      "stale": "En retard : aucune collecte réussie récente",
+      "neverSinceStartup": "Jamais depuis le démarrage"
+    },
     "degradedTitle": "Certaines informations n'ont pas pu être récupérées",
     "degraded": {
       "version": "La version de CrowdSec n'a pas pu être lue.",

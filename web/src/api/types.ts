@@ -84,8 +84,19 @@ export interface Machine {
 
 export type DegradedPart = 'version' | 'bouncers' | 'machines'
 
+export interface EngineHealth {
+  engine_name: string
+  last_success_at: string | null
+  lag_seconds: number | null
+  errors_total: number
+  stale: boolean
+}
+
 export interface HealthReport {
   version: string
+  database: 'ok' | 'unavailable'
+  schema_version: number | null
+  collector: EngineHealth[]
   bouncers: Bouncer[]
   machines: Machine[]
   degraded: DegradedPart[]

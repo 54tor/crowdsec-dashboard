@@ -65,6 +65,9 @@ export function makePage<Item>(items: Item[], overrides: Partial<Page<Item>> = {
 export function makeHealth(overrides: Partial<HealthReport> = {}): HealthReport {
   return {
     version: 'v1.7.3',
+    database: 'ok',
+    schema_version: null,
+    collector: [],
     bouncers: [],
     machines: [],
     degraded: [],
