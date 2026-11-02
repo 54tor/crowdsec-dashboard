@@ -76,6 +76,9 @@ func initialiseAccounts(ctx context.Context, database *bun.DB, keyring *secrets.
 	if migrateError := store.Migrate(ctx, database); migrateError != nil {
 		return accountServices{}, migrateError
 	}
+	if keysError := secrets.CheckKeysAvailable(ctx, database, keyring); keysError != nil {
+		return accountServices{}, keysError
+	}
 	repository := accounts.NewRepository(database)
 	secondFactors := secondfactor.NewRepository(database, keyring)
 	enrollment := accounts.NewEnrollment(repository, secondFactors)

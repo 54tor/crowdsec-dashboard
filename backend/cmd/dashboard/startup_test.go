@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"os"
@@ -198,5 +199,24 @@ func TestLoginServiceAsksTheEnrolledAccountForItsSecondFactor(testContext *testi
 
 	if beginError != nil || beginResult.Stage != login.StageSecondFactor || beginResult.PendingID == "" || !slices.Contains(beginResult.Methods, "totp") {
 		testContext.Errorf("the password alone must lead to the second factor, got %+v (%v)", beginResult, beginError)
+	}
+}
+
+func TestStartupRefusesWhenDatabaseUsesUnknownKey(testContext *testing.T) {
+	database := storetest.New(testContext)
+	removedKeyFile, removedEncodedKey := writeTestKeyFile(testContext, 1)
+	removedKeyring, _ := loadSecretsKeyring(removedKeyFile, nil)
+	insertTOTPCredential(testContext, database, removedKeyring, "alice")
+
+	_, startupError := initialiseAccounts(context.Background(), database, newTestKeyring(testContext), (&capturedLog{}).printf)
+
+	if !errors.Is(startupError, secrets.ErrMissingKeys) {
+		testContext.Fatalf("startup must refuse a database sealed under a missing key, got %v", startupError)
+	}
+	if !strings.Contains(startupError.Error(), removedKeyring.CurrentKeyID()) {
+		testContext.Errorf("the refusal must name the missing key id: %v", startupError)
+	}
+	if strings.Contains(startupError.Error(), removedEncodedKey) {
+		testContext.Error("the refusal must never contain key material")
 	}
 }
