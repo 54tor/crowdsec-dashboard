@@ -20,6 +20,7 @@ these files, which compose would otherwise expand.
 | `CROWDSEC_CONF_DIR` | none | Directory holding a read-only copy of the CrowdSec configuration, for example `/etc/crowdsec`. |
 | `TRUSTED_PROXY_CIDRS` | empty | Comma-separated CIDRs of reverse proxies whose `X-Forwarded-For` is believed. Empty means the TCP peer address is always used. |
 | `SECRETS_KEY_FILE` | none, required | Path of the file holding the key that encrypts the TOTP secrets: 32 random bytes, base64 encoded on one line. The process refuses to start when it is unset, unreadable, not base64 or not 32 bytes. The example compose sets `/run/dashboard-secrets/key` (see [Secrets key](#secrets-key)). |
+| `SECRETS_RETIRED_KEY_FILES` | empty | Comma-separated paths of the retired keys the dashboard still reads during a rotation (same format as the current key), for example `/run/dashboard-secrets/retired-1`. They are the copies made at start by the `25-secrets-key` script from `SECRETS_RETIRED_KEY_SOURCES` (compose secrets under `/run/secrets`, read by the script only). A stored secret whose key is neither the current key nor listed here stops the start and the log names the key ids ([Secrets key](#secrets-key)). |
 | `WEBAUTHN_RP_ID` | empty | WebAuthn relying party ID: the public domain name of the dashboard, lowercase, without scheme, port or path, never an IP address. Set it together with `WEBAUTHN_RP_ORIGINS` or leave both empty (TOTP only). |
 | `WEBAUTHN_RP_ORIGINS` | empty | Comma-separated bare origins from which the browser reaches the dashboard, for example `https://dashboard.example.com`. Each must be `https://` (`http://` only for `localhost`), without path, and equal to `WEBAUTHN_RP_ID` or one of its subdomains. |
 | `GEOIP_DATABASE_FILE` | empty | Path of a GeoLite2 Country database (`.mmdb`), for example `/var/lib/geoip/GeoLite2-Country.mmdb`. Empty means no geolocation: country rules are refused ([security.md](security.md#access-allowlist)). The file is re-read when it changes (checked every minute). |
@@ -39,6 +40,9 @@ these files, which compose would otherwise expand.
 | `COLLECTOR_POLL_LIMIT` | `1000` | Number of newest alerts read from an engine on each collection, from 100 to 5000. The first collection, and any collection that finds a gap since the last one, reads the whole history instead (at most 16 MiB and 120 s); when that full read is truncated or too slow the collection falls back to this limit and the engine is marked `history_incomplete`. |
 | `ARCHIVE_ALERT_RETENTION_DAYS` | `365` | Days an archived alert is kept, counted from its collection time, from 1 to 3650. |
 | `ARCHIVE_DECISION_RETENTION_DAYS` | `365` | Days an archived decision is kept, from 1 to 3650, never more than `ARCHIVE_ALERT_RETENTION_DAYS`. |
+| `AUDIT_RETENTION_DAYS` | `365` | Days an audit event is kept, from 90 to 3650. |
+| `AUDIT_IP_RETENTION_DAYS` | `30` | Days the client address of an audit event, and the target of a `login_failure` event (the name as typed, possibly an e-mail address), are kept; then they are erased and the event stays. From 1 to `AUDIT_RETENTION_DAYS`. |
+| `API_TOKEN_RETENTION_DAYS` | `30` | Days a revoked or expired API token row is kept before deletion, from 1 to 3650. A revoked or expired token never authenticates, whatever this value. |
 | `ARCHIVE_EVENT_RETENTION_DAYS` | `90` | Days the archived events (attacker-controlled data, the largest part) are kept, from 1 to 3650, never more than `ARCHIVE_ALERT_RETENTION_DAYS`. |
 
 The archive retention runs once at start and then every hour (each run stops after 30 minutes and
@@ -52,8 +56,10 @@ the engine's remaining duration, is not past) is never purged, and the alert tha
 until the decision expires, whatever the horizons; the events of that alert still follow their own
 horizon. A decision without a usable expiry is treated as inactive and follows its horizon.
 
-`DATABASE_URL`, `SECRETS_KEY_FILE`, `WEBAUTHN_RP_*`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS`,
-`COLLECTOR_*`, `ARCHIVE_*` and `CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,
+The audit, token and archive retentions run in one hourly job ([operations.md](operations.md#retention-and-purge)).
+
+`DATABASE_URL`, `SECRETS_KEY_FILE`, `SECRETS_RETIRED_KEY_FILES`, `WEBAUTHN_RP_*`, `SESSION_TTL`, `TRUSTED_PROXY_CIDRS` and the `SYNC_*`, `SHARE_EXCLUDE_CIDRS`,
+`COLLECTOR_*`, `ARCHIVE_*`, `AUDIT_*`, `API_TOKEN_RETENTION_DAYS` and `CONFIG_IMPORT_*` variables are validated at start; a wrong value stops the process. The LAPI,
 Docker and configuration variables have no default and no start-time check: a
 wrong value shows up as an error code on the pages that need it (see
 [operations.md](operations.md#troubleshooting)).
@@ -72,7 +78,7 @@ failed migration stops the start. Back up the database before upgrading to a new
 
 ## Secrets key
 
-TOTP secrets are stored encrypted (AES-256-GCM) with a key that lives outside the database. Generate
+TOTP secrets and the secrets of the engines (machine passwords, proxy credentials) are stored encrypted (AES-256-GCM) with a key that lives outside the database. Generate
 it once, outside git, and keep it in a file readable only by you:
 
 ```
@@ -87,9 +93,12 @@ the host owner and mode (owned by the host user, mode 0600), so it is not readab
 The key is identified by its `key_id`, the first 16 hex characters of its SHA-256, stored with each
 encrypted secret.
 
-**Losing the key makes every TOTP secret unreadable**: with the wrong or a missing key, TOTP codes
+**Losing the key makes every TOTP secret and engine secret unreadable**: with the wrong or a missing key, TOTP codes
 are never accepted. Back the key up separately from the database (see
-[operations.md](operations.md#secrets-key)). Only one key is active; there is no rotation yet.
+[operations.md](operations.md#secrets-key)). Only one key seals new secrets; during a rotation the
+previous keys are listed in `SECRETS_RETIRED_KEY_FILES` (and `SECRETS_RETIRED_KEY_SOURCES`, read by the
+init script) and `dashboard rotate-secrets` rewrites the rows
+([operations.md](operations.md#rotating-the-secrets-key)).
 
 ## WebAuthn
 
@@ -194,9 +203,31 @@ prometheus:
 The listener only needs to be reachable from inside the CrowdSec container, so keep it on
 `127.0.0.1` unless something else scrapes it. Counters restart at zero on every reload.
 
+## Prometheus scraping the dashboard
+
+The dashboard exports the collector state of each engine at `GET /api/prometheus/metrics`
+([operations.md](operations.md#health-and-metrics)). It needs a `read` API token (Tokens page, at most
+365 days: renew it every year). Put the token in a file readable by Prometheus only and reference it:
+
+```yaml
+scrape_configs:
+  - job_name: crowdsec-dashboard
+    scheme: https
+    metrics_path: /api/prometheus/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/dashboard.token
+    static_configs:
+      - targets: ['dashboard.example.com']
+```
+
+Not to be confused with the CrowdSec Prometheus endpoint of the section above, which feeds the
+Metrics page.
+
 ## Trusted proxy
 
-The client address drives the per-IP login rate limit. `X-Forwarded-For` is believed only when the
+The client address drives the per-IP login rate limit, and the address checked against the
+account's allowlist when an API token is used. `X-Forwarded-For` is believed only when the
 TCP peer is inside `TRUSTED_PROXY_CIDRS`, and the right-most entry that is not itself trusted is
 taken as the client.
 

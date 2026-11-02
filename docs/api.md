@@ -2,7 +2,8 @@
 
 JSON over HTTP, served by the same process as the UI. Every route except `healthz`, `auth/status`, `auth/logout` and the
 `auth/enroll...` and `auth/login...` routes below needs the `session` cookie (set at the end of login
-or enrolment) and answers 401 `unauthenticated` without it. When PostgreSQL is unreachable, authentication-related
+or enrolment), or an API token in `Authorization: Bearer csd_...` ([Access levels](#access-levels)),
+and answers 401 `unauthenticated` without credentials (401 `invalid_token` for a bad token). When PostgreSQL is unreachable, authentication-related
 routes answer 503 `database_unavailable`. Errors are
 `{"error": "<code>"}`; codes are explained in [operations.md](operations.md#troubleshooting).
 Unsafe methods from another origin are refused with 403 `cross_origin`. All responses carry the
@@ -11,17 +12,36 @@ security headers described in [security.md](security.md#headers-and-content-secu
 Delete requests carry a body `{"confirm": "<value>"}` where the value equals the identifier in the
 path. Bodies of the bouncer, machine and hub creation routes reject unknown fields.
 
+## Access levels
+
+The "Access" of each route below is one of:
+
+- **public**: no credential;
+- **authenticated**: a session, or any API token (`read` or `write`);
+- **admin**: an `admin` session, or a `write` token of an `admin` account; otherwise 403 `forbidden`;
+- **session only**: a browser session of any role; a token gets 403 `session_required`;
+- **admin, session only**: an `admin` session.
+
+A token is sent as `Authorization: Bearer csd_<token>` (nothing else is accepted). An unknown, revoked
+or expired token answers 401 `invalid_token`; a valid one whose account is locked or whose address
+the account's allowlist refuses answers 403 `token_denied`. A `read` token has the effective role
+`read_only`. The unsafe-method cross-origin check does not get in the way of `curl`. Example:
+
+```
+curl -H "Authorization: Bearer $DASHBOARD_TOKEN" https://dashboard.example.com/api/alerts
+```
+
 ## Authentication and service
 
-| Method | Path | Auth | Body | Success response | Errors |
+| Method | Path | Access | Body | Success response | Errors |
 |---|---|---|---|---|---|
-| GET | `/api/healthz` | no | none | `200 {"status":"ok","database":"ok"}` | 503 `{"status":"degraded","database":"unavailable"}` when the database does not answer a 2 s ping |
-| GET | `/api/auth/status` | no | none | `200 {"enrollment_required": <bool>}`, true while an enrolment token is open (answered from memory, no database access) | none |
-| POST | `/api/auth/enroll` | no | `{"token","account_name","password"}` (max 1 KiB) | `200 {"status":"second_factor_required","methods":["totp"]}` (`"webauthn"` too when enabled). Nothing is created yet: the name and password hash are kept in memory under the token | 400 `invalid_request`, 400 `invalid_account_name` (not `^[a-z0-9][a-z0-9._-]{0,63}$`), 400 `invalid_password_length` (not 12 to 128 characters), 403 `invalid_enrollment_token`, 404 `not_found` (enrolment closed: an account exists), 429 `too_many_attempts`, 503 `database_unavailable` |
-| POST | `/api/auth/login` | no | `{"account_name","password"}` (max 1 KiB) | `200 {"status":"second_factor_required","methods":[...]}` for an account with a factor (the enrolled methods), or `200 {"status":"second_factor_setup_required","methods":[...]}` for a legacy account without one (methods that can be enrolled). Both set the `pending_login` cookie; no session yet | 400 `invalid_request`, 401 `invalid_credentials` (unknown account and wrong password are indistinguishable), 403 `second_factor_setup_not_allowed`, 423 `account_locked` (with `Retry-After`), 429 `too_many_attempts`, 503 `too_many_pending_logins`, 503 `database_unavailable` |
-| POST | `/api/auth/logout` | no | none | `200 {"status":"ok"}`, session destroyed, cookie cleared | 503 `database_unavailable` |
-| POST | `/api/auth/logout-all` | yes | none | `200 {"status":"ok"}`, every session of the account destroyed, cookie cleared | 401, 503 `database_unavailable` |
-| GET | `/api/auth/me` | yes | none | `200 {"status":"authenticated","account_name","account_role"}` | 401, 503 `database_unavailable` |
+| GET | `/api/healthz` | public | none | `200 {"status":"ok","database":"ok"}` | 503 `{"status":"degraded","database":"unavailable"}` when the database does not answer a 2 s ping |
+| GET | `/api/auth/status` | public | none | `200 {"enrollment_required": <bool>}`, true while an enrolment token is open (answered from memory, no database access) | none |
+| POST | `/api/auth/enroll` | public | `{"token","account_name","password"}` (max 1 KiB) | `200 {"status":"second_factor_required","methods":["totp"]}` (`"webauthn"` too when enabled). Nothing is created yet: the name and password hash are kept in memory under the token | 400 `invalid_request`, 400 `invalid_account_name` (not `^[a-z0-9][a-z0-9._-]{0,63}$`), 400 `invalid_password_length` (not 12 to 128 characters), 403 `invalid_enrollment_token`, 404 `not_found` (enrolment closed: an account exists), 429 `too_many_attempts`, 503 `database_unavailable` |
+| POST | `/api/auth/login` | public | `{"account_name","password"}` (max 1 KiB) | `200 {"status":"second_factor_required","methods":[...]}` for an account with a factor (the enrolled methods), or `200 {"status":"second_factor_setup_required","methods":[...]}` for a legacy account without one (methods that can be enrolled). Both set the `pending_login` cookie; no session yet | 400 `invalid_request`, 401 `invalid_credentials` (unknown account and wrong password are indistinguishable), 403 `second_factor_setup_not_allowed`, 423 `account_locked` (with `Retry-After`), 429 `too_many_attempts`, 503 `too_many_pending_logins`, 503 `database_unavailable` |
+| POST | `/api/auth/logout` | public | none | `200 {"status":"ok"}`, session destroyed, cookie cleared | 503 `database_unavailable` |
+| POST | `/api/auth/logout-all` | session only | none | `200 {"status":"ok"}`, every session of the account destroyed **and every API token revoked**, cookie cleared | 401, 403 `session_required`, 503 `database_unavailable` |
+| GET | `/api/auth/me` | authenticated | none | `200 {"status":"authenticated","account_name","account_role"}` | 401, 503 `database_unavailable` |
 
 The enrolment token is the one logged at start while no account exists ([operations.md](operations.md#first-start-and-enrolment)).
 `login` and `enroll` share the per-client and global rate limits described in [security.md](security.md#rate-limits).
@@ -84,20 +104,48 @@ Errors that can end any of the final steps (`login/totp`, `login/recovery-code`,
 ## Account access allowlist
 
 Per-account rules deciding from where the account may sign in
-([security.md](security.md#access-allowlist)). All three routes need a session and act on the
+([security.md](security.md#access-allowlist)). All three routes are session only and act on the
 caller's own account. A rule is `{"id","kind","value"}` with `kind` `ip` (an address or a CIDR,
 stored as a CIDR) or `country` (two letters, stored upper case).
 
 | Method | Path | Body | Success response | Errors |
 |---|---|---|---|---|
 | GET | `/api/account/access-rules` | none | `200 {"rules":[...],"client_ip","client_country"}`; `client_ip` is the address the dashboard sees for this request, `client_country` its country or `null` when unknown or when no GeoLite2 database is loaded | 401, 503 `database_unavailable` |
-| POST | `/api/account/access-rules` | `{"kind","value"}` (max 1 KiB, unknown fields refused) | `201 {"id","kind","value"}` with the canonical value | 400 `invalid_access_rule` (bad kind or value, or a `/0` prefix), 409 `access_rule_exists`, 409 `would_lock_out_current_client`, 409 `geolocation_unavailable` (country rule with no readable GeoLite2 database), 401, 503 |
+| POST | `/api/account/access-rules` | `{"kind","value"}` (max 1 KiB, unknown fields refused) | `201 {"id","kind","value"}` with the canonical value | 400 `invalid_access_rule` (bad kind or value, or a `/0` prefix), 400 `prefix_too_broad` (broader than IPv4 /8 or IPv6 /16), 409 `access_rule_exists`, 409 `would_lock_out_current_client`, 409 `geolocation_unavailable` (country rule with no readable GeoLite2 database), 401, 503 |
 | DELETE | `/api/account/access-rules/{id}` | none | `204` with no body | 404 `not_found` (unknown id, or a rule of another account), 409 `would_lock_out_current_client`, 401, 503 |
 
 Deleting the last rule turns the allowlist off. The two 409 lock-out answers mean that, with the
 change applied, the caller's current address would not be admitted.
 Rules are checked at sign-in only: a change never ends an existing session, from any address; use
 `POST /api/auth/logout-all` to revoke them.
+
+## API tokens
+
+Session only. A token belongs to the account that creates it ([security.md](security.md#api-tokens)).
+
+| Method | Path | Body | Success response | Errors |
+|---|---|---|---|---|
+| GET | `/api/tokens` | none | `200 [{"token_id","name","scope","created_at","expires_at","revoked_at"}]`, the account's own tokens, never the secret | 401, 403 `session_required`, 503 |
+| POST | `/api/tokens` | `{"name","scope","expires_in_days"}` (max 1 KiB): `scope` is `read` or `write`, `expires_in_days` 1 to 365 | `201 {"token_id","name","scope","expires_at","token"}`, `Cache-Control: no-store`; **`token` is shown only here** | 400 `invalid_request` (unknown scope or body), 400 `invalid_token_name`, 400 `invalid_expiry`, 403 `scope_not_allowed` (`write` for a `read_only` account), 409 `token_name_taken`, 403 `session_required`, 503 |
+| DELETE | `/api/tokens/{id}` | `{"confirm":"<id>"}` | `200 {"status":"ok"}` | 400 `confirmation_required`, 404 `not_found` (unknown or another account's), 403 `session_required`, 503 |
+
+## Accounts
+
+Admin, session only. Names match `^[a-z0-9][a-z0-9._-]{0,63}$`; see
+[operations.md](operations.md#accounts-administration). Bodies are capped at 2 KiB.
+
+| Method | Path | Body | Success response | Errors |
+|---|---|---|---|---|
+| GET | `/api/accounts` | none | `200` list of `{"account_name","account_role","created_at","second_factor_enrolled","locked"}` | 403, 503 |
+| POST | `/api/accounts` | `{"account_name","password","account_role"}` (password 12 to 128 characters) | `201 {"account_name"}`; the account has a 72 hours second-factor setup window | 400 `invalid_account_name`, `invalid_password_length`, `invalid_role`; 409 `account_exists` |
+| POST | `/api/accounts/{name}/role` | `{"account_role"}` | `200 {"status":"ok"}` | 400 `invalid_role`; 404 `not_found`; 409 `last_admin` (demoting the last administrator) |
+| POST | `/api/accounts/{name}/second-factor/reset` | none | `200 {"status":"ok"}`: factors and recovery codes deleted, 72 hours window opened, sessions and tokens revoked | 404 |
+| POST | `/api/accounts/{name}/sessions/revoke` | none | `200 {"status":"ok"}`: sessions and tokens revoked | 404 |
+| POST | `/api/accounts/{name}/unlock` | none | `200 {"status":"ok"}` | 404 |
+| DELETE | `/api/accounts/{name}` | `{"confirm":"<name>"}` | `200 {"status":"ok"}` | 400 `confirmation_required`; 404; 409 `last_admin` |
+
+Each is audited, target `account:<name>` (`account:<name>:<role>` at creation, `account:<name>:<previous>-><new>` for a role change) ([security.md](security.md#audit-log)). Every route
+answers 403 `forbidden` to a `read_only` session and 403 `session_required` to a token.
 
 ## Read
 
@@ -136,44 +184,51 @@ ever holds active decisions). Lists never carry alert `events`.
   alerts whose decisions cover the IP (an IP inside a range-scoped ban matches it, an alert without
   a decision does not); on the archive `ip` is an exact match on the alert source value
   (`alert_source_value`), so a range alert is found with the range itself, not with an IP inside it.
+  For archived decisions `ip` matches the decision value or the source value of the alert that
+  produced it, exactly: an archived range ban is found by its range string or by the source IP of its
+  alert, not by an address the range contains.
 - `since` is forwarded to the LAPI, which compares it with the alert `start_at`
   (`started_at >= now - since`, CrowdSec `pkg/database/alertfilter.go`); on the archive it bounds the
   alert `created_at`. An archived alert whose engine date is missing, unparseable or in the future is dated by its collection time, so it neither sorts first nor escapes this bound.
-- Order: live items in LAPI order, then archived alerts by `created_at` descending (archive id as
-  tie-break) and archived decisions by archive decision id descending (insertion order).
+- Order: live items in LAPI order, then archived alerts by `created_at` descending, alerts without a
+  date last (archive id as tie-break) and archived decisions by archive decision id descending (insertion order).
 - Paging is by offset over "live window, then archive": if the live window changes between two
   requests (new alert, or the collector archives in between), an item can repeat or be skipped at a
   page boundary.
 
-| Method | Path | Auth | Response | Errors |
+| Method | Path | Access | Response | Errors |
 |---|---|---|---|---|
-| GET | `/api/alerts` | yes | page of alerts: `id, uuid, scenario_version, created_at, machine_id, scenario, message, events_count, start_at, stop_at, simulated, source{scope,value,ip,range,cn,as_name,as_number}, decisions[]` (always an array), `engine, archive_id, live` | 400, 503 `database_unavailable` |
-| GET | `/api/alerts/archive/{archive_id}` | yes | one archived alert: the list fields plus `events_truncated` and `events: [{timestamp, meta:{key: value}}]` exactly as stored (`[]` once events were purged by retention); attacker-controlled values are plain JSON strings, never HTML | 400 `invalid_request`, 404 `not_found`, 503 |
-| GET | `/api/decisions` | yes | page of decisions: `id, alert_id, origin, type, scope, value, duration, until, scenario, simulated, engine, live` | 400, 503 |
-| GET | `/api/health` | yes | `{"version", "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}], "degraded":[...]}`; `self` is true only for the machine whose id equals `LAPI_MACHINE_ID` (always present, false otherwise); `degraded` lists sources that failed (`version`, `bouncers`, `machines`) | none: failures are reported in `degraded` |
-| GET | `/api/metrics` | yes | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
-| GET | `/api/config/files` | yes | `{"files":["acquis.yaml", ...]}` | 500 `config_unavailable` |
-| GET | `/api/config/files/{name...}` | yes | `{"name","content"}` with secrets redacted | 404 `not_found`, 413 `file_too_large`, 500 |
-| GET | `/api/hub` | yes | array of `{type,name,status,local_version,description}` (max 1000) | 502 `cscli_failed`, 504 `cscli_timeout` |
+| GET | `/api/alerts` | authenticated | page of alerts: `id, uuid, scenario_version, created_at, machine_id, scenario, message, events_count, start_at, stop_at, simulated, source{scope,value,ip,range,cn,as_name,as_number}, decisions[]` (always an array), `engine, archive_id, live` | 400, 503 `database_unavailable` |
+| GET | `/api/alerts/archive/{archive_id}` | authenticated | one archived alert: the list fields plus `events_truncated` and `events: [{timestamp, meta:{key: value}}]` exactly as stored (`[]` once events were purged by retention); attacker-controlled values are plain JSON strings, never HTML | 400 `invalid_request`, 404 `not_found`, 503 |
+| GET | `/api/decisions` | authenticated | page of decisions: `id, alert_id, origin, type, scope, value, duration, until, scenario, simulated, engine, live, archive_decision_id` (the archive row id of the decision, `null` for a live one not archived yet) | 400, 503 |
+| GET | `/api/health` | authenticated | `{"version", "database":"ok"\|"unavailable", "schema_version":<number or null>, "collector":[{engine_name,last_success_at,lag_seconds,errors_total,stale,history_incomplete}], "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}], "degraded":[...]}`; `self` is true only for the machine whose id equals `LAPI_MACHINE_ID` (always present, false otherwise); `degraded` lists sources that failed (`version`, `bouncers`, `machines`); `collector` has one entry per configured engine, `stale` being true after three `COLLECTOR_INTERVAL` without success or when none happened yet (`last_success_at` and `lag_seconds` null) ([operations.md](operations.md#health-and-metrics)) | none: failures are reported in `degraded` |
+| GET | `/api/prometheus/metrics` | authenticated | Prometheus text format: `csdash_collector_last_success_timestamp_seconds`, `csdash_collector_errors_total`, `csdash_collector_stale`, `csdash_collector_history_incomplete`, labelled by `engine` | 401 `unauthenticated` or `invalid_token` |
+| GET | `/api/metrics` | authenticated | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
+| GET | `/api/config/files` | admin | `{"files":["acquis.yaml", ...]}` | 500 `config_unavailable` |
+| GET | `/api/config/files/{name...}` | admin | `{"name","content"}` with secrets redacted | 403 `forbidden`, 404 `not_found`, 413 `file_too_large`, 500 |
+| GET | `/api/hub` | authenticated | array of `{type,name,status,local_version,description}` (max 1000) | 502 `cscli_failed`, 504 `cscli_timeout` |
 
 ## Write
 
-| Method | Path | Auth | Body | Success response | Errors |
+Every route of this table is **admin** (an `admin` session or a `write` token of an `admin` account):
+a `read_only` account or a `read` token gets 403 `forbidden`.
+
+| Method | Path | Access | Body | Success response | Errors |
 |---|---|---|---|---|---|
-| POST | `/api/decisions` | yes | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 502 |
-| DELETE | `/api/decisions/{id}?scope=<scope>&value=<value>` | yes | `{"confirm":"<id>"}` | `200 {"status":"deleted"}` | 400 `confirmation_required`, `invalid_request`; 404 `not_found`; 409 `target_mismatch`; 502 |
+| POST | `/api/decisions` | admin | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 502 |
+| DELETE | `/api/decisions/{id}?scope=<scope>&value=<value>` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted"}`, audited `decision_removed` | 400 `confirmation_required`, `invalid_request`; 404 `not_found`; 409 `target_mismatch`; 502 |
 | DELETE | `/api/alerts/{id}?uuid=<uuid>` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted","archive_deleted":true}` | 400; 403 `forbidden`; 404 `not_found`; 409 `target_mismatch`; 502 `cscli_failed` |
 | DELETE | `/api/alerts/archive/{archive_id}` | admin | `{"confirm":"<archive_id>"}` | `200 {"status":"deleted"}` | 400 `invalid_request`, `confirmation_required`; 403; 404 `not_found`; 503 |
-| POST | `/api/bouncers` | yes | `{"name"}` | `200 {"name","key"}`, `Cache-Control: no-store` | 400 `invalid_request`; 502; 504 |
-| DELETE | `/api/bouncers/{name}` | yes | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400; 502; 504 |
-| POST | `/api/machines` | yes | `{"name"}` | `200 {"name","password"}`, `Cache-Control: no-store` | 400; 502; 504 |
-| POST | `/api/machines/{name}/validate` | yes | none | `200 {"status":"validated"}` | 400; 502 |
-| DELETE | `/api/machines/{name}` | yes | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400; 409 `self_account`; 502 |
-| POST | `/api/hub/update` | yes | none | `200 {"status":"updated"}` | 502; 504 |
-| POST | `/api/hub/upgrade` | yes | none | `200 {"status":"upgraded"}` | 502; 504 |
-| POST | `/api/hub/collections` | yes | `{"name"}` such as `crowdsecurity/linux` | `200 {"status":"installed"}` | 400; 502; 504 |
-| DELETE | `/api/hub/collections/{name...}` | yes | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400; 502; 504 |
-| POST | `/api/crowdsec/reload` | yes | none | `200 {"status":"reload_requested"}` | 502; 504 |
+| POST | `/api/bouncers` | admin | `{"name"}` | `200 {"name","key"}`, `Cache-Control: no-store` | 400 `invalid_request`; 502; 504 |
+| DELETE | `/api/bouncers/{name}` | admin | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400; 502; 504 |
+| POST | `/api/machines` | admin | `{"name"}` | `200 {"name","password"}`, `Cache-Control: no-store` | 400; 502; 504 |
+| POST | `/api/machines/{name}/validate` | admin | none | `200 {"status":"validated"}` | 400; 502 |
+| DELETE | `/api/machines/{name}` | admin | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400; 409 `self_account`; 502 |
+| POST | `/api/hub/update` | admin | none | `200 {"status":"updated"}` | 502; 504 |
+| POST | `/api/hub/upgrade` | admin | none | `200 {"status":"upgraded"}` | 502; 504 |
+| POST | `/api/hub/collections` | admin | `{"name"}` such as `crowdsecurity/linux` | `200 {"status":"installed"}` | 400; 502; 504 |
+| DELETE | `/api/hub/collections/{name...}` | admin | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400; 502; 504 |
+| POST | `/api/crowdsec/reload` | admin | none | `200 {"status":"reload_requested"}` | 502; 504 |
 
 Both live deletions name the target they mean, because an `id` alone may belong to another engine
 or to an older generation of the local LAPI (ids are reused after a reset):
@@ -193,11 +248,7 @@ or to an older generation of the local LAPI (ids are reused after a reset):
 
 Only `live:true` rows of the `local` engine can be deleted this way. `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
 from the archive only (a remote engine is never contacted). Both alert routes (`DELETE /api/alerts/{id}` and `DELETE /api/alerts/archive/{archive_id}`) are audited `alert_deleted` with
-target `<engine>/<upstream id>` and refuse a `read_only` account (403 `forbidden`).
-
-In this release the routes marked "yes" above (decisions, bouncers, machines, hub, reload) still
-accept a `read_only` account: only the alert deletions and the engine routes check the role. Role
-enforcement on the other write routes comes with the account management of a later release.
+target `<engine>/<upstream id>`.
 
 Machine names match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; bouncer names also allow `@` after the first character (bouncers registered over TLS are named `name@<address>`); hub names allow one `/`.
 The machine self-check runs before the confirmation check, so `self_account` wins over
@@ -206,9 +257,10 @@ The machine self-check runs before the confirmation check, so `self_account` win
 ## Engines
 
 CrowdSec engines whose alerts the dashboard archives. The `local` engine comes from `LAPI_URL` /
-`LAPI_MACHINE_ID` at start-up and is read-only here. Every route needs a session; all but
-`/api/engines/names` also need the `admin` role (403 `forbidden` otherwise, before any read or
-write). Bodies are capped at 8 KiB and unknown fields are refused (400 `invalid_request`).
+`LAPI_MACHINE_ID` at start-up and is read-only here. `GET /api/engines/names` is authenticated; `GET /api/engines` and the connection test are admin;
+the create, change and delete routes are admin and session only (403 `session_required` for a
+token). Everything but the names answers 403 `forbidden` to a `read_only` account, before any read or
+write. Bodies are capped at 8 KiB and unknown fields are refused (400 `invalid_request`).
 No response, error or audit entry ever contains a machine password or proxy credential: the only
 trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted URL.
 
@@ -216,9 +268,9 @@ trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted 
 |---|---|---|---|---|
 | GET | `/api/engines/names` | none | `200 {"items":[{name,is_local,enabled}]}`, any role | 401, 503 `database_unavailable` |
 | GET | `/api/engines` | none | `200 {"items":[engine]}` | 403, 503 |
-| POST | `/api/engines` | `{name, lapi_url, machine_id, machine_password, proxy?{kind,url,username?,password?}, allow_insecure_http, public_addresses, enabled, sync_enabled}` | `201 engine` | 400 `invalid_engine`, `invalid_request`; 409 `engine_exists`; 403; 503 |
+| POST | `/api/engines` | `{name, lapi_url, machine_id, machine_password, proxy?{kind,url,username?,password?}, allow_insecure_http, public_addresses, enabled, sync_enabled}` | `201 engine` | 400 `invalid_engine`, `invalid_request`; 409 `engine_exists`, `engine_deleting` (same name or URL as an engine whose archive is still being deleted); 403; 503 |
 | PATCH | `/api/engines/{name}` | same fields, all optional; absent = unchanged; `"proxy": null` removes the proxy; `proxy.clear_credentials: true` drops the proxy credentials | `200 engine` | 400 `invalid_engine`, `engine_secret_required`, `invalid_request`; 404 `engine_not_found`; 409 `engine_exists`, `engine_local_readonly`; 403; 503 |
-| DELETE | `/api/engines/{name}` | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400 `confirmation_required`; 404; 409 `engine_local_readonly`; 403; 503 |
+| DELETE | `/api/engines/{name}` | `{"confirm":"<name>"}` | `202 {"status":"deleting"}`: the archive is deleted in the background | 400 `confirmation_required`; 404; 409 `engine_local_readonly`; 403; 503 |
 | POST | `/api/engines/{name}/test` | none | `200 {"status":"ok"}` | 502 `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`; 404; 403; 503 |
 
 `engine` is `{name, is_local, lapi_url, machine_id, proxy:{kind,url}|null, has_proxy_credentials,
@@ -245,6 +297,9 @@ out of the collection until it is fixed); never a raw error text.
   without new credentials or `clear_credentials`; a proxy change on an `http` engine without
   `machine_password`. Nothing is written and no connection is made.
 - Deleting an engine deletes its whole archive; disable it (`"enabled": false`) to keep the archive.
+  The delete answers 202 at once: `engine_deleting_at` is set, the engine disappears from every
+  route (404 `engine_not_found`), the lists and the collector, and a background job removes its
+  alerts in batches and then the engine, resuming after a restart ([operations.md](operations.md#engines-and-the-archive)).
 - `test` logs in as the machine (`POST /v1/watchers/login`) through the engine's own guarded
   client and proxy, also for a disabled engine and for `local` (which uses the dashboard's own LAPI
   client). The engine's answer is never returned, only the outcome: `ok`, `engine_unreachable`,

@@ -32,6 +32,71 @@ socket (see [Limits](#honest-limits)).
   token replaces it. Until completion nothing is stored, so an abandoned enrolment leaves no
   account (and a restart gives a new token).
 
+## Roles and access
+
+Accounts have a role, `admin` or `read_only`. The first account is `admin`; an administrator creates
+the others on the Accounts page. Each route of the API declares one access level, and a test walks
+the route table so that no write route can be added without one:
+
+| Access | Who | Routes |
+|---|---|---|
+| Public | nobody authenticated | `healthz`, `auth/status`, `auth/enroll...`, `auth/login...`, `auth/logout` |
+| Authenticated | any session, any token | `auth/me`, the list and detail reads (alerts, decisions, `alerts/archive/{id}`, hub, `metrics`), `health`, `prometheus/metrics`, `engines/names` |
+| Admin | `admin` session, or a `write` token of an `admin` account | `GET /api/engines`, `POST /api/engines/{name}/test`, configuration files, ban and unban, alert deletion (live and archive), bouncers, machines, hub changes, reload |
+| Session only | a browser session, any role | `auth/logout-all`, the account's own allowlist rules, API token management |
+| Admin and session only | an `admin` session | account administration, engine create, change and delete |
+
+A `read_only` account, or a `read` token, gets 403 `forbidden` on every admin route; a token on a
+session-only route gets 403 `session_required`, whatever its scope. The interface hides the actions
+the role cannot perform, but the server is the control. Configuration files are readable by
+administrators only, since redaction is best effort ([Configuration files](#configuration-files)).
+
+**A `write` token of an administrator can mint LAPI credentials.** Bouncer and machine creation,
+hub changes, reload, configuration files and engine reads are admin routes, not session-only: a
+stolen `write` token can create a bouncer key or a machine password. The routes that change who can
+sign in or where secrets go (accounts, tokens, allowlists, engine writes) need a session. Keep
+`write` tokens rare and short, and prefer `read` tokens.
+
+### API tokens
+
+- Created on the Tokens page (or `POST /api/tokens`) by a session, per account. Fields: a name (1 to 64
+  printable characters, unique among the account's tokens that are not revoked), a scope and a
+  lifetime of 1 to 365 days. No token lives longer than a year.
+- The token is `csd_` followed by 43 characters, from 32 random bytes. The server keeps only its SHA-256.
+  It is shown **once**, in the creation response (`Cache-Control: no-store`) and the dialog; if lost, create another.
+- Sent as `Authorization: Bearer <token>` and nothing else (no query parameter, no cookie). The scheme
+  name is case-insensitive. A Bearer header that holds a bad token answers 401 `invalid_token` and
+  never falls back to a session cookie.
+- **Scopes.** `read` gives the effective role `read_only`; `write` gives the role the account has now
+  (an account demoted to `read_only` loses the write power of its existing tokens at once). A
+  `read_only` account cannot create a `write` token (403 `scope_not_allowed`).
+- **The account's protections apply to its tokens.** On every call the token's account must not be
+  locked, and the client address must pass the account's [allowlist](#access-allowlist) (country
+  rules included), else 403 `token_denied`. The decision is cached for a minute per account and
+  address, so a new rule can take up to a minute to reach tokens. The address is resolved like the
+  login limiter: **set `TRUSTED_PROXY_CIDRS`**, otherwise behind a proxy every token call appears to
+  come from the proxy.
+- **Revocation.** Revoke one token on the Tokens page (audited `api_token_revoked`). Every token of an
+  account is revoked when an administrator resets its second factor or revokes its sessions, and when
+  the account uses "log out everywhere"; deleting the account deletes them. A revoked or expired
+  token never authenticates; its row is removed after `API_TOKEN_RETENTION_DAYS`.
+- Creation and revocation are audited (`api_token_created`, `api_token_revoked`, target
+  `api_token:<id>:<name>`). Calls made with a token are not logged one by one, but the write actions
+  that are audited (`alert_deleted`, `decision_removed`, engine changes) record the account.
+
+### Account administration
+
+- Only an `admin` session can create, change, reset, unlock, revoke or delete accounts, and the last
+  administrator cannot be demoted or deleted (409 `last_admin`, checked under an advisory lock so two
+  simultaneous requests cannot remove both).
+- A created account gets a password chosen by the administrator and a 72 hours second-factor
+  setup window ([Accounts from the first release](#accounts-from-the-first-release)). **The
+  administrator knows the initial password, so they could enrol a second factor of their own before
+  the user does and then sign in as that user.** Give the password over a channel you trust, let the
+  user enrol at once, and treat an unused window as a risk. There is no password reset: a new password
+  means a new account.
+- Resetting a second factor revokes the account's sessions and tokens, and opens the window again.
+
 ## Login
 
 Login has three steps. Each one must succeed before the next is reached, and a session cookie is
@@ -104,7 +169,8 @@ WebAuthn response).
   its pending login. Recovery codes count as second-factor attempts like any other method.
 - A factor that was accepted stays used even when the allowlist then refuses the login: a TOTP step
   or recovery code cannot be replayed afterwards.
-- The unlock is manual, by SQL ([operations.md](operations.md#unlocking-an-account)).
+- A locked account also refuses its API tokens (`token_denied`). An administrator unlocks it on the
+  Accounts page; by SQL: [operations.md](operations.md#unlocking-an-account).
 
 ## Second factor
 
@@ -121,39 +187,51 @@ WebAuthn response).
     assertion cannot be replayed. A passkey whose signature counter stays at 0 (many synced
     passkeys) gets no clone detection; for others, a counter that does not increase is refused
     and audited as `webauthn_clone_suspected`. No `excludeCredentials` list is sent when enrolling:
-    setup is only offered to an account that has no factor, and resetting a factor is planned for a
-    later lot.
+    setup is only offered to an account that has no factor, and a reset deletes the factors first.
   - **Recovery codes**: 10 codes of 16 characters (80 bits), shown once at enrolment, stored only as
     SHA-256 hashes, each usable once. They are typed like a TOTP code (case, dashes and the
     lookalikes `O`, `I`, `L` are normalised). Using one is audited.
 - Enrolment cannot finish without a confirmed factor and the generated recovery codes.
 - Browsers without the JSON WebAuthn API cannot enrol or use a passkey; they use TOTP.
-- Decisions the interface cannot reverse yet: the factors of an account cannot be changed or reset
-  from the UI (planned for a later lot); the SQL procedures of
-  [operations.md](operations.md#unlocking-an-account) cover the emergency cases.
+- A user cannot change their own factors; an administrator resets them from the Accounts page
+  ([Account administration](#account-administration)), and the SQL procedures of
+  [operations.md](operations.md#unlocking-an-account) cover the case where no administrator can sign in.
 
-### Encryption of TOTP secrets
+### Encryption of secrets
 
-A TOTP secret must be readable to verify codes, so it is encrypted rather than hashed: AES-256-GCM
-with a random nonce, the account id as authenticated data (a ciphertext copied to another account
-fails), and a key held outside the database (`SECRETS_KEY_FILE`). Each row stores the `key_id`
-(first 16 hex characters of the key's SHA-256) of the key that sealed it, so a future rotation can
-tell keys apart; today a single key is loaded, and a row sealed with another key cannot be opened.
-A database dump alone does not reveal TOTP secrets; a dump plus the key does. **Losing the key
-makes the secrets unreadable**: see [operations.md](operations.md#secrets-key). Passkey public data
+A TOTP secret, and the machine password and proxy credentials of an engine, must be readable to be
+used, so they are encrypted rather than hashed: AES-256-GCM with a random nonce, authenticated data
+that ties the ciphertext to its owner (the account id for TOTP; the engine id and its destination for
+engine secrets, [below](#engines-and-outbound-connections)), and a key held outside the database
+(`SECRETS_KEY_FILE`). Each row stores the `key_id` (first 16 hex characters of the key's SHA-256) of
+the key that sealed it. New secrets use the current key; the retired keys listed in
+`SECRETS_RETIRED_KEY_FILES` stay readable during a rotation, and the dashboard refuses to start when a
+row uses a key it does not hold. `dashboard rotate-secrets` rewrites the rows with the current key
+([operations.md](operations.md#rotating-the-secrets-key)). A database dump alone does not reveal the
+secrets; a dump plus the key does. **Losing the key makes the secrets unreadable**: see
+[operations.md](operations.md#secrets-key).
+
+Engine secrets written before the destination binding used the engine id alone as authenticated
+data. They are still read, and resealed in the new form at start and by `rotate-secrets`, so restored
+older backups keep working. That fallback is the weak point: someone who can write to the database and
+replays an old sealed value under the same key can use the id-only form. There is no format flag to
+check, since a database writer could set it too. The window closes for good when you rotate to a new
+key and remove the old one, because the old blobs then no longer open at all. Passkey public data
 and recovery-code hashes are not secret and are not encrypted. The key is read from a tmpfs file
 that only `docker-user` can read, and is never logged.
 
 ### Accounts from the first release
 
 Accounts created before the second factor existed have none. Migration 00002 opens a *setup window*
-on every such account (`account_second_factor_setup_until = infinity`). At the next login, after
+on every such account (`account_second_factor_setup_until = infinity`). An account created by an
+administrator, or whose factor an administrator reset, gets the same window for 72 hours. At the next login, after
 the correct password, the dashboard asks to enrol a factor instead of asking for one: **whoever
 presents the password first enrols their own factor**. Sign in right after upgrading. On completion
 the window closes, the recovery codes are shown, and every session of the account is revoked. An
 account with no factor and a closed window is refused with 403
-`second_factor_setup_not_allowed`. An operator can reopen the window by SQL
-([operations.md](operations.md#reopening-the-setup-window)).
+`second_factor_setup_not_allowed`. An administrator reopens the window by resetting the factor, or an
+operator by SQL ([operations.md](operations.md#reopening-the-setup-window)). Refusals are audited
+(`second_factor_setup_refused`).
 
 ## Access allowlist
 
@@ -165,9 +243,9 @@ Each account can restrict where it signs in from, with IP/CIDR rules and country
 - Order of checks: password, then second factor, then allowlist. A refused login answers 403
   `access_denied` (audited as `login_denied_access_rule`) after the factor was consumed.
 - Rules are normalised before they are stored: addresses to `/32` or `/128`, IPv4-mapped IPv6 to
-  IPv4, host bits cleared. A prefix of length zero (`0.0.0.0/0`, `::/0`) is refused. There is **no
-  minimum length** otherwise: `/1` to `/7` are accepted today and allow a large part of the
-  Internet.
+  IPv4, host bits cleared. A prefix of length zero (`0.0.0.0/0`, `::/0`) is refused, and so is any
+  new IP rule broader than IPv4 /8 or IPv6 /16 (400 `prefix_too_broad`), because a wide rule makes
+  the allowlist meaningless. Rules stored before this floor keep working and can still be deleted.
 - **Lock-out guard**: adding or deleting a rule is refused with 409 `would_lock_out_current_client`
   when the resulting rule set would not admit the address you are connected from, evaluated inside a
   transaction with the account row locked. The address is the one resolved like the login rate
@@ -176,9 +254,10 @@ Each account can restrict where it signs in from, with IP/CIDR rules and country
   address can be refused.
 - **Rules apply at sign-in only.** They are evaluated once, when the login completes; a session that
   already exists is never checked against them. Adding or tightening a rule therefore does not cut
-  off any existing session, including a stolen one: it keeps working from any address until it
+  off any existing session (API tokens, by contrast, are checked on every call), including a stolen one: it keeps working from any address until it
   expires (`SESSION_TTL`, 12 h by default) or is revoked. After a suspected compromise, add the rule
-  and then revoke the sessions (`POST /api/auth/logout-all` with a session of the account, or by SQL:
+  and then revoke the sessions and tokens ("Revoke sessions" on the Accounts page,
+  `POST /api/auth/logout-all` with a session of the account, or by SQL:
   [Revoking every session](operations.md#revoking-every-session)).
 - Country rules need a GeoLite2 Country database (`GEOIP_DATABASE_FILE`). With no database, an
   unreadable one, or an address the database does not know, a country rule never matches: the login
@@ -199,7 +278,7 @@ Each account can restrict where it signs in from, with IP/CIDR rules and country
 
 ## Audit log
 
-Authentication events and the engine and alert-deletion actions are written to the `audit_event` table with the account (empty for an
+Authentication events, account and token management, and the engine, alert-deletion and decision-removal actions are written to the `audit_event` table with the account (empty for an
 unknown account), an action, a short target, the client address and the time. Targets are stripped
 of control characters and cut at 64 characters. Recorded actions:
 
@@ -211,19 +290,51 @@ of control characters and cut at 64 characters. Recorded actions:
 | `account_locked` | the failure that triggered a lockout | account name |
 | `login_denied_access_rule` | second factor accepted, allowlist refused | account name |
 | `recovery_code_used` | a recovery code was accepted | account name |
+| `login_locked_password_ok` | the password was right but the account is locked | account name |
+| `second_factor_setup_refused` | the password was right, the account has no factor and its setup window is closed | account name |
+| `second_factor_attempt_refused` | a factor attempt on an account that is already locked | account name |
 | `enrollment_completed` | the first account was created | account name |
 | `second_factor_enrolled` | a factor was confirmed at enrolment or at setup | `totp` or `webauthn` |
 | `access_rule_added`, `access_rule_removed` | a rule changed | `ip:<cidr>` or `country:<code>` |
 | `engine_created`, `engine_updated`, `engine_deleted` | an engine was written | engine name, `old>new` after a rename |
 | `engine_tested` | a connection test of an existing engine, successful or not | engine name |
 | `alert_deleted` | a live local alert (with its archived copy) or an archived alert was deleted | `<engine>/<upstream alert id>` |
+| `decision_removed` | a live decision was deleted (unban) | `decision:<id>` |
+| `api_token_created`, `api_token_revoked` | a token was created or revoked | `api_token:<id>:<name>` |
+| `account_created`, `account_role_changed`, `account_second_factor_reset`, `account_sessions_revoked`, `account_unlocked`, `account_deleted` | an administrator acted on an account | `account:<name>`; at creation `account:<name>:<role>`; role change `account:<name>:<previous role>-><new role>` |
+| `secrets_rotated` | `dashboard rotate-secrets` finished a real run (no account) | number of rows rewritten |
+| `retention_purged` | the hourly job removed or scrubbed something (no account) | counts: `ips=… audit=… sessions=… tokens=… archive=…` |
 
-Not audited yet: a password step that ends on a locked account, an attempt refused because the
-account is already locked, rate-limited requests, session creation and logout. The `login_failure`
+The client address is stored as plain text with an IPv4-mapped IPv6 address shown as IPv4 (empty when
+it cannot be parsed). Not audited: rate-limited requests, session creation and logout, bouncer,
+machine and hub changes, the use of an API token. The `login_failure`
 target is whatever was typed in the account name field, so a password typed there by mistake is
-recorded: restrict who can read the table. There is no retention policy and no page or API to read
-the log yet; query the table directly. A failed write is logged by the dashboard and never blocks
-the login.
+recorded: restrict who can read the table; the target is erased with the client address after
+`AUDIT_IP_RETENTION_DAYS`, and the row after `AUDIT_RETENTION_DAYS`
+([Personal data](#personal-data)). There is no page or API to read the log; query the table
+directly. A failed write is logged by the dashboard and never blocks the login.
+
+## Personal data
+
+What the database holds about people, and for how long. Retention runs in one hourly job
+([operations.md](operations.md#retention-and-purge)); nothing here leaves the database.
+
+| Data | Where | Kept | Then |
+|---|---|---|---|
+| Client address of the operator | `audit_event_client_ip` | `AUDIT_IP_RETENTION_DAYS` (30) | erased, the event stays |
+| Account name as typed at a failed login (may be an e-mail address, or a mistyped password) | `audit_event_target` of `login_failure` | `AUDIT_IP_RETENTION_DAYS` (30) | target erased, the event stays |
+| Other audit targets (account names, engine names, `decision:<id>`) and the action | `audit_event` | `AUDIT_RETENTION_DAYS` (365, at least 90) | row deleted |
+| Address or CIDR of an allowlist change | `audit_event_target` of `access_rule_added` and `access_rule_removed` | `AUDIT_RETENTION_DAYS` (365) | row deleted; **not** erased by the 30 days scrub, since it is the account's own configuration |
+| Account name, role, creation date | `account` | while the account exists | deleted with the account; names remain in audit targets until their retention |
+| Allowlist rules (addresses, networks, countries of the operator) | `access_rule` | until removed or the account is deleted | deleted with the account |
+| Sessions (token hash, account, expiry; no address) | `session` | until expiry or revocation | pruned every hour |
+| Lockout state (failed-attempt count, lock end) | `account` | until a success, an unlock or the lock end passes | overwritten, no history |
+| API tokens (name, scope, hash, dates; no address) | `api_token` | until revoked or expired, then `API_TOKEN_RETENTION_DAYS` (30) | row deleted |
+| Source addresses of attackers (alert source and decision values, event meta) | archive tables | `ARCHIVE_ALERT_RETENTION_DAYS` and `ARCHIVE_DECISION_RETENTION_DAYS` (365), events `ARCHIVE_EVENT_RETENTION_DAYS` (90) | deleted; a decision still active on the engine is kept until it expires |
+
+Password hashes, recovery-code hashes and passkey public data are credentials, not logs: they live
+and die with the account. Backups ([operations.md](operations.md#backup-and-restore)) keep all of the
+above until the dump is deleted, so give dumps their own retention.
 
 ## Sessions
 
@@ -233,8 +344,9 @@ the login.
 - Sessions are created only after the third step of login. Completing a second-factor setup at
   login revokes every existing session of that account.
 - Sessions survive a dashboard restart. Logout destroys the server-side session, "log out
-  everywhere" (`POST /api/auth/logout-all`) destroys all sessions of the account, and deleting an
-  account removes its sessions (cascade).
+  everywhere" (`POST /api/auth/logout-all`, or "Revoke sessions" by an administrator) destroys all
+  sessions of the account **and revokes all its API tokens**, and deleting an account removes its
+  sessions and tokens (cascade).
 - Cookie `session`: `HttpOnly`, `Secure`, `SameSite=Strict`, path `/`. Because of `Secure`, serve the
   dashboard over HTTPS (browsers also accept `http://127.0.0.1` and `localhost`).
 
@@ -303,7 +415,7 @@ so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 
 ## Configuration files
 
-Only an allowlist is readable: `config.yaml`, `acquis.yaml`, `profiles.yaml`, `acquis.d/*.yaml|yml`
+Only administrators can read configuration files, and only an allowlist is readable: `config.yaml`, `acquis.yaml`, `profiles.yaml`, `acquis.d/*.yaml|yml`
 and `parsers/*/*whitelist*.yaml|yml`, each at most 256 KiB. Any file whose name contains
 `credentials` is refused, as is any path through a symlink. The mount is read-only.
 
@@ -365,7 +477,7 @@ accepted to supervise the dashboard and `geoipupdate` in one container. Mitigati
 
 An administrator can register remote CrowdSec engines (`/api/engines`, [api.md](api.md#engines));
 the dashboard then logs in to their LAPI as a machine and archives their alerts. Only the `admin`
-role can read, add, change, test or delete engines; a `read_only` account only sees the engine
+role can read, add, change, test or delete engines (and writes need a session, not a token); a `read_only` account only sees the engine
 names (`GET /api/engines/names`, for filters and selectors), never their URL, machine, proxy or
 collection state.
 
@@ -391,8 +503,10 @@ client per engine, never through `HTTP_PROXY` / `HTTPS_PROXY` of the environment
   for collector reads, 4 MiB for allowlists, 8 MiB otherwise). An oversized answer is an error or
   an incomplete read; it is never used partially.
 - **Secrets at rest.** The machine password and the proxy credentials of an engine are sealed with
-  the secrets key (AES-GCM, see [Encryption of TOTP secrets](#encryption-of-totp-secrets)) with the
-  engine id as associated data: a sealed value copied to another engine row does not open. No API
+  the secrets key (AES-GCM, see [Encryption of secrets](#encryption-of-secrets)). The authenticated
+  data is the engine id and its destination (scheme, host and port of `lapi_url`; for the proxy
+  credentials also the proxy kind and URL): a sealed value copied to another engine row, or left in
+  place under a changed destination, does not open (`engine_secret_unreadable`). No API
   response, error, log or audit entry carries them; the API only says `has_proxy_credentials`.
 - **Secrets bound to their destination.** Changing the scheme, host or port of `lapi_url` requires
   the machine password in the same request; changing `proxy.url` or `proxy.kind` of an engine
@@ -457,21 +571,19 @@ release (lot 5); the filter is the shared one for all dashboard-initiated writes
   it with untrusted workloads.
 - The proxy blocks everything else (other containers, images, networks, container creation), so the
   blast radius is the CrowdSec container and the dashboard's own LAPI account, not the whole host.
-- Accounts have a role, `admin` or `read_only`. The first account is `admin`; there is no
-  interface to create accounts or change a role yet. `read_only` is enforced on the engine routes
-  (except the engine names) and on alert deletion only: in this release a `read_only` account can
-  still ban, unban, manage bouncers and machines, change the hub and reload CrowdSec. API tokens
-  and a UI to read the audit log come in later lots.
+- Roles and tokens are described in [Roles and access](#roles-and-access). A `write` token of an
+  administrator reaches the credential-creating admin routes; there is no page to read the audit
+  log.
 - Known limits of the second factor and the allowlist, collected here:
-  - allowlist prefixes from `/1` to `/7` are accepted (no minimum length yet);
+  - the allowlist prefix floor (IPv4 /8, IPv6 /16) applies to new rules only;
   - the pending state of a first-account enrolment and of a setup has no expiry of its own (memory
     only, gone at restart or completion);
-  - the factors of an account cannot be reset from the UI yet, and WebAuthn `excludeCredentials` is
-    not used because setup is offered only to accounts without a factor;
+  - WebAuthn `excludeCredentials` is not used because setup is offered only to accounts without a
+    factor (a reset deletes them);
   - a security key used without PIN or biometric is accepted (user verification `preferred`), and a
     passkey with a counter stuck at 0 has no clone detection;
   - without a GeoLite2 database, country rules refuse everyone not matched by an IP rule;
-  - the audit log is not complete (see [Audit log](#audit-log)) and has no retention.
+  - the audit log is not complete (see [Audit log](#audit-log)).
 - The login rate limiter, the pending logins and the enrolment state are per process (one replica).
 
 ## Exposure advice
