@@ -110,9 +110,9 @@ stored as a CIDR) or `country` (two letters, stored upper case).
 
 | Method | Path | Body | Success response | Errors |
 |---|---|---|---|---|
-| GET | `/api/account/access-rules` | none | `200 {"rules":[...],"client_ip","client_country"}`; `client_ip` is the address the dashboard sees for this request, `client_country` its country or `null` when unknown or when no GeoLite2 database is loaded | 401, 503 `database_unavailable` |
-| POST | `/api/account/access-rules` | `{"kind","value"}` (max 1 KiB, unknown fields refused) | `201 {"id","kind","value"}` with the canonical value | 400 `invalid_access_rule` (bad kind or value, or a `/0` prefix), 400 `prefix_too_broad` (broader than IPv4 /8 or IPv6 /16), 409 `access_rule_exists`, 409 `would_lock_out_current_client`, 409 `geolocation_unavailable` (country rule with no readable GeoLite2 database), 401, 503 |
-| DELETE | `/api/account/access-rules/{id}` | none | `204` with no body | 404 `not_found` (unknown id, or a rule of another account), 409 `would_lock_out_current_client`, 401, 503 |
+| GET | `/api/account/access-rules` | none | `200 {"rules":[...],"client_ip","client_country"}`; `client_ip` is the address the dashboard sees for this request, `client_country` its country or `null` when unknown or when no GeoLite2 database is loaded | 401, 403 `session_required` (API token), 503 `database_unavailable` |
+| POST | `/api/account/access-rules` | `{"kind","value"}` (max 1 KiB, unknown fields refused) | `201 {"id","kind","value"}` with the canonical value | 400 `invalid_access_rule` (bad kind or value, or a `/0` prefix), 400 `prefix_too_broad` (broader than IPv4 /8 or IPv6 /16), 409 `access_rule_exists`, 409 `would_lock_out_current_client`, 409 `geolocation_unavailable` (country rule with no readable GeoLite2 database), 401, 403 `session_required`, 503 |
+| DELETE | `/api/account/access-rules/{id}` | none | `204` with no body | 404 `not_found` (unknown id, or a rule of another account), 409 `would_lock_out_current_client`, 401, 403 `session_required`, 503 |
 
 Deleting the last rule turns the allowlist off. The two 409 lock-out answers mean that, with the
 change applied, the caller's current address would not be admitted.
@@ -132,7 +132,7 @@ Session only. A token belongs to the account that creates it ([security.md](secu
 ## Accounts
 
 Admin, session only. Names match `^[a-z0-9][a-z0-9._-]{0,63}$`; see
-[operations.md](operations.md#accounts-administration). Bodies are capped at 2 KiB.
+[operations.md](operations.md#account-administration). Bodies are capped at 2 KiB.
 
 | Method | Path | Body | Success response | Errors |
 |---|---|---|---|---|
@@ -202,7 +202,7 @@ ever holds active decisions). Lists never carry alert `events`.
 | GET | `/api/alerts/archive/{archive_id}` | authenticated | one archived alert: the list fields plus `events_truncated` and `events: [{timestamp, meta:{key: value}}]` exactly as stored (`[]` once events were purged by retention); attacker-controlled values are plain JSON strings, never HTML | 400 `invalid_request`, 404 `not_found`, 503 |
 | GET | `/api/decisions` | authenticated | page of decisions: `id, alert_id, origin, type, scope, value, duration, until, scenario, simulated, engine, live, archive_decision_id` (the archive row id of the decision, `null` for a live one not archived yet) | 400, 503 |
 | GET | `/api/health` | authenticated | `{"version", "database":"ok"\|"unavailable", "schema_version":<number or null>, "collector":[{engine_name,last_success_at,lag_seconds,errors_total,stale,history_incomplete}], "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}], "degraded":[...]}`; `self` is true only for the machine whose id equals `LAPI_MACHINE_ID` (always present, false otherwise); `degraded` lists sources that failed (`version`, `bouncers`, `machines`); `collector` has one entry per configured engine, `stale` being true after three `COLLECTOR_INTERVAL` without success or when none happened yet (`last_success_at` and `lag_seconds` null) ([operations.md](operations.md#health-and-metrics)) | none: failures are reported in `degraded` |
-| GET | `/api/prometheus/metrics` | authenticated | Prometheus text format: `csdash_collector_last_success_timestamp_seconds`, `csdash_collector_errors_total`, `csdash_collector_stale`, `csdash_collector_history_incomplete`, labelled by `engine` | 401 `unauthenticated` or `invalid_token` |
+| GET | `/api/prometheus/metrics` | authenticated | Prometheus text format: `csdash_collector_last_success_timestamp_seconds`, `csdash_collector_errors_total`, `csdash_collector_stale`, `csdash_collector_history_incomplete`, labelled by `engine` | 401 `unauthenticated` or `invalid_token`; 403 `token_denied` (token of a locked account or from an address refused by its allowlist) |
 | GET | `/api/metrics` | authenticated | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
 | GET | `/api/config/files` | admin | `{"files":["acquis.yaml", ...]}` | 500 `config_unavailable` |
 | GET | `/api/config/files/{name...}` | admin | `{"name","content"}` with secrets redacted | 403 `forbidden`, 404 `not_found`, 413 `file_too_large`, 500 |

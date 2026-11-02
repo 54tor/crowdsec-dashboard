@@ -16,12 +16,12 @@
 | Health page | One failing source does not blank the page: the response lists it in `degraded` (`version`, `bouncers`, `machines`) and shows the others. It also reports the database, the schema version and the collector of each engine ([Health and metrics](#health-and-metrics)). |
 | Sessions | Stored in PostgreSQL, 12 h by default, kept across restarts. The login rate limiter is per process: one replica only. |
 | Pending logins | The state between the password step and the second factor (5 minutes, 5 attempts, bound to the client address) is in memory: a restart makes everybody in mid-login start again. The first-account enrolment state is also in memory, with no expiry, and is lost at restart. |
-| Second factor | TOTP always; WebAuthn only with `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS`. An administrator resets the factors of an account from the Accounts page ([Accounts administration](#accounts-administration)); a user cannot change their own. |
+| Second factor | TOTP always; WebAuthn only with `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS`. An administrator resets the factors of an account from the Accounts page ([Account administration](#account-administration)); a user cannot change their own. |
 | Access allowlist | No rule means no restriction; any rule means deny by default. Country rules need the GeoLite2 database, otherwise they never match. New IP rules are no broader than IPv4 /8 or IPv6 /16 (400 `prefix_too_broad`); rules stored before that floor keep working. Checked at sign-in, and for every call made with an API token; existing sessions are not cut off. |
 | Audit log | Written to `audit_event`; no page to read it. Client addresses are scrubbed after 30 days and rows deleted after 365 days by default ([Retention and purge](#retention-and-purge)); some events are not recorded ([security.md](security.md#audit-log)). |
-| Engines | Managed on the Engines page by `admin` accounts only ([Engines and the archive](#engines-and-the-archive)). The collection counters restart with the process; the "History incomplete" flag is stored and only goes away when the engine is deleted. |
-| Roles | Every route that writes, creates a credential or reads configuration files needs the `admin` role, for a session as for an API token; `read_only` accounts and `read` tokens get 403 `forbidden`, and the interface hides the write buttons for them ([security.md](security.md#roles-and-access)). |
-| Prometheus | `GET /api/prometheus/metrics` needs a session or a `read` token; there is no anonymous scrape ([Health and metrics](#health-and-metrics)). |
+| Engines | Managed on the Engines page by `admin` accounts only ([Engines and the archive](#engines-and-the-archive)). The collection counters restart with the process, and so does the "History incomplete" notice of the Engines page, which only covers gaps seen by the current process. The persisted flag is in `/api/health` (`collector[].history_incomplete`) and the `csdash_collector_history_incomplete` gauge: it survives restarts and only goes away when the engine is deleted. |
+| Roles | Every route that writes to CrowdSec or the archive, creates a LAPI credential, manages engines or accounts, or reads configuration files needs the `admin` role, for a session as for an API token; `read_only` accounts and `read` tokens get 403 `forbidden`, and the interface hides the write buttons for them ([security.md](security.md#roles-and-access)). Your own API tokens (`POST`/`DELETE /api/tokens`), your own allowlist rules and `logout-all` are open to `read_only` accounts too, from a browser session only. |
+| Prometheus | `GET /api/prometheus/metrics` accepts a session or an API token of any scope; give Prometheus a `read` token. There is no anonymous scrape ([Health and metrics](#health-and-metrics)). |
 
 ## Troubleshooting
 
@@ -40,7 +40,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `webauthn_disabled` | 404 | `WEBAUTHN_RP_ID` and `WEBAUTHN_RP_ORIGINS` are not set. |
 | `account_locked` | 423 | Five second-factor failures. The response carries `Retry-After` in seconds; the lock lasts 15 minutes. To unlock now: [Unlocking an account](#unlocking-an-account). |
 | `access_denied` | 403 | The password and factor were right but the account's allowlist does not admit this address or country. With a country rule, check that the GeoLite2 database is present ([Dashboard image](#dashboard-image)). Fix it by SQL: [Removing an allowlist](#removing-an-allowlist). |
-| `second_factor_setup_not_allowed` | 403 | The account has no second factor and its setup window is closed. An administrator reopens it with "Reset second factor" ([Accounts administration](#accounts-administration)), or by SQL: [Reopening the setup window](#reopening-the-setup-window). |
+| `second_factor_setup_not_allowed` | 403 | The account has no second factor and its setup window is closed. An administrator reopens it with "Reset second factor" ([Account administration](#account-administration)), or by SQL: [Reopening the setup window](#reopening-the-setup-window). |
 | `second_factor_required` | 409 | Enrolment or setup was completed before a factor was confirmed and the recovery codes were generated. |
 | `enrollment_not_started` | 409 | An enrolment step came before `POST /api/auth/enroll`, or the dashboard restarted since. Start again with the token from the new log. |
 | `second_factor_unavailable` | 503 | A TOTP key or recovery codes could not be generated; the dashboard log has the cause. |
@@ -67,7 +67,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `invalid_token` | 401 | The `Authorization: Bearer` value is not a valid API token: unknown, revoked, expired, or not starting with `csd_`. A Bearer header never falls back to the session cookie. |
 | `token_denied` | 403 | The token is valid but its account is locked or the calling address is refused by the account's allowlist. Behind a proxy without `TRUSTED_PROXY_CIDRS`, the proxy address is the one evaluated. A new allowlist rule can take up to a minute to apply to tokens. |
 | `scope_not_allowed` | 403 | A `write` token was requested by a `read_only` account. |
-| `token_name_taken` | 409 | An active (not revoked) token of the account already has this name. |
+| `token_name_taken` | 409 | A token of the account that is not revoked already has this name. An expired token that was not revoked still holds its name: revoke it to reuse the name. |
 | `invalid_token_name`, `invalid_expiry` | 400 | Token name empty, over 64 characters or with control characters; `expires_in_days` outside 1 to 365. |
 | `account_exists` | 409 | An account with this name already exists. |
 | `invalid_role` | 400 | `account_role` is neither `admin` nor `read_only`. |
@@ -121,7 +121,9 @@ after the database is healthy.
 - The hardening release adds migrations 00004 (API token constraints and indexes), 00005 (archive
   ordering indexes and the persisted `engine_history_incomplete` flag) and 00006 (`engine_deleting_at`).
   None of them was applied anywhere before this release: they run together at the next start, so back
-  up first and let that start apply all three. The same start reseals the engine secrets that still use
+  up first and let that start apply all three. 00005 builds two indexes on `alert` without
+  `CONCURRENTLY`, inside the fixed 60 s start-up timeout (not configurable): on a very large archive
+  that first start can time out and the dashboard then exits. The same start reseals the engine secrets that still use
   the former associated data ([Rotating the secrets key](#rotating-the-secrets-key)).
 - If PostgreSQL goes down while the dashboard runs, `/api/healthz` answers 503 and login and
   authenticated routes answer 503 `database_unavailable`. Nobody is signed out: sessions are valid
@@ -194,10 +196,12 @@ restarts are needed, and nothing is lost if you stop between them.
 
 1. Generate the new key file next to the old one (same command as for the first key, another file name).
 2. In the compose file, make the new file the `dashboard-secrets-key` secret and add the old file as a
-   second secret, `dashboard-secrets-key-retired`, uncommenting the three lines of the example:
+   second secret, `dashboard-secrets-key-retired`, by uncommenting the four places of
+   `deploy/compose.example.yaml`: the two environment lines
    `SECRETS_RETIRED_KEY_SOURCES: /run/secrets/dashboard-secrets-key-retired` (comma-separated, no
-   spaces, when there are several), `SECRETS_RETIRED_KEY_FILES: /run/dashboard-secrets/retired-1`
-   and the entry under `secrets`. The `25-secrets-key` script reads the sources and copies them in
+   spaces, when there are several) and `SECRETS_RETIRED_KEY_FILES: /run/dashboard-secrets/retired-1`,
+   the `dashboard-secrets-key-retired` entry in the dashboard service's `secrets` list, and the
+   `dashboard-secrets-key-retired` block under the top-level `secrets`. The `25-secrets-key` script reads the sources and copies them in
    order to `/run/dashboard-secrets/retired-1`, `retired-2`, and so on; the dashboard reads those
    copies through `SECRETS_RETIRED_KEY_FILES`, in the same order.
 3. Recreate the dashboard (**first restart**). At start it applies pending migrations, then refuses to
@@ -298,11 +302,13 @@ collides with an earlier key.
 **History incomplete.** When the newest alerts read do not reach back to the cursor (more new
 alerts than the poll limit since the last collection), the collector reads the whole history
 again; if that read is truncated or too slow it archives what the poll returned, counts a gap
-and the Engines page shows "History incomplete". Some alerts of that window may never be archived if
-the engine purged them meanwhile. The flag is stored in the `engine` row (`engine_history_incomplete`),
-survives restarts and is exported as the `csdash_collector_history_incomplete` gauge. It describes
-the stored archive, so nothing clears it except deleting the engine; if it fires for good, treat it as
-known. Lower the interval or raise `COLLECTOR_POLL_LIMIT` for busy engines.
+and the Engines page shows "History incomplete". That notice comes from the in-memory `gaps` counter,
+so it only covers the current process and disappears at restart. Some alerts of that window may never
+be archived if the engine purged them meanwhile. The lasting record is the flag stored in the `engine`
+row (`engine_history_incomplete`): it survives restarts, is visible in `GET /api/health`
+(`collector[].history_incomplete`) and is exported as the `csdash_collector_history_incomplete` gauge.
+It describes the stored archive, so nothing clears it except deleting the engine; if it fires for good,
+treat it as known. Lower the interval or raise `COLLECTOR_POLL_LIMIT` for busy engines.
 
 **Engine flush.** CrowdSec purges its own alerts (`db_config.flush.max_items`, `max_age`, checked
 every minute). It keeps the newest `max_items + 1` alerts and never purges an alert that still has
@@ -326,7 +332,9 @@ are never purged, and the alert that owns one is kept until that decision expire
 not collected again while the engine still serves them (they are below the cursor).
 
 **Deleting an engine deletes its archive** (alerts, events and decisions), after the name is
-retyped. The request answers 202 `{"status":"deleting"}` at once: the engine row is marked
+retyped. The request answers 202 `{"status":"deleting"}` without waiting for the archive deletion;
+it can first wait, up to the collector's store timeout (120 s), while a running collection of that
+engine holds its row lock. Then the engine row is marked
 (`engine_deleting_at`), disappears from the Engines page, the engine filters, the collector and the
 archive lists, and a background job deletes its alerts in batches, then the row. The job is resumed at
 every start and every hour if a restart or an error interrupted it. While it runs, creating an engine
@@ -378,7 +386,7 @@ your own allowlist) is not scrubbed: it stays until the audit row is deleted. Th
 retention is in [security.md](security.md#personal-data). A database dump keeps all of it for as long as
 the dump exists.
 
-## Accounts administration
+## Account administration
 
 Administrators manage accounts on the Accounts page (API: [api.md](api.md#accounts)); the page is
 for a session only. An administrator can create an account (name, initial password of 12 to 128
@@ -402,7 +410,8 @@ delete.
   signed in with (409 `cannot_delete_own_account`); another administrator must do it.
 - The page disables the role selector and the delete action on your own row, so an administrator
   cannot demote or delete themselves from the interface; another administrator does it. The server
-  itself only guards the last administrator.
+  also refuses self-deletion (409 `cannot_delete_own_account`) but not self-demotion, which only the
+  last-administrator guard limits.
 - Every action is audited (`account_created`, `account_role_changed`, `account_second_factor_reset`,
   `account_sessions_revoked`, `account_unlocked`, `account_deleted`; target `account:<name>`).
 - There is still no password reset: to change a password, delete the account and create it again.
@@ -422,7 +431,7 @@ delete.
 - the existing fields (`version`, `bouncers`, `machines`, `degraded`).
 
 `GET /api/prometheus/metrics` serves the same collector state in the Prometheus text format, behind
-authentication (a session or a `read` token, never anonymously):
+authentication (a session or an API token of any scope, never anonymously; a `read` token is enough):
 
 | Metric | Type | Meaning |
 |---|---|---|
@@ -440,7 +449,7 @@ expires the scrape fails with 401 `invalid_token`: renew it every year before it
 ## Account recovery by SQL
 
 An administrator resets factors, unlocks and revokes sessions from the Accounts page
-([Accounts administration](#accounts-administration)). When no administrator can sign in, or to reset
+([Account administration](#account-administration)). When no administrator can sign in, or to reset
 an allowlist (still not in the interface), run SQL on the dashboard database from the host, for example
 `docker exec -i <postgres container> psql -U <user> -d <database>`. Check the account first
 (`SELECT account_id, account_name FROM account;`) and use its id below. Everything here is a write
@@ -579,8 +588,8 @@ Sessions in the dump are live again, which is a reason to restore from your own 
 `deploy/dev/backup-check.sh` exercises both scripts on a disposable PostgreSQL
 ([development.md](development.md#backup-and-restore-check)).
 
-Accounts have no password-reset feature (for a lost second factor, see [Accounts
-administration](#accounts-administration) and [Account recovery by SQL](#account-recovery-by-sql)): with the
+Accounts have no password-reset feature (for a lost second factor, see [Account
+administration](#account-administration) and [Account recovery by SQL](#account-recovery-by-sql)): with the
 database restored you keep your accounts; if the `account` table is emptied, the next start opens
 enrolment again. To rotate the machine password, run `cscli machines delete` and `add` again with the
 new value, then recreate the dashboard.

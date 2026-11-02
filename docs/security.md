@@ -73,7 +73,8 @@ sign in or where secrets go (accounts, tokens, allowlists, engine writes) need a
 - **The account's protections apply to its tokens.** On every call the token's account must not be
   locked, and the client address must pass the account's [allowlist](#access-allowlist) (country
   rules included), else 403 `token_denied`. The decision is cached for a minute per account and
-  address, so a new rule can take up to a minute to reach tokens. The address is resolved like the
+  address, so a new or removed rule can take up to a minute to reach tokens. A lockout and a token
+  revocation are not cached: they apply to the next call. The address is resolved like the
   login limiter: **set `TRUSTED_PROXY_CIDRS`**, otherwise behind a proxy every token call appears to
   come from the proxy.
 - **Revocation.** Revoke one token on the Tokens page (audited `api_token_revoked`). Every token of an
@@ -81,8 +82,10 @@ sign in or where secrets go (accounts, tokens, allowlists, engine writes) need a
   the account uses "log out everywhere"; deleting the account deletes them. A revoked or expired
   token never authenticates; its row is removed after `API_TOKEN_RETENTION_DAYS`.
 - Creation and revocation are audited (`api_token_created`, `api_token_revoked`, target
-  `api_token:<id>:<name>`). Calls made with a token are not logged one by one, but the write actions
-  that are audited (`alert_deleted`, `decision_removed`, engine changes) record the account.
+  `api_token:<id>:<name>`). Calls made with a token are not logged one by one, but the audited write actions
+  a `write` token can reach (`alert_deleted`, `decision_removed`, `engine_tested`) record the account.
+  The other engine changes and account administration need an `admin` browser session and are
+  never made with a token.
 
 ### Account administration
 
@@ -195,7 +198,7 @@ WebAuthn response).
 - Browsers without the JSON WebAuthn API cannot enrol or use a passkey; they use TOTP.
 - A user cannot change their own factors; an administrator resets them from the Accounts page
   ([Account administration](#account-administration)), and the SQL procedures of
-  [operations.md](operations.md#unlocking-an-account) cover the case where no administrator can sign in.
+  [operations.md](operations.md#account-recovery-by-sql) cover the case where no administrator can sign in.
 
 ### Encryption of secrets
 

@@ -54,7 +54,8 @@ Tests that need PostgreSQL (store, sessions, accounts, API) read `TEST_DATABASE_
 its own schema. Without that variable they are skipped, so a plain `go test` still passes but does
 not cover the database code. `test-db.sh` uses its own compose project `csdash-test-db`.
 
-Keep `-p 4` on shared machines.
+Keep `-p 4` on shared machines. Backend tests use fake services and the frozen CrowdSec outputs under
+`deploy/dev/fixtures`; web tests stub `fetch` (`web/src/test/fetchStub.ts`) and render whole pages.
 
 ### Backup and restore check
 
@@ -70,8 +71,6 @@ It prints `backup-check: OK` and exits 0 on success.
 ```
 deploy/dev/backup-check.sh
 ```
- Backend tests use fake services and the frozen CrowdSec outputs under
-`deploy/dev/fixtures`; web tests stub `fetch` (`web/src/test/fetchStub.ts`) and render whole pages.
 
 ## Running locally
 

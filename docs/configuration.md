@@ -206,8 +206,8 @@ The listener only needs to be reachable from inside the CrowdSec container, so k
 ## Prometheus scraping the dashboard
 
 The dashboard exports the collector state of each engine at `GET /api/prometheus/metrics`
-([operations.md](operations.md#health-and-metrics)). It needs a `read` API token (Tokens page, at most
-365 days: renew it every year). Put the token in a file readable by Prometheus only and reference it:
+([operations.md](operations.md#health-and-metrics)). It accepts an API token of any scope; give it a
+`read` token (Tokens page, at most 365 days: renew it every year). Put the token in a file readable by Prometheus only and reference it:
 
 ```yaml
 scrape_configs:
