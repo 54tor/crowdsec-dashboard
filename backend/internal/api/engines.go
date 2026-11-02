@@ -144,11 +144,11 @@ func (handlers engineHandlers) remove(responseWriter http.ResponseWriter, reques
 		return
 	}
 	handlers.record(request, audit.ActionEngineDeleted, name)
-	response := map[string]string{"status": "deleted"}
+	response := map[string]string{"status": "deleting"}
 	if warning := handlers.reloadRegistry(request.Context()); warning != "" {
 		response["warning"] = warning
 	}
-	writeJSON(responseWriter, http.StatusOK, response)
+	writeJSON(responseWriter, http.StatusAccepted, response)
 }
 
 func (handlers engineHandlers) test(responseWriter http.ResponseWriter, request *http.Request) {

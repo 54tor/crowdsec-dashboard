@@ -601,3 +601,21 @@ func TestDeleteArchivedAlertByArchiveIDReportsItsKey(testContext *testing.T) {
 		testContext.Errorf("a second delete must report ErrAlertNotFound, got %v", againError)
 	}
 }
+
+func TestListAlertsHidesTheArchiveOfADeletingEngine(testContext *testing.T) {
+	fixture := newReaderFixture(testContext)
+	fixture.storeFor(testContext, fixture.remoteEngineID, []lapi.Alert{
+		alertWith(2, "2026-11-01T11:59:00Z", "crowdsecurity/ssh-bf", "203.0.113.2"),
+	})
+	if _, markError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_deleting_at = now() WHERE engine_id = ?`, fixture.remoteEngineID); markError != nil {
+		testContext.Fatalf("mark deleting: %v", markError)
+	}
+
+	everyAlert, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Limit: 50})
+	filteredAlerts, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Limit: 50, Engine: remoteEngineName})
+
+	if len(everyAlert) != 0 || len(filteredAlerts) != 0 {
+		testContext.Errorf("a deleting engine must leave the archive reads: %s / %s", upstreamIDsOf(everyAlert), upstreamIDsOf(filteredAlerts))
+	}
+}

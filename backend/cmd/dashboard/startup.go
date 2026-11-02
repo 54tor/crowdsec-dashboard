@@ -96,6 +96,7 @@ func initialiseEngines(ctx context.Context, database *bun.DB, keyring *secrets.K
 		return nil, nil, fmt.Errorf("ensure local engine: %w", ensureError)
 	}
 	resealLegacyEngineSecrets(ctx, repository, logLine)
+	repository.ResumeDeletions(ctx)
 	registry := engines.NewRegistry(repository, localSettings.client, nil)
 	if reloadError := registry.Reload(ctx); reloadError != nil {
 		logLine("engine registry: %v", reloadError)

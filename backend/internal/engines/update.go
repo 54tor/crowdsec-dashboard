@@ -52,7 +52,7 @@ func resetsCursor(changes []columnChange) bool {
 
 func loadLockedRow(ctx context.Context, transaction bun.Tx, name string) (engineRow, error) {
 	var currentRow engineRow
-	queryError := transaction.NewRaw(`SELECT `+engineColumns+` FROM engine WHERE engine_name = ? FOR UPDATE`, name).Scan(ctx, &currentRow)
+	queryError := transaction.NewRaw(`SELECT `+engineColumns+` FROM engine WHERE engine_name = ? AND engine_deleting_at IS NULL FOR UPDATE`, name).Scan(ctx, &currentRow)
 	if queryError != nil {
 		if isNoRows(queryError) {
 			return engineRow{}, ErrEngineNotFound

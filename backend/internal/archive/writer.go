@@ -177,7 +177,7 @@ func lockEngineCursor(ctx context.Context, transaction bun.Tx, engineID int64, l
 	var cursor int64
 	var handleIsCurrent bool
 	lockError := transaction.NewRaw(
-		`SELECT engine_collection_cursor, engine_lapi_url = ? AND engine_enabled FROM engine WHERE engine_id = ? FOR UPDATE`,
+		`SELECT engine_collection_cursor, engine_lapi_url = ? AND engine_enabled FROM engine WHERE engine_id = ? AND engine_deleting_at IS NULL FOR UPDATE`,
 		lapiURL, engineID,
 	).Scan(ctx, &cursor, &handleIsCurrent)
 	if errors.Is(lockError, sql.ErrNoRows) {

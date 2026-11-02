@@ -38,7 +38,7 @@ func (reader *Reader) KnownAlertKeys(ctx context.Context, engineName string, key
 	queryError := reader.database.NewRaw(
 		`SELECT alert_upstream_id, alert_upstream_uuid, alert_id
 		 FROM alert
-		 JOIN engine ON engine_id = alert_engine_id
+		 JOIN engine ON engine_id = alert_engine_id AND engine_deleting_at IS NULL
 		 JOIN unnest(?::bigint[], ?::text[]) AS asked (upstream_id, upstream_uuid)
 		   ON alert_upstream_id = asked.upstream_id AND alert_upstream_uuid = asked.upstream_uuid
 		 WHERE engine_name = ?`,
@@ -63,7 +63,7 @@ func (reader *Reader) KnownDecisionKeys(ctx context.Context, engineName string, 
 		`SELECT DISTINCT decision_upstream_id
 		 FROM decision
 		 JOIN alert ON alert_id = decision_alert_id
-		 JOIN engine ON engine_id = alert_engine_id
+		 JOIN engine ON engine_id = alert_engine_id AND engine_deleting_at IS NULL
 		 WHERE decision_alert_id = ANY(?::bigint[]) AND engine_name = ? AND decision_upstream_id = ANY(?::bigint[])`,
 		pgdialect.Array(archivedAlertIDs), engineName, pgdialect.Array(upstreamIDs),
 	).Scan(ctx, &knownIDs)
@@ -79,7 +79,7 @@ func (reader *Reader) KnownDecisionKeys(ctx context.Context, engineName string, 
 func (reader *Reader) AlertDetail(ctx context.Context, archiveID int64) (AlertDetail, error) {
 	var detailedAlert ArchivedAlert
 	alertError := reader.database.NewSelect().TableExpr("alert").
-		Join("JOIN engine ON engine_id = alert_engine_id").
+		Join("JOIN engine ON engine_id = alert_engine_id AND engine_deleting_at IS NULL").
 		ColumnExpr(alertSelection).
 		Where("alert_id = ?", archiveID).
 		Scan(ctx, &detailedAlert)
@@ -110,7 +110,7 @@ func (reader *Reader) DeleteAlert(ctx context.Context, engineName string, key Up
 		return false, nil
 	}
 	deleteResult, deleteError := reader.database.NewDelete().TableExpr("alert").
-		Where("alert_engine_id = (SELECT engine_id FROM engine WHERE engine_name = ?)", engineName).
+		Where("alert_engine_id = (SELECT engine_id FROM engine WHERE engine_name = ? AND engine_deleting_at IS NULL)", engineName).
 		Where("alert_upstream_id = ?", key.UpstreamID).
 		Where("alert_upstream_uuid = ?", key.UUID).
 		Exec(ctx)

@@ -142,7 +142,7 @@ func TestStoredEngineLifecycleThroughAPI(testContext *testing.T) {
 	}
 
 	deleteRecorder := fixture.send(http.MethodDelete, "/api/engines/edge-1", `{"confirm":"edge-1"}`)
-	if deleteRecorder.Code != http.StatusOK {
+	if deleteRecorder.Code != http.StatusAccepted {
 		testContext.Fatalf("delete: %d %q", deleteRecorder.Code, deleteRecorder.Body.String())
 	}
 	if _, getError := fixture.repository.Get(context.Background(), "edge-1"); getError != engines.ErrEngineNotFound {

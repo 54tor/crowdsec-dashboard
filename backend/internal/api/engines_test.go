@@ -462,7 +462,7 @@ func TestDeleteRequiresRetypedName(testContext *testing.T) {
 
 	recorder := fixture.send(http.MethodDelete, "/api/engines/edge-1", `{"confirm":"edge-1"}`)
 
-	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"status":"deleted"}` {
+	if recorder.Code != http.StatusAccepted || strings.TrimSpace(recorder.Body.String()) != `{"status":"deleting"}` {
 		testContext.Fatalf("unexpected response %d %q", recorder.Code, recorder.Body.String())
 	}
 	expectedEvent := recordedAuditEvent{action: audit.ActionEngineDeleted, target: "edge-1", clientIP: testClientIP}
@@ -597,7 +597,7 @@ func TestFailedReloadIsReportedAsWarningAndLogged(testContext *testing.T) {
 	if createRecorder.Code != http.StatusCreated || !strings.Contains(createRecorder.Body.String(), `"warning":"registry_reload_failed"`) {
 		testContext.Errorf("create must report the stale registry: %d %q", createRecorder.Code, createRecorder.Body.String())
 	}
-	if strings.TrimSpace(deleteRecorder.Body.String()) != `{"status":"deleted","warning":"registry_reload_failed"}` {
+	if strings.TrimSpace(deleteRecorder.Body.String()) != `{"status":"deleting","warning":"registry_reload_failed"}` {
 		testContext.Errorf("delete must report the stale registry: %q", deleteRecorder.Body.String())
 	}
 	if !strings.Contains(capturedOutput.String(), "open sealed value") {

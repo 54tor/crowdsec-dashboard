@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -13,12 +14,14 @@ import (
 )
 
 type Repository struct {
-	database *bun.DB
-	keyring  *secrets.Keyring
+	database       *bun.DB
+	keyring        *secrets.Keyring
+	purgeBatchSize int
+	purges         sync.WaitGroup
 }
 
 func NewRepository(database *bun.DB, keyring *secrets.Keyring) *Repository {
-	return &Repository{database: database, keyring: keyring}
+	return &Repository{database: database, keyring: keyring, purgeBatchSize: defaultPurgeBatchSize}
 }
 
 const engineWriteLockKey int64 = 7311290001
@@ -32,7 +35,7 @@ func lockEngineWriters(ctx context.Context, transaction bun.Tx) error {
 
 func (repository *Repository) List(ctx context.Context) ([]Engine, error) {
 	var rows []engineRow
-	queryError := repository.database.NewRaw(`SELECT `+engineColumns+` FROM engine ORDER BY engine_is_local DESC, engine_name`).Scan(ctx, &rows)
+	queryError := repository.database.NewRaw(`SELECT `+engineColumns+` FROM engine WHERE engine_deleting_at IS NULL ORDER BY engine_is_local DESC, engine_name`).Scan(ctx, &rows)
 	if queryError != nil {
 		return nil, fmt.Errorf("list engines: %w", queryError)
 	}
@@ -48,7 +51,7 @@ func (repository *Repository) List(ctx context.Context) ([]Engine, error) {
 }
 
 func (repository *Repository) Get(ctx context.Context, name string) (Engine, error) {
-	return getEngine(ctx, repository.database, `engine_name = ?`, name)
+	return getEngine(ctx, repository.database, `engine_name = ? AND engine_deleting_at IS NULL`, name)
 }
 
 func getEngine(ctx context.Context, executor bun.IDB, condition string, argument any) (Engine, error) {
@@ -63,26 +66,6 @@ func getEngine(ctx context.Context, executor bun.IDB, condition string, argument
 	return row.toEngine()
 }
 
-func (repository *Repository) Delete(ctx context.Context, name string) error {
-	return repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
-		var isLocal bool
-		queryError := transaction.NewRaw(`SELECT engine_is_local FROM engine WHERE engine_name = ? FOR UPDATE`, name).Scan(ctx, &isLocal)
-		if errors.Is(queryError, sql.ErrNoRows) {
-			return ErrEngineNotFound
-		}
-		if queryError != nil {
-			return fmt.Errorf("load engine: %w", queryError)
-		}
-		if isLocal {
-			return ErrLocalReadOnly
-		}
-		if _, deleteError := transaction.ExecContext(ctx, `DELETE FROM engine WHERE engine_name = ?`, name); deleteError != nil {
-			return fmt.Errorf("delete engine: %w", deleteError)
-		}
-		return nil
-	})
-}
-
 func (repository *Repository) Credentials(ctx context.Context, engineID int64) (Credentials, error) {
 	_, credentials, loadError := repository.engineWithCredentials(ctx, engineID)
 	return credentials, loadError
@@ -90,7 +73,7 @@ func (repository *Repository) Credentials(ctx context.Context, engineID int64) (
 
 func (repository *Repository) engineWithCredentials(ctx context.Context, engineID int64) (Engine, Credentials, error) {
 	var row engineRow
-	queryError := repository.database.NewRaw(`SELECT `+engineColumns+` FROM engine WHERE engine_id = ?`, engineID).Scan(ctx, &row)
+	queryError := repository.database.NewRaw(`SELECT `+engineColumns+` FROM engine WHERE engine_id = ? AND engine_deleting_at IS NULL`, engineID).Scan(ctx, &row)
 	if errors.Is(queryError, sql.ErrNoRows) {
 		return Engine{}, Credentials{}, ErrEngineNotFound
 	}
