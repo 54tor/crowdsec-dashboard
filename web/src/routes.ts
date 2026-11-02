@@ -11,7 +11,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/decisions', labelKey: 'nav.decisions' },
   { path: '/health', labelKey: 'nav.health' },
   { path: '/metrics', labelKey: 'nav.metrics' },
-  { path: '/config', labelKey: 'nav.config' },
+  { path: '/config', labelKey: 'nav.config', requiredRole: 'admin' },
   { path: '/bouncers', labelKey: 'nav.bouncers' },
   { path: '/machines', labelKey: 'nav.machines' },
   { path: '/hub', labelKey: 'nav.hub' },

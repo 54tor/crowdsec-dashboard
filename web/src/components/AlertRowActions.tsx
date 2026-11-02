@@ -3,14 +3,16 @@ import type { Alert } from '@/api/types'
 import { deleteAlert } from '@/api/writeApi'
 import { AlertDetailDialog } from '@/components/AlertDetailDialog'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
+import { useCanWrite } from '@/hooks/useCanWrite'
 import { isLiveLocalRow } from '@/lib/liveRow'
 
 export function AlertRowActions({ alertRow }: { alertRow: Alert }) {
   const { t } = useTranslation()
+  const canWrite = useCanWrite()
   return (
     <div className="flex flex-wrap gap-2">
       {alertRow.archive_id !== null && <AlertDetailDialog archiveId={alertRow.archive_id} alertId={alertRow.id} engineName={alertRow.engine} />}
-      {isLiveLocalRow(alertRow) && (
+      {canWrite && isLiveLocalRow(alertRow) && (
         <RowDeleteAction
           buttonLabel={t('alerts.delete')}
           ariaLabel={t('alerts.deleteAria', { id: alertRow.id })}

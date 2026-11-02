@@ -193,7 +193,7 @@ describe('accounts page', () => {
 
   it('aWriteRefusedWith403ShowsForbiddenWithoutSigningOut', async () => {
     const fetchMock = stubFetch({
-      'GET /api/auth/me': READ_ONLY_SESSION,
+      'GET /api/auth/me': ADMIN_SESSION,
       'GET /api/decisions?page=1&per_page=20': { status: 200, body: makePage([makeDecision({ id: 10, alert_id: 1 })]) },
       'DELETE /api/decisions/10?scope=Ip&value=203.0.113.7': { status: 403, body: { error: 'forbidden' } },
     })

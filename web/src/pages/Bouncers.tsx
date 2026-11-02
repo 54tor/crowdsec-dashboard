@@ -6,12 +6,15 @@ import { CreateSecretDialog } from '@/components/CreateSecretDialog'
 import { HealthPageSection } from '@/components/HealthPageSection'
 import { BouncersTable } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
+import { WriteOnly } from '@/components/WriteOnly'
+import { useCanWrite } from '@/hooks/useCanWrite'
 import { HEALTH_QUERY_KEY } from '@/hooks/useReadResources'
 
 export function Bouncers() {
   const { t } = useTranslation()
+  const canWrite = useCanWrite()
   const actions = useMemo(
-    () => ({
+    () => canWrite && ({
       header: t('bouncers.actions'),
       cell: (bouncer: Bouncer) => (
         <RowDeleteAction
@@ -25,7 +28,7 @@ export function Bouncers() {
         />
       ),
     }),
-    [t],
+    [t, canWrite],
   )
   const labels = {
     title: t('bouncers.addTitle'),
@@ -38,14 +41,16 @@ export function Bouncers() {
       titleKey="bouncers.title"
       degradedPart="bouncers"
       toolbar={
-        <CreateSecretDialog
-          triggerLabel={t('bouncers.add')}
-          labels={labels}
-          createSecret={async (name) => (await createBouncer(name)).key}
-        />
+        <WriteOnly>
+          <CreateSecretDialog
+            triggerLabel={t('bouncers.add')}
+            labels={labels}
+            createSecret={async (name) => (await createBouncer(name)).key}
+          />
+        </WriteOnly>
       }
     >
-      {(report, now) => <BouncersTable bouncers={report.bouncers} now={now} actions={actions} />}
+      {(report, now) => <BouncersTable bouncers={report.bouncers} now={now} actions={actions || undefined} />}
     </HealthPageSection>
   )
 }

@@ -8,12 +8,15 @@ import { MachinesTable } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { Button } from '@/components/ui/button'
 import { ValidateMachineButton } from '@/components/ValidateMachineButton'
+import { WriteOnly } from '@/components/WriteOnly'
+import { useCanWrite } from '@/hooks/useCanWrite'
 import { HEALTH_QUERY_KEY } from '@/hooks/useReadResources'
 
 export function Machines() {
   const { t } = useTranslation()
+  const canWrite = useCanWrite()
   const actions = useMemo(
-    () => ({
+    () => canWrite && ({
       header: t('machines.actions'),
       cell: (machine: Machine) => (
         <div className="flex flex-wrap items-start gap-2">
@@ -48,7 +51,7 @@ export function Machines() {
         </div>
       ),
     }),
-    [t],
+    [t, canWrite],
   )
   const labels = {
     title: t('machines.addTitle'),
@@ -61,14 +64,16 @@ export function Machines() {
       titleKey="machines.title"
       degradedPart="machines"
       toolbar={
-        <CreateSecretDialog
-          triggerLabel={t('machines.add')}
-          labels={labels}
-          createSecret={async (name) => (await createMachine(name)).password}
-        />
+        <WriteOnly>
+          <CreateSecretDialog
+            triggerLabel={t('machines.add')}
+            labels={labels}
+            createSecret={async (name) => (await createMachine(name)).password}
+          />
+        </WriteOnly>
       }
     >
-      {(report, now) => <MachinesTable machines={report.machines} now={now} actions={actions} />}
+      {(report, now) => <MachinesTable machines={report.machines} now={now} actions={actions || undefined} />}
     </HealthPageSection>
   )
 }

@@ -4,6 +4,7 @@ import type { HubItem } from '@/api/types'
 import { removeCollection } from '@/api/writeApi'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
+import { useCanWrite } from '@/hooks/useCanWrite'
 import { HUB_QUERY_KEY } from '@/hooks/useReadResources'
 import { isTimeoutError } from '@/lib/apiErrors'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
@@ -11,6 +12,7 @@ import { useReloadRequired } from '@/hooks/useReloadRequired'
 export function HubTable({ items }: { items: HubItem[] }) {
   const { t } = useTranslation()
   const { markReloadRequired } = useReloadRequired()
+  const canWrite = useCanWrite()
   const columns = useMemo<DataTableColumn<HubItem>[]>(
     () => [
       { key: 'type', header: t('hub.columns.type'), cell: (hubItem) => hubItem.type },
@@ -18,7 +20,7 @@ export function HubTable({ items }: { items: HubItem[] }) {
       { key: 'status', header: t('hub.columns.status'), cell: (hubItem) => hubItem.status },
       { key: 'version', header: t('hub.columns.version'), cell: (hubItem) => hubItem.local_version },
       { key: 'description', header: t('hub.columns.description'), cell: (hubItem) => hubItem.description },
-      {
+      ...(canWrite ? ([{
         key: 'actions',
         header: t('hub.columns.actions'),
         cell: (hubItem) =>
@@ -35,9 +37,9 @@ export function HubTable({ items }: { items: HubItem[] }) {
               onFailed={(failure) => isTimeoutError(failure) && markReloadRequired()}
             />
           ),
-      },
+      }] satisfies DataTableColumn<HubItem>[]) : []),
     ],
-    [t, markReloadRequired],
+    [t, markReloadRequired, canWrite],
   )
   return <DataTable caption={t('hub.caption')} columns={columns} rows={items} rowKey={(hubItem) => `${hubItem.type}/${hubItem.name}`} />
 }

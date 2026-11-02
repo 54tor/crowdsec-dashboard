@@ -4,6 +4,7 @@ import { ErrorNotice } from '@/components/Notice'
 import { HubFilters } from '@/components/HubFilters'
 import { HubTable } from '@/components/HubTable'
 import { HubToolbar } from '@/components/HubToolbar'
+import { WriteOnly } from '@/components/WriteOnly'
 import { ReloadBanner } from '@/components/ReloadBanner'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { useHub } from '@/hooks/useReadResources'
@@ -25,8 +26,10 @@ export function Hub() {
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">{t('hub.title')}</h1>
-      <ReloadBanner />
-      <HubToolbar />
+      <WriteOnly>
+        <ReloadBanner />
+        <HubToolbar />
+      </WriteOnly>
       <HubFilters types={types} selectedType={selectedType} nameQuery={nameQuery} onTypeChange={setSelectedType} onNameChange={setNameQuery} />
       {error && <ErrorNotice error={error} />}
       {isPending && !error && <TableSkeleton />}

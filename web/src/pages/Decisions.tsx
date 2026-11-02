@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import type { Decision } from '@/api/types'
 import type { DataTableColumn } from '@/components/DataTable'
 import { BanDialog } from '@/components/BanDialog'
+import { WriteOnly } from '@/components/WriteOnly'
+import { useCanWrite } from '@/hooks/useCanWrite'
 import { CheckboxField } from '@/components/CheckboxField'
 import { EngineCell } from '@/components/EngineCell'
 import { FilterBar } from '@/components/FilterBar'
@@ -24,6 +26,7 @@ function decisionRowKey(decision: Decision): string {
 export function Decisions() {
   const { t, i18n } = useTranslation()
   const controls = useListControls()
+  const canWrite = useCanWrite()
   const [includeExpired, setIncludeExpired] = useState(false)
   const query = usePagedList<Decision>('decisions', controls.filters, controls.page, PAGE_SIZE, controls.isValid, includeExpired)
 
@@ -59,7 +62,7 @@ export function Decisions() {
         className: 'whitespace-nowrap',
         cell: (decision) => (decision.until ? formatDateTime(decision.until, i18n.language) : decision.duration),
       },
-      {
+      ...(canWrite ? ([{
         key: 'actions',
         header: t('decisions.actions'),
         cell: (decision) =>
@@ -75,15 +78,17 @@ export function Decisions() {
               invalidates={[['decisions']]}
             />
           ) : null,
-      },
+      }] satisfies DataTableColumn<Decision>[]) : []),
     ],
-    [t, i18n.language],
+    [t, i18n.language, canWrite],
   )
 
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">{t('decisions.title')}</h1>
-      <BanDialog />
+      <WriteOnly>
+        <BanDialog />
+      </WriteOnly>
       <InfoNotice>{t('decisions.communityNotice')}</InfoNotice>
       <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} />
       <CheckboxField id="decisions-include-expired" label={t('decisions.includeExpired')} checked={includeExpired} onChange={changeIncludeExpired} />
