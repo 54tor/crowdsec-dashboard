@@ -42,3 +42,17 @@ func TestCanonicalizeCountryUppercases(testContext *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalizeRefusesPrefixesBelowFloor(testContext *testing.T) {
+	for _, input := range []string{"10.0.0.0/7", "0.0.0.0/1", "128.0.0.0/4", "::ffff:0:0/103", "2000::/15", "::/1", "fe80::/10"} {
+		if _, canonicalError := Canonicalize(KindIP, input); !errors.Is(canonicalError, ErrPrefixTooBroad) {
+			testContext.Errorf("%q: expected ErrPrefixTooBroad, got %v", input, canonicalError)
+		}
+	}
+	for input, expectedValue := range map[string]string{"10.0.0.0/8": "10.0.0.0/8", "2001::/16": "2001::/16", "::ffff:10.0.0.0/104": "10.0.0.0/8"} {
+		obtainedValue, canonicalError := Canonicalize(KindIP, input)
+		if canonicalError != nil || obtainedValue != expectedValue {
+			testContext.Errorf("%q: expected %s at the floor, got %s (%v)", input, expectedValue, obtainedValue, canonicalError)
+		}
+	}
+}

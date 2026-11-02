@@ -10,10 +10,15 @@ const (
 	KindIP      = "ip"
 	KindCountry = "country"
 
-	ipv4InIPv6PrefixBits = 96
+	ipv4InIPv6PrefixBits  = 96
+	minIPv4RulePrefixBits = 8
+	minIPv6RulePrefixBits = 16
 )
 
-var ErrInvalidRule = errors.New("invalid access rule")
+var (
+	ErrInvalidRule    = errors.New("invalid access rule")
+	ErrPrefixTooBroad = errors.New("access rule prefix is broader than the floor")
+)
 
 type Rule struct {
 	ID    int64  `json:"id"`
@@ -55,7 +60,18 @@ func canonicalizeIP(value string) (string, error) {
 	if bits == 0 {
 		return "", ErrInvalidRule
 	}
-	return netip.PrefixFrom(address, bits).Masked().String(), nil
+	canonicalPrefix := netip.PrefixFrom(address, bits).Masked()
+	if !meetsRulePrefixFloor(canonicalPrefix) {
+		return "", ErrPrefixTooBroad
+	}
+	return canonicalPrefix.String(), nil
+}
+
+func meetsRulePrefixFloor(prefix netip.Prefix) bool {
+	if prefix.Addr().Is4() {
+		return prefix.Bits() >= minIPv4RulePrefixBits
+	}
+	return prefix.Bits() >= minIPv6RulePrefixBits
 }
 
 func canonicalizeCountry(value string) (string, error) {

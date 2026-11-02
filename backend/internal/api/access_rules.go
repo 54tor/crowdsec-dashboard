@@ -78,13 +78,13 @@ func (handlers accessRuleHandlers) add(responseWriter http.ResponseWriter, reque
 		writeError(responseWriter, http.StatusBadRequest, "invalid_access_rule")
 		return
 	}
-	clientIP, clientAddress := handlers.clientAddress(request)
+	_, clientAddress := handlers.clientAddress(request)
 	addedRule, addError := handlers.service.Add(request.Context(), identity.AccountID, submission.Kind, submission.Value, clientAddress, handlers.resolveGeolocator())
 	if addError != nil {
 		writeAccessRuleError(responseWriter, "add access rule", addError)
 		return
 	}
-	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionAccessRuleAdded, addedRule.Kind+":"+addedRule.Value, clientIP)
+	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionAccessRuleAdded, addedRule.Kind+":"+addedRule.Value, audit.ClientIPText(clientAddress))
 	writeJSON(responseWriter, http.StatusCreated, addedRule)
 }
 
@@ -95,7 +95,7 @@ func (handlers accessRuleHandlers) remove(responseWriter http.ResponseWriter, re
 		writeError(responseWriter, http.StatusNotFound, "not_found")
 		return
 	}
-	clientIP, clientAddress := handlers.clientAddress(request)
+	_, clientAddress := handlers.clientAddress(request)
 	removedRule := accessrule.Rule{}
 	if existingRules, listError := handlers.service.List(request.Context(), identity.AccountID); listError == nil {
 		for _, existingRule := range existingRules {
@@ -108,7 +108,7 @@ func (handlers accessRuleHandlers) remove(responseWriter http.ResponseWriter, re
 		writeAccessRuleError(responseWriter, "delete access rule", deleteError)
 		return
 	}
-	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionAccessRuleRemoved, removedRule.Kind+":"+removedRule.Value, clientIP)
+	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionAccessRuleRemoved, removedRule.Kind+":"+removedRule.Value, audit.ClientIPText(clientAddress))
 	responseWriter.WriteHeader(http.StatusNoContent)
 }
 
@@ -116,6 +116,8 @@ func writeAccessRuleError(responseWriter http.ResponseWriter, operation string, 
 	switch {
 	case errors.Is(operationError, accessrule.ErrInvalidRule):
 		writeError(responseWriter, http.StatusBadRequest, "invalid_access_rule")
+	case errors.Is(operationError, accessrule.ErrPrefixTooBroad):
+		writeError(responseWriter, http.StatusBadRequest, "prefix_too_broad")
 	case errors.Is(operationError, accessrule.ErrRuleNotFound):
 		writeError(responseWriter, http.StatusNotFound, "not_found")
 	case errors.Is(operationError, accessrule.ErrRuleExists):

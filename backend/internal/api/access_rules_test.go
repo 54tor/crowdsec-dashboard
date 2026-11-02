@@ -201,3 +201,36 @@ func TestAddAccessRuleRefusesMatchEverythingPrefix(testContext *testing.T) {
 
 	expectError(testContext, recorder, http.StatusBadRequest, "invalid_access_rule")
 }
+
+func TestAuditClientIPFormatIsUnmappedEverywhere(testContext *testing.T) {
+	fixture := newAccessRuleFixture(testContext, nil)
+	fixture.service.rules = []accessrule.Rule{{ID: 5, Kind: "ip", Value: "198.51.100.0/24"}}
+	for _, route := range []struct{ method, path, body string }{
+		{http.MethodPost, "/api/account/access-rules", `{"kind":"ip","value":"198.51.100.0/24"}`},
+		{http.MethodDelete, "/api/account/access-rules/5", ""},
+	} {
+		request := httptest.NewRequest(route.method, "https://dashboard.example.com"+route.path, strings.NewReader(route.body))
+		request.RemoteAddr = "[::ffff:198.51.100.7]:5555"
+		request.Header.Set("Content-Type", "application/json")
+		request.AddCookie(fixture.cookie)
+		fixture.handler.ServeHTTP(httptest.NewRecorder(), request)
+	}
+
+	if len(fixture.recorder.events) != 2 {
+		testContext.Fatalf("expected two audit events, got %+v", fixture.recorder.events)
+	}
+	for _, recorded := range fixture.recorder.events {
+		if recorded.clientIP != "198.51.100.7" {
+			testContext.Errorf("%s: expected the unmapped IPv4 form, got %q", recorded.action, recorded.clientIP)
+		}
+	}
+}
+
+func TestAddAccessRuleRefusesPrefixTooBroad(testContext *testing.T) {
+	fixture := newAccessRuleFixture(testContext, nil)
+	fixture.service.addError = accessrule.ErrPrefixTooBroad
+
+	recorder := fixture.send(http.MethodPost, "/api/account/access-rules", `{"kind":"ip","value":"10.0.0.0/7"}`, "")
+
+	expectError(testContext, recorder, http.StatusBadRequest, "prefix_too_broad")
+}

@@ -133,3 +133,38 @@ func TestAddCountryRuleRefusedWhenGeolocationUnavailable(testContext *testing.T)
 		testContext.Fatalf("expected ErrGeolocationUnavailable, got %v", addError)
 	}
 }
+
+func TestAddRuleRefusesPrefixBelowFloor(testContext *testing.T) {
+	database := storetest.New(testContext)
+	repository := NewRepository(database)
+	accountID := createAccount(testContext, database, "alice")
+
+	_, addError := repository.Add(context.Background(), accountID, KindIP, "192.0.0.0/7", clientAddress, geo.Unavailable{})
+
+	if !errors.Is(addError, ErrPrefixTooBroad) {
+		testContext.Fatalf("expected ErrPrefixTooBroad, got %v", addError)
+	}
+	storedRules, _ := repository.List(context.Background(), accountID)
+	if len(storedRules) != 0 {
+		testContext.Errorf("nothing must be stored, got %+v", storedRules)
+	}
+	if _, floorError := repository.Add(context.Background(), accountID, KindIP, "192.0.0.0/8", clientAddress, geo.Unavailable{}); floorError != nil {
+		testContext.Errorf("a prefix exactly at the floor must be accepted: %v", floorError)
+	}
+}
+
+func TestStoredRuleBelowFloorKeepsWorking(testContext *testing.T) {
+	database := storetest.New(testContext)
+	repository := NewRepository(database)
+	accountID := createAccount(testContext, database, "alice")
+	if _, insertError := database.ExecContext(context.Background(),
+		`INSERT INTO access_rule (access_rule_account_id, access_rule_kind, access_rule_value) VALUES (?, 'ip', '192.0.0.0/4')`, accountID); insertError != nil {
+		testContext.Fatal(insertError)
+	}
+
+	storedRules, listError := repository.List(context.Background(), accountID)
+
+	if listError != nil || len(storedRules) != 1 || !Allows(context.Background(), storedRules, clientAddress, geo.Unavailable{}) {
+		testContext.Errorf("a rule stored before the floor must still be listed and evaluated, got %+v / %v", storedRules, listError)
+	}
+}
