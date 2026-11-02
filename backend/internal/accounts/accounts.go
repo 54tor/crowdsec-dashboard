@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 	"unicode/utf8"
 
 	"github.com/alexedwards/argon2id"
@@ -29,10 +30,15 @@ var (
 
 type Repository struct {
 	database *bun.DB
+	now      func() time.Time
 }
 
 func NewRepository(database *bun.DB) *Repository {
-	return &Repository{database: database}
+	return NewRepositoryWithClock(database, time.Now)
+}
+
+func NewRepositoryWithClock(database *bun.DB, now func() time.Time) *Repository {
+	return &Repository{database: database, now: now}
 }
 
 func HashPassword(password string) (string, error) {

@@ -137,7 +137,7 @@ func newLoginFixtureWith(testContext *testing.T, options fixtureOptions) *loginF
 	clock := newTestClock()
 	fixture := &loginFixture{
 		database:     database,
-		accounts:     accounts.NewRepository(database),
+		accounts:     accounts.NewRepositoryWithClock(database, clock.Now),
 		factors:      &countingFactors{Repository: secondfactor.NewRepository(database, keyring)},
 		sessions:     sessions.NewPostgresStore(database, time.Hour, clock.Now),
 		relyingParty: relyingParty,

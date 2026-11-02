@@ -103,7 +103,7 @@ func (repository *Repository) OpenSecondFactorSetup(ctx context.Context, executo
 func (repository *Repository) CloseSecondFactorSetup(ctx context.Context, executor bun.IDB, accountID int64) error {
 	closeResult, closeError := executor.ExecContext(ctx,
 		`UPDATE account SET account_second_factor_setup_until = NULL
-		 WHERE account_id = ? AND account_second_factor_setup_until IS NOT NULL`, accountID)
+		 WHERE account_id = ? AND account_second_factor_setup_until > ?`, accountID, repository.now())
 	if closeError != nil {
 		return fmt.Errorf("close second factor setup window: %w", closeError)
 	}

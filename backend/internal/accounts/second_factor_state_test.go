@@ -182,7 +182,7 @@ func TestOpenSecondFactorSetupAllowsSetupUntilDeadline(testContext *testing.T) {
 }
 
 func TestCloseSecondFactorSetupClearsWindowOnce(testContext *testing.T) {
-	repository := newRepositoryWithAccount(testContext)
+	repository, _ := newRepositoryWithClockAndAccount(testContext)
 	accountID := accountIDOf(testContext, repository, validAccountName)
 	ctx := context.Background()
 	if openError := repository.OpenSecondFactorSetup(ctx, repository.database, accountID, referenceInstant.Add(time.Hour)); openError != nil {
@@ -200,5 +200,29 @@ func TestCloseSecondFactorSetupClearsWindowOnce(testContext *testing.T) {
 	}
 	if isAllowed, _ := repository.SecondFactorSetupAllowed(ctx, accountID, referenceInstant); isAllowed {
 		testContext.Error("the window must be closed")
+	}
+}
+
+// TestCloseSecondFactorSetupRefusesExpiredWindowInSQL proves the deadline is
+// checked by the UPDATE itself: a window that is still set but already past
+// must not be closed (that would let a late enrolment write its factors).
+func TestCloseSecondFactorSetupRefusesExpiredWindowInSQL(testContext *testing.T) {
+	repository, clock := newRepositoryWithClockAndAccount(testContext)
+	accountID := accountIDOf(testContext, repository, validAccountName)
+	ctx := context.Background()
+	expiredDeadline := clock.Now().Add(-time.Second)
+	if openError := repository.OpenSecondFactorSetup(ctx, repository.database, accountID, expiredDeadline); openError != nil {
+		testContext.Fatal(openError)
+	}
+
+	closeError := repository.CloseSecondFactorSetup(ctx, repository.database, accountID)
+
+	if closeError != ErrSecondFactorSetupClosed {
+		testContext.Errorf("an expired window must report ErrSecondFactorSetupClosed, got %v", closeError)
+	}
+	var remainingDeadline time.Time
+	if queryError := repository.database.NewRaw(`SELECT account_second_factor_setup_until FROM account WHERE account_id = ?`, accountID).
+		Scan(ctx, &remainingDeadline); queryError != nil || !remainingDeadline.Equal(expiredDeadline) {
+		testContext.Errorf("the refused close must leave the column untouched, got %v (%v)", remainingDeadline, queryError)
 	}
 }

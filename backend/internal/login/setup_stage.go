@@ -46,6 +46,9 @@ func (service *Service) CompleteSetup(ctx context.Context, pendingID string, cli
 		if closeError := service.dependencies.Accounts.CloseSecondFactorSetup(ctx, transaction, pending.AccountID); closeError != nil {
 			return closeError
 		}
+		if revokeError := service.dependencies.Accounts.RevokeSessions(ctx, transaction, pending.AccountID); revokeError != nil {
+			return revokeError
+		}
 		return service.dependencies.SecondFactors.SaveSetup(ctx, transaction, pending.AccountID, pending.Setup)
 	})
 	if transactionError != nil && !errors.Is(transactionError, accounts.ErrSecondFactorSetupClosed) {
@@ -58,9 +61,6 @@ func (service *Service) CompleteSetup(ctx context.Context, pendingID string, cli
 		return auth.AccountIdentity{}, transactionError
 	}
 
-	if destroyError := service.dependencies.Sessions.DestroyAllForAccount(ctx, enrolledPending.AccountID); destroyError != nil {
-		return auth.AccountIdentity{}, fmt.Errorf("revoke sessions after second factor setup: %w", destroyError)
-	}
 	for _, enrolledMethod := range enrolledPending.Setup.ConfirmedMethods() {
 		service.record(ctx, enrolledPending.AccountID, audit.ActionSecondFactorEnrolled, enrolledMethod, clientIP)
 	}
