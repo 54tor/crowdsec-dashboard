@@ -169,7 +169,7 @@ func (reader *Reader) decisionQuery(query AlertQuery) *bun.SelectQuery {
 		Join("JOIN engine ON engine_id = alert_engine_id AND engine_deleting_at IS NULL")
 	selectQuery = applyCommonFilters(selectQuery, query)
 	if query.IP != "" {
-		selectQuery = selectQuery.Where("decision_value = ?", query.IP)
+		selectQuery = selectQuery.Where("(decision_value = ? OR alert_source_value = ?)", query.IP, query.IP)
 	}
 	if !query.IncludeExpired {
 		selectQuery = selectQuery.Where("decision_until > ?", reader.now().UTC())
