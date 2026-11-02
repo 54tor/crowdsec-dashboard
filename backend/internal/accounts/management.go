@@ -124,11 +124,12 @@ func (repository *Repository) ChangeRole(ctx context.Context, accountName, role 
 				return guardError
 			}
 		}
-		if _, updateError := transaction.ExecContext(ctx,
-			`UPDATE account SET account_role = ? WHERE account_id = ?`, role, accountID); updateError != nil {
+		updateResult, updateError := transaction.ExecContext(ctx,
+			`UPDATE account SET account_role = ? WHERE account_id = ?`, role, accountID)
+		if updateError != nil {
 			return fmt.Errorf("change account role: %w", updateError)
 		}
-		return nil
+		return requireAffectedRow(updateResult, ErrAccountNotFound)
 	})
 }
 
@@ -141,10 +142,11 @@ func (repository *Repository) Delete(ctx context.Context, accountName string) er
 		if guardError := lockAdministrators(ctx, transaction, accountID); guardError != nil {
 			return guardError
 		}
-		if _, deleteError := transaction.ExecContext(ctx, `DELETE FROM account WHERE account_id = ?`, accountID); deleteError != nil {
+		deleteResult, deleteError := transaction.ExecContext(ctx, `DELETE FROM account WHERE account_id = ?`, accountID)
+		if deleteError != nil {
 			return fmt.Errorf("delete account: %w", deleteError)
 		}
-		return nil
+		return requireAffectedRow(deleteResult, ErrAccountNotFound)
 	})
 }
 
