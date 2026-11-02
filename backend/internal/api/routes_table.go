@@ -117,7 +117,7 @@ func readRoutes(loadedConfig config.Config, services Services) []apiRoute {
 }
 
 func crowdsecWriteRoutes(loadedConfig config.Config, services Services) []apiRoute {
-	decisions := decisionHandlers{service: services.Decisions, lister: services.DecisionReader, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	decisions := decisionHandlers{service: services.Decisions, lister: services.DecisionReader, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	bouncers := bouncerHandlers{service: services.Bouncers}
 	machines := machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}
 	hub := hubHandlers{service: services.Hub}

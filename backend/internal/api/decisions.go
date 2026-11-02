@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
@@ -24,6 +26,7 @@ const (
 type decisionHandlers struct {
 	service      DecisionService
 	lister       DecisionLister
+	recorder     audit.Recorder
 	trustedCIDRs []*net.IPNet
 }
 
@@ -139,5 +142,13 @@ func (handlers decisionHandlers) remove(responseWriter http.ResponseWriter, requ
 		writeUpstreamError(responseWriter, deleteError)
 		return
 	}
+	handlers.recordRemoval(request, decisionID)
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (handlers decisionHandlers) recordRemoval(request *http.Request, decisionID int64) {
+	identity, _ := auth.IdentityFromContext(request.Context())
+	clientIP := auditClientIP(request, handlers.trustedCIDRs)
+	target := "decision:" + strconv.FormatInt(decisionID, 10)
+	audit.RecordOrLog(context.WithoutCancel(request.Context()), handlers.recorder, identity.AccountID, audit.ActionDecisionRemoved, target, clientIP)
 }

@@ -45,6 +45,7 @@ type writeFixture struct {
 	cookie    *http.Cookie
 	decisions *fakeDecisions
 	runner    *recordingRunner
+	audit     *fakeAuditRecorder
 }
 
 // writeFixtureAlertIDs and writeFixtureDecisionIDs exist on the fake local LAPI:
@@ -67,10 +68,11 @@ func newWriteFixture(testContext *testing.T) writeFixture {
 	for _, decisionID := range writeFixtureDecisionIDs {
 		decisionLister.decisions = append(decisionLister.decisions, lapi.Decision{ID: decisionID, Scope: "Ip", Value: fmt.Sprintf("203.0.113.%d", decisionID)})
 	}
-	services := Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}, AlertLookup: alertLookup, DecisionReader: decisionLister}
+	auditRecorder := &fakeAuditRecorder{}
+	services := Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}, AlertLookup: alertLookup, DecisionReader: decisionLister, Audit: auditRecorder}
 	handler, sessions := newTestHandlerAndSessions(testContext, services, "")
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
-	return writeFixture{handler: handler, cookie: cookie, decisions: decisions, runner: runner}
+	return writeFixture{handler: handler, cookie: cookie, decisions: decisions, runner: runner, audit: auditRecorder}
 }
 
 func deleteAlertPath(alertID string) string {
