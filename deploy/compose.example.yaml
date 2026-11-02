@@ -110,6 +110,10 @@ services:
       # that /32 here. IPv6 variant: TRUSTED_PROXY_CIDRS: fd00:30::10/128
       TRUSTED_PROXY_CIDRS: 172.30.0.10/32
       SECRETS_KEY_FILE: /run/dashboard-secrets/key
+      # Key rotation: the init script copies each compose secret listed in SECRETS_RETIRED_KEY_SOURCES
+      # to /run/dashboard-secrets/retired-N (in order); SECRETS_RETIRED_KEY_FILES lists those copies.
+      # SECRETS_RETIRED_KEY_SOURCES: /run/secrets/dashboard-secrets-key-retired
+      # SECRETS_RETIRED_KEY_FILES: /run/dashboard-secrets/retired-1
       S6_READ_ONLY_ROOT: "1"
       WAIT_FOR_NETWORK: "false"
       GEOIP_DATABASE_FILE: /var/lib/geoip/GeoLite2-Country.mmdb
@@ -128,6 +132,8 @@ services:
     cap_add: [CHOWN, DAC_READ_SEARCH, KILL, SETGID, SETUID]
     secrets:
       - dashboard-secrets-key
+      # During a key rotation: uncomment with the matching top-level secret below.
+      # - dashboard-secrets-key-retired
       # Optional GeoLite2 updates: uncomment with the matching top-level secrets below.
       # - maxmind-account-id
       # - maxmind-license-key
@@ -172,6 +178,8 @@ volumes:
 secrets:
   dashboard-secrets-key:
     file: ./secrets/dashboard-secrets.key
+  # dashboard-secrets-key-retired:
+  #   file: ./secrets/dashboard-secrets-retired.key
   # maxmind-account-id:
   #   file: ./secrets/maxmind-account-id
   # maxmind-license-key:

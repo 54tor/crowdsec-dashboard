@@ -86,7 +86,7 @@ copy_never_echoes_key() {
     write_source "${case_directory}/source" "${key_material}"
     write_source "${case_directory}/retired" "${other_key_material}"
     captured_output="$(run_script "${case_directory}" SECRETS_KEY_SOURCE="${case_directory}/source" \
-        SECRETS_RETIRED_KEY_FILES="${case_directory}/retired" 2>&1)"
+        SECRETS_RETIRED_KEY_SOURCES="${case_directory}/retired" 2>&1)"
     if [[ "${captured_output}" == *"${key_material}"* || "${captured_output}" == *"${other_key_material}"* ]]; then
         report_failure "${test_name}" "output contains key material"
         return
@@ -122,7 +122,7 @@ TestRetiredKeysAreCopiedWithSameModeAndOwner() {
     write_source "${case_directory}/retired-a" "retired-one"
     write_source "${case_directory}/retired-b" "retired-two"
     run_script "${case_directory}" SECRETS_KEY_SOURCE="${case_directory}/source" \
-        SECRETS_RETIRED_KEY_FILES="${case_directory}/retired-a,${case_directory}/retired-b" > /dev/null 2>&1 \
+        SECRETS_RETIRED_KEY_SOURCES="${case_directory}/retired-a,${case_directory}/retired-b" > /dev/null 2>&1 \
         || { report_failure "${test_name}" "script failed"; return; }
     local retired_index
     for retired_index in 1 2; do
@@ -145,11 +145,58 @@ TestMissingRetiredKeyFailsLoudly() {
     case_directory="$(new_case_directory)"
     write_source "${case_directory}/source" "${key_material}"
     captured_output="$(run_script "${case_directory}" SECRETS_KEY_SOURCE="${case_directory}/source" \
-        SECRETS_RETIRED_KEY_FILES="${case_directory}/absent-retired" 2>&1)" || exit_code=$?
+        SECRETS_RETIRED_KEY_SOURCES="${case_directory}/absent-retired" 2>&1)" || exit_code=$?
     if [[ "${exit_code}" != 1 || "${captured_output}" != *absent-retired* ]]; then
         report_failure "${test_name}" "expected exit 1 naming the path, got ${exit_code}: ${captured_output}"
         return
     fi
+    report_success "${test_name}"
+}
+
+TestServerRetiredKeyFilesAreIgnoredByTheScript() {
+    # SECRETS_RETIRED_KEY_FILES names the copies the server reads, which do not
+    # exist yet when the script runs: the script must not treat them as sources.
+    local test_name="TestServerRetiredKeyFilesAreIgnoredByTheScript"
+    local case_directory
+    case_directory="$(new_case_directory)"
+    write_source "${case_directory}/source" "${key_material}"
+    run_script "${case_directory}" SECRETS_KEY_SOURCE="${case_directory}/source" \
+        SECRETS_RETIRED_KEY_FILES="${case_directory}/out/retired-1" > /dev/null 2>&1 \
+        || { report_failure "${test_name}" "script failed on the server copy paths"; return; }
+    if compgen -G "${case_directory}/out/retired-*" > /dev/null; then
+        report_failure "${test_name}" "a retired copy was created without any source"
+        return
+    fi
+    report_success "${test_name}"
+}
+
+TestRetiredCopiesAreReadableAtTheServerPaths() {
+    # The server reads SECRETS_RETIRED_KEY_FILES=<dir>/retired-1,<dir>/retired-2.
+    # The test cannot switch to docker-user, so it checks what that user gets after
+    # the chown: the owner of the 0700 directory can read each 0400 copy, in source order.
+    local test_name="TestRetiredCopiesAreReadableAtTheServerPaths"
+    local case_directory
+    case_directory="$(new_case_directory)"
+    write_source "${case_directory}/source" "${key_material}"
+    write_source "${case_directory}/retired-a" "retired-one"
+    write_source "${case_directory}/retired-b" "retired-two"
+    run_script "${case_directory}" SECRETS_KEY_SOURCE="${case_directory}/source" \
+        SECRETS_RETIRED_KEY_SOURCES="${case_directory}/retired-a,${case_directory}/retired-b" > /dev/null 2>&1 \
+        || { report_failure "${test_name}" "script failed"; return; }
+    local server_retired_key_files="${case_directory}/out/retired-1,${case_directory}/out/retired-2"
+    local server_paths expected_contents=(retired-one retired-two) path_index=0
+    IFS=',' read -r -a server_paths <<< "${server_retired_key_files}"
+    for server_path in "${server_paths[@]}"; do
+        if [[ ! -r "${server_path}" || "$(stat -c '%U' "${server_path}")" != "$(stat -c '%U' "${case_directory}/out")" ]]; then
+            report_failure "${test_name}" "${server_path} is not readable by the directory owner"
+            return
+        fi
+        if [[ "$(cat "${server_path}")" != "${expected_contents[${path_index}]}" ]]; then
+            report_failure "${test_name}" "${server_path} does not hold source number $((path_index + 1))"
+            return
+        fi
+        path_index=$((path_index + 1))
+    done
     report_success "${test_name}"
 }
 
@@ -159,6 +206,8 @@ copy_never_echoes_key
 rerun_replaces_previous_copy
 TestRetiredKeysAreCopiedWithSameModeAndOwner
 TestMissingRetiredKeyFailsLoudly
+TestServerRetiredKeyFilesAreIgnoredByTheScript
+TestRetiredCopiesAreReadableAtTheServerPaths
 
 if (( failed_test_count > 0 )); then
     printf '%s test(s) failed\n' "${failed_test_count}"
