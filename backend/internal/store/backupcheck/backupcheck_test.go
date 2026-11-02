@@ -42,7 +42,7 @@ const (
 	totpSecretFileName = "totp-secret"
 	seededAlertCount   = 3
 	setupWindow        = time.Hour
-	totpStepOffset     = 30 * time.Second
+	totpPeriod         = 30 * time.Second
 )
 
 func requireVariable(testContext *testing.T, variableName string) string {
@@ -216,11 +216,15 @@ func TestRestoredDatabaseServesLoginAndArchive(testContext *testing.T) {
 	}
 	now := time.Now()
 	// The seed already consumed the current time step (replay protection), so the code of the next step is the one that must be accepted.
-	currentCode, codeError := totp.GenerateCode(string(totpSecret), now.Add(totpStepOffset))
+	nextStepCode, codeError := totp.GenerateCode(string(totpSecret), now.Add(totpPeriod))
 	if codeError != nil {
 		testContext.Fatalf("generate code: %v", codeError)
 	}
-	if verifyError := secondfactor.NewRepository(database, keyring).VerifyTOTP(ctx, identity.AccountID, currentCode, now); verifyError != nil {
+	factors := secondfactor.NewRepository(database, keyring)
+	if verifyError := factors.VerifyTOTP(ctx, identity.AccountID, nextStepCode, now); verifyError != nil {
 		testContext.Errorf("restored totp secret must verify: %v", verifyError)
+	}
+	if replayError := factors.VerifyTOTP(ctx, identity.AccountID, nextStepCode, now); !errors.Is(replayError, secondfactor.ErrInvalidCode) {
+		testContext.Errorf("a consumed totp step must be refused after restore, got %v", replayError)
 	}
 }

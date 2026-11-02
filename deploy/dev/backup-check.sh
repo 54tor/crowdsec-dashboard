@@ -19,7 +19,7 @@ work_directory="$(mktemp -d)"
 # Removes the temporary files by literal relative names from inside the temporary directory.
 remove_work_directory() {
   cd "$work_directory" || return 0
-  rm -rf ./keys ./state ./backups ./compose.yaml ./empty.dump ./test.log
+  rm -rf ./keys ./state ./backups ./compose.yaml ./empty.dump ./header-only.dump ./truncated.dump ./corrupt-data.dump ./test.log
   cd / && rmdir "$work_directory" || true
 }
 trap remove_work_directory EXIT
@@ -55,6 +55,7 @@ psql_admin 'CREATE DATABASE backup_source'
 cleanup_databases() {
   psql_admin 'DROP DATABASE IF EXISTS backup_source WITH (FORCE)' >/dev/null || true
   psql_admin 'DROP DATABASE IF EXISTS backup_restored WITH (FORCE)' >/dev/null || true
+  psql_admin 'DROP DATABASE IF EXISTS backup_restored_restore_tmp WITH (FORCE)' >/dev/null || true
   remove_work_directory
 }
 trap cleanup_databases EXIT
@@ -82,40 +83,65 @@ run_check BACKUP_CHECK_SOURCE_URL="$(url_for backup_source)"
 backup_file="$("$deploy_directory/backup.sh" -p "$project" -s "$service" -d "$source_database" -o "$work_directory/backups")"
 echo "backup-check: backup written, mode $(stat -c %a "$backup_file")"
 
+# The dump records backup_source as its origin, so restoring it into backup_restored needs the explicit flag.
 restore() {
   "$deploy_directory/restore.sh" -p "$project" -s "$service" -d "$restored_database" "$@"
 }
 
-# restore.sh must refuse before touching anything: first a wrong confirmation, then an empty file.
-# backup_restored does not exist yet, so any change would make it appear.
-database_exists() {
-  docker compose -p "$project" exec -T "$service" psql -U postgres -d postgres -tAc \
-    "SELECT count(*) FROM pg_database WHERE datname = 'backup_restored'"
+psql_query() {
+  docker compose -p "$project" exec -T "$service" psql -U postgres -d "$1" -tAc "$2"
 }
-if restore "$backup_file" </dev/null; then
-  echo "backup-check: restore.sh accepted a missing confirmation" >&2
-  exit 1
-fi
-if restore --confirm wrong_name "$backup_file"; then
-  echo "backup-check: restore.sh accepted a wrong confirmation" >&2
-  exit 1
-fi
-: > "$work_directory/empty.dump"
-if restore --confirm "$restored_database" "$work_directory/empty.dump"; then
-  echo "backup-check: restore.sh accepted an empty backup" >&2
-  exit 1
-fi
-if restore --confirm "$restored_database" "$work_directory/missing.dump"; then
-  echo "backup-check: restore.sh accepted a missing backup" >&2
-  exit 1
-fi
-if [ "$(database_exists)" != 0 ]; then
-  echo "backup-check: a refused restore touched the database" >&2
-  exit 1
-fi
-echo "backup-check: refusals leave the database untouched"
 
-restore --confirm "$restored_database" "$backup_file"
+# Row counts of the account, engine, alert, event and decision tables: a cheap fingerprint of a database's content.
+fingerprint() {
+  psql_query "$1" "SELECT (SELECT count(*) FROM account) || '/' || (SELECT count(*) FROM engine) || '/' || (SELECT count(*) FROM alert) || '/' || (SELECT count(*) FROM event) || '/' || (SELECT count(*) FROM decision)"
+}
+
+restore --allow-database-mismatch --confirm "$restored_database" "$backup_file"
+restored_marker="$(fingerprint backup_restored)"
+source_marker="$(fingerprint backup_source)"
+echo "backup-check: fingerprints restored=$restored_marker source=$source_marker"
+if [ "$restored_marker" != "$source_marker" ] || [ "$restored_marker" = "" ]; then
+  echo "backup-check: restored database differs from its source" >&2
+  exit 1
+fi
+
+# Every refusal below must leave both databases (and the temporary restore database) exactly as they are.
+: > "$work_directory/empty.dump"
+backup_size="$(stat -c %s "$backup_file")"
+head -c 200 "$backup_file" > "$work_directory/header-only.dump"
+head -c "$((backup_size * 3 / 4))" "$backup_file" > "$work_directory/truncated.dump"
+# Random bytes in the middle of the data: the table of contents still lists fine, so only the restore itself fails.
+cp "$backup_file" "$work_directory/corrupt-data.dump"
+head -c 16 /dev/urandom | dd of="$work_directory/corrupt-data.dump" bs=1 seek="$((backup_size / 2))" conv=notrunc 2>/dev/null
+
+expect_refusal() {
+  description="$1"
+  shift
+  if restore "$@" </dev/null; then
+    echo "backup-check: restore.sh accepted $description" >&2
+    exit 1
+  fi
+}
+expect_refusal "a missing confirmation" --allow-database-mismatch "$backup_file"
+expect_refusal "a wrong confirmation" --allow-database-mismatch --confirm wrong_name "$backup_file"
+expect_refusal "a database mismatch without the flag" --confirm "$restored_database" "$backup_file"
+expect_refusal "an empty backup" --allow-database-mismatch --confirm "$restored_database" "$work_directory/empty.dump"
+expect_refusal "a missing backup" --allow-database-mismatch --confirm "$restored_database" "$work_directory/missing.dump"
+expect_refusal "an invalid archive" --allow-database-mismatch --confirm "$restored_database" "$work_directory/header-only.dump"
+expect_refusal "a truncated archive" --allow-database-mismatch --confirm "$restored_database" "$work_directory/truncated.dump"
+# Passes validation, fails midway in pg_restore: the original database must survive and the dashboard restart path runs.
+expect_refusal "an archive with corrupt data" --allow-database-mismatch --confirm "$restored_database" "$work_directory/corrupt-data.dump"
+
+if [ "$(fingerprint backup_restored)" != "$restored_marker" ] || [ "$(fingerprint backup_source)" != "$source_marker" ]; then
+  echo "backup-check: a refused restore changed a database" >&2
+  exit 1
+fi
+if [ "$(psql_query postgres "SELECT count(*) FROM pg_database WHERE datname = 'backup_restored_restore_tmp'")" != 0 ]; then
+  echo "backup-check: a failed restore left its temporary database behind" >&2
+  exit 1
+fi
+echo "backup-check: refusals and failed restores leave the databases intact"
 
 RUN_PATTERN=TestRestoredDatabaseServesLoginAndArchive
 run_check BACKUP_CHECK_RESTORED_URL="$(url_for backup_restored)"
