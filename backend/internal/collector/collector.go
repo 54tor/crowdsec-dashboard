@@ -202,7 +202,7 @@ func (collector *Collector) collectClaimed(ctx context.Context, handle engines.H
 		collector.release(handle.Engine.ID, func(*engineState) {})
 		return collectError
 	}
-	if errors.Is(collectError, archive.ErrStaleEngineHandle) {
+	if errors.Is(collectError, archive.ErrStaleEngineHandle) || errors.Is(collectError, archive.ErrEngineNotFound) {
 		collector.release(handle.Engine.ID, func(currentState *engineState) {
 			currentState.stats.NextAttemptAt = collectedAt.Add(collector.settings.Interval)
 		})

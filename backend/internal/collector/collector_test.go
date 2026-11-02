@@ -996,3 +996,26 @@ func TestStaleHandleIsNeitherAFailureNorRecorded(testContext *testing.T) {
 		testContext.Fatalf("a stale handle must not be logged, got %q", logText)
 	}
 }
+
+func TestCollectionRacingAnEngineDeletionIsNeitherAFailureNorRecorded(testContext *testing.T) {
+	fixture := newCollectorFixture(testContext, testSettings())
+	fake := &fakeEngine{}
+	fake.addAlerts(1, 3)
+	engineID := fixture.insertEngine(testContext, "edge-1")
+	handle := handleFor(engineID, "edge-1", startFakeEngine(testContext, fake))
+	fixture.source.set(handle)
+	if _, markError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_deleting_at = now() WHERE engine_id = ?`, engineID); markError != nil {
+		testContext.Fatalf("mark deleting: %v", markError)
+	}
+
+	collectError := fixture.collector.CollectOnce(context.Background(), handle)
+
+	if !errors.Is(collectError, archive.ErrEngineNotFound) {
+		testContext.Fatalf("expected the deleting engine to be reported, got %v", collectError)
+	}
+	engineStats := fixture.statsOf(testContext, "edge-1")
+	if engineStats.Failures != 0 || engineStats.ConsecutiveFailures != 0 || engineStats.LastErrorCode != "" {
+		testContext.Fatalf("a deleting engine is not a failure: %+v", engineStats)
+	}
+}
