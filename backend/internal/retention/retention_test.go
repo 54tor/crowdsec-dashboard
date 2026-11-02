@@ -133,6 +133,7 @@ func TestPurgeDoesNotRewriteScrubbedRows(testContext *testing.T) {
 	fixture := defaultFixture(testContext)
 	insertAuditEvent(testContext, fixture.database, "login_failure", "visitor@example.com", "203.0.113.7", fixedNow.Add(-31*oneDay))
 	insertAuditEvent(testContext, fixture.database, "login_success", nil, nil, fixedNow.Add(-31*oneDay))
+	insertAuditEvent(testContext, fixture.database, "retention_purged", "ips=0", "", fixedNow.Add(-31*oneDay))
 	firstReport, firstError := fixture.purger.Run(context.Background(), fixedNow)
 
 	secondReport, secondError := fixture.purger.Run(context.Background(), fixedNow)
@@ -234,5 +235,32 @@ func TestPurgeRecordsItsOwnAuditEvent(testContext *testing.T) {
 	}
 	if recordedIP != nil && *recordedIP != "" {
 		testContext.Errorf("the purge event must carry no IP, got %q", *recordedIP)
+	}
+}
+
+func TestPurgeTreatsEmptyClientIPAsScrubbed(testContext *testing.T) {
+	fixture := defaultFixture(testContext)
+	insertAuditEvent(testContext, fixture.database, "retention_purged", "ips=0", "", fixedNow.Add(-31*oneDay))
+
+	report, purgeError := fixture.purger.Run(context.Background(), fixedNow)
+
+	if purgeError != nil || report.AuditClientIPsScrubbed != 0 {
+		testContext.Fatalf("unexpected report %+v error %v", report, purgeError)
+	}
+	if countAuditEvents(testContext, fixture.database, "audit_event_action = 'retention_purged'") != 1 {
+		testContext.Error("a purge with nothing to do must not record a purge event")
+	}
+}
+
+func TestPurgeRecordsNoEventWhenReportIsEmpty(testContext *testing.T) {
+	fixture := defaultFixture(testContext)
+
+	report, purgeError := fixture.purger.Run(context.Background(), fixedNow)
+
+	if purgeError != nil || !report.IsEmpty() {
+		testContext.Fatalf("unexpected report %+v error %v", report, purgeError)
+	}
+	if countAuditEvents(testContext, fixture.database, "true") != 0 {
+		testContext.Error("an empty report must record no audit event")
 	}
 }

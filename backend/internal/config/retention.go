@@ -23,8 +23,7 @@ func loadRetentionSettings(getenv func(string) string) (retentionSettings, error
 	if auditError != nil {
 		return retentionSettings{}, auditError
 	}
-	ipDefaultDays := min(defaultAuditIPRetentionDays, auditDays)
-	ipDays, ipError := parseBoundedInt(getenv, "AUDIT_IP_RETENTION_DAYS", ipDefaultDays, minimumRetentionDays, auditDays)
+	ipDays, ipError := parseBoundedInt(getenv, "AUDIT_IP_RETENTION_DAYS", defaultAuditIPRetentionDays, minimumRetentionDays, auditDays)
 	if ipError != nil {
 		return retentionSettings{}, fmt.Errorf("%w (AUDIT_RETENTION_DAYS is %d)", ipError, auditDays)
 	}

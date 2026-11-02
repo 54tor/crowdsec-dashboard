@@ -106,7 +106,7 @@ func (purger *Purger) scrubAuditPersonalData(ctx context.Context, now time.Time)
 		 SET audit_event_client_ip = NULL,
 		     audit_event_target = CASE WHEN audit_event_action = ? THEN NULL ELSE audit_event_target END
 		 WHERE audit_event_created_at < ?
-		   AND (audit_event_client_ip IS NOT NULL
+		   AND ((audit_event_client_ip IS NOT NULL AND audit_event_client_ip <> '')
 		        OR (audit_event_action = ? AND audit_event_target IS NOT NULL))`,
 		string(audit.ActionLoginFailure), now.Add(-purger.policy.AuditClientIPRetention), string(audit.ActionLoginFailure),
 	).Exec(ctx)
