@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { EngineHealth } from '@/api/types'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { Badge } from '@/components/ui/badge'
-import { formatCount, formatDateTime, formatDuration, formatRelativeAge } from '@/lib/format'
+import { formatDateTime, formatDuration, formatNumber, formatRelativeAge } from '@/lib/format'
 
 function LastSuccessCell({ engine, now }: { engine: EngineHealth; now: number }) {
   const { t, i18n } = useTranslation()
@@ -28,7 +28,7 @@ export function CollectorTable({ engines, now }: { engines: EngineHealth[]; now:
         header: t('health.collector.lag'),
         cell: (engine) => (engine.lag_seconds === null ? '—' : formatDuration(engine.lag_seconds, i18n.language)),
       },
-      { key: 'errors', header: t('health.collector.errors'), cell: (engine) => formatCount(engine.errors_total, i18n.language) },
+      { key: 'errors', header: t('health.collector.errors'), cell: (engine) => formatNumber(engine.errors_total, i18n.language) },
       {
         key: 'status',
         header: t('health.columns.status'),
@@ -40,5 +40,5 @@ export function CollectorTable({ engines, now }: { engines: EngineHealth[]; now:
   if (engines.length === 0) {
     return <p className="text-sm text-muted-foreground">{t('health.collector.empty')}</p>
   }
-  return <DataTable caption={t('health.collector.caption')} columns={columns} rows={engines} rowKey={(engine) => engine.engine_name} />
+  return <DataTable caption={t('health.collector.tableCaption')} columns={columns} rows={engines} rowKey={(engine) => engine.engine_name} />
 }

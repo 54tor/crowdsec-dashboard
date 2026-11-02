@@ -29,6 +29,7 @@ export function CreateTokenForm({ onCreated, onClose, reportPending }: CreateTok
   const [revealedToken, setRevealedToken] = useState<string | null>(null)
   const creation = useMutation({
     mutationFn: createToken,
+    gcTime: 0,
     onSuccess: (created) => {
       setRevealedToken(created.token)
       onCreated()

@@ -84,6 +84,33 @@ describe('api tokens page', () => {
     expect(fetchMock.mock.calls.every(([, init]) => !String((init as RequestInit | undefined)?.body ?? '').includes(FAKE_TOKEN))).toBe(true)
   })
 
+  // The mutation result holds the plaintext token; TanStack keeps finished
+  // mutations in its MutationCache for gcTime (5 minutes by default), so every
+  // way of closing the dialog must leave no copy of it there.
+  it.each([
+    ['the done button', async (user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement) => user.click(within(dialog).getByRole('button', { name: en.secret.done }))],
+    ['the escape key', async (user: ReturnType<typeof userEvent.setup>) => user.keyboard('{Escape}')],
+  ])('leavesNoTokenInTheMutationCacheAfterClosingWith %s', async (_closingWay, closeDialog) => {
+    stubFetch(
+      tokenRoutes({
+        [`POST ${TOKENS_URL}`]: { status: 201, body: { token_id: 8, name: 'deploy', scope: 'read', expires_at: '2027-01-01T10:00:00Z', token: FAKE_TOKEN } },
+      }),
+    )
+    const user = userEvent.setup()
+    const { queryClient } = renderApp('/tokens')
+    const dialog = await openCreationDialog(user)
+    await submitToken(user, dialog, 'deploy')
+    await within(dialog).findByText(FAKE_TOKEN)
+
+    await closeDialog(user, dialog)
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => {
+      const cachedMutationResults = JSON.stringify(queryClient.getMutationCache().getAll().map((cachedMutation) => cachedMutation.state.data))
+      expect(cachedMutationResults).not.toContain(FAKE_TOKEN)
+    })
+  })
+
   it('offersOnlyTheReadScopeToAReadOnlyAccount', async () => {
     stubFetch(tokenRoutes({}, READ_ONLY_SESSION))
     const user = userEvent.setup()

@@ -245,6 +245,7 @@
   "health": {
     "title": "Health",
     "version": "CrowdSec version",
+    "fieldLabel": "{{label}}:",
     "bouncersCaption": "Bouncers",
     "machinesCaption": "Machines",
     "noBouncers": "No bouncers registered.",
@@ -273,6 +274,7 @@
     },
     "collector": {
       "caption": "Collector",
+      "tableCaption": "Collection status per engine",
       "empty": "No collection engine reported yet.",
       "lastSuccess": "Last collection",
       "lag": "Lag",

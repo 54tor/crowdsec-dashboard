@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLanguage } from '@/i18n'
 import en from '@/i18n/en.json'
+import fr from '@/i18n/fr.json'
 import { makeHealth } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
 import { prepareEnglishApp, SESSION_OK } from '@/test/pageHarness'
@@ -138,6 +139,42 @@ describe('health page', () => {
 
     expect(await screen.findByText(en.health.database.ok)).toBeInTheDocument()
     expect(screen.getByText('7')).toHaveClass('font-mono')
+  })
+
+  // English puts no space before the colon, French puts one: the separator
+  // must come from the translation, not from the markup.
+  it('separatesLabelAndValueByTheLanguageRule', async () => {
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      'GET /api/health': { status: 200, body: makeHealth({ schema_version: null }) },
+    })
+    renderApp('/health')
+
+    const englishDatabaseLine = (await screen.findByText(en.health.database.ok)).closest('p') as HTMLElement
+    expect(englishDatabaseLine.textContent).toBe(`${en.health.database.label}: ${en.health.database.ok}`)
+    await setLanguage('fr')
+    const frenchDatabaseLine = (await screen.findByText(fr.health.database.ok)).closest('p') as HTMLElement
+    expect(frenchDatabaseLine.textContent).toBe(`${fr.health.database.label} : ${fr.health.database.ok}`)
+  })
+
+  // The section heading already says "Collector"; a caption with the same
+  // words would be announced twice by a screen reader entering the table.
+  it('givesTheCollectorTableACaptionDistinctFromItsHeading', async () => {
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      'GET /api/health': {
+        status: 200,
+        body: makeHealth({
+          collector: [{ engine_name: 'alerts-engine', last_success_at: null, lag_seconds: null, errors_total: 0, stale: true }],
+        }),
+      },
+    })
+    renderApp('/health')
+
+    const collectorTable = (await screen.findByText('alerts-engine')).closest('table') as HTMLElement
+    const collectorHeading = screen.getByRole('heading', { level: 2, name: en.health.collector.caption })
+    expect(within(collectorTable).getByText(en.health.collector.tableCaption)).toBeInTheDocument()
+    expect(en.health.collector.tableCaption).not.toBe(collectorHeading.textContent)
   })
 
   it('listsEachEngineWithLastCollectionAndLag', async () => {

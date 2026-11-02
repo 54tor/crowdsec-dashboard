@@ -25,14 +25,14 @@ export function Health() {
             </WarningNotice>
           )}
           <p className="text-sm">
-            {t('health.version')} : <span className="font-mono">{data.version}</span>
+            {t('health.fieldLabel', { label: t('health.version') })} <span className="font-mono">{data.version}</span>
           </p>
           <p className="text-sm">
-            {t('health.database.label')} : <span>{data.database === 'ok' ? t('health.database.ok') : t('health.database.unavailable')}</span>
+            {t('health.fieldLabel', { label: t('health.database.label') })} <span>{data.database === 'ok' ? t('health.database.ok') : t('health.database.unavailable')}</span>
             {data.schema_version !== null && (
               <>
                 {' · '}
-                {t('health.database.schemaVersion')} : <span className="font-mono">{data.schema_version}</span>
+                {t('health.fieldLabel', { label: t('health.database.schemaVersion') })} <span className="font-mono">{data.schema_version}</span>
               </>
             )}
           </p>

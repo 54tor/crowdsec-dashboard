@@ -64,7 +64,3 @@ export function formatDuration(totalSeconds: number, language: string): string {
     maximumFractionDigits: 1,
   }).format(totalSeconds / matchingUnit.seconds)
 }
-
-export function formatCount(count: number, language: string): string {
-  return new Intl.NumberFormat(language).format(count)
-}
