@@ -149,7 +149,7 @@ func TestChangeRoleRefusesDemotingLastAdmin(testContext *testing.T) {
 	createOrFail(testContext, repository, validAccountName, auth.RoleAdmin)
 	createOrFail(testContext, repository, readOnlyName, auth.RoleReadOnly)
 
-	demoteError := repository.ChangeRole(context.Background(), validAccountName, auth.RoleReadOnly)
+	_, demoteError := repository.ChangeRole(context.Background(), validAccountName, auth.RoleReadOnly)
 
 	if !errors.Is(demoteError, ErrLastAdmin) {
 		testContext.Errorf("expected ErrLastAdmin, got %v", demoteError)
@@ -157,13 +157,13 @@ func TestChangeRoleRefusesDemotingLastAdmin(testContext *testing.T) {
 	if accountRole := roleOf(testContext, repository, validAccountName); accountRole != auth.RoleAdmin {
 		testContext.Errorf("the last admin must stay admin, got %s", accountRole)
 	}
-	if promoteError := repository.ChangeRole(context.Background(), readOnlyName, auth.RoleAdmin); promoteError != nil {
-		testContext.Fatalf("promoting a read_only account must succeed, got %v", promoteError)
+	if previousRole, promoteError := repository.ChangeRole(context.Background(), readOnlyName, auth.RoleAdmin); promoteError != nil || previousRole != auth.RoleReadOnly {
+		testContext.Fatalf("promoting a read_only account must succeed and report read_only, got %q %v", previousRole, promoteError)
 	}
-	if demoteAfterPromotionError := repository.ChangeRole(context.Background(), validAccountName, auth.RoleReadOnly); demoteAfterPromotionError != nil {
+	if _, demoteAfterPromotionError := repository.ChangeRole(context.Background(), validAccountName, auth.RoleReadOnly); demoteAfterPromotionError != nil {
 		testContext.Errorf("with another admin the demotion must succeed, got %v", demoteAfterPromotionError)
 	}
-	if invalidRoleError := repository.ChangeRole(context.Background(), readOnlyName, "owner"); !errors.Is(invalidRoleError, ErrInvalidRole) {
+	if _, invalidRoleError := repository.ChangeRole(context.Background(), readOnlyName, "owner"); !errors.Is(invalidRoleError, ErrInvalidRole) {
 		testContext.Errorf("expected ErrInvalidRole, got %v", invalidRoleError)
 	}
 }
@@ -203,7 +203,7 @@ func TestConcurrentMutualDemotionKeepsOneAdmin(testContext *testing.T) {
 		go func() {
 			defer waitGroup.Done()
 			<-startSignal
-			demotionErrors[targetIndex] = repository.ChangeRole(context.Background(), targetName, auth.RoleReadOnly)
+			_, demotionErrors[targetIndex] = repository.ChangeRole(context.Background(), targetName, auth.RoleReadOnly)
 		}()
 	}
 	close(startSignal)
@@ -495,9 +495,11 @@ func TestUnknownAccountReturnsErrAccountNotFound(testContext *testing.T) {
 	ctx := context.Background()
 	_, accountIDError := repository.AccountID(ctx, unknownName)
 
+	_, changeToAdminError := repository.ChangeRole(ctx, unknownName, auth.RoleAdmin)
+	_, changeToReadOnlyError := repository.ChangeRole(ctx, unknownName, auth.RoleReadOnly)
 	operationErrors := map[string]error{
-		"ChangeRole":              repository.ChangeRole(ctx, unknownName, auth.RoleAdmin),
-		"ChangeRole to read_only": repository.ChangeRole(ctx, unknownName, auth.RoleReadOnly),
+		"ChangeRole":              changeToAdminError,
+		"ChangeRole to read_only": changeToReadOnlyError,
 		"Delete":                  repository.Delete(ctx, unknownName),
 		"ResetSecondFactor":       repository.ResetSecondFactor(ctx, unknownName),
 		"RevokeSessionsAndTokens": repository.RevokeSessionsAndTokens(ctx, unknownName),

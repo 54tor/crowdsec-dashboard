@@ -110,11 +110,12 @@ func lockAdministrators(ctx context.Context, transaction bun.Tx, targetAccountID
 	return nil
 }
 
-func (repository *Repository) ChangeRole(ctx context.Context, accountName, role string) error {
+func (repository *Repository) ChangeRole(ctx context.Context, accountName, role string) (string, error) {
 	if roleError := validateRole(role); roleError != nil {
-		return roleError
+		return "", roleError
 	}
-	return repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
+	var previousRole string
+	transactionError := repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
 		accountID, lookupError := accountIDByName(ctx, transaction, accountName)
 		if lookupError != nil {
 			return lookupError
@@ -124,6 +125,9 @@ func (repository *Repository) ChangeRole(ctx context.Context, accountName, role 
 				return guardError
 			}
 		}
+		if roleError := transaction.NewRaw(`SELECT account_role FROM account WHERE account_id = ? FOR UPDATE`, accountID).Scan(ctx, &previousRole); roleError != nil {
+			return fmt.Errorf("read account role: %w", roleError)
+		}
 		updateResult, updateError := transaction.ExecContext(ctx,
 			`UPDATE account SET account_role = ? WHERE account_id = ?`, role, accountID)
 		if updateError != nil {
@@ -131,6 +135,10 @@ func (repository *Repository) ChangeRole(ctx context.Context, accountName, role 
 		}
 		return requireAffectedRow(updateResult, ErrAccountNotFound)
 	})
+	if transactionError != nil {
+		return "", transactionError
+	}
+	return previousRole, nil
 }
 
 func (repository *Repository) Delete(ctx context.Context, accountName string) error {
