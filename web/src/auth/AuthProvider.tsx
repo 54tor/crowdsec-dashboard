@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const { t } = useTranslation()
   const pendingAccountName = useRef<string | null>(null)
+  const loginGeneration = useRef(0)
   const [roleError, setRoleError] = useState(false)
   const sessionQuery = useQuery({ queryKey: SESSION_QUERY_KEY, queryFn: fetchSessionState })
 
@@ -100,7 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearCachedData(queryClient)
       queryClient.setQueryData(SESSION_QUERY_KEY, false)
     })
-    return () => setUnauthenticatedHandler(null)
+    return () => {
+      loginGeneration.current += 1
+      setUnauthenticatedHandler(null)
+    }
   }, [queryClient])
 
   const authState = useMemo<AuthState>(
@@ -111,12 +115,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       roleError,
       retryRoleRefresh,
       async login(accountName, password) {
+        loginGeneration.current += 1
         const loginProgress = await beginLogin(accountName, password)
         pendingAccountName.current = accountName
         return loginProgress
       },
       async verifySecondFactor(method, value) {
+        const ceremonyGeneration = loginGeneration.current
         await verifyLoginSecondFactor(method, value)
+        if (ceremonyGeneration !== loginGeneration.current) {
+          return
+        }
         openSession(pendingAccountName.current)
       },
       async completeLoginSetup() {

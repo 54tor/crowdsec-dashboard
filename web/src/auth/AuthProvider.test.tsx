@@ -124,4 +124,34 @@ describe('AuthProvider', () => {
     await waitFor(() => expect(screen.getByTestId('authenticated')).toHaveTextContent('false'))
     expect(queryClient.getQueryData(['alerts'])).toBeUndefined()
   })
+
+  it('ignoreLeResultatDUneCeremonieDeSecondFacteurApresUnRedemarrageDeConnexion', async () => {
+    let releaseOldCeremony: () => void = () => undefined
+    const oldCeremonyGate = new Promise<void>((resolve) => {
+      releaseOldCeremony = resolve
+    })
+    let meCallCount = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input)
+      if (path === '/api/auth/me') {
+        meCallCount += 1
+        return new Response(JSON.stringify({ error: 'unauthenticated' }), { status: 401 })
+      }
+      if (path === '/api/auth/login/totp') {
+        await oldCeremonyGate
+      }
+      return new Response(JSON.stringify({ status: 'second_factor_required', methods: ['totp'] }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderProbe()
+    const user = userEvent.setup()
+    await user.click(await screen.findByText('login'))
+    await user.click(screen.getByText('verify'))
+    await user.click(screen.getByText('login'))
+    releaseOldCeremony()
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/auth/login/totp', expect.anything()))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId('authenticated')).toHaveTextContent('false')
+    expect(meCallCount).toBe(1)
+  })
 })
