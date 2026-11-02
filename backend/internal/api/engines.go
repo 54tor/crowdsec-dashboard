@@ -168,7 +168,7 @@ func (handlers engineHandlers) test(responseWriter http.ResponseWriter, request 
 
 func (handlers engineHandlers) record(request *http.Request, action audit.Action, engineName string) {
 	identity, _ := auth.IdentityFromContext(request.Context())
-	clientIP := auth.ClientIP(request, handlers.trustedCIDRs)
+	clientIP := auditClientIP(request, handlers.trustedCIDRs)
 	auditContext, cancelAudit := context.WithTimeout(context.WithoutCancel(request.Context()), engineAuditTimeout)
 	defer cancelAudit()
 	audit.RecordOrLog(auditContext, handlers.recorder, identity.AccountID, action, engineName, clientIP)

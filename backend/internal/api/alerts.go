@@ -75,7 +75,7 @@ func (handlers alertHandlers) deleteArchivedCopy(requestContext context.Context,
 
 func recordAlertDeletion(request *http.Request, recorder audit.Recorder, trustedCIDRs []*net.IPNet, engineName string, upstreamID int64) {
 	identity, _ := auth.IdentityFromContext(request.Context())
-	clientIP := auth.ClientIP(request, trustedCIDRs)
+	clientIP := auditClientIP(request, trustedCIDRs)
 	target := engineName + "/" + strconv.FormatInt(upstreamID, 10)
 	audit.RecordOrLog(context.WithoutCancel(request.Context()), recorder, identity.AccountID, audit.ActionAlertDeleted, target, clientIP)
 }

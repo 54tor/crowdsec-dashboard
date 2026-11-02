@@ -94,7 +94,7 @@ func (handlers tokenHandlers) create(responseWriter http.ResponseWriter, request
 		return
 	}
 	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionAPITokenCreated,
-		tokenAuditTarget(token.TokenID, token.Name), auth.ClientIP(request, handlers.trustedCIDRs))
+		tokenAuditTarget(token.TokenID, token.Name), auditClientIP(request, handlers.trustedCIDRs))
 	responseWriter.Header().Set("Cache-Control", "no-store")
 	writeJSON(responseWriter, http.StatusCreated, createdTokenView{
 		TokenID: token.TokenID, Name: token.Name, Scope: token.Scope, ExpiresAt: token.ExpiresAt, Token: plaintext,
@@ -118,7 +118,7 @@ func (handlers tokenHandlers) revoke(responseWriter http.ResponseWriter, request
 		return
 	}
 	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionAPITokenRevoked,
-		tokenAuditTarget(tokenID, revokedName), auth.ClientIP(request, handlers.trustedCIDRs))
+		tokenAuditTarget(tokenID, revokedName), auditClientIP(request, handlers.trustedCIDRs))
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
 }
 

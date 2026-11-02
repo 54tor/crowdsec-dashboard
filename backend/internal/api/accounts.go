@@ -55,7 +55,7 @@ type accountView struct {
 func (handlers accountHandlers) record(request *http.Request, action audit.Action, target string) {
 	identity, _ := auth.IdentityFromContext(request.Context())
 	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, action,
-		accountTargetPrefix+target, auth.ClientIP(request, handlers.trustedCIDRs))
+		accountTargetPrefix+target, auditClientIP(request, handlers.trustedCIDRs))
 }
 
 func (handlers accountHandlers) list(responseWriter http.ResponseWriter, request *http.Request) {
