@@ -53,7 +53,7 @@ func Purge(ctx context.Context, database *bun.DB, retention Retention, now time.
 
 func (batchPurger purger) purge(ctx context.Context, retention Retention, now time.Time) (PurgeResult, error) {
 	var result PurgeResult
-	deletedEvents, eventsError := batchPurger.purgeEvents(ctx, now.Add(-retention.Event))
+	deletedEvents, eventsError := batchPurger.purgeEvents(ctx, now.Add(-retention.Event), now)
 	result.Events = deletedEvents
 	if eventsError != nil {
 		return result, fmt.Errorf("purge events: %w", eventsError)
@@ -77,10 +77,13 @@ func (batchPurger purger) purge(ctx context.Context, retention Retention, now ti
 	return result, nil
 }
 
-func (batchPurger purger) purgeEvents(ctx context.Context, eventCutoff time.Time) (int64, error) {
+func (batchPurger purger) purgeEvents(ctx context.Context, eventCutoff time.Time, now time.Time) (int64, error) {
 	previousHorizon, readError := readEventPurgeHorizon(ctx, batchPurger.database)
 	if readError != nil {
 		return 0, readError
+	}
+	if previousHorizon != nil && previousHorizon.After(now) {
+		previousHorizon = nil
 	}
 	deletedEvents, deleteError := batchPurger.deleteInBatches(ctx, purgeEventsStatement, []any{previousHorizon, eventCutoff})
 	if deleteError != nil {

@@ -83,3 +83,24 @@ func TestEventPurgeHorizonNeverMovesBack(testContext *testing.T) {
 		testContext.Errorf("expected the horizon to stay at %s, got %v", expectedHorizon, storedHorizon)
 	}
 }
+
+// After the clock jumped back, a stored horizon may lie in the future: it is
+// ignored so the purge sweeps the whole window once and records a real horizon.
+func TestEventPurgeIgnoresAHorizonAheadOfNow(testContext *testing.T) {
+	fixture := newArchiveFixture(testContext)
+	if writeError := writeEventPurgeHorizon(context.Background(), fixture.database, purgeNow.Add(retentionDay)); writeError != nil {
+		testContext.Fatalf("write future horizon: %v", writeError)
+	}
+	fixture.storeCollectedAt(testContext, 1, 1, 20*retentionDay)
+
+	purgeResult, purgeError := Purge(context.Background(), fixture.database, testRetention, purgeNow)
+
+	if purgeError != nil || purgeResult.Events != 1 {
+		testContext.Errorf("a horizon ahead of now must not block the sweep, got %+v %v", purgeResult, purgeError)
+	}
+	storedHorizon, readError := readEventPurgeHorizon(context.Background(), fixture.database)
+	expectedHorizon := purgeNow.Add(-testRetention.Event)
+	if readError != nil || storedHorizon == nil || !storedHorizon.Equal(expectedHorizon) {
+		testContext.Errorf("expected the horizon reset to %s, got %v %v", expectedHorizon, storedHorizon, readError)
+	}
+}
