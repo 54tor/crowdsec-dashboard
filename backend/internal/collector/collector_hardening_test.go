@@ -139,3 +139,24 @@ func TestHistoryIncompleteSurvivesRestart(testContext *testing.T) {
 		testContext.Fatal("a complete collection must not clear the incomplete history")
 	}
 }
+
+// Every configured engine appears in Stats, even before its first attempt, as a
+// zero entry with no success: health and metrics then show it as stale.
+func TestStatsIncludesEnginesWithoutState(testContext *testing.T) {
+	source := &fakeSource{}
+	source.set(
+		engines.Handle{Engine: engines.Engine{ID: 1, Name: "edge-never", Enabled: true}},
+		engines.Handle{Engine: engines.Engine{ID: 2, Name: "edge-truncated", Enabled: true, HistoryIncomplete: true}},
+	)
+	idleCollector := New(source, nil, nil, nil, testSettings(), time.Now, func(string, ...any) {})
+
+	statsByName := idleCollector.Stats()
+
+	neverStats, neverListed := statsByName["edge-never"]
+	if !neverListed || !neverStats.LastSuccessAt.IsZero() || neverStats.Polls != 0 {
+		testContext.Fatalf("an engine never polled must be listed with no success, got %v", statsByName)
+	}
+	if !statsByName["edge-truncated"].HistoryIncomplete {
+		testContext.Errorf("the stored incomplete flag must be reported before any poll, got %v", statsByName)
+	}
+}
