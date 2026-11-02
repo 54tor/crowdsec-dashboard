@@ -10,6 +10,7 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	var routes []apiRoute
 	routes = append(routes, authenticationRoutes(loadedConfig, services, authenticationHandlers)...)
 	routes = append(routes, accountRoutes(loadedConfig, services)...)
+	routes = append(routes, tokenRoutes(loadedConfig, services)...)
 	routes = append(routes, engineRoutes(loadedConfig, services)...)
 	routes = append(routes, readRoutes(loadedConfig, services)...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
@@ -54,6 +55,15 @@ func accountRoutes(loadedConfig config.Config, services Services) []apiRoute {
 		{"GET /api/account/access-rules", accessSessionOnly, http.HandlerFunc(accessRules.list)},
 		{"POST /api/account/access-rules", accessSessionOnly, http.HandlerFunc(accessRules.add)},
 		{"DELETE /api/account/access-rules/{id}", accessSessionOnly, http.HandlerFunc(accessRules.remove)},
+	}
+}
+
+func tokenRoutes(loadedConfig config.Config, services Services) []apiRoute {
+	tokens := tokenHandlers{manager: services.TokenManager, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	return []apiRoute{
+		{"GET /api/tokens", accessSessionOnly, http.HandlerFunc(tokens.list)},
+		{"POST /api/tokens", accessSessionOnly, http.HandlerFunc(tokens.create)},
+		{"DELETE /api/tokens/{id}", accessSessionOnly, http.HandlerFunc(tokens.revoke)},
 	}
 }
 

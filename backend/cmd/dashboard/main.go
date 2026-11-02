@@ -75,7 +75,9 @@ func main() {
 	services.Login = newLoginService(database, accountServices, sessionStore, webAuthn, auditRecorder)
 	services.Enrollment = accountServices.enrollment
 	services.Sessions = sessionStore
-	services.Tokens = apitokens.NewRepository(database, time.Now)
+	tokenRepository := apitokens.NewRepository(database, time.Now)
+	services.Tokens = tokenRepository
+	services.TokenManager = tokenRepository
 	services.Database = database
 	services.Audit = auditRecorder
 	services.Geolocator = accountServices.geolocator

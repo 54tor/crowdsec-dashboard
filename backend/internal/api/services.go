@@ -49,6 +49,7 @@ type Services struct {
 	AccessRules    AccessRuleService
 	Engines        EngineService
 	WebAuthn       *secondfactor.WebAuthn
+	TokenManager   TokenManager
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {

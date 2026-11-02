@@ -32,6 +32,8 @@ var mutatingRoutesAllowedBelowAdmin = map[string]bool{
 	"POST /api/auth/logout-all":                   true,
 	"POST /api/account/access-rules":              true,
 	"DELETE /api/account/access-rules/{id}":       true,
+	"POST /api/tokens":                            true,
+	"DELETE /api/tokens/{id}":                     true,
 	"POST /api/auth/enroll":                       true,
 	"POST /api/auth/enroll/totp":                  true,
 	"POST /api/auth/enroll/totp/confirm":          true,
@@ -326,6 +328,9 @@ var requiredSessionOnlyRoutes = map[string]routeAccess{
 	"GET /api/account/access-rules":         accessSessionOnly,
 	"POST /api/account/access-rules":        accessSessionOnly,
 	"DELETE /api/account/access-rules/{id}": accessSessionOnly,
+	"GET /api/tokens":                       accessSessionOnly,
+	"POST /api/tokens":                      accessSessionOnly,
+	"DELETE /api/tokens/{id}":               accessSessionOnly,
 }
 
 var publicRoutePattern = regexp.MustCompile(`^(POST /api/auth/(login|enroll|logout)(/.*)?|GET /api/healthz|GET /api/auth/status)$`)

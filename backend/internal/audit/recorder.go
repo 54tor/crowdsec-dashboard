@@ -28,6 +28,18 @@ const (
 	ActionEngineDeleted        Action = "engine_deleted"
 	ActionEngineTested         Action = "engine_tested"
 	ActionAlertDeleted         Action = "alert_deleted"
+
+	ActionAPITokenCreated          Action = "api_token_created"
+	ActionAPITokenRevoked          Action = "api_token_revoked"
+	ActionAccountCreated           Action = "account_created"
+	ActionAccountRoleChanged       Action = "account_role_changed"
+	ActionAccountSecondFactorReset Action = "account_second_factor_reset"
+	ActionAccountSessionsRevoked   Action = "account_sessions_revoked"
+	ActionAccountUnlocked          Action = "account_unlocked"
+	ActionAccountDeleted           Action = "account_deleted"
+	ActionSecretsRotated           Action = "secrets_rotated"
+	ActionRetentionPurged          Action = "retention_purged"
+	ActionDecisionRemoved          Action = "decision_removed"
 )
 
 const maximumTargetRunes = 64
