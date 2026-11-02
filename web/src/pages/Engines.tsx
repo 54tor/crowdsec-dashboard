@@ -7,7 +7,7 @@ import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { EngineCollectionStatus } from '@/components/EngineCollectionStatus'
 import { EngineFormDialog } from '@/components/EngineFormDialog'
 import { EngineRowActions } from '@/components/EngineRowActions'
-import { ErrorNotice, WarningNotice } from '@/components/Notice'
+import { ErrorNotice, InfoNotice, WarningNotice } from '@/components/Notice'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -43,6 +43,7 @@ function EngineState({ engine }: { engine: EngineView }) {
 export function Engines() {
   const { t } = useTranslation()
   const [warningCode, setWarningCode] = useState<string | undefined>(undefined)
+  const [isDeleting, setIsDeleting] = useState(false)
   const { data: engineList, dataUpdatedAt, error, isPending } = useQuery({ queryKey: ENGINES_QUERY_KEY, queryFn: listEngines })
   const columns = useMemo<DataTableColumn<EngineView>[]>(
     () => [
@@ -50,7 +51,7 @@ export function Engines() {
       { key: 'destination', header: t('engines.columns.destination'), cell: (engine) => <EngineDestination engine={engine} /> },
       { key: 'state', header: t('engines.columns.state'), cell: (engine) => <EngineState engine={engine} /> },
       { key: 'collection', header: t('engines.columns.collection'), cell: (engine) => <EngineCollectionStatus engine={engine} now={dataUpdatedAt} /> },
-      { key: 'actions', header: t('engines.actions'), cell: (engine) => <EngineRowActions engine={engine} onWarning={setWarningCode} /> },
+      { key: 'actions', header: t('engines.actions'), cell: (engine) => <EngineRowActions engine={engine} onWarning={setWarningCode} onDeleting={() => setIsDeleting(true)} /> },
     ],
     [t, dataUpdatedAt],
   )
@@ -61,6 +62,7 @@ export function Engines() {
         onSaved={(savedEngine) => setWarningCode(savedEngine.warning)}
         trigger={<Button type="button">{t('engines.add')}</Button>}
       />
+      {isDeleting && <InfoNotice>{t('engines.deleting')}</InfoNotice>}
       {warningCode && <WarningNotice>{errorMessage({ code: warningCode })}</WarningNotice>}
       {error && <ErrorNotice error={error} />}
       {isPending && <TableSkeleton />}

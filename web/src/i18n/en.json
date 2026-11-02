@@ -451,6 +451,7 @@
     "deleteAria": "Delete {{name}}",
     "deleteTitle": "Delete engine {{name}}",
     "deleteDescription": "Deleting the engine {{name}} also deletes its whole archive: alerts, events and decisions. To keep the archive, disable the engine instead.",
+    "deleting": "Deletion in progress: the engine is hidden now and its archive is being deleted in the background.",
     "test": "Test connection",
     "testAria": "Test {{name}}",
     "testing": "Testing…",

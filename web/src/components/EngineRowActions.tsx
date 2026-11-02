@@ -9,9 +9,10 @@ import { Button } from '@/components/ui/button'
 interface EngineRowActionsProps {
   engine: EngineView
   onWarning: (warningCode: string | undefined) => void
+  onDeleting: () => void
 }
 
-export function EngineRowActions({ engine, onWarning }: EngineRowActionsProps) {
+export function EngineRowActions({ engine, onWarning, onDeleting }: EngineRowActionsProps) {
   const { t } = useTranslation()
   return (
     <div className="flex flex-wrap items-start gap-2">
@@ -33,7 +34,11 @@ export function EngineRowActions({ engine, onWarning }: EngineRowActionsProps) {
             title={t('engines.deleteTitle', { name: engine.name })}
             description={t('engines.deleteDescription', { name: engine.name })}
             target={engine.name}
-            request={async (confirm) => onWarning((await deleteEngine(engine.name, confirm)).warning)}
+            request={async (confirm) => {
+              const deletion = await deleteEngine(engine.name, confirm)
+              onWarning(deletion.warning)
+              onDeleting()
+            }}
             invalidates={[ENGINES_QUERY_KEY, ENGINE_NAMES_QUERY_KEY]}
           />
         </>

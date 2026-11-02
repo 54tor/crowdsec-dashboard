@@ -206,7 +206,7 @@ describe('engines page', () => {
     stubFetch(
       engineRoutes({
         'GET /api/engines': { status: 200, body: { items: [LOCAL_ENGINE, collectedEngine] } },
-        'DELETE /api/engines/remote-one': { status: 200, body: { status: 'deleted', warning: 'registry_reload_failed' } },
+        'DELETE /api/engines/remote-one': { status: 202, body: { status: 'deleting', warning: 'registry_reload_failed' } },
       }),
     )
     const user = userEvent.setup()
@@ -220,6 +220,24 @@ describe('engines page', () => {
     await user.type(within(dialog).getByLabelText('Type remote-one to confirm'), 'remote-one')
     await user.click(within(dialog).getByRole('button', { name: en.common.delete }))
     expect(await screen.findByText(en.errors.registry_reload_failed)).toBeInTheDocument()
+  })
+
+  it('affiche la suppression en cours', async () => {
+    stubFetch(
+      engineRoutes({
+        'GET /api/engines': { status: 200, body: { items: [LOCAL_ENGINE, makeEngine({ name: 'remote-one' })] } },
+        'DELETE /api/engines/remote-one': { status: 202, body: { status: 'deleting' } },
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/engines')
+
+    await user.click(await screen.findByRole('button', { name: 'Delete remote-one' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Type remote-one to confirm'), 'remote-one')
+    await user.click(within(dialog).getByRole('button', { name: en.common.delete }))
+
+    expect(await screen.findByText(en.engines.deleting)).toBeInTheDocument()
   })
 
   it('exige le mot de passe machine pour un changement de proxy seul sur un moteur http', async () => {

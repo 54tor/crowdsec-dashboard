@@ -451,6 +451,7 @@
     "deleteAria": "Supprimer {{name}}",
     "deleteTitle": "Supprimer le moteur {{name}}",
     "deleteDescription": "Supprimer le moteur {{name}} supprime aussi toute son archive : alertes, événements et décisions. Pour conserver l'archive, désactivez plutôt le moteur.",
+    "deleting": "Suppression en cours : le moteur est masqué dès maintenant et son archive est supprimée en arrière-plan.",
     "test": "Tester la connexion",
     "testAria": "Tester {{name}}",
     "testing": "Test en cours…",
