@@ -16,6 +16,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/machines', labelKey: 'nav.machines' },
   { path: '/hub', labelKey: 'nav.hub' },
   { path: '/engines', labelKey: 'nav.engines', requiredRole: 'admin' },
+  { path: '/tokens', labelKey: 'nav.tokens' },
 ]
 
 export function visibleNavItems(accountRole: AccountRole | null): readonly NavItem[] {

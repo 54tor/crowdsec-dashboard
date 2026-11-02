@@ -13,7 +13,8 @@
     "bouncers": "Bouncers",
     "machines": "Machines",
     "hub": "Hub",
-    "engines": "Moteurs"
+    "engines": "Moteurs",
+    "tokens": "Jetons d’API"
   },
   "common": {
     "retry": "Réessayer",
@@ -135,7 +136,12 @@
     "engine_blocked_address": "L'adresse du moteur est bloquée par la politique de sécurité réseau.",
     "engine_secret_unreadable": "Le secret stocké de ce moteur ne peut pas être déchiffré. Ressaisissez-le pour rétablir la collecte.",
     "archive_write_failed": "Les alertes collectées n'ont pas pu être écrites dans l'archive.",
-    "registry_reload_failed": "La modification est enregistrée, mais le collecteur n'a pas pu recharger sa liste de moteurs. L'ancien ensemble reste actif jusqu'au prochain rechargement réussi."
+    "registry_reload_failed": "La modification est enregistrée, mais le collecteur n'a pas pu recharger sa liste de moteurs. L'ancien ensemble reste actif jusqu'au prochain rechargement réussi.",
+    "session_required": "Cette action exige une session de navigateur connectée, pas un jeton d’API.",
+    "scope_not_allowed": "Votre compte ne peut pas créer un jeton avec cette portée.",
+    "invalid_expiry": "La validité doit être comprise entre 1 et 365 jours.",
+    "invalid_token_name": "Le nom du jeton est invalide. Utilisez 1 à 64 caractères.",
+    "token_name_taken": "Vous avez déjà un jeton portant ce nom."
   },
   "filters": {
     "label": "Filtres",
@@ -463,5 +469,39 @@
     "truncated": "Une partie des événements de cette alerte n'a pas été archivée (limite de taille).",
     "noMeta": "Aucune métadonnée.",
     "close": "Fermer"
+  },
+  "tokens": {
+    "title": "Jetons d’API",
+    "add": "Nouveau jeton",
+    "addTitle": "Créer un jeton d’API",
+    "addDescription": "Le jeton permet à des scripts d’appeler ce tableau de bord en votre nom. Il n’est affiché qu’une seule fois.",
+    "nameLabel": "Nom du jeton",
+    "scopeLabel": "Portée",
+    "expiryLabel": "Validité",
+    "create": "Créer",
+    "secretLabel": "Jeton d’API",
+    "scopes": {
+      "read": "Lecture",
+      "write": "Lecture et écriture"
+    },
+    "expiryOptions": {
+      "30": "30 jours",
+      "90": "90 jours",
+      "180": "180 jours",
+      "365": "365 jours"
+    },
+    "tableCaption": "Vos jetons d’API",
+    "empty": "Vous n’avez aucun jeton d’API.",
+    "columns": {
+      "name": "Nom",
+      "scope": "Portée",
+      "createdAt": "Créé le",
+      "expiresAt": "Expire le",
+      "actions": "Actions"
+    },
+    "revoke": "Révoquer",
+    "revokeAria": "Révoquer {{name}}",
+    "revokeTitle": "Révoquer le jeton {{name}}",
+    "revokeDescription": "Les scripts qui utilisent le jeton {{name}} perdront immédiatement leur accès."
   }
 }

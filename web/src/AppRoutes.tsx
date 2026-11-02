@@ -18,6 +18,7 @@ import { Engines } from '@/pages/Engines'
 import { Hub } from '@/pages/Hub'
 import { Machines } from '@/pages/Machines'
 import { Metrics } from '@/pages/Metrics'
+import { Tokens } from '@/pages/Tokens'
 import { NAV_ITEMS, type NavItem } from '@/routes'
 
 const READ_PAGES: Record<string, ReactElement> = {
@@ -30,6 +31,7 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/machines': <Machines />,
   '/hub': <Hub />,
   '/engines': <Engines />,
+  '/tokens': <Tokens />,
 }
 
 function pageFor(navItem: NavItem): ReactElement {
