@@ -208,3 +208,44 @@ func TestLoadKeyringErrorNeverContainsKeyMaterial(testContext *testing.T) {
 		}
 	}
 }
+
+func encodedKeyFile(testContext *testing.T, fillByte byte) string {
+	testContext.Helper()
+	return writeKeyFile(testContext, []byte(base64.StdEncoding.EncodeToString(testKeyBytes(fillByte))), 0o400)
+}
+
+func TestLoadKeyringRefusesDuplicateKeyID(testContext *testing.T) {
+	currentKeyFile := encodedKeyFile(testContext, 1)
+	duplicateRetiredKeyFile := encodedKeyFile(testContext, 1)
+
+	_, loadError := LoadKeyringWithRetired(currentKeyFile, []string{duplicateRetiredKeyFile})
+
+	if loadError == nil {
+		testContext.Fatal("two key files with the same key id must be refused")
+	}
+	if strings.Contains(loadError.Error(), base64.StdEncoding.EncodeToString(testKeyBytes(1))) {
+		testContext.Error("the error must never contain key material")
+	}
+}
+
+func TestLoadKeyringWithRetiredSealsWithCurrentAndOpensWithAll(testContext *testing.T) {
+	retiredKeyring := newTestKeyring(testContext, 1)
+	sealedUnderRetired, retiredKeyID, _ := retiredKeyring.Seal([]byte("old-secret"), []byte(testAssociatedData))
+
+	keyring, loadError := LoadKeyringWithRetired(encodedKeyFile(testContext, 2), []string{encodedKeyFile(testContext, 1)})
+	if loadError != nil {
+		testContext.Fatalf("load: %v", loadError)
+	}
+	_, sealingKeyID, _ := keyring.Seal([]byte("new-secret"), nil)
+	openedPlaintext, openError := keyring.Open(sealedUnderRetired, retiredKeyID, []byte(testAssociatedData))
+
+	if sealingKeyID != keyring.CurrentKeyID() || sealingKeyID == retiredKeyID {
+		testContext.Errorf("seal must use the current key, got %q (retired %q)", sealingKeyID, retiredKeyID)
+	}
+	if openError != nil || string(openedPlaintext) != "old-secret" {
+		testContext.Errorf("the retired key must still open its rows: %q %v", openedPlaintext, openError)
+	}
+	if len(keyring.KeyIDs()) != 2 {
+		testContext.Errorf("expected two key ids, got %v", keyring.KeyIDs())
+	}
+}

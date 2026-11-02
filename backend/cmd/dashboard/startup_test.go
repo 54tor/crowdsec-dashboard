@@ -147,7 +147,7 @@ func TestStartupRefusesInvalidSecretsKey(testContext *testing.T) {
 		testContext.Fatalf("write key file: %v", writeError)
 	}
 
-	keyring, loadError := loadSecretsKeyring(invalidKeyFile)
+	keyring, loadError := loadSecretsKeyring(invalidKeyFile, nil)
 
 	if loadError == nil || keyring != nil {
 		testContext.Fatalf("an invalid key must be refused, got %v", loadError)
@@ -158,7 +158,7 @@ func TestStartupRefusesInvalidSecretsKey(testContext *testing.T) {
 	if strings.Contains(loadError.Error(), "not-a-valid-key-material") {
 		testContext.Error("error must not contain the key content")
 	}
-	if _, missingError := loadSecretsKeyring(filepath.Join(testContext.TempDir(), "absent.key")); missingError == nil {
+	if _, missingError := loadSecretsKeyring(filepath.Join(testContext.TempDir(), "absent.key"), nil); missingError == nil {
 		testContext.Error("a missing key file must be refused")
 	}
 }

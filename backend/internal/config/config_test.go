@@ -246,3 +246,29 @@ func TestLoadReadsGeoIPDatabaseFile(testContext *testing.T) {
 		testContext.Fatalf("got %q, %v", loadedConfig.GeoIPDatabaseFile, loadError)
 	}
 }
+
+func TestLoadParsesRetiredSecretsKeyFiles(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{
+		"DATABASE_URL":              validTestDatabaseURL,
+		"SECRETS_RETIRED_KEY_FILES": "/run/dashboard-secrets/retired-1, /run/dashboard-secrets/retired-2,",
+	}))
+
+	if loadError != nil {
+		testContext.Fatalf("unexpected error: %v", loadError)
+	}
+	expectedFiles := []string{"/run/dashboard-secrets/retired-1", "/run/dashboard-secrets/retired-2"}
+	if strings.Join(loadedConfig.SecretsRetiredKeyFiles, "|") != strings.Join(expectedFiles, "|") {
+		testContext.Errorf("expected %v, got %v", expectedFiles, loadedConfig.SecretsRetiredKeyFiles)
+	}
+}
+
+func TestLoadLeavesRetiredSecretsKeyFilesEmptyByDefault(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL}))
+
+	if loadError != nil {
+		testContext.Fatalf("unexpected error: %v", loadError)
+	}
+	if len(loadedConfig.SecretsRetiredKeyFiles) != 0 {
+		testContext.Errorf("expected no retired key file, got %v", loadedConfig.SecretsRetiredKeyFiles)
+	}
+}

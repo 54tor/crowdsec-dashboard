@@ -36,7 +36,12 @@ func main() {
 		log.Fatal(loadError)
 	}
 
-	keyring, keyringError := loadSecretsKeyring(loadedConfig.SecretsKeyFile)
+	if len(os.Args) > 1 && os.Args[1] == rotateSecretsCommand {
+		runRotateSecretsCommand(loadedConfig)
+		return
+	}
+
+	keyring, keyringError := loadSecretsKeyring(loadedConfig.SecretsKeyFile, loadedConfig.SecretsRetiredKeyFiles)
 	if keyringError != nil {
 		log.Fatalf("secrets key: %v", keyringError)
 	}
@@ -138,4 +143,13 @@ func main() {
 	<-collectorDone
 	<-purgeDone
 	<-reloadDone
+}
+
+func runRotateSecretsCommand(loadedConfig config.Config) {
+	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+	if rotateError := runRotateSecrets(signalContext, os.Args[2:], loadedConfig, os.Stdout); rotateError != nil {
+		stopSignals()
+		log.Fatalf("%s: %v", rotateSecretsCommand, rotateError)
+	}
 }

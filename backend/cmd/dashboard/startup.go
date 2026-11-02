@@ -39,8 +39,8 @@ type accountServices struct {
 	geolocator    geo.Geolocator
 }
 
-func loadSecretsKeyring(keyFilePath string) (*secrets.Keyring, error) {
-	return secrets.LoadKeyring(keyFilePath)
+func loadSecretsKeyring(keyFilePath string, retiredKeyFiles []string) (*secrets.Keyring, error) {
+	return secrets.LoadKeyringWithRetired(keyFilePath, retiredKeyFiles)
 }
 
 const (

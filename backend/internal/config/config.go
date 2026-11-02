@@ -15,20 +15,21 @@ const (
 )
 
 type Config struct {
-	ListenAddr          string
-	DatabaseURL         string
-	SecretsKeyFile      string
-	GeoIPDatabaseFile   string
-	SessionTTL          time.Duration
-	LAPIURL             string
-	LAPIMachineID       string
-	LAPIMachinePassword string
-	CrowdSecContainer   string
-	DockerHost          string
-	ConfDir             string
-	TrustedProxyCIDRs   []*net.IPNet
-	WebAuthnRPID        string
-	WebAuthnRPOrigins   []string
+	ListenAddr             string
+	DatabaseURL            string
+	SecretsKeyFile         string
+	SecretsRetiredKeyFiles []string
+	GeoIPDatabaseFile      string
+	SessionTTL             time.Duration
+	LAPIURL                string
+	LAPIMachineID          string
+	LAPIMachinePassword    string
+	CrowdSecContainer      string
+	DockerHost             string
+	ConfDir                string
+	TrustedProxyCIDRs      []*net.IPNet
+	WebAuthnRPID           string
+	WebAuthnRPOrigins      []string
 
 	SyncEnabled         bool
 	SyncInterval        time.Duration
@@ -89,20 +90,21 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	return Config{
-		ListenAddr:          listenAddr,
-		DatabaseURL:         databaseURL,
-		SecretsKeyFile:      secretsKeyFile,
-		GeoIPDatabaseFile:   getenv("GEOIP_DATABASE_FILE"),
-		SessionTTL:          sessionTTL,
-		LAPIURL:             getenv("LAPI_URL"),
-		LAPIMachineID:       getenv("LAPI_MACHINE_ID"),
-		LAPIMachinePassword: getenv("LAPI_MACHINE_PASSWORD"),
-		CrowdSecContainer:   getenv("CROWDSEC_CONTAINER"),
-		DockerHost:          getenv("DOCKER_HOST"),
-		ConfDir:             getenv("CROWDSEC_CONF_DIR"),
-		TrustedProxyCIDRs:   trustedProxyCIDRs,
-		WebAuthnRPID:        webAuthnRPID,
-		WebAuthnRPOrigins:   webAuthnRPOrigins,
+		ListenAddr:             listenAddr,
+		DatabaseURL:            databaseURL,
+		SecretsKeyFile:         secretsKeyFile,
+		SecretsRetiredKeyFiles: parseFileList(getenv("SECRETS_RETIRED_KEY_FILES")),
+		GeoIPDatabaseFile:      getenv("GEOIP_DATABASE_FILE"),
+		SessionTTL:             sessionTTL,
+		LAPIURL:                getenv("LAPI_URL"),
+		LAPIMachineID:          getenv("LAPI_MACHINE_ID"),
+		LAPIMachinePassword:    getenv("LAPI_MACHINE_PASSWORD"),
+		CrowdSecContainer:      getenv("CROWDSEC_CONTAINER"),
+		DockerHost:             getenv("DOCKER_HOST"),
+		ConfDir:                getenv("CROWDSEC_CONF_DIR"),
+		TrustedProxyCIDRs:      trustedProxyCIDRs,
+		WebAuthnRPID:           webAuthnRPID,
+		WebAuthnRPOrigins:      webAuthnRPOrigins,
 
 		SyncEnabled:         syncConfig.Enabled,
 		SyncInterval:        syncConfig.Interval,
@@ -120,6 +122,16 @@ func Load(getenv func(string) string) (Config, error) {
 		ArchiveDecisionRetention: archiveConfig.DecisionRetention,
 		ArchiveEventRetention:    archiveConfig.EventRetention,
 	}, nil
+}
+
+func parseFileList(rawValue string) []string {
+	var filePaths []string
+	for _, rawFilePath := range strings.Split(rawValue, ",") {
+		if filePath := strings.TrimSpace(rawFilePath); filePath != "" {
+			filePaths = append(filePaths, filePath)
+		}
+	}
+	return filePaths
 }
 
 func validateDatabaseURL(rawValue string) error {
