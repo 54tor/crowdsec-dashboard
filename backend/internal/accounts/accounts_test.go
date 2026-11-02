@@ -22,11 +22,7 @@ const (
 func newRepositoryWithAccount(testContext *testing.T) *Repository {
 	testContext.Helper()
 	repository := NewRepository(storetest.New(testContext))
-	passwordHash, hashError := HashPassword(validPassword)
-	if hashError != nil {
-		testContext.Fatal(hashError)
-	}
-	if _, createError := repository.CreateWithPasswordHash(context.Background(), validAccountName, passwordHash, roleAdmin); createError != nil {
+	if _, createError := repository.CreateAccount(context.Background(), validAccountName, validPassword, roleAdmin, SecondFactorSetupWindow); createError != nil {
 		testContext.Fatal(createError)
 	}
 	return repository
@@ -109,7 +105,7 @@ func TestAuthenticateReturnsDistinctErrorWhenDatabaseIsClosed(testContext *testi
 func TestCreateRefusesDuplicateName(testContext *testing.T) {
 	repository := newRepositoryWithAccount(testContext)
 
-	_, createError := repository.CreateWithPasswordHash(context.Background(), validAccountName, "hash", roleAdmin)
+	_, createError := repository.CreateAccount(context.Background(), validAccountName, validPassword, roleAdmin, SecondFactorSetupWindow)
 
 	if !errors.Is(createError, ErrAccountExists) {
 		testContext.Errorf("expected ErrAccountExists, got %v", createError)
@@ -120,7 +116,7 @@ func TestCreateRefusesInvalidName(testContext *testing.T) {
 	repository := NewRepository(storetest.New(testContext))
 
 	for _, invalidName := range []string{"", "Alice", "-bad", "has space", strings.Repeat("a", 65)} {
-		_, createError := repository.CreateWithPasswordHash(context.Background(), invalidName, "hash", roleAdmin)
+		_, createError := repository.CreateAccount(context.Background(), invalidName, validPassword, roleAdmin, SecondFactorSetupWindow)
 		if !errors.Is(createError, ErrInvalidAccountName) {
 			testContext.Errorf("name %q: expected ErrInvalidAccountName, got %v", invalidName, createError)
 		}

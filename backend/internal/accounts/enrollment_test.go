@@ -209,11 +209,7 @@ func TestCompleteIsClosedAfterFirstAccount(testContext *testing.T) {
 	enrollment, repository := newEnrollment(testContext)
 	token := openToken(testContext, enrollment)
 	startWithConfirmedTOTP(testContext, enrollment, token, enrollmentAccountName)
-	passwordHash, hashError := HashPassword(validPassword)
-	if hashError != nil {
-		testContext.Fatal(hashError)
-	}
-	if _, createError := repository.CreateWithPasswordHash(context.Background(), validAccountName, passwordHash, roleAdmin); createError != nil {
+	if _, createError := repository.CreateAccount(context.Background(), validAccountName, validPassword, roleAdmin, SecondFactorSetupWindow); createError != nil {
 		testContext.Fatal(createError)
 	}
 

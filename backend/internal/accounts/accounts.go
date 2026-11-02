@@ -62,19 +62,6 @@ func (repository *Repository) Count(ctx context.Context) (int, error) {
 	return accountCount, queryError
 }
 
-func (repository *Repository) CreateWithPasswordHash(ctx context.Context, accountName, passwordHash, role string) (int64, error) {
-	var accountID int64
-	transactionError := repository.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
-		var insertError error
-		accountID, insertError = insertPasswordAccount(ctx, transaction, accountName, passwordHash, role)
-		return insertError
-	})
-	if transactionError != nil {
-		return 0, transactionError
-	}
-	return accountID, nil
-}
-
 func insertPasswordAccount(ctx context.Context, transaction bun.Tx, accountName, passwordHash, role string) (int64, error) {
 	if validationError := ValidateAccountName(accountName); validationError != nil {
 		return 0, validationError

@@ -163,11 +163,7 @@ func newLoginFixtureWith(testContext *testing.T, options fixtureOptions) *loginF
 
 func (fixture *loginFixture) createAccount(testContext *testing.T, accountName string) int64 {
 	testContext.Helper()
-	passwordHash, hashError := accounts.HashPassword(testPassword)
-	if hashError != nil {
-		testContext.Fatal(hashError)
-	}
-	accountID, createError := fixture.accounts.CreateWithPasswordHash(context.Background(), accountName, passwordHash, "admin")
+	accountID, createError := fixture.accounts.CreateAccount(context.Background(), accountName, testPassword, "admin", accounts.SecondFactorSetupWindow)
 	if createError != nil {
 		testContext.Fatal(createError)
 	}

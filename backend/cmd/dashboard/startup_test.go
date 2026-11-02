@@ -104,7 +104,7 @@ func confirmTOTPAndRecoveryCodes(testContext *testing.T, enrollment *accounts.En
 func TestStartupLogsNoTokenWhenAccountExists(testContext *testing.T) {
 	database := storetest.New(testContext)
 	repository := accounts.NewRepository(database)
-	if _, createError := repository.CreateWithPasswordHash(context.Background(), "admin", "hash", "admin"); createError != nil {
+	if _, createError := repository.CreateAccount(context.Background(), "admin", "correct horse battery", "admin", accounts.SecondFactorSetupWindow); createError != nil {
 		testContext.Fatalf("seed account: %v", createError)
 	}
 	sink := &capturedLog{}

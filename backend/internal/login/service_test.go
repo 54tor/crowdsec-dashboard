@@ -101,8 +101,12 @@ func TestBeginReturnsSetupStageForAccountWithoutFactor(testContext *testing.T) {
 
 func TestSetupStageRefusedOutsideSetupWindow(testContext *testing.T) {
 	fixture := newLoginFixture(testContext)
-	fixture.createAccount(testContext, "alice")
+	closedWindowID := fixture.createAccount(testContext, "alice")
 	expiredWindowID := fixture.createAccount(testContext, "bob")
+	if _, closeError := fixture.database.ExecContext(context.Background(),
+		`UPDATE account SET account_second_factor_setup_until = NULL WHERE account_id = ?`, closedWindowID); closeError != nil {
+		testContext.Fatal(closeError)
+	}
 	fixture.openSetupWindow(testContext, expiredWindowID, fixture.clock.Now().Add(-time.Second).Format(time.RFC3339Nano))
 
 	for _, accountName := range []string{"alice", "bob"} {
