@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ACCOUNTS_QUERY_KEY,
@@ -10,8 +11,10 @@ import {
   type AccountRole,
   type ManagedAccount,
 } from '@/api/accountsApi'
+import { useAuth } from '@/auth/useAuth'
 import { AccountRoleSelect } from '@/components/AccountRoleSelect'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
+import { ConfirmActionDialog } from '@/components/ConfirmActionDialog'
 import { Button } from '@/components/ui/button'
 
 interface AccountRowActionsProps {
@@ -23,6 +26,7 @@ interface AccountRowActionsProps {
 export function AccountRoleCell({ account, onFailed, onSucceeded }: AccountRowActionsProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { accountName } = useAuth()
   const roleChange = useMutation({
     mutationFn: (accountRole: AccountRole) => changeAccountRole(account.account_name, accountRole),
     onSuccess: onSucceeded,
@@ -36,6 +40,7 @@ export function AccountRoleCell({ account, onFailed, onSucceeded }: AccountRowAc
         label={t('accounts.roleOf', { name: account.account_name })}
         value={account.account_role}
         onChange={(chosenRole) => roleChange.mutate(chosenRole)}
+        disabledReason={account.account_name === accountName ? t('accounts.ownAccountProtected') : undefined}
       />
     </div>
   )
@@ -44,6 +49,8 @@ export function AccountRoleCell({ account, onFailed, onSucceeded }: AccountRowAc
 export function AccountRowActions({ account, onFailed, onSucceeded }: AccountRowActionsProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { accountName: signedInAccountName } = useAuth()
+  const [isRevokeOpen, setIsRevokeOpen] = useState(false)
   const accountName = account.account_name
   const action = useMutation({
     mutationFn: (operation: () => Promise<unknown>) => operation(),
@@ -64,9 +71,28 @@ export function AccountRowActions({ account, onFailed, onSucceeded }: AccountRow
         request={() => resetAccountSecondFactor(accountName)}
         invalidates={[ACCOUNTS_QUERY_KEY]}
       />
-      <Button type="button" variant="outline" size="sm" aria-label={t('accounts.revokeSessionsAria', { name: accountName })} disabled={action.isPending} onClick={() => action.mutate(() => revokeAccountSessions(accountName))}>
-        {t('accounts.revokeSessions')}
-      </Button>
+      <ConfirmActionDialog
+        open={isRevokeOpen}
+        onOpenChange={setIsRevokeOpen}
+        trigger={
+          <Button type="button" variant="outline" size="sm" aria-label={t('accounts.revokeSessionsAria', { name: accountName })}>
+            {t('accounts.revokeSessions')}
+          </Button>
+        }
+        title={t('accounts.revokeSessionsTitle', { name: accountName })}
+        description={t('accounts.revokeSessionsDescription', { name: accountName })}
+        submitLabel={t('accounts.revokeSessions')}
+        request={() => revokeAccountSessions(accountName)}
+        onDone={() => {
+          setIsRevokeOpen(false)
+          onSucceeded()
+          void queryClient.invalidateQueries({ queryKey: ACCOUNTS_QUERY_KEY })
+        }}
+        onFailed={(failure) => {
+          setIsRevokeOpen(false)
+          onFailed(failure)
+        }}
+      />
       {account.locked && (
         <Button type="button" variant="outline" size="sm" aria-label={t('accounts.unlockAria', { name: accountName })} disabled={action.isPending} onClick={() => action.mutate(() => unlockAccount(accountName))}>
           {t('accounts.unlock')}
@@ -79,6 +105,7 @@ export function AccountRowActions({ account, onFailed, onSucceeded }: AccountRow
         description={t('accounts.deleteDescription', { name: accountName })}
         target={accountName}
         request={() => deleteAccount(accountName)}
+        disabledReason={accountName === signedInAccountName ? t('accounts.ownAccountProtected') : undefined}
         invalidates={[ACCOUNTS_QUERY_KEY]}
       />
     </div>

@@ -14,9 +14,10 @@ interface RowDeleteActionProps {
   invalidates: QueryKey[]
   onDeleted?: () => void
   onFailed?: (failure: unknown) => void
+  disabledReason?: string
 }
 
-export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, request, invalidates, onDeleted, onFailed }: RowDeleteActionProps) {
+export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, request, invalidates, onDeleted, onFailed, disabledReason }: RowDeleteActionProps) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
@@ -30,7 +31,7 @@ export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, ta
     <ConfirmDeleteDialog
       open={isDialogOpen}
       trigger={
-        <Button type="button" variant="destructive" size="sm" aria-label={ariaLabel}>
+        <Button type="button" variant="destructive" size="sm" aria-label={ariaLabel} disabled={disabledReason !== undefined} title={disabledReason}>
           {buttonLabel}
         </Button>
       }

@@ -71,6 +71,11 @@ describe('accounts page', () => {
     expect(fetchMock.mock.calls.every(([requestedUrl]) => !String(requestedUrl).includes('a-long-test-password'))).toBe(true)
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(document.body.innerHTML).not.toContain('a-long-test-password')
+
+    await user.click(screen.getByRole('button', { name: en.accounts.add }))
+    const reopenedDialog = await screen.findByRole('dialog', { name: en.accounts.addTitle })
+    expect(within(reopenedDialog).getByLabelText(en.accounts.passwordLabel)).toHaveValue('')
+    expect(within(reopenedDialog).getByLabelText(en.accounts.nameLabel)).toHaveValue('')
   })
 
   it('translatesAccountExists', async () => {
@@ -99,11 +104,17 @@ describe('accounts page', () => {
   })
 
   it('translatesLastAdminWhenDemoting', async () => {
-    stubFetch(accountRoutes({ [`POST ${ACCOUNTS_URL}/alice/role`]: { status: 409, body: { error: 'last_admin' } } }))
+    const otherAdministrator = { ...ACCOUNT_ALICE, account_name: 'erin' }
+    stubFetch(
+      accountRoutes({
+        [`GET ${ACCOUNTS_URL}`]: { status: 200, body: [ACCOUNT_ALICE, otherAdministrator] },
+        [`POST ${ACCOUNTS_URL}/erin/role`]: { status: 409, body: { error: 'last_admin' } },
+      }),
+    )
     const user = userEvent.setup()
     renderApp('/accounts')
 
-    await user.selectOptions(await screen.findByLabelText('Role of alice'), 'read_only')
+    await user.selectOptions(await screen.findByLabelText('Role of erin'), 'read_only')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(en.errors.last_admin)
   })
@@ -124,7 +135,7 @@ describe('accounts page', () => {
     await waitFor(() => expect(requestsTo(fetchMock, 'POST', `${ACCOUNTS_URL}/alice/second-factor/reset`)).toHaveLength(1))
   })
 
-  it('revokesSessionsAndUnlocks', async () => {
+  it('revokesSessionsOnlyAfterConfirmationAndUnlocksInOneClick', async () => {
     const fetchMock = stubFetch(
       accountRoutes({
         [`POST ${ACCOUNTS_URL}/carol/sessions/revoke`]: { status: 200, body: { status: 'ok' } },
@@ -135,11 +146,33 @@ describe('accounts page', () => {
     renderApp('/accounts')
 
     await user.click(await screen.findByRole('button', { name: 'Revoke sessions of carol' }))
-    await user.click(await screen.findByRole('button', { name: 'Unlock carol' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(requestsTo(fetchMock, 'POST', `${ACCOUNTS_URL}/carol/sessions/revoke`)).toHaveLength(0)
+    await user.click(within(dialog).getByRole('button', { name: en.dialog.cancel }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(requestsTo(fetchMock, 'POST', `${ACCOUNTS_URL}/carol/sessions/revoke`)).toHaveLength(0)
 
+    await user.click(screen.getByRole('button', { name: 'Revoke sessions of carol' }))
+    const secondDialog = await screen.findByRole('dialog')
+    await user.click(within(secondDialog).getByRole('button', { name: en.accounts.revokeSessions }))
     await waitFor(() => expect(requestsTo(fetchMock, 'POST', `${ACCOUNTS_URL}/carol/sessions/revoke`)).toHaveLength(1))
+
+    await user.click(screen.getByRole('button', { name: 'Unlock carol' }))
     await waitFor(() => expect(requestsTo(fetchMock, 'POST', `${ACCOUNTS_URL}/carol/unlock`)).toHaveLength(1))
     expect(screen.queryByRole('button', { name: 'Unlock alice' })).not.toBeInTheDocument()
+  })
+
+  it('protectsTheRowOfTheSignedInAccountButStillAllowsSessionRevocation', async () => {
+    stubFetch(accountRoutes())
+    renderApp('/accounts')
+
+    expect(await screen.findByLabelText('Role of alice')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete alice' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete alice' })).toHaveAttribute('title', en.accounts.ownAccountProtected)
+    expect(screen.getByLabelText('Role of alice')).toHaveAttribute('title', en.accounts.ownAccountProtected)
+    expect(screen.getByRole('button', { name: 'Revoke sessions of alice' })).toBeEnabled()
+    expect(screen.getByLabelText('Role of carol')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete carol' })).toBeEnabled()
   })
 
   it('deletesAfterTypingTheAccountName', async () => {
