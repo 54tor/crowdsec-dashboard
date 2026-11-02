@@ -50,6 +50,7 @@ type Services struct {
 	Engines        EngineService
 	WebAuthn       *secondfactor.WebAuthn
 	TokenManager   TokenManager
+	AccountManager AccountManager
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {

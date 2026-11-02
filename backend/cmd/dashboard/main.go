@@ -78,6 +78,7 @@ func main() {
 	tokenRepository := apitokens.NewRepository(database, time.Now)
 	services.Tokens = tokenRepository
 	services.TokenManager = tokenRepository
+	services.AccountManager = accountServices.repository
 	services.Database = database
 	services.Audit = auditRecorder
 	services.Geolocator = accountServices.geolocator

@@ -331,6 +331,14 @@ var requiredSessionOnlyRoutes = map[string]routeAccess{
 	"GET /api/tokens":                       accessSessionOnly,
 	"POST /api/tokens":                      accessSessionOnly,
 	"DELETE /api/tokens/{id}":               accessSessionOnly,
+
+	"GET /api/accounts":                             accessAdminSessionOnly,
+	"POST /api/accounts":                            accessAdminSessionOnly,
+	"POST /api/accounts/{name}/role":                accessAdminSessionOnly,
+	"POST /api/accounts/{name}/second-factor/reset": accessAdminSessionOnly,
+	"POST /api/accounts/{name}/sessions/revoke":     accessAdminSessionOnly,
+	"POST /api/accounts/{name}/unlock":              accessAdminSessionOnly,
+	"DELETE /api/accounts/{name}":                   accessAdminSessionOnly,
 }
 
 var publicRoutePattern = regexp.MustCompile(`^(POST /api/auth/(login|enroll|logout)(/.*)?|GET /api/healthz|GET /api/auth/status)$`)

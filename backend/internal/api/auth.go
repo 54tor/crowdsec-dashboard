@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -28,6 +29,7 @@ type authHandlers struct {
 	sessionTTL          time.Duration
 	trustedCIDRs        []*net.IPNet
 	sessions            auth.SessionStore
+	accountManager      AccountManager
 	limiter             *auth.LoginLimiter
 	secondFactorLimiter *auth.LoginLimiter
 	failureWait         time.Duration
@@ -136,13 +138,20 @@ func (handlers *authHandlers) logout(responseWriter http.ResponseWriter, request
 
 func (handlers *authHandlers) logoutAll(responseWriter http.ResponseWriter, request *http.Request) {
 	identity, _ := auth.IdentityFromContext(request.Context())
-	if destroyError := handlers.sessions.DestroyAllForAccount(request.Context(), identity.AccountID); destroyError != nil {
-		log.Printf("destroy account sessions: %v", destroyError)
+	if destroyError := handlers.revokeEverything(request.Context(), identity); destroyError != nil {
+		log.Printf("revoke account sessions and tokens: %v", destroyError)
 		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
 	http.SetCookie(responseWriter, handlers.sessionCookie("", -1))
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (handlers *authHandlers) revokeEverything(ctx context.Context, identity auth.AccountIdentity) error {
+	if handlers.accountManager == nil {
+		return handlers.sessions.DestroyAllForAccount(ctx, identity.AccountID)
+	}
+	return handlers.accountManager.RevokeSessionsAndTokens(ctx, identity.AccountName)
 }
 
 type meResponse struct {

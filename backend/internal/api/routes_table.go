@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
 )
 
@@ -11,6 +12,7 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, authenticationRoutes(loadedConfig, services, authenticationHandlers)...)
 	routes = append(routes, accountRoutes(loadedConfig, services)...)
 	routes = append(routes, tokenRoutes(loadedConfig, services)...)
+	routes = append(routes, accountAdminRoutes(loadedConfig, services)...)
 	routes = append(routes, engineRoutes(loadedConfig, services)...)
 	routes = append(routes, readRoutes(loadedConfig, services)...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
@@ -64,6 +66,19 @@ func tokenRoutes(loadedConfig config.Config, services Services) []apiRoute {
 		{"GET /api/tokens", accessSessionOnly, http.HandlerFunc(tokens.list)},
 		{"POST /api/tokens", accessSessionOnly, http.HandlerFunc(tokens.create)},
 		{"DELETE /api/tokens/{id}", accessSessionOnly, http.HandlerFunc(tokens.revoke)},
+	}
+}
+
+func accountAdminRoutes(loadedConfig config.Config, services Services) []apiRoute {
+	managed := accountHandlers{manager: services.AccountManager, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	return []apiRoute{
+		{"GET /api/accounts", accessAdminSessionOnly, http.HandlerFunc(managed.list)},
+		{"POST /api/accounts", accessAdminSessionOnly, http.HandlerFunc(managed.create)},
+		{"POST /api/accounts/{name}/role", accessAdminSessionOnly, http.HandlerFunc(managed.changeRole)},
+		{"POST /api/accounts/{name}/second-factor/reset", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountSecondFactorReset, AccountManager.ResetSecondFactor)},
+		{"POST /api/accounts/{name}/sessions/revoke", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountSessionsRevoked, AccountManager.RevokeSessionsAndTokens)},
+		{"POST /api/accounts/{name}/unlock", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountUnlocked, AccountManager.Unlock)},
+		{"DELETE /api/accounts/{name}", accessAdminSessionOnly, http.HandlerFunc(managed.remove)},
 	}
 }
 
