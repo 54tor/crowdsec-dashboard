@@ -89,7 +89,7 @@ func TestRequireRoleForbiddenBodyNamesNoRole(testContext *testing.T) {
 
 func TestRequireRoleAfterRequireSessionHidesRoleFromUnauthenticated(testContext *testing.T) {
 	store := authtest.NewSessionStore(time.Hour, time.Now)
-	chain := auth.RequireSession(store)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
+	chain := auth.RequireAuthentication(store, nil, nil, nil)(auth.RequireRole(auth.RoleAdmin)(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
 		testContext.Error("handler must not run")
 	})))
 	recorder := httptest.NewRecorder()

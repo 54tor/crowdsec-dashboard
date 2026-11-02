@@ -69,7 +69,7 @@ func (store *PostgresStore) Lookup(ctx context.Context, token string) (auth.Acco
 	if queryError != nil {
 		return auth.AccountIdentity{}, false, fmt.Errorf("lookup session: %w", queryError)
 	}
-	return auth.AccountIdentity{AccountID: row.AccountID, AccountName: row.AccountName, AccountRole: row.AccountRole}, true, nil
+	return auth.AccountIdentity{AccountID: row.AccountID, AccountName: row.AccountName, AccountRole: row.AccountRole, AuthMethod: auth.AuthMethodSession}, true, nil
 }
 
 func (store *PostgresStore) Destroy(ctx context.Context, token string) error {

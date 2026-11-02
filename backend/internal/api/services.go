@@ -27,6 +27,8 @@ type AlertLookup interface {
 
 type Services struct {
 	Sessions       auth.SessionStore
+	Tokens         auth.TokenStore
+	TokenGate      auth.TokenGate
 	Login          LoginService
 	Enrollment     EnrollmentService
 	Database       Pinger

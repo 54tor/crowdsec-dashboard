@@ -37,6 +37,7 @@ func (repository *Repository) Lookup(ctx context.Context, plaintext string) (aut
 		AccountName: row.AccountName,
 		AccountRole: row.AccountRole,
 		LockedUntil: lockEnd(row.LockedUntil),
+		AuthMethod:  auth.AuthMethodToken,
 	}, true, nil
 }
 

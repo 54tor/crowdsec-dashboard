@@ -12,6 +12,7 @@ import (
 
 	"crowdsec-dashboard/internal/accessrule"
 	"crowdsec-dashboard/internal/api"
+	"crowdsec-dashboard/internal/apitokens"
 	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
@@ -74,10 +75,12 @@ func main() {
 	services.Login = newLoginService(database, accountServices, sessionStore, webAuthn, auditRecorder)
 	services.Enrollment = accountServices.enrollment
 	services.Sessions = sessionStore
+	services.Tokens = apitokens.NewRepository(database, time.Now)
 	services.Database = database
 	services.Audit = auditRecorder
 	services.Geolocator = accountServices.geolocator
 	services.AccessRules = accessrule.NewRepository(database)
+	services.TokenGate = api.NewTokenGate(services.AccessRules, services.Geolocator, time.Now)
 	services.Archive = archive.NewReader(database)
 	services.WebAuthn = webAuthn
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)

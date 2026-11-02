@@ -14,7 +14,7 @@ func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services
 }
 
 func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration, services Services) http.Handler {
-	requireSession := auth.RequireSession(services.Sessions)
+	requireSession := auth.RequireAuthentication(services.Sessions, services.Tokens, services.TokenGate, loadedConfig.TrustedProxyCIDRs)
 	handlers := &authHandlers{
 		loginService:        services.Login,
 		sessionTTL:          loadedConfig.SessionTTL,

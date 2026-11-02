@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"crowdsec-dashboard/internal/auth"
 	"testing"
 	"time"
 
@@ -52,7 +53,7 @@ func TestCreateThenLookupReturnsAccountIdentity(testContext *testing.T) {
 	if createError != nil || lookupError != nil || !found {
 		testContext.Fatalf("unexpected result %v %v %v", createError, lookupError, found)
 	}
-	if identity.AccountID != accountID || identity.AccountName != "alice" || identity.AccountRole != "read_only" {
+	if identity.AccountID != accountID || identity.AccountName != "alice" || identity.AccountRole != "read_only" || identity.AuthMethod != auth.AuthMethodSession {
 		testContext.Errorf("unexpected identity %+v", identity)
 	}
 }

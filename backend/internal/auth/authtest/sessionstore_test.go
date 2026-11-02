@@ -114,6 +114,7 @@ func TestLookupResolvesTheIdentityOfTheSessionAccount(testContext *testing.T) {
 
 	resolvedIdentity, found, lookupError := store.Lookup(context.Background(), carolToken)
 
+	carolIdentity.AuthMethod = auth.AuthMethodSession
 	if lookupError != nil || !found || resolvedIdentity != carolIdentity || bobIdentity.AccountID == carolIdentity.AccountID {
 		testContext.Errorf("unexpected identity %+v for %+v (found=%v, error=%v)", resolvedIdentity, carolIdentity, found, lookupError)
 	}

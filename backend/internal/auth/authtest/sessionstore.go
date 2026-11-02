@@ -79,6 +79,7 @@ func (store *SessionStore) Lookup(_ context.Context, token string) (auth.Account
 		return auth.AccountIdentity{}, false, nil
 	}
 	identity, accountExists := store.identityOf(record.accountID)
+	identity.AuthMethod = auth.AuthMethodSession
 	return identity, accountExists, nil
 }
 
@@ -117,7 +118,7 @@ func (store *SessionStore) pruneExpired() {
 
 func (store *SessionStore) identityOf(accountID int64) (auth.AccountIdentity, bool) {
 	if store.resolveIdentity == nil {
-		return auth.AccountIdentity{AccountID: accountID, AccountName: AccountName, AccountRole: AccountRole}, true
+		return auth.AccountIdentity{AccountID: accountID, AccountName: AccountName, AccountRole: AccountRole, AuthMethod: auth.AuthMethodSession}, true
 	}
 	return store.resolveIdentity(accountID)
 }

@@ -93,7 +93,7 @@ func TestLookupReturnsReadOnlyIdentityForReadScope(testContext *testing.T) {
 	identity, found, lookupError := fixture.repository.Lookup(context.Background(), plaintext)
 
 	requireNoError(testContext, lookupError)
-	if !found || identity.AccountID != administrator.AccountID || identity.AccountName != "alice" || identity.AccountRole != "read_only" {
+	if !found || identity.AccountID != administrator.AccountID || identity.AccountName != "alice" || identity.AccountRole != "read_only" || identity.AuthMethod != auth.AuthMethodToken {
 		testContext.Errorf("unexpected lookup %+v found=%v", identity, found)
 	}
 }

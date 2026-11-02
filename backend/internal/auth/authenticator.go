@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	AuthMethodSession = "session"
+	AuthMethodToken   = "token"
+)
+
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
 type AccountIdentity struct {
@@ -13,6 +18,7 @@ type AccountIdentity struct {
 	AccountName string
 	AccountRole string
 	LockedUntil time.Time
+	AuthMethod  string
 }
 
 type Authenticator interface {
