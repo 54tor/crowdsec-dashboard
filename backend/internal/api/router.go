@@ -6,7 +6,6 @@ import (
 
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/config"
-	"crowdsec-dashboard/internal/cscli"
 )
 
 func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services Services) http.Handler {
@@ -14,7 +13,6 @@ func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services
 }
 
 func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration, services Services) http.Handler {
-	requireSession := auth.RequireAuthentication(services.Sessions, services.Tokens, services.TokenGate, loadedConfig.TrustedProxyCIDRs)
 	handlers := &authHandlers{
 		loginService:        services.Login,
 		sessionTTL:          loadedConfig.SessionTTL,
@@ -28,74 +26,8 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 		now:                 time.Now,
 	}
 
-	longWrite := extendWriteDeadline(cscli.HubMutationTimeout)
 	router := http.NewServeMux()
-	router.Handle("GET /api/healthz", HealthHandler(services.Database))
-	enrollment := enrollmentHandlers{enrollment: services.Enrollment, auth: handlers, recorder: services.Audit, webAuthn: services.WebAuthn}
-	enrollmentFactors := enrollment.setupHandlers()
-	router.HandleFunc("GET /api/auth/status", enrollment.status)
-	router.HandleFunc("POST /api/auth/enroll", enrollment.enroll)
-	router.HandleFunc("POST /api/auth/enroll/totp", enrollmentFactors.beginTOTP)
-	router.HandleFunc("POST /api/auth/enroll/totp/confirm", enrollmentFactors.confirmTOTP)
-	router.HandleFunc("POST /api/auth/enroll/webauthn/options", enrollmentFactors.beginWebAuthn)
-	router.HandleFunc("POST /api/auth/enroll/webauthn/confirm", enrollmentFactors.confirmWebAuthn)
-	router.HandleFunc("POST /api/auth/enroll/recovery-codes", enrollmentFactors.recoveryCodes)
-	router.HandleFunc("POST /api/auth/enroll/complete", enrollment.complete)
-	router.HandleFunc("POST /api/auth/login", handlers.login)
-	loginSteps := loginStepHandlers{auth: handlers}
-	loginSetup := loginSteps.setupHandlers()
-	router.HandleFunc("POST /api/auth/login/totp", loginSteps.verifyTOTP)
-	router.HandleFunc("POST /api/auth/login/recovery-code", loginSteps.verifyRecoveryCode)
-	router.HandleFunc("POST /api/auth/login/webauthn/options", loginSteps.webAuthnOptions)
-	router.HandleFunc("POST /api/auth/login/webauthn", loginSteps.verifyWebAuthn)
-	router.HandleFunc("POST /api/auth/login/setup/totp", loginSetup.beginTOTP)
-	router.HandleFunc("POST /api/auth/login/setup/totp/confirm", loginSetup.confirmTOTP)
-	router.HandleFunc("POST /api/auth/login/setup/webauthn/options", loginSetup.beginWebAuthn)
-	router.HandleFunc("POST /api/auth/login/setup/webauthn/confirm", loginSetup.confirmWebAuthn)
-	router.HandleFunc("POST /api/auth/login/setup/recovery-codes", loginSetup.recoveryCodes)
-	router.HandleFunc("POST /api/auth/login/setup/complete", loginSteps.completeSetup)
-	router.HandleFunc("POST /api/auth/logout", handlers.logout)
-	router.Handle("POST /api/auth/logout-all", requireSession(http.HandlerFunc(handlers.logoutAll)))
-	router.Handle("GET /api/auth/me", requireSession(http.HandlerFunc(handlers.me)))
-	accessRules := accessRuleHandlers{service: services.AccessRules, geolocator: services.Geolocator, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
-	router.Handle("GET /api/account/access-rules", requireSession(http.HandlerFunc(accessRules.list)))
-	router.Handle("POST /api/account/access-rules", requireSession(http.HandlerFunc(accessRules.add)))
-	router.Handle("DELETE /api/account/access-rules/{id}", requireSession(http.HandlerFunc(accessRules.remove)))
-	requireAdmin := auth.RequireRole(auth.RoleAdmin)
-	engineRoutes := engineHandlers{service: services.Engines, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
-	router.Handle("GET /api/engines/names", requireSession(http.HandlerFunc(engineRoutes.names)))
-	router.Handle("GET /api/engines", requireSession(requireAdmin(http.HandlerFunc(engineRoutes.list))))
-	router.Handle("POST /api/engines", requireSession(requireAdmin(http.HandlerFunc(engineRoutes.create))))
-	router.Handle("PATCH /api/engines/{name}", requireSession(requireAdmin(http.HandlerFunc(engineRoutes.update))))
-	router.Handle("DELETE /api/engines/{name}", requireSession(requireAdmin(http.HandlerFunc(engineRoutes.remove))))
-	router.Handle("POST /api/engines/{name}/test", requireSession(requireAdmin(http.HandlerFunc(engineRoutes.test))))
-	router.Handle("GET /api/alerts", requireSession(http.HandlerFunc(alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive}.list)))
-	router.Handle("GET /api/decisions", requireSession(http.HandlerFunc(decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive}.list)))
-	archivedAlerts := archivedAlertHandlers{archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
-	router.Handle("GET /api/alerts/archive/{archive_id}", requireSession(http.HandlerFunc(archivedAlerts.detail)))
-	router.Handle("DELETE /api/alerts/archive/{archive_id}", requireSession(requireAdmin(http.HandlerFunc(archivedAlerts.remove))))
-	router.Handle("GET /api/health", requireSession(http.HandlerFunc(healthReportHandlers{platform: services.Platform, selfMachineID: loadedConfig.LAPIMachineID}.get)))
-	router.Handle("GET /api/metrics", requireSession(http.HandlerFunc(metricsHandlers{platform: services.Platform}.get)))
-	router.Handle("GET /api/config/files", requireSession(http.HandlerFunc(configFileHandlers{files: services.ConfigFiles}.list)))
-	router.Handle("GET /api/config/files/{name...}", requireSession(http.HandlerFunc(configFileHandlers{files: services.ConfigFiles}.get)))
-	router.Handle("POST /api/decisions", requireSession(http.HandlerFunc(decisionHandlers{service: services.Decisions, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}.add)))
-	router.Handle("DELETE /api/decisions/{id}", requireSession(http.HandlerFunc(decisionHandlers{service: services.Decisions, lister: services.DecisionReader}.remove)))
-	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
-	router.Handle("DELETE /api/alerts/{id}", requireSession(requireAdmin(http.HandlerFunc(liveAlerts.remove))))
-	router.Handle("POST /api/bouncers", requireSession(http.HandlerFunc(bouncerHandlers{service: services.Bouncers}.create)))
-	router.Handle("DELETE /api/bouncers/{name}", requireSession(http.HandlerFunc(bouncerHandlers{service: services.Bouncers}.remove)))
-	router.Handle("POST /api/machines", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}.create)))
-	router.Handle("POST /api/machines/{name}/validate", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}.validate)))
-	router.Handle("DELETE /api/machines/{name}", requireSession(http.HandlerFunc(machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}.remove)))
-	router.Handle("GET /api/hub", requireSession(http.HandlerFunc(hubHandlers{service: services.Hub}.list)))
-	router.Handle("POST /api/hub/update", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.update))))
-	router.Handle("POST /api/hub/upgrade", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.upgrade))))
-	router.Handle("POST /api/hub/collections", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.install))))
-	router.Handle("DELETE /api/hub/collections/{name...}", requireSession(longWrite(http.HandlerFunc(hubHandlers{service: services.Hub}.remove))))
-	router.Handle("POST /api/crowdsec/reload", requireSession(http.HandlerFunc(reloadHandlers{service: services.Reloader}.reload)))
-	router.Handle("/api/", requireSession(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
-		writeError(responseWriter, http.StatusNotFound, "not_found")
-	})))
+	registerRoutes(router, apiRoutes(loadedConfig, services, handlers), services.Sessions, services.Tokens, services.TokenGate, loadedConfig.TrustedProxyCIDRs)
 	router.Handle("/", singlePageApp)
 
 	crossOriginProtection := http.NewCrossOriginProtection()
