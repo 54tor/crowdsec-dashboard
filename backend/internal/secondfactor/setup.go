@@ -2,6 +2,7 @@ package secondfactor
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,11 +52,11 @@ func (setup *Setup) ConfirmTOTP(code string, now time.Time) error {
 	if !setup.hasEnrollment {
 		return ErrInvalidCode
 	}
-	matchedStep, isMatched := MatchTOTP(setup.enrollment.Secret, code, now)
-	if !isMatched {
+	matchedStep, isMatched := MatchTOTP(setup.enrollment.Secret, strings.TrimSpace(code), now)
+	if !isMatched || (setup.totpConfirmed && matchedStep < setup.confirmedStep) {
 		return ErrInvalidCode
 	}
-	setup.confirmedStep = matchedStep
+	setup.confirmedStep = max(setup.confirmedStep, matchedStep)
 	setup.totpConfirmed = true
 	return nil
 }

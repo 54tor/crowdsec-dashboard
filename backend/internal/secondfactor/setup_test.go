@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestSetupRecoveryCodesRequireConfirmedFactor(testContext *testing.T) {
@@ -99,5 +100,57 @@ func TestSetupConfirmedMethodsListsOnlyConfirmedFactors(testContext *testing.T) 
 
 	if len(confirmedMethods) != 1 || confirmedMethods[0] != "totp" {
 		testContext.Errorf("expected [totp], got %v", confirmedMethods)
+	}
+}
+
+func confirmedSetupAt(testContext *testing.T, confirmationInstant time.Time) (*Setup, string) {
+	testContext.Helper()
+	setup := &Setup{}
+	enrollment, _ := setup.BeginTOTP("alice")
+	if confirmError := setup.ConfirmTOTP(codeAt(testContext, enrollment.Secret, confirmationInstant), confirmationInstant); confirmError != nil {
+		testContext.Fatal(confirmError)
+	}
+	return setup, enrollment.Secret
+}
+
+func TestConfirmTOTPAgainKeepsHighestStep(testContext *testing.T) {
+	setup, secret := confirmedSetupAt(testContext, referenceInstant)
+	laterInstant := referenceInstant.Add(30 * time.Second)
+	expectedStep := laterInstant.Unix() / 30
+
+	if confirmError := setup.ConfirmTOTP(codeAt(testContext, secret, laterInstant), laterInstant); confirmError != nil {
+		testContext.Fatal(confirmError)
+	}
+	olderCode := codeAt(testContext, secret, referenceInstant)
+	setup.ConfirmTOTP(olderCode, laterInstant)
+
+	if setup.confirmedStep != expectedStep {
+		testContext.Errorf("expected the highest step %d to be kept, got %d", expectedStep, setup.confirmedStep)
+	}
+}
+
+func TestConfirmTOTPAfterConfirmationRejectsReplayedOlderStep(testContext *testing.T) {
+	setup, secret := confirmedSetupAt(testContext, referenceInstant.Add(30*time.Second))
+	confirmedStep := setup.confirmedStep
+	olderCode := codeAt(testContext, secret, referenceInstant)
+
+	confirmError := setup.ConfirmTOTP(olderCode, referenceInstant.Add(30*time.Second))
+
+	if !errors.Is(confirmError, ErrInvalidCode) {
+		testContext.Fatalf("expected ErrInvalidCode for a replayed older step, got %v", confirmError)
+	}
+	if setup.confirmedStep != confirmedStep || !setup.totpConfirmed {
+		testContext.Errorf("a rejected replay must leave the confirmation untouched, got step %d", setup.confirmedStep)
+	}
+}
+
+func TestConfirmTOTPTrimsWhitespace(testContext *testing.T) {
+	setup := &Setup{}
+	enrollment, _ := setup.BeginTOTP("alice")
+
+	confirmError := setup.ConfirmTOTP("  "+codeAt(testContext, enrollment.Secret, referenceInstant)+" \n", referenceInstant)
+
+	if confirmError != nil {
+		testContext.Fatalf("surrounding whitespace must be ignored, got %v", confirmError)
 	}
 }
