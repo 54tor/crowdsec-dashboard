@@ -132,6 +132,16 @@ expect_refusal "an invalid archive" --allow-database-mismatch --confirm "$restor
 expect_refusal "a truncated archive" --allow-database-mismatch --confirm "$restored_database" "$work_directory/truncated.dump"
 # Passes validation, fails midway in pg_restore: the original database must survive and the dashboard restart path runs.
 expect_refusal "an archive with corrupt data" --allow-database-mismatch --confirm "$restored_database" "$work_directory/corrupt-data.dump"
+# A name over 51 characters would make "<name>_restore_tmp" collide with the real name after postgres truncates it to 63.
+expect_refusal "a database name over 51 characters" -d "$(printf 'a%.0s' $(seq 1 52))" --confirm "$(printf 'a%.0s' $(seq 1 52))" "$backup_file"
+# A leftover temporary database is never dropped automatically.
+psql_admin 'CREATE DATABASE backup_restored_restore_tmp'
+expect_refusal "a restore while a temporary database exists" --allow-database-mismatch --confirm "$restored_database" "$backup_file"
+if [ "$(psql_query postgres "SELECT count(*) FROM pg_database WHERE datname = 'backup_restored_restore_tmp'")" != 1 ]; then
+  echo "backup-check: the leftover temporary database was dropped" >&2
+  exit 1
+fi
+psql_admin 'DROP DATABASE backup_restored_restore_tmp'
 
 if [ "$(fingerprint backup_restored)" != "$restored_marker" ] || [ "$(fingerprint backup_source)" != "$source_marker" ]; then
   echo "backup-check: a refused restore changed a database" >&2

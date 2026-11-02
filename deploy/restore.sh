@@ -38,6 +38,10 @@ if ! [[ "$database" =~ ^[A-Za-z0-9_]+$ ]]; then
   echo "invalid database name" >&2
   exit 2
 fi
+if [ "${#database}" -gt 51 ]; then
+  echo "database name is longer than 51 characters: the temporary restore name would be truncated by postgres" >&2
+  exit 2
+fi
 temporary_database="${database}_restore_tmp"
 
 compose() {
@@ -51,6 +55,12 @@ fi
 container_id="$(compose ps -q --status running "$service")"
 if [ -z "$container_id" ]; then
   echo "service $service of compose project $project is not running: nothing was changed" >&2
+  exit 1
+fi
+
+existing_temporary="$(compose exec -T "$service" sh -c 'psql -U "${POSTGRES_USER:-postgres}" -d postgres -tAc "SELECT count(*) FROM pg_database WHERE datname = '"'"'$1'"'"'"' sh "$temporary_database")"
+if [ "$existing_temporary" != 0 ]; then
+  echo "database $temporary_database already exists: inspect it and drop it manually, nothing was changed" >&2
   exit 1
 fi
 
@@ -97,11 +107,14 @@ database_state="original kept"
 finish() {
   exit_status=$?
   trap - EXIT
-  if [ -n "$temporary_created" ]; then
+  if [ -n "$temporary_created" ] && [ "$database_state" = "original kept" ]; then
     admin_sql "DROP DATABASE IF EXISTS \"$temporary_database\" WITH (FORCE)" >/dev/null 2>&1 || true
   fi
   if [ "$exit_status" -ne 0 ]; then
     echo "restore failed, database state: $database_state" >&2
+    if [ -n "$temporary_created" ] && [ "$database_state" != "original kept" ]; then
+      echo "database $temporary_database holds the restored data and was kept" >&2
+    fi
   fi
   if [ -n "$dashboard_stopped" ] && [ -n "$dashboard_was_running" ]; then
     if [ "$exit_status" -eq 0 ] || [ "$database_state" = "original kept" ]; then
@@ -126,7 +139,6 @@ dashboard_stopped=1
 compose stop "$dashboard_service"
 
 temporary_created=1
-admin_sql "DROP DATABASE IF EXISTS \"$temporary_database\" WITH (FORCE)"
 admin_sql "CREATE DATABASE \"$temporary_database\""
 compose exec -T "$service" sh -c 'pg_restore --no-owner --exit-on-error -U "${POSTGRES_USER:-postgres}" -d "$1"' sh "$temporary_database" < "$backup_source"
 
