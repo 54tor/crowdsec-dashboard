@@ -14,7 +14,7 @@ export function Bouncers() {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
   const actions = useMemo(
-    () => canWrite && ({
+    () => canWrite ? ({
       header: t('bouncers.actions'),
       cell: (bouncer: Bouncer) => (
         <RowDeleteAction
@@ -27,7 +27,7 @@ export function Bouncers() {
           invalidates={[HEALTH_QUERY_KEY]}
         />
       ),
-    }),
+    }) : undefined,
     [t, canWrite],
   )
   const labels = {
@@ -50,7 +50,7 @@ export function Bouncers() {
         </WriteOnly>
       }
     >
-      {(report, now) => <BouncersTable bouncers={report.bouncers} now={now} actions={actions || undefined} />}
+      {(report, now) => <BouncersTable bouncers={report.bouncers} now={now} actions={actions} />}
     </HealthPageSection>
   )
 }

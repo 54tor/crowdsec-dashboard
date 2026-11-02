@@ -11,6 +11,7 @@ vi.mock('@/components/TimelineChartCanvas', () => ({
 }))
 
 const ADMIN_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'alice', account_role: 'admin' } }
+const UNKNOWN_ROLE_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'carol' } }
 const READ_ONLY_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'bob', account_role: 'read_only' } }
 
 const HEALTH = makeHealth({
@@ -18,7 +19,7 @@ const HEALTH = makeHealth({
   machines: [makeMachine({ machine_id: 'machine-one', self: false, is_validated: false })],
 })
 
-function readRoutes(session: typeof ADMIN_SESSION) {
+function readRoutes(session: { status: number; body: object }) {
   return {
     'GET /api/auth/me': session,
     'GET /api/decisions?page=1&per_page=20': { status: 200, body: makePage([makeDecision({ id: 10, alert_id: 1 })]) },
@@ -78,6 +79,15 @@ describe('write actions per account role', () => {
   for (const [pageName, pageCase] of Object.entries(WRITE_PAGES)) {
     it(`${pageName}PageDoesNotRenderWriteActionsForAReadOnlyAccount`, async () => {
       stubFetch(readRoutes(READ_ONLY_SESSION))
+      renderApp(pageCase.path)
+
+      await pageCase.waitForReadContent()
+
+      expect(pageCase.writeControls().filter((control) => control !== null)).toEqual([])
+    })
+
+    it(`${pageName}PageDoesNotRenderWriteActionsWhenTheRoleIsUnknown`, async () => {
+      stubFetch(readRoutes(UNKNOWN_ROLE_SESSION))
       renderApp(pageCase.path)
 
       await pageCase.waitForReadContent()

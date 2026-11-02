@@ -1,7 +1,7 @@
 import { resetUnauthenticatedGuard } from '@/api/client'
 import { initI18n, setLanguage } from '@/i18n'
 
-export const SESSION_OK = { status: 200, body: { status: 'ok' } }
+export const SESSION_OK = { status: 200, body: { status: 'ok', account_name: 'alice', account_role: 'admin' } }
 
 export const DEBOUNCE_WAIT_MILLISECONDS = 500
 

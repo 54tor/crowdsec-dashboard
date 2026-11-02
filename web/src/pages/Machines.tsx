@@ -16,7 +16,7 @@ export function Machines() {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
   const actions = useMemo(
-    () => canWrite && ({
+    () => canWrite ? ({
       header: t('machines.actions'),
       cell: (machine: Machine) => (
         <div className="flex flex-wrap items-start gap-2">
@@ -50,7 +50,7 @@ export function Machines() {
           )}
         </div>
       ),
-    }),
+    }) : undefined,
     [t, canWrite],
   )
   const labels = {
@@ -73,7 +73,7 @@ export function Machines() {
         </WriteOnly>
       }
     >
-      {(report, now) => <MachinesTable machines={report.machines} now={now} actions={actions || undefined} />}
+      {(report, now) => <MachinesTable machines={report.machines} now={now} actions={actions} />}
     </HealthPageSection>
   )
 }
