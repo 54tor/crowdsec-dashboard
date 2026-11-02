@@ -47,3 +47,24 @@ export function formatRelativeAge(isoDate: string, now: number, language: string
 export function formatNumber(value: number, language: string): string {
   return new Intl.NumberFormat(language).format(value)
 }
+
+const DURATION_UNITS: { unit: 'day' | 'hour' | 'minute' | 'second'; seconds: number; minimumSeconds: number }[] = [
+  { unit: 'day', seconds: 86_400, minimumSeconds: 172_800 },
+  { unit: 'hour', seconds: 3_600, minimumSeconds: 3_600 },
+  { unit: 'minute', seconds: 60, minimumSeconds: 60 },
+  { unit: 'second', seconds: 1, minimumSeconds: 0 },
+]
+
+export function formatDuration(totalSeconds: number, language: string): string {
+  const matchingUnit = DURATION_UNITS.find((candidate) => totalSeconds >= candidate.minimumSeconds) ?? DURATION_UNITS[DURATION_UNITS.length - 1]
+  return new Intl.NumberFormat(language, {
+    style: 'unit',
+    unit: matchingUnit.unit,
+    unitDisplay: 'narrow',
+    maximumFractionDigits: 1,
+  }).format(totalSeconds / matchingUnit.seconds)
+}
+
+export function formatCount(count: number, language: string): string {
+  return new Intl.NumberFormat(language).format(count)
+}

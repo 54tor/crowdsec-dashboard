@@ -269,7 +269,6 @@
       "lastSuccess": "Dernière collecte",
       "lag": "Retard",
       "errors": "Erreurs",
-      "seconds": "{{count}} s",
       "stale": "En retard : aucune collecte réussie récente",
       "neverSinceStartup": "Jamais depuis le démarrage"
     },

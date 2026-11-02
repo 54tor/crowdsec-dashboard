@@ -269,7 +269,6 @@
       "lastSuccess": "Last collection",
       "lag": "Lag",
       "errors": "Errors",
-      "seconds": "{{count}} s",
       "stale": "Late: no recent successful collection",
       "neverSinceStartup": "Never since startup"
     },

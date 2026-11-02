@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLanguage } from '@/i18n'
 import en from '@/i18n/en.json'
 import { makeHealth } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
@@ -136,7 +137,7 @@ describe('health page', () => {
     renderApp('/health')
 
     expect(await screen.findByText(en.health.database.ok)).toBeInTheDocument()
-    expect(screen.getByText(/Schema version/)).toHaveTextContent('7')
+    expect(screen.getByText('7')).toHaveClass('font-mono')
   })
 
   it('listsEachEngineWithLastCollectionAndLag', async () => {
@@ -153,9 +154,43 @@ describe('health page', () => {
     renderApp('/health')
 
     const engineRow = (await screen.findByText('alerts-engine')).closest('tr') as HTMLElement
-    expect(within(engineRow).getByText('42 s')).toBeInTheDocument()
+    expect(within(engineRow).getByText('42s')).toBeInTheDocument()
     expect(within(engineRow).getByText('3')).toBeInTheDocument()
     expect(within(engineRow).queryByText(en.health.collector.stale)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [900, '15m'],
+    [10800, '3h'],
+    [259200, '3d'],
+  ])('formatsLagOf%iSecondsInHumanUnits', async (lagSeconds, expectedText) => {
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      'GET /api/health': {
+        status: 200,
+        body: makeHealth({ collector: [{ engine_name: 'slow-engine', last_success_at: null, lag_seconds: lagSeconds, errors_total: 1234, stale: true }] }),
+      },
+    })
+    renderApp('/health')
+
+    const engineRow = (await screen.findByText('slow-engine')).closest('tr') as HTMLElement
+    expect(within(engineRow).getByText(expectedText)).toBeInTheDocument()
+    expect(within(engineRow).getByText('1,234')).toBeInTheDocument()
+  })
+
+  it('formatsLagInFrench', async () => {
+    await setLanguage('fr')
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      'GET /api/health': {
+        status: 200,
+        body: makeHealth({ collector: [{ engine_name: 'moteur-lent', last_success_at: null, lag_seconds: 900, errors_total: 0, stale: true }] }),
+      },
+    })
+    renderApp('/health')
+
+    const engineRow = (await screen.findByText('moteur-lent')).closest('tr') as HTMLElement
+    expect(within(engineRow).getByText('15min')).toBeInTheDocument()
   })
 
   it('flagsStaleEngine', async () => {

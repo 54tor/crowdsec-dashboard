@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { EngineHealth } from '@/api/types'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { Badge } from '@/components/ui/badge'
-import { formatDateTime, formatRelativeAge } from '@/lib/format'
+import { formatCount, formatDateTime, formatDuration, formatRelativeAge } from '@/lib/format'
 
 function LastSuccessCell({ engine, now }: { engine: EngineHealth; now: number }) {
   const { t, i18n } = useTranslation()
@@ -18,7 +18,7 @@ function LastSuccessCell({ engine, now }: { engine: EngineHealth; now: number })
 }
 
 export function CollectorTable({ engines, now }: { engines: EngineHealth[]; now: number }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const columns = useMemo<DataTableColumn<EngineHealth>[]>(
     () => [
       { key: 'name', header: t('health.columns.name'), cell: (engine) => engine.engine_name },
@@ -26,16 +26,16 @@ export function CollectorTable({ engines, now }: { engines: EngineHealth[]; now:
       {
         key: 'lag',
         header: t('health.collector.lag'),
-        cell: (engine) => (engine.lag_seconds === null ? '—' : t('health.collector.seconds', { count: Math.round(engine.lag_seconds) })),
+        cell: (engine) => (engine.lag_seconds === null ? '—' : formatDuration(engine.lag_seconds, i18n.language)),
       },
-      { key: 'errors', header: t('health.collector.errors'), cell: (engine) => engine.errors_total },
+      { key: 'errors', header: t('health.collector.errors'), cell: (engine) => formatCount(engine.errors_total, i18n.language) },
       {
         key: 'status',
         header: t('health.columns.status'),
         cell: (engine) => <Badge variant="outline">{engine.stale ? t('health.collector.stale') : t('health.ok')}</Badge>,
       },
     ],
-    [t, now],
+    [t, i18n.language, now],
   )
   if (engines.length === 0) {
     return <p className="text-sm text-muted-foreground">{t('health.collector.empty')}</p>
