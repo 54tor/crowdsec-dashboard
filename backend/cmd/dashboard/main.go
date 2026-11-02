@@ -18,6 +18,7 @@ import (
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/retention"
 	"crowdsec-dashboard/internal/sessions"
 	"crowdsec-dashboard/internal/store"
 	"crowdsec-dashboard/internal/webui"
@@ -91,6 +92,11 @@ func main() {
 	services.TokenGate = api.NewTokenGate(services.AccessRules, services.Geolocator, time.Now)
 	services.Archive = archive.NewReader(database)
 	services.WebAuthn = webAuthn
+	purger := retention.NewPurger(database, retention.Policy{
+		AuditRetention:         loadedConfig.AuditRetention,
+		AuditClientIPRetention: loadedConfig.AuditClientIPRetention,
+		APITokenRetention:      loadedConfig.APITokenRetention,
+	}, sessionStore, tokenRepository, newArchivePurgeAdapter(database, loadedConfig), auditRecorder)
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
 
@@ -106,7 +112,6 @@ func main() {
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()
 
-	go pruneSessionsPeriodically(signalContext, sessionStore, sessionPruneInterval, log.Printf)
 	collectorDone := make(chan struct{})
 	go func() {
 		defer close(collectorDone)
@@ -115,7 +120,7 @@ func main() {
 	purgeDone := make(chan struct{})
 	go func() {
 		defer close(purgeDone)
-		purgeArchivePeriodically(signalContext, newArchivePurge(database, loadedConfig), archivePurgeInterval, time.Now, log.Printf)
+		runPurgePeriodically(signalContext, purger, purgeInterval, time.Now, log.Printf)
 	}()
 
 	reloadDone := make(chan struct{})

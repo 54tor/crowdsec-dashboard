@@ -46,6 +46,10 @@ type Config struct {
 	ArchiveAlertRetention    time.Duration
 	ArchiveDecisionRetention time.Duration
 	ArchiveEventRetention    time.Duration
+
+	AuditRetention         time.Duration
+	AuditClientIPRetention time.Duration
+	APITokenRetention      time.Duration
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -82,6 +86,11 @@ func Load(getenv func(string) string) (Config, error) {
 	archiveConfig, archiveError := loadArchiveSettings(getenv)
 	if archiveError != nil {
 		return Config{}, archiveError
+	}
+
+	retentionConfig, retentionError := loadRetentionSettings(getenv)
+	if retentionError != nil {
+		return Config{}, retentionError
 	}
 
 	listenAddr := getenv("LISTEN_ADDR")
@@ -121,6 +130,10 @@ func Load(getenv func(string) string) (Config, error) {
 		ArchiveAlertRetention:    archiveConfig.AlertRetention,
 		ArchiveDecisionRetention: archiveConfig.DecisionRetention,
 		ArchiveEventRetention:    archiveConfig.EventRetention,
+
+		AuditRetention:         retentionConfig.AuditRetention,
+		AuditClientIPRetention: retentionConfig.AuditClientIPRetention,
+		APITokenRetention:      retentionConfig.APITokenRetention,
 	}, nil
 }
 

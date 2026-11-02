@@ -25,10 +25,8 @@ import (
 )
 
 const (
-	sessionPruneInterval = time.Hour
-	sessionPruneTimeout  = 30 * time.Second
-	startupTimeout       = 60 * time.Second
-	enrollmentPath       = "/enroll"
+	startupTimeout = 60 * time.Second
+	enrollmentPath = "/enroll"
 )
 
 type accountServices struct {
@@ -131,25 +129,4 @@ func newLoginService(database *bun.DB, services accountServices, sessionStore au
 		Audit:         recorder,
 		Database:      database,
 	})
-}
-
-type sessionPruner interface {
-	PruneExpired(ctx context.Context) (int64, error)
-}
-
-func pruneSessionsPeriodically(ctx context.Context, pruner sessionPruner, interval time.Duration, logLine logFunction) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			pruneContext, cancelPrune := context.WithTimeout(ctx, sessionPruneTimeout)
-			if _, pruneError := pruner.PruneExpired(pruneContext); pruneError != nil {
-				logLine("prune sessions: %v", pruneError)
-			}
-			cancelPrune()
-		}
-	}
 }
