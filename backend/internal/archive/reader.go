@@ -105,7 +105,7 @@ func (reader *Reader) ListAlerts(ctx context.Context, query AlertQuery) ([]Archi
 		return alerts, total, totalCapped, nil
 	}
 	pageError := newFilteredQuery().ColumnExpr(alertSelection).
-		OrderExpr("alert_created_at DESC, alert_id DESC").
+		OrderExpr("alert_created_at DESC NULLS LAST, alert_id DESC").
 		Offset(int64(offset)).Limit(int64(limit)).
 		Scan(ctx, &alerts)
 	if pageError != nil {
@@ -149,7 +149,10 @@ func (reader *Reader) ListDecisions(ctx context.Context, query AlertQuery) ([]Ar
 func (reader *Reader) alertQuery(query AlertQuery) *bun.SelectQuery {
 	selectQuery := reader.database.NewSelect().TableExpr("alert").
 		Join("JOIN engine ON engine_id = alert_engine_id AND engine_deleting_at IS NULL")
-	selectQuery = applyAlertFilters(selectQuery, query)
+	selectQuery = applyCommonFilters(selectQuery, query)
+	if query.IP != "" {
+		selectQuery = selectQuery.Where("alert_source_value = ?", query.IP)
+	}
 	if query.ExcludedEngine != "" && len(query.ExcludedKeys) > 0 {
 		excludedIDs, excludedUUIDs := splitKeys(query.ExcludedKeys)
 		selectQuery = selectQuery.Where(
@@ -164,7 +167,10 @@ func (reader *Reader) decisionQuery(query AlertQuery) *bun.SelectQuery {
 	selectQuery := reader.database.NewSelect().TableExpr("decision").
 		Join("JOIN alert ON alert_id = decision_alert_id").
 		Join("JOIN engine ON engine_id = alert_engine_id AND engine_deleting_at IS NULL")
-	selectQuery = applyAlertFilters(selectQuery, query)
+	selectQuery = applyCommonFilters(selectQuery, query)
+	if query.IP != "" {
+		selectQuery = selectQuery.Where("decision_value = ?", query.IP)
+	}
 	if !query.IncludeExpired {
 		selectQuery = selectQuery.Where("decision_until > ?", reader.now().UTC())
 	}
@@ -174,15 +180,12 @@ func (reader *Reader) decisionQuery(query AlertQuery) *bun.SelectQuery {
 	return selectQuery
 }
 
-func applyAlertFilters(selectQuery *bun.SelectQuery, query AlertQuery) *bun.SelectQuery {
+func applyCommonFilters(selectQuery *bun.SelectQuery, query AlertQuery) *bun.SelectQuery {
 	if query.Engine != "" {
 		selectQuery = selectQuery.Where("alert_engine_id = (SELECT engine_id FROM engine WHERE engine_name = ? AND engine_deleting_at IS NULL)", query.Engine)
 	}
 	if query.Scenario != "" {
 		selectQuery = selectQuery.Where("alert_scenario_name = ?", query.Scenario)
-	}
-	if query.IP != "" {
-		selectQuery = selectQuery.Where("alert_source_value = ?", query.IP)
 	}
 	if !query.Since.IsZero() {
 		selectQuery = selectQuery.Where("alert_created_at >= ?", query.Since.UTC())
