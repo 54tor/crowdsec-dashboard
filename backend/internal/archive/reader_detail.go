@@ -53,25 +53,44 @@ func (reader *Reader) KnownAlertKeys(ctx context.Context, engineName string, key
 	return knownKeys, nil
 }
 
-func (reader *Reader) KnownDecisionKeys(ctx context.Context, engineName string, archivedAlertIDs []int64, upstreamIDs []int64) (map[int64]bool, error) {
-	knownDecisions := map[int64]bool{}
-	if len(upstreamIDs) == 0 || len(archivedAlertIDs) == 0 || strings.ContainsRune(engineName, 0) {
+type DecisionKey struct {
+	AlertArchiveID int64
+	UpstreamID     int64
+}
+
+type knownDecisionRow struct {
+	AlertArchiveID int64 `bun:"decision_alert_id"`
+	UpstreamID     int64 `bun:"decision_upstream_id"`
+	ArchiveID      int64 `bun:"decision_id"`
+}
+
+func (reader *Reader) KnownDecisionKeys(ctx context.Context, engineName string, keys []DecisionKey) (map[DecisionKey]int64, error) {
+	knownDecisions := map[DecisionKey]int64{}
+	if len(keys) == 0 || strings.ContainsRune(engineName, 0) {
 		return knownDecisions, nil
 	}
-	var knownIDs []int64
+	askedAlertIDs := make([]int64, 0, len(keys))
+	askedUpstreamIDs := make([]int64, 0, len(keys))
+	for _, askedKey := range keys {
+		askedAlertIDs = append(askedAlertIDs, askedKey.AlertArchiveID)
+		askedUpstreamIDs = append(askedUpstreamIDs, askedKey.UpstreamID)
+	}
+	var knownRows []knownDecisionRow
 	queryError := reader.database.NewRaw(
-		`SELECT DISTINCT decision_upstream_id
+		`SELECT decision_alert_id, decision_upstream_id, decision_id
 		 FROM decision
+		 JOIN unnest(?::bigint[], ?::bigint[]) AS asked (archived_alert_id, upstream_decision_id)
+		   ON decision_alert_id = asked.archived_alert_id AND decision_upstream_id = asked.upstream_decision_id
 		 JOIN alert ON alert_id = decision_alert_id
 		 JOIN engine ON engine_id = alert_engine_id AND engine_deleting_at IS NULL
-		 WHERE decision_alert_id = ANY(?::bigint[]) AND engine_name = ? AND decision_upstream_id = ANY(?::bigint[])`,
-		pgdialect.Array(archivedAlertIDs), engineName, pgdialect.Array(upstreamIDs),
-	).Scan(ctx, &knownIDs)
+		 WHERE engine_name = ?`,
+		pgdialect.Array(askedAlertIDs), pgdialect.Array(askedUpstreamIDs), engineName,
+	).Scan(ctx, &knownRows)
 	if queryError != nil {
 		return nil, queryError
 	}
-	for _, knownID := range knownIDs {
-		knownDecisions[knownID] = true
+	for _, knownRow := range knownRows {
+		knownDecisions[DecisionKey{AlertArchiveID: knownRow.AlertArchiveID, UpstreamID: knownRow.UpstreamID}] = knownRow.ArchiveID
 	}
 	return knownDecisions, nil
 }

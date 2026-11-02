@@ -18,8 +18,9 @@ type alertItem struct {
 
 type decisionItem struct {
 	lapi.Decision
-	Engine string `json:"engine"`
-	Live   bool   `json:"live"`
+	Engine            string `json:"engine"`
+	ArchiveDecisionID *int64 `json:"archive_decision_id"`
+	Live              bool   `json:"live"`
 }
 
 type eventItem struct {
@@ -103,16 +104,21 @@ func archivedDecisionFields(archivedDecision archive.ArchivedDecision) lapi.Deci
 	}
 }
 
-func liveDecisionItems(liveDecisions []lapi.Decision) []decisionItem {
+func liveDecisionItems(liveDecisions []lapi.Decision, archiveIDsByLiveID map[int64]int64) []decisionItem {
 	items := make([]decisionItem, 0, len(liveDecisions))
 	for _, liveDecision := range liveDecisions {
-		items = append(items, decisionItem{Decision: liveDecision, Engine: engines.ReservedLocalName, Live: true})
+		item := decisionItem{Decision: liveDecision, Engine: engines.ReservedLocalName, Live: true}
+		if archiveDecisionID, archived := archiveIDsByLiveID[liveDecision.ID]; archived {
+			item.ArchiveDecisionID = &archiveDecisionID
+		}
+		items = append(items, item)
 	}
 	return items
 }
 
 func archivedDecisionItem(archivedDecision archive.ArchivedDecision) decisionItem {
-	return decisionItem{Decision: archivedDecisionFields(archivedDecision), Engine: archivedDecision.Engine}
+	archiveDecisionID := archivedDecision.ArchiveID
+	return decisionItem{Decision: archivedDecisionFields(archivedDecision), Engine: archivedDecision.Engine, ArchiveDecisionID: &archiveDecisionID}
 }
 
 func newAlertDetailItem(detail archive.AlertDetail) alertDetailItem {

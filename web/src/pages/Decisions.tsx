@@ -20,7 +20,11 @@ import { formatDateTime } from '@/lib/format'
 import { isLiveLocalRow } from '@/lib/liveRow'
 
 function decisionRowKey(decision: Decision): string {
-  return `${decision.engine}/${decision.id}/${decision.live ? 'live' : 'archived'}`
+  const archiveDecisionId = decision.archive_decision_id ?? null
+  if (archiveDecisionId !== null) {
+    return `archive/${archiveDecisionId}`
+  }
+  return `live/${decision.engine}/${decision.id}`
 }
 
 export function Decisions() {

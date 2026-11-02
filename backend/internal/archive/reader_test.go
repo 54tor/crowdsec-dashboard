@@ -374,6 +374,10 @@ func TestListDecisionsFiltersAndExcludesLiveIDs(testContext *testing.T) {
 		alertWith(1, "2026-10-31T12:00:00Z", "crowdsecurity/ssh-bf", "203.0.113.1"),
 	})
 
+	localDecisionTenArchiveID := int64(fixture.countRows(testContext,
+		`SELECT decision_id FROM decision JOIN alert ON alert_id = decision_alert_id WHERE alert_engine_id = ? AND decision_upstream_id = 10`,
+		fixture.engineID))
+
 	decisionCases := []struct {
 		name        string
 		query       AlertQuery
@@ -384,7 +388,7 @@ func TestListDecisionsFiltersAndExcludesLiveIDs(testContext *testing.T) {
 		{"scenario", AlertQuery{Scenario: "crowdsecurity/http-probing"}, "local:20"},
 		{"ip", AlertQuery{IP: "203.0.113.1"}, "edge-1:10,local:10"},
 		{"since", AlertQuery{Since: time.Date(2026, 10, 31, 11, 0, 0, 0, time.UTC)}, "edge-1:10,local:20"},
-		{"excluded live", AlertQuery{ExcludedEngine: "local", ExcludedDecisionIDs: []int64{10}}, "edge-1:10,local:20"},
+		{"excluded live", AlertQuery{ExcludedEngine: "local", ExcludedDecisionIDs: []int64{localDecisionTenArchiveID}}, "edge-1:10,local:20"},
 	}
 	for _, decisionCase := range decisionCases {
 		decisionCase.query.Limit = 50
@@ -436,42 +440,50 @@ func TestKnownDecisionKeysMatchesEngine(testContext *testing.T) {
 	fixture := newReaderFixture(testContext)
 	fixture.storeFor(testContext, fixture.engineID, sampleAlerts(1, 2))
 	fixture.storeFor(testContext, fixture.remoteEngineID, sampleAlerts(3, 3))
+	localArchiveIDs, _ := fixture.reader.KnownAlertKeys(context.Background(), "local", []UpstreamKey{{UpstreamID: 1, UUID: "uuid-1"}})
+	remoteArchiveIDs, _ := fixture.reader.KnownAlertKeys(context.Background(), remoteEngineName, []UpstreamKey{{UpstreamID: 3, UUID: "uuid-3"}})
+	localAlertArchiveID := localArchiveIDs[UpstreamKey{UpstreamID: 1, UUID: "uuid-1"}]
+	remoteAlertArchiveID := remoteArchiveIDs[UpstreamKey{UpstreamID: 3, UUID: "uuid-3"}]
 
-	archiveIDs, _ := fixture.reader.KnownAlertKeys(context.Background(), "local", []UpstreamKey{
-		{UpstreamID: 1, UUID: "uuid-1"}, {UpstreamID: 2, UUID: "uuid-2"},
+	knownDecisions, knownError := fixture.reader.KnownDecisionKeys(context.Background(), "local", []DecisionKey{
+		{AlertArchiveID: localAlertArchiveID, UpstreamID: 10},
+		{AlertArchiveID: remoteAlertArchiveID, UpstreamID: 30},
+		{AlertArchiveID: localAlertArchiveID, UpstreamID: 99},
 	})
-	archivedAlertIDs := []int64{archiveIDs[UpstreamKey{UpstreamID: 1, UUID: "uuid-1"}], archiveIDs[UpstreamKey{UpstreamID: 2, UUID: "uuid-2"}]}
-
-	knownDecisions, knownError := fixture.reader.KnownDecisionKeys(context.Background(), "local", archivedAlertIDs, []int64{10, 30, 99})
 
 	if knownError != nil {
 		testContext.Fatalf("known decision keys: %v", knownError)
 	}
-	if len(knownDecisions) != 1 || !knownDecisions[10] {
-		testContext.Errorf("only decision 10 belongs to the local engine archive, got %v", knownDecisions)
+	localDecisionKey := DecisionKey{AlertArchiveID: localAlertArchiveID, UpstreamID: 10}
+	expectedArchiveID := int64(fixture.countRows(testContext, `SELECT decision_id FROM decision WHERE decision_alert_id = ?`, localAlertArchiveID))
+	if len(knownDecisions) != 1 || knownDecisions[localDecisionKey] != expectedArchiveID {
+		testContext.Errorf("only decision 10 belongs to the local engine archive, under decision_id %d, got %v", expectedArchiveID, knownDecisions)
 	}
 }
 
-// The lookup is restricted to the decisions of the given archived alerts: a
-// decision id archived under another alert (an engine reset reuses ids) is not
-// reported, and no alert ids means nothing is known.
+// The lookup matches the (archived alert, upstream decision) pair: a decision id
+// archived under another alert (an engine reset reuses ids) is not reported, and
+// no keys means nothing is known.
 func TestKnownDecisionKeysIsRestrictedToTheGivenAlerts(testContext *testing.T) {
 	fixture := newReaderFixture(testContext)
 	fixture.storeFor(testContext, fixture.engineID, sampleAlerts(1, 2))
 	archiveIDs, _ := fixture.reader.KnownAlertKeys(context.Background(), "local", []UpstreamKey{{UpstreamID: 1, UUID: "uuid-1"}})
+	firstAlertArchiveID := archiveIDs[UpstreamKey{UpstreamID: 1, UUID: "uuid-1"}]
 
-	restrictedDecisions, restrictedError := fixture.reader.KnownDecisionKeys(context.Background(), "local",
-		[]int64{archiveIDs[UpstreamKey{UpstreamID: 1, UUID: "uuid-1"}]}, []int64{10, 20})
-	noAlertDecisions, noAlertError := fixture.reader.KnownDecisionKeys(context.Background(), "local", nil, []int64{10, 20})
+	restrictedDecisions, restrictedError := fixture.reader.KnownDecisionKeys(context.Background(), "local", []DecisionKey{
+		{AlertArchiveID: firstAlertArchiveID, UpstreamID: 10},
+		{AlertArchiveID: firstAlertArchiveID, UpstreamID: 20},
+	})
+	noKeyDecisions, noKeyError := fixture.reader.KnownDecisionKeys(context.Background(), "local", nil)
 
-	if restrictedError != nil || noAlertError != nil {
-		testContext.Fatalf("known decision keys: %v %v", restrictedError, noAlertError)
+	if restrictedError != nil || noKeyError != nil {
+		testContext.Fatalf("known decision keys: %v %v", restrictedError, noKeyError)
 	}
-	if len(restrictedDecisions) != 1 || !restrictedDecisions[10] {
+	if _, firstDecisionKnown := restrictedDecisions[DecisionKey{AlertArchiveID: firstAlertArchiveID, UpstreamID: 10}]; len(restrictedDecisions) != 1 || !firstDecisionKnown {
 		testContext.Errorf("decision 20 belongs to alert 2, which was not asked, got %v", restrictedDecisions)
 	}
-	if len(noAlertDecisions) != 0 {
-		testContext.Errorf("no archived alert asked, no decision known, got %v", noAlertDecisions)
+	if len(noKeyDecisions) != 0 {
+		testContext.Errorf("no key asked, no decision known, got %v", noKeyDecisions)
 	}
 }
 

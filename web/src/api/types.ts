@@ -10,6 +10,7 @@ export interface Decision {
   scenario: string
   simulated: boolean
   engine: string
+  archive_decision_id?: number | null
   live: boolean
 }
 

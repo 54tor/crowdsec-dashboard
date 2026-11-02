@@ -85,13 +85,41 @@ describe('decisions page with archive', () => {
       'GET /api/auth/me': SESSION_OK,
       [`GET ${DECISIONS_URL}`]: {
         status: 200,
-        body: makePage([makeDecision({ id: 20, value: '203.0.113.20' }), makeDecision({ id: 20, value: '203.0.113.21', live: false }), makeDecision({ id: 20, value: '203.0.113.22', engine: 'edge-1', live: false })]),
+        body: makePage([
+          makeDecision({ id: 20, value: '203.0.113.20' }),
+          makeDecision({ id: 20, value: '203.0.113.21', live: false, archive_decision_id: 5 }),
+          makeDecision({ id: 20, value: '203.0.113.22', engine: 'edge-1', live: false, archive_decision_id: 6 }),
+        ]),
       },
     })
     renderApp('/decisions')
 
     expect(await screen.findByText('203.0.113.22')).toBeInTheDocument()
     expect(screen.getByText('203.0.113.21')).toBeInTheDocument()
+    const duplicateKeyWarnings = consoleErrorSpy.mock.calls.filter((loggedArguments) => String(loggedArguments[0]).includes('same key'))
+    expect(duplicateKeyWarnings).toHaveLength(0)
+    consoleErrorSpy.mockRestore()
+  })
+
+  // A reset of the local engine database reuses upstream ids: two archived
+  // generations of decision 10 share engine, id and live flag, and only their
+  // archive id tells them apart.
+  it("ligne de décision : la clé est l'id d'archive", async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      [`GET ${DECISIONS_URL}`]: {
+        status: 200,
+        body: makePage([
+          makeDecision({ id: 10, value: '203.0.113.30', live: false, archive_decision_id: 41 }),
+          makeDecision({ id: 10, value: '203.0.113.31', live: false, archive_decision_id: 42 }),
+        ]),
+      },
+    })
+    renderApp('/decisions')
+
+    expect(await screen.findByText('203.0.113.30')).toBeInTheDocument()
+    expect(screen.getByText('203.0.113.31')).toBeInTheDocument()
     const duplicateKeyWarnings = consoleErrorSpy.mock.calls.filter((loggedArguments) => String(loggedArguments[0]).includes('same key'))
     expect(duplicateKeyWarnings).toHaveLength(0)
     consoleErrorSpy.mockRestore()

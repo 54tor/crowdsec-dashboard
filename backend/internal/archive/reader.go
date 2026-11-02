@@ -168,9 +168,8 @@ func (reader *Reader) decisionQuery(query AlertQuery) *bun.SelectQuery {
 	if !query.IncludeExpired {
 		selectQuery = selectQuery.Where("decision_until > ?", reader.now().UTC())
 	}
-	if query.ExcludedEngine != "" && len(query.ExcludedDecisionIDs) > 0 {
-		selectQuery = selectQuery.Where("NOT (engine_name = ? AND decision_upstream_id = ANY(?::bigint[]))",
-			query.ExcludedEngine, pgdialect.Array(query.ExcludedDecisionIDs))
+	if len(query.ExcludedDecisionIDs) > 0 {
+		selectQuery = selectQuery.Where("decision_id <> ALL(?::bigint[])", pgdialect.Array(query.ExcludedDecisionIDs))
 	}
 	return selectQuery
 }

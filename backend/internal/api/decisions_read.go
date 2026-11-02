@@ -52,7 +52,7 @@ func (handlers decisionReadHandlers) listLiveOnly(responseWriter http.ResponseWr
 func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWriter, request *http.Request, query listQuery) {
 	requestContext := request.Context()
 	window, liveStatus := handlers.readLiveWindow(requestContext, query)
-	excludedDecisionIDs, knownError := handlers.archivedLiveDecisionIDs(requestContext, window.Decisions)
+	archiveIDsByLiveID, knownError := handlers.archivedLiveDecisionIDs(requestContext, window.Decisions)
 	if knownError != nil {
 		writeArchiveError(responseWriter, "match live decisions with the archive", knownError)
 		return
@@ -62,7 +62,10 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	archiveQuery.ExcludedDecisionIDs = excludedDecisionIDs
+	archiveQuery.ExcludedDecisionIDs = make([]int64, 0, len(archiveIDsByLiveID))
+	for _, archiveDecisionID := range archiveIDsByLiveID {
+		archiveQuery.ExcludedDecisionIDs = append(archiveQuery.ExcludedDecisionIDs, archiveDecisionID)
+	}
 	totalCapped := false
 	readArchivePage := func(offset, limit int) ([]decisionItem, int, error) {
 		archivedDecisions, archiveTotal, archiveTotalCapped, listError := handlers.archiveReader.ListDecisions(requestContext, withArchiveWindow(archiveQuery, offset, limit))
@@ -73,7 +76,7 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 		}
 		return archivedItems, archiveTotal, listError
 	}
-	items, total, mergeError := archive.MergePage(liveDecisionItems(window.Decisions), readArchivePage, query.Page, query.PerPage)
+	items, total, mergeError := archive.MergePage(liveDecisionItems(window.Decisions, archiveIDsByLiveID), readArchivePage, query.Page, query.PerPage)
 	if mergeError != nil {
 		writeArchiveError(responseWriter, "list archived decisions", mergeError)
 		return
@@ -103,30 +106,37 @@ func (handlers decisionReadHandlers) readLiveWindow(ctx context.Context, query l
 	return window, liveStatusOK
 }
 
-func (handlers decisionReadHandlers) archivedLiveDecisionIDs(ctx context.Context, liveDecisions []lapi.Decision) ([]int64, error) {
+func (handlers decisionReadHandlers) archivedLiveDecisionIDs(ctx context.Context, liveDecisions []lapi.Decision) (map[int64]int64, error) {
 	parentKeys := make([]archive.UpstreamKey, 0, len(liveDecisions))
-	liveDecisionIDs := make([]int64, 0, len(liveDecisions))
 	for _, liveDecision := range liveDecisions {
 		parentKeys = append(parentKeys, archive.UpstreamKey{UpstreamID: liveDecision.AlertID, UUID: liveDecision.AlertUUID})
-		liveDecisionIDs = append(liveDecisionIDs, liveDecision.ID)
 	}
 	archivedParents, parentsError := handlers.archiveReader.KnownAlertKeys(ctx, engines.ReservedLocalName, parentKeys)
 	if parentsError != nil {
 		return nil, parentsError
 	}
-	archivedParentIDs := make([]int64, 0, len(archivedParents))
-	for _, archivedParentID := range archivedParents {
-		archivedParentIDs = append(archivedParentIDs, archivedParentID)
+	decisionKeysByLiveID := map[int64]archive.DecisionKey{}
+	decisionKeys := make([]archive.DecisionKey, 0, len(liveDecisions))
+	for _, liveDecision := range liveDecisions {
+		archivedParentID, parentArchived := archivedParents[archive.UpstreamKey{UpstreamID: liveDecision.AlertID, UUID: liveDecision.AlertUUID}]
+		if !parentArchived {
+			continue
+		}
+		decisionKey := archive.DecisionKey{AlertArchiveID: archivedParentID, UpstreamID: liveDecision.ID}
+		decisionKeysByLiveID[liveDecision.ID] = decisionKey
+		decisionKeys = append(decisionKeys, decisionKey)
 	}
-	knownDecisions, decisionsError := handlers.archiveReader.KnownDecisionKeys(ctx, engines.ReservedLocalName, archivedParentIDs, liveDecisionIDs)
+	knownDecisions, decisionsError := handlers.archiveReader.KnownDecisionKeys(ctx, engines.ReservedLocalName, decisionKeys)
 	if decisionsError != nil {
 		return nil, decisionsError
 	}
-	excludedDecisionIDs := make([]int64, 0, len(knownDecisions))
-	for knownDecisionID := range knownDecisions {
-		excludedDecisionIDs = append(excludedDecisionIDs, knownDecisionID)
+	archiveIDsByLiveID := make(map[int64]int64, len(knownDecisions))
+	for liveDecisionID, decisionKey := range decisionKeysByLiveID {
+		if archiveDecisionID, known := knownDecisions[decisionKey]; known {
+			archiveIDsByLiveID[liveDecisionID] = archiveDecisionID
+		}
 	}
-	return excludedDecisionIDs, nil
+	return archiveIDsByLiveID, nil
 }
 
 func liveDecisionFilter(query listQuery) lapi.DecisionFilter {
