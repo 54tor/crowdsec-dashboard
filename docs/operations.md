@@ -72,6 +72,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `account_exists` | 409 | An account with this name already exists. |
 | `invalid_role` | 400 | `account_role` is neither `admin` nor `read_only`. |
 | `last_admin` | 409 | The change would remove the last `admin` (demotion or deletion). Create or promote another administrator first. |
+| `cannot_delete_own_account` | 409 | An administrator tried to delete the account they are signed in with. Another administrator must delete it. |
 | `engine_deleting` | 409 | A create used the name or URL of an engine whose archive is still being deleted. Retry once the deletion has finished (see [Engines and the archive](#engines-and-the-archive)). |
 | `target_mismatch` | 409 | The alert or decision id now designates another target (different uuid, scope or value): the list was stale or the LAPI was reset. Reload the page. |
 | `engine_exists`, `engine_not_found`, `invalid_engine` | 409, 404, 400 | Engine name or URL already used, unknown engine (an engine being deleted counts as unknown), or a field refused (name, URL scheme without `allow_insecure_http`, credentials or forbidden address in a URL, proxy kind). |
@@ -397,7 +398,8 @@ delete.
 - **Last administrator.** Demoting or deleting the only `admin` is refused with 409 `last_admin`.
   Several administrators can still demote each other down to one.
 - **Delete** removes the account with its sessions, tokens, factors and rules (the audit events stay).
-  The request must repeat the name in `confirm`.
+  The request must repeat the name in `confirm`. An administrator cannot delete the account they are
+  signed in with (409 `cannot_delete_own_account`); another administrator must do it.
 - The page disables the role selector and the delete action on your own row, so an administrator
   cannot demote or delete themselves from the interface; another administrator does it. The server
   itself only guards the last administrator.

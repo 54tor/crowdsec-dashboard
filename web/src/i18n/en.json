@@ -151,6 +151,7 @@
     "invalid_token_name": "The token name is invalid. Use 1 to 64 characters.",
     "token_name_taken": "You already have a token with this name.",
     "last_admin": "Refused: at least one administrator must remain.",
+    "cannot_delete_own_account": "Refused: you cannot delete the account you are signed in with.",
     "account_exists": "An account with this name already exists.",
     "invalid_role": "The role is invalid.",
     "token_denied": "This action is not available with an API token."

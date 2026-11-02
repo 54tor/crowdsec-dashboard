@@ -16,7 +16,7 @@ const KNOWN_ERROR_CODES = [
   'invalid_request', 'invalid_code', 'webauthn_failed', 'webauthn_unsupported', 'webauthn_disabled', 'second_factor_required', 'enrollment_not_started', 'second_factor_unavailable', 'invalid_account_name', 'invalid_password_length', 'invalid_enrollment_token', 'database_unavailable', 'invalid_target', 'target_mismatch', 'invalid_duration', 'invalid_reason', 'confirmation_required',
   'invalid_access_rule', 'prefix_too_broad', 'access_rule_exists', 'would_lock_out_current_client', 'geolocation_unavailable',
   'engine_exists', 'engine_deleting', 'engine_not_found', 'engine_local_readonly', 'invalid_engine', 'engine_secret_required', 'engine_unreachable', 'engine_auth_failed', 'engine_blocked_address', 'engine_secret_unreadable', 'archive_write_failed', 'registry_reload_failed',
-  'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'self_account', 'network', 'unknown',
+  'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'self_account', 'cannot_delete_own_account', 'network', 'unknown',
 ]
 
 describe('i18n', () => {

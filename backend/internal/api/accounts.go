@@ -123,6 +123,10 @@ func (handlers accountHandlers) remove(responseWriter http.ResponseWriter, reque
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
+	if identity, _ := auth.IdentityFromContext(request.Context()); identity.AccountName == accountName {
+		writeError(responseWriter, http.StatusConflict, "cannot_delete_own_account")
+		return
+	}
 	if deleteError := handlers.manager.Delete(request.Context(), accountName); deleteError != nil {
 		writeAccountError(responseWriter, deleteError)
 		return

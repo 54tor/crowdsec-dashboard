@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/uptrace/bun"
 
@@ -20,6 +21,7 @@ import (
 const (
 	rotateSecretsCommand = "rotate-secrets"
 	rotationBatchSize    = 500
+	rotationAuditTimeout = 5 * time.Second
 )
 
 func runRotateSecrets(ctx context.Context, arguments []string, loadedConfig config.Config, output io.Writer) error {
@@ -44,7 +46,9 @@ func rotateSecrets(ctx context.Context, database *bun.DB, keyring *secrets.Keyri
 	report, rotateError := secrets.Rotate(ctx, database, keyring, dryRun, rotationBatchSize)
 	printRotationReport(output, report, dryRun)
 	if !dryRun {
-		audit.RecordOrLog(ctx, audit.NewPostgresRecorder(database), 0, audit.ActionSecretsRotated, strconv.FormatInt(report.Rewritten(), 10), "")
+		auditContext, cancelAudit := context.WithTimeout(context.WithoutCancel(ctx), rotationAuditTimeout)
+		defer cancelAudit()
+		audit.RecordOrLog(auditContext, audit.NewPostgresRecorder(database), 0, audit.ActionSecretsRotated, strconv.FormatInt(report.Rewritten(), 10), "")
 	}
 	return rotateError
 }

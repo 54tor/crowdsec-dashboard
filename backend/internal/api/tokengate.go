@@ -11,7 +11,10 @@ import (
 	"crowdsec-dashboard/internal/geo"
 )
 
-const tokenGateCacheLifetime = time.Minute
+const (
+	tokenGateCacheLifetime = time.Minute
+	tokenGateCacheBound    = 1024
+)
 
 type RuleLister interface {
 	List(ctx context.Context, accountID int64) ([]accessrule.Rule, error)
@@ -71,5 +74,19 @@ func (gate *TokenGate) cachedDecision(cacheKey tokenGateKey, currentTime time.Ti
 func (gate *TokenGate) storeDecision(cacheKey tokenGateKey, allowed bool, currentTime time.Time) {
 	gate.mutex.Lock()
 	defer gate.mutex.Unlock()
+	if len(gate.decisions) >= tokenGateCacheBound {
+		gate.sweepExpiredDecisions(currentTime)
+	}
 	gate.decisions[cacheKey] = tokenGateDecision{allowed: allowed, expires: currentTime.Add(tokenGateCacheLifetime)}
+}
+
+func (gate *TokenGate) sweepExpiredDecisions(currentTime time.Time) {
+	for cacheKey, decision := range gate.decisions {
+		if !currentTime.Before(decision.expires) {
+			delete(gate.decisions, cacheKey)
+		}
+	}
+	if len(gate.decisions) >= tokenGateCacheBound {
+		clear(gate.decisions)
+	}
 }

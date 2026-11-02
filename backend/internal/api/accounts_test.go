@@ -354,6 +354,23 @@ func TestDeleteRequiresConfirm(testContext *testing.T) {
 	}
 }
 
+// Deleting the signed-in account would leave its own audit row pointing at a
+// deleted id, so the server refuses it before touching anything.
+func TestDeletingOwnAccountReturns409AndKeepsTheAccount(testContext *testing.T) {
+	fixture := newAccountFixture(testContext)
+	fixture.manager.accountByName["dave"] = &managedAccount{accountID: 40, role: auth.RoleAdmin}
+
+	recorder := fixture.asAdministrator(http.MethodDelete, "/api/accounts/alice", `{"confirm":"alice"}`)
+
+	expectError(testContext, recorder, http.StatusConflict, "cannot_delete_own_account")
+	if _, stillThere := fixture.manager.accountByName["alice"]; !stillThere {
+		testContext.Error("own account must not be deleted")
+	}
+	if len(fixture.recorder.events) != 0 {
+		testContext.Errorf("refused deletion must not be audited: %+v", fixture.recorder.events)
+	}
+}
+
 func TestEveryAccountActionIsAudited(testContext *testing.T) {
 	for _, route := range accountActionRoutes {
 		fixture := newAccountFixture(testContext)
@@ -400,5 +417,28 @@ func TestAuditNeverContainsPassword(testContext *testing.T) {
 		if strings.Contains(event.target, validPassword) {
 			testContext.Errorf("password leaked into audit target %q", event.target)
 		}
+	}
+}
+
+// Services built without an account manager must answer the account routes
+// with a clean 503 instead of panicking on the nil manager.
+func TestAccountRoutesWithoutManagerFailClosed(testContext *testing.T) {
+	sessions := authtest.NewSessionStore(time.Hour, time.Now)
+	sessions.ResolveIdentitiesWith(func(accountID int64) (auth.AccountIdentity, bool) {
+		return auth.AccountIdentity{AccountID: accountID, AccountName: "alice", AccountRole: auth.RoleAdmin, AuthMethod: auth.AuthMethodSession}, true
+	})
+	handler := newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, Services{Sessions: sessions})
+	administratorCookie := newAuthenticatedCookie(testContext, sessions, administratorAccountID)
+
+	for _, route := range []struct{ method, path, body string }{
+		{http.MethodGet, "/api/accounts", ``},
+		{http.MethodPost, "/api/auth/logout-all", ``},
+	} {
+		request := httptest.NewRequest(route.method, "https://dashboard.example.com"+route.path, strings.NewReader(route.body))
+		request.AddCookie(administratorCookie)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+
+		expectError(testContext, recorder, http.StatusServiceUnavailable, "database_unavailable")
 	}
 }

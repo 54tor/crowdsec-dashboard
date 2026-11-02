@@ -142,7 +142,7 @@ Admin, session only. Names match `^[a-z0-9][a-z0-9._-]{0,63}$`; see
 | POST | `/api/accounts/{name}/second-factor/reset` | none | `200 {"status":"ok"}`: factors and recovery codes deleted, 72 hours window opened, sessions and tokens revoked | 404 |
 | POST | `/api/accounts/{name}/sessions/revoke` | none | `200 {"status":"ok"}`: sessions and tokens revoked | 404 |
 | POST | `/api/accounts/{name}/unlock` | none | `200 {"status":"ok"}` | 404 |
-| DELETE | `/api/accounts/{name}` | `{"confirm":"<name>"}` | `200 {"status":"ok"}` | 400 `confirmation_required`; 404; 409 `last_admin` |
+| DELETE | `/api/accounts/{name}` | `{"confirm":"<name>"}` | `200 {"status":"ok"}` | 400 `confirmation_required`; 404; 409 `last_admin`; 409 `cannot_delete_own_account` (the signed-in account) |
 
 Each is audited, target `account:<name>` (`account:<name>:<role>` at creation, `account:<name>:<previous>-><new>` for a role change) ([security.md](security.md#audit-log)). Every route
 answers 403 `forbidden` to a `read_only` session and 403 `session_required` to a token.

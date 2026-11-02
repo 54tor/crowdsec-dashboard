@@ -93,6 +93,23 @@ func TestRotateSecretsCommandAuditsOnlyTheRealRun(testContext *testing.T) {
 	}
 }
 
+// A SIGINT cancels the command context mid-rotation; the secrets_rotated
+// event is the only trace of the rows already rewritten, so it must still be
+// written with a context detached from the signal.
+func TestRotateSecretsCommandAuditsEvenWhenInterrupted(testContext *testing.T) {
+	database := storetest.New(testContext)
+	keyring := newTestKeyring(testContext)
+	interruptedContext, cancelRotation := context.WithCancel(context.Background())
+	cancelRotation()
+
+	var output bytes.Buffer
+	_ = rotateSecrets(interruptedContext, database, keyring, false, &output)
+
+	if auditTargets := countRotationAuditEvents(testContext, database); len(auditTargets) != 1 {
+		testContext.Errorf("an interrupted rotation must still be audited, got %v", auditTargets)
+	}
+}
+
 func TestRotateSecretsCommandFailsOnUnreadableRows(testContext *testing.T) {
 	database := storetest.New(testContext)
 	keyring := newTestKeyring(testContext)

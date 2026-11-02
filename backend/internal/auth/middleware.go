@@ -67,6 +67,10 @@ func authenticateToken(responseWriter http.ResponseWriter, request *http.Request
 		writeJSONError(responseWriter, http.StatusUnauthorized, "invalid_token")
 		return
 	}
+	if gate == nil {
+		writeJSONError(responseWriter, http.StatusForbidden, "token_denied")
+		return
+	}
 	clientAddress, _ := netip.ParseAddr(ClientIP(request, trustedProxies))
 	allowed, gateError := gate.AllowToken(request.Context(), identity, clientAddress)
 	if gateError != nil {

@@ -13,6 +13,9 @@ func NewHandler(loadedConfig config.Config, singlePageApp http.Handler, services
 }
 
 func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureWait time.Duration, services Services) http.Handler {
+	if services.AccountManager == nil {
+		services.AccountManager = unavailableAccountManager{}
+	}
 	handlers := &authHandlers{
 		loginService:        services.Login,
 		sessionTTL:          loadedConfig.SessionTTL,

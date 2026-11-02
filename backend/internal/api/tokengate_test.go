@@ -89,3 +89,28 @@ func TestTokenGateCachesDecisionPerAccountAndClientForOneMinute(testContext *tes
 		testContext.Errorf("unexpected list calls: within minute %d, total %d", callsWithinMinute, lister.listCalls)
 	}
 }
+
+// Each distinct account and client pair adds one cache entry; without a
+// bound a scan from many addresses would grow the map for ever.
+func TestTokenGateCacheStaysBounded(testContext *testing.T) {
+	currentTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	gate := NewTokenGate(&countingRuleLister{}, geo.Unavailable{}, func() time.Time { return currentTime })
+	identity := auth.AccountIdentity{AccountID: 5}
+	clientAddressFor := func(clientNumber int) netip.Addr {
+		return netip.AddrFrom4([4]byte{10, byte(clientNumber >> 16), byte(clientNumber >> 8), byte(clientNumber)})
+	}
+
+	for clientNumber := 0; clientNumber < 3*tokenGateCacheBound; clientNumber++ {
+		gate.AllowToken(context.Background(), identity, clientAddressFor(clientNumber))
+	}
+	entriesWhileFresh := len(gate.decisions)
+	currentTime = currentTime.Add(tokenGateCacheLifetime + time.Second)
+	gate.AllowToken(context.Background(), identity, clientAddressFor(0))
+
+	if entriesWhileFresh > tokenGateCacheBound {
+		testContext.Errorf("fresh entries exceed the bound: %d > %d", entriesWhileFresh, tokenGateCacheBound)
+	}
+	if len(gate.decisions) != 1 {
+		testContext.Errorf("expired entries must be swept, %d remain", len(gate.decisions))
+	}
+}

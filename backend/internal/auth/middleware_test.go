@@ -271,3 +271,21 @@ func TestRequireSessionMethodAcceptsSessionIdentity(testContext *testing.T) {
 		testContext.Errorf("expected 204, got %d", recorder.Code)
 	}
 }
+
+// A token store wired without its gate must refuse tokens rather than panic
+// on the nil gate and leave the request without an answer.
+func TestTokenWithoutGateFailsClosed(testContext *testing.T) {
+	handler := auth.RequireAuthentication(authtest.NewSessionStore(time.Hour, time.Now), defaultTokenStore(), nil, nil)(http.HandlerFunc(func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/api/x", nil)
+	request.RemoteAddr = "198.51.100.7:4000"
+	request.Header.Set("Authorization", "Bearer "+validTokenPlaintext)
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusForbidden || recorder.Body.String() != "{\"error\":\"token_denied\"}\n" {
+		testContext.Errorf("unexpected response %d %q", recorder.Code, recorder.Body.String())
+	}
+}

@@ -124,8 +124,7 @@ func (handlers enrollmentHandlers) setupHandlers() secondFactorSetupHandlers {
 }
 
 func (handlers enrollmentHandlers) complete(responseWriter http.ResponseWriter, request *http.Request) {
-	clientIP := auditClientIP(request, handlers.auth.trustedCIDRs)
-	if !handlers.auth.secondFactorLimiter.Allow(clientIP) {
+	if !handlers.auth.secondFactorLimiter.Allow(auth.ClientIP(request, handlers.auth.trustedCIDRs)) {
 		writeTooManyAttempts(responseWriter)
 		return
 	}
@@ -141,6 +140,7 @@ func (handlers enrollmentHandlers) complete(responseWriter http.ResponseWriter, 
 		return
 	}
 	enrolledMethods := setup.ConfirmedMethods()
+	clientIP := auditClientIP(request, handlers.auth.trustedCIDRs)
 	identity, completeError := handlers.enrollment.Complete(request.Context(), token)
 	if completeError != nil {
 		enrollmentFailure(completeError).write(responseWriter)

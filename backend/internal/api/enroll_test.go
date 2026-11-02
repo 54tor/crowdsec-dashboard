@@ -376,6 +376,29 @@ func TestEnrollWithWrongTokenIsRateLimited(testContext *testing.T) {
 	}
 }
 
+// Peers whose address does not parse all collapse to the empty audit
+// address; the rate limiter must still key them apart by their raw peer.
+func TestEnrollCompleteLimiterKeysUnparseablePeersApart(testContext *testing.T) {
+	handler := handlerWithEnrollment(testContext, &fakeEnrollment{required: true})
+	postCompleteFrom := func(peerAddress string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/auth/enroll/complete", strings.NewReader(tokenBody("wrong")))
+		request.RemoteAddr = peerAddress
+		request.Header.Set("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+	for attemptNumber := 1; attemptNumber <= secondFactorAttemptsPerIP; attemptNumber++ {
+		postCompleteFrom("first-unparseable-peer")
+	}
+
+	recorder := postCompleteFrom("second-unparseable-peer")
+
+	if recorder.Code == http.StatusTooManyRequests {
+		testContext.Error("a different peer must not share the exhausted rate-limit bucket")
+	}
+}
+
 var enrollmentStepPaths = []string{
 	"/api/auth/enroll/totp",
 	"/api/auth/enroll/totp/confirm",
