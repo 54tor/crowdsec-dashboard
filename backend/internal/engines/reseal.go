@@ -24,6 +24,16 @@ type legacyReseal struct {
 	columns  sealedColumns
 	stale    sealedValue
 	resealed sealedValue
+	pins     []columnChange
+}
+
+func (binding secretBinding) machinePasswordPins() []columnChange {
+	return []columnChange{{"engine_lapi_url = ?", binding.lapiURL}}
+}
+
+func (binding secretBinding) proxyCredentialPins() []columnChange {
+	return append(binding.machinePasswordPins(),
+		columnChange{"engine_proxy_kind = ?", binding.proxyKind}, columnChange{"engine_proxy_url = ?", binding.proxyURL})
 }
 
 func resealedMachinePassword(keyring *secrets.Keyring, binding secretBinding, stale sealedValue, password string) (legacyReseal, error) {
@@ -31,7 +41,7 @@ func resealedMachinePassword(keyring *secrets.Keyring, binding secretBinding, st
 	if sealError != nil {
 		return legacyReseal{}, sealError
 	}
-	return legacyReseal{columns: machinePasswordColumns, stale: stale, resealed: resealed}, nil
+	return legacyReseal{columns: machinePasswordColumns, stale: stale, resealed: resealed, pins: binding.machinePasswordPins()}, nil
 }
 
 func resealedProxyCredential(keyring *secrets.Keyring, binding secretBinding, stale sealedValue, payload proxyCredentialPayload) (legacyReseal, error) {
@@ -39,15 +49,20 @@ func resealedProxyCredential(keyring *secrets.Keyring, binding secretBinding, st
 	if sealError != nil {
 		return legacyReseal{}, sealError
 	}
-	return legacyReseal{columns: proxyCredentialColumns, stale: stale, resealed: resealed}, nil
+	return legacyReseal{columns: proxyCredentialColumns, stale: stale, resealed: resealed, pins: binding.proxyCredentialPins()}, nil
 }
 
 func resealIfUnchanged(ctx context.Context, executor bun.IDB, engineID int64, reseal legacyReseal) (bool, error) {
-	result, updateError := executor.NewRaw(
-		`UPDATE engine SET ? = ?, ? = ? WHERE engine_id = ? AND ? = ? AND ? = ?`,
-		bun.Ident(reseal.columns.ciphertextColumn), reseal.resealed.ciphertext, bun.Ident(reseal.columns.keyIDColumn), reseal.resealed.keyID,
-		engineID, bun.Ident(reseal.columns.ciphertextColumn), reseal.stale.ciphertext, bun.Ident(reseal.columns.keyIDColumn), reseal.stale.keyID,
-	).Exec(ctx)
+	updateQuery := executor.NewUpdate().TableExpr("engine").
+		Set("? = ?", bun.Ident(reseal.columns.ciphertextColumn), reseal.resealed.ciphertext).
+		Set("? = ?", bun.Ident(reseal.columns.keyIDColumn), reseal.resealed.keyID).
+		Where("engine_id = ?", engineID).
+		Where("? = ?", bun.Ident(reseal.columns.ciphertextColumn), reseal.stale.ciphertext).
+		Where("? = ?", bun.Ident(reseal.columns.keyIDColumn), reseal.stale.keyID)
+	for _, pin := range reseal.pins {
+		updateQuery = updateQuery.Where(pin.expression, pin.value)
+	}
+	result, updateError := updateQuery.Exec(ctx)
 	if updateError != nil {
 		return false, fmt.Errorf("reseal %s: %w", reseal.columns.ciphertextColumn, updateError)
 	}

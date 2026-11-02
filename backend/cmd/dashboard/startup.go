@@ -95,6 +95,7 @@ func initialiseEngines(ctx context.Context, database *bun.DB, keyring *secrets.K
 	if _, ensureError := repository.EnsureLocal(ctx, localSettings.lapiURL, localSettings.machineID); ensureError != nil {
 		return nil, nil, fmt.Errorf("ensure local engine: %w", ensureError)
 	}
+	resealLegacyEngineSecrets(ctx, repository, logLine)
 	registry := engines.NewRegistry(repository, localSettings.client, nil)
 	if reloadError := registry.Reload(ctx); reloadError != nil {
 		logLine("engine registry: %v", reloadError)
@@ -103,6 +104,17 @@ func initialiseEngines(ctx context.Context, database *bun.DB, keyring *secrets.K
 		}
 	}
 	return repository, registry, nil
+}
+
+func resealLegacyEngineSecrets(ctx context.Context, repository *engines.Repository, logLine logFunction) {
+	report, resealError := repository.ResealLegacySecrets(ctx)
+	if !report.IsEmpty() {
+		logLine("engine secrets reseal: resealed=%d unreadable=%d skipped_concurrent=%d unreadable_engine_ids=%v",
+			report.Resealed, len(report.UnreadableEngineIDs), report.SkippedConcurrent, report.UnreadableEngineIDs)
+	}
+	if resealError != nil {
+		logLine("engine secrets reseal: %v", resealError)
+	}
 }
 
 func newEngineCollector(database *bun.DB, repository *engines.Repository, registry *engines.Registry, loadedConfig config.Config) *collector.Collector {

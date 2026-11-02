@@ -152,3 +152,28 @@ func TestResealNeverOverwritesConcurrentChange(testContext *testing.T) {
 		testContext.Errorf("the concurrent password must be kept and the proxy credential stay readable: %v", credentialsError)
 	}
 }
+
+func TestResealNeverBindsToADestinationOtherThanTheOneRead(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	createdEngine := mustCreate(testContext, fixture, withProxy(remoteInput("edge-1", "https://one.example.com")))
+	writeLegacySecrets(testContext, fixture, createdEngine.ID)
+	staleRow := loadRow(testContext, fixture, createdEngine.ID)
+	_, pendingReseals, openError := fixture.repository.openCredentials(staleRow)
+	if openError != nil || len(pendingReseals) != 2 {
+		testContext.Fatalf("expected two pending reseals, got %d %v", len(pendingReseals), openError)
+	}
+
+	// The destination is changed directly in the database after the read: the
+	// ciphertext is untouched, so only the pinned destination stops the reseal.
+	if _, redirectError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_lapi_url = 'https://attacker.example.com' WHERE engine_id = ?`, createdEngine.ID); redirectError != nil {
+		testContext.Fatalf("redirect: %v", redirectError)
+	}
+	for _, pendingReseal := range pendingReseals {
+		isResealed, resealError := resealIfUnchanged(context.Background(), fixture.database, createdEngine.ID, pendingReseal)
+		if resealError != nil || isResealed {
+			testContext.Errorf("%s: the reseal must skip a row whose destination changed, got %v %v",
+				pendingReseal.columns.ciphertextColumn, isResealed, resealError)
+		}
+	}
+}
