@@ -93,6 +93,7 @@ describe('account security page', () => {
 
   it.each([
     ['invalid_access_rule', 400],
+    ['prefix_too_broad', 400],
     ['access_rule_exists', 409],
     ['would_lock_out_current_client', 409],
     ['geolocation_unavailable', 409],

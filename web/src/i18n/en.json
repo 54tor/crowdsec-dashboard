@@ -125,6 +125,7 @@
     "too_many_pending_logins": "Too many sign-ins in progress. Please try again shortly.",
     "invalid_access_rule": "Enter a valid IP address, CIDR or two-letter country code. Rules that match everything are refused.",
     "access_rule_exists": "This rule already exists.",
+    "prefix_too_broad": "This range is too wide: the broadest accepted prefix is /8 for IPv4 and /16 for IPv6.",
     "would_lock_out_current_client": "Refused: this change would lock out your current connection. Add a rule that covers your address first.",
     "geolocation_unavailable": "The GeoLite2 database is not available, so country rules cannot be managed right now.",
     "engine_exists": "An engine with this name already exists.",

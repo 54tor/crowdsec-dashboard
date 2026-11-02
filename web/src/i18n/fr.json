@@ -125,6 +125,7 @@
     "too_many_pending_logins": "Trop de connexions en cours. Réessayez dans un instant.",
     "invalid_access_rule": "Saisissez une adresse IP, un CIDR ou un code pays à deux lettres valides. Les règles qui couvrent tout sont refusées.",
     "access_rule_exists": "Cette règle existe déjà.",
+    "prefix_too_broad": "Cette plage est trop large : le préfixe le plus large accepté est /8 pour IPv4 et /16 pour IPv6.",
     "would_lock_out_current_client": "Refusé : cette modification vous exclurait de votre connexion actuelle. Ajoutez d'abord une règle qui couvre votre adresse.",
     "geolocation_unavailable": "La base GeoLite2 n'est pas disponible : les règles par pays ne peuvent pas être gérées pour le moment.",
     "engine_exists": "Un moteur porte déjà ce nom.",
