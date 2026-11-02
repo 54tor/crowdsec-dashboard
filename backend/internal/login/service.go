@@ -119,6 +119,7 @@ func (service *Service) Begin(ctx context.Context, accountName, password string,
 		return BeginResult{}, lockedError
 	}
 	if lockedUntil.After(now) {
+		service.record(ctx, identity.AccountID, audit.ActionLoginLockedPasswordOK, accountName, clientIP)
 		return BeginResult{}, AccountLockedError{Until: lockedUntil}
 	}
 
@@ -139,6 +140,7 @@ func (service *Service) Begin(ctx context.Context, accountName, password string,
 			return BeginResult{}, allowedError
 		}
 		if !isSetupAllowed {
+			service.record(ctx, identity.AccountID, audit.ActionSecondFactorSetupRefused, accountName, clientIP)
 			return BeginResult{}, ErrSecondFactorSetupNotAllowed
 		}
 		pending.Stage = StageSetup
@@ -177,5 +179,5 @@ func (service *Service) admit(ctx context.Context, pending Pending, clientIP net
 }
 
 func (service *Service) record(ctx context.Context, accountID int64, action audit.Action, target string, clientIP netip.Addr) {
-	audit.RecordOrLog(ctx, service.dependencies.Audit, accountID, action, target, clientIP.Unmap().String())
+	audit.RecordOrLog(ctx, service.dependencies.Audit, accountID, action, target, audit.ClientIPText(clientIP))
 }

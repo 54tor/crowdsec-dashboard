@@ -662,3 +662,83 @@ func TestParallelWrongCodesRespectThePendingLoginCap(testContext *testing.T) {
 		testContext.Errorf("the per-pending cap must not lock the account, got %v", lockedUntil)
 	}
 }
+
+func TestLockedAccountWithCorrectPasswordIsAudited(testContext *testing.T) {
+	fixture := newLoginFixture(testContext)
+	locked := fixture.createTOTPAccount(testContext, "mallory")
+	for reservationNumber := 0; reservationNumber < 5; reservationNumber++ {
+		fixture.accounts.ReserveSecondFactorAttempt(context.Background(), locked.accountID, fixture.clock.Now())
+	}
+
+	_, beginError := fixture.service.Begin(context.Background(), "mallory", testPassword, clientAddress)
+	fixture.service.Begin(context.Background(), "mallory", wrongPassword, clientAddress)
+
+	var lockedError AccountLockedError
+	if !errors.As(beginError, &lockedError) {
+		testContext.Fatalf("expected AccountLockedError, got %v", beginError)
+	}
+	events := fixture.recorder.eventsWithAction(audit.ActionLoginLockedPasswordOK)
+	expectedEvent := recordedEvent{accountID: locked.accountID, action: audit.ActionLoginLockedPasswordOK, target: "mallory", clientIP: "192.0.2.10"}
+	if len(events) != 1 || events[0] != expectedEvent {
+		testContext.Errorf("expected exactly %+v for the correct password only, got %+v", expectedEvent, events)
+	}
+}
+
+func TestSetupNotAllowedIsAudited(testContext *testing.T) {
+	fixture := newLoginFixture(testContext)
+	closedWindowID := fixture.createAccount(testContext, "alice")
+	if _, closeError := fixture.database.ExecContext(context.Background(),
+		`UPDATE account SET account_second_factor_setup_until = NULL WHERE account_id = ?`, closedWindowID); closeError != nil {
+		testContext.Fatal(closeError)
+	}
+
+	_, beginError := fixture.service.Begin(context.Background(), "alice", testPassword, clientAddress)
+
+	if !errors.Is(beginError, ErrSecondFactorSetupNotAllowed) {
+		testContext.Fatalf("expected ErrSecondFactorSetupNotAllowed, got %v", beginError)
+	}
+	events := fixture.recorder.eventsWithAction(audit.ActionSecondFactorSetupRefused)
+	expectedEvent := recordedEvent{accountID: closedWindowID, action: audit.ActionSecondFactorSetupRefused, target: "alice", clientIP: "192.0.2.10"}
+	if len(events) != 1 || events[0] != expectedEvent {
+		testContext.Errorf("expected exactly %+v, got %+v", expectedEvent, events)
+	}
+}
+
+func TestRefusedAttemptReservationIsAudited(testContext *testing.T) {
+	fixture := newLoginFixture(testContext)
+	alice := fixture.createTOTPAccount(testContext, "alice")
+	beginResult := fixture.beginOrFail(testContext, "alice")
+	for reservationNumber := 0; reservationNumber < 5; reservationNumber++ {
+		fixture.accounts.ReserveSecondFactorAttempt(context.Background(), alice.accountID, fixture.clock.Now())
+	}
+
+	_, verifyError := fixture.service.VerifyTOTP(context.Background(), beginResult.PendingID, clientAddress, fixture.totpCode(testContext, alice.secret))
+
+	var lockedError AccountLockedError
+	if !errors.As(verifyError, &lockedError) {
+		testContext.Fatalf("expected AccountLockedError, got %v", verifyError)
+	}
+	events := fixture.recorder.eventsWithAction(audit.ActionSecondFactorAttemptRefused)
+	expectedEvent := recordedEvent{accountID: alice.accountID, action: audit.ActionSecondFactorAttemptRefused, target: "alice", clientIP: "192.0.2.10"}
+	if len(events) != 1 || events[0] != expectedEvent {
+		testContext.Errorf("expected exactly %+v, got %+v", expectedEvent, events)
+	}
+}
+
+func TestAuditClientIPFormatIsUnmappedEverywhere(testContext *testing.T) {
+	fixture := newLoginFixture(testContext)
+	fixture.createAccount(testContext, "alice")
+	mappedAddress := netip.MustParseAddr("::ffff:192.0.2.10")
+
+	fixture.service.Begin(context.Background(), "alice", wrongPassword, mappedAddress)
+	fixture.service.Begin(context.Background(), "alice", testPassword, mappedAddress)
+
+	for _, recorded := range fixture.recorder.events {
+		if recorded.clientIP != "192.0.2.10" {
+			testContext.Errorf("%s: expected the unmapped IPv4 form, got %q", recorded.action, recorded.clientIP)
+		}
+	}
+	if len(fixture.recorder.events) == 0 {
+		testContext.Fatal("expected audit events")
+	}
+}

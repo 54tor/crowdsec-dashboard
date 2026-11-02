@@ -89,6 +89,7 @@ func (service *Service) verifySecondFactor(ctx context.Context, pendingID string
 		return auth.AccountIdentity{}, reserveError
 	}
 	if !reservation.Reserved {
+		service.record(ctx, pending.AccountID, audit.ActionSecondFactorAttemptRefused, pending.AccountName, clientIP)
 		lease.Consume()
 		return auth.AccountIdentity{}, AccountLockedError{Until: reservation.LockedUntil}
 	}
