@@ -82,6 +82,9 @@
       "retry": "Réessayer"
     }
   },
+  "auth": {
+    "roleRefreshFailed": "Vos autorisations n'ont pas pu être chargées. Certaines actions peuvent être masquées."
+  },
   "logout": "Se déconnecter",
   "errors": {
     "unauthenticated": "Votre session a expiré. Veuillez vous reconnecter.",

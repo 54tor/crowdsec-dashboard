@@ -82,6 +82,9 @@
       "retry": "Try again"
     }
   },
+  "auth": {
+    "roleRefreshFailed": "Your permissions could not be loaded. Some actions may be hidden."
+  },
   "logout": "Log out",
   "errors": {
     "unauthenticated": "Your session has expired. Please sign in again.",

@@ -113,7 +113,14 @@ describe('two-step login', () => {
   })
 
   it('acceptsARecoveryCodeThroughTheToggle', async () => {
-    const { user, fetchMock } = await startAtSecondFactor({ 'POST /api/auth/login/recovery-code': OK })
+    let hasSession = false
+    const { user, fetchMock } = await startAtSecondFactor({
+      'GET /api/auth/me': () => (hasSession ? { status: 200, body: { status: 'authenticated', account_name: 'alice' } } : UNAUTHENTICATED),
+      'POST /api/auth/login/recovery-code': () => {
+        hasSession = true
+        return OK
+      },
+    })
     await user.click(screen.getByRole('button', { name: en.login.secondFactor.useRecoveryCode }))
     await user.type(screen.getByLabelText(en.login.secondFactor.recoveryLabel), 'aaaa-bbbb-cccc')
     await user.click(screen.getByRole('button', { name: en.login.secondFactor.submit }))
@@ -230,9 +237,14 @@ describe('two-step login', () => {
       const serializedAssertion = { id: 'credential-id', response: { signature: 'c2ln' } }
       const getCredential = vi.fn(async () => ({ toJSON: () => serializedAssertion }))
       installCredentials({ get: getCredential })
+      let hasSession = false
       const { user, fetchMock } = await startAtSecondFactor({
+        'GET /api/auth/me': () => (hasSession ? { status: 200, body: { status: 'authenticated', account_name: 'alice' } } : UNAUTHENTICATED),
         'POST /api/auth/login/webauthn/options': ASSERTION_OPTIONS,
-        'POST /api/auth/login/webauthn': OK,
+        'POST /api/auth/login/webauthn': () => {
+          hasSession = true
+          return OK
+        },
       })
       await user.click(screen.getByRole('button', { name: en.login.secondFactor.useSecurityKey }))
       expect(await screen.findByRole('heading', { name: en.nav.alerts })).toBeInTheDocument()

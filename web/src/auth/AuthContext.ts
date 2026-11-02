@@ -7,6 +7,8 @@ export interface AuthState {
   isAuthenticated: boolean
   accountName: string | null
   accountRole: AccountRole | null
+  roleError: boolean
+  retryRoleRefresh(): void
   login(accountName: string, password: string): Promise<LoginProgress>
   verifySecondFactor(method: LoginSecondFactorMethod, value?: string): Promise<void>
   completeLoginSetup(): Promise<void>

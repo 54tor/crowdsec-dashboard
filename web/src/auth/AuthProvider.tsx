@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError, apiFetch, resetUnauthenticatedGuard, setUnauthenticatedHandler } from '@/api/client'
 import { beginLogin, completeLoginSetup, verifyLoginSecondFactor } from '@/api/loginApi'
@@ -21,47 +21,85 @@ function parseAccountRole(rawRole: string | undefined): AccountRole | null {
 
 type SessionState = SessionIdentity | false
 
+const ROLE_REFRESH_RETRY_DELAY_MS = 300
+
+async function fetchSessionIdentity(): Promise<SessionIdentity> {
+  const meResponse = await apiFetch<{ account_name?: string; account_role?: string }>('/api/auth/me')
+  return { accountName: meResponse.account_name ?? null, accountRole: parseAccountRole(meResponse.account_role) }
+}
+
+function isUnauthenticatedError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'unauthenticated'
+}
+
 async function fetchSessionState(): Promise<SessionState> {
   try {
-    const meResponse = await apiFetch<{ account_name?: string; account_role?: string }>('/api/auth/me')
-    return { accountName: meResponse.account_name ?? null, accountRole: parseAccountRole(meResponse.account_role) }
+    return await fetchSessionIdentity()
   } catch (sessionError) {
-    if (sessionError instanceof ApiError && sessionError.code === 'unauthenticated') {
+    if (isUnauthenticatedError(sessionError)) {
       return false
     }
     throw sessionError
   }
 }
 
-async function refreshAccountRole(queryClient: QueryClient): Promise<void> {
-  try {
-    const meResponse = await fetch('/api/auth/me', { credentials: 'same-origin' })
-    if (!meResponse.ok) {
-      return
+async function refreshAccountRole(queryClient: QueryClient): Promise<boolean> {
+  for (let attemptNumber = 1; attemptNumber <= 2; attemptNumber += 1) {
+    try {
+      const sessionIdentity = await fetchSessionIdentity()
+      queryClient.setQueryData<SessionState>(SESSION_QUERY_KEY, (currentState) =>
+        currentState ? { ...currentState, accountRole: sessionIdentity.accountRole } : currentState,
+      )
+      return true
+    } catch (refreshError) {
+      if (isUnauthenticatedError(refreshError)) {
+        return true
+      }
+      if (attemptNumber === 1) {
+        await new Promise((resolve) => setTimeout(resolve, ROLE_REFRESH_RETRY_DELAY_MS))
+      }
     }
-    const sessionIdentity = (await meResponse.json()) as { account_name?: string; account_role?: string }
-    queryClient.setQueryData<SessionState>(SESSION_QUERY_KEY, (currentState) =>
-      currentState ? { ...currentState, accountRole: parseAccountRole(sessionIdentity.account_role) } : currentState,
-    )
-  } catch {
-    return
   }
+  return false
 }
 
-function openSession(queryClient: QueryClient, accountName: string | null): void {
-  resetUnauthenticatedGuard()
-  queryClient.setQueryData(SESSION_QUERY_KEY, { accountName, accountRole: null } satisfies SessionIdentity as SessionState)
-  void refreshAccountRole(queryClient)
+function clearCachedData(queryClient: QueryClient): void {
+  queryClient.removeQueries({ predicate: (cachedQuery) => cachedQuery.queryKey[0] !== SESSION_QUERY_KEY[0] })
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const { t } = useTranslation()
   const pendingAccountName = useRef<string | null>(null)
+  const [roleError, setRoleError] = useState(false)
   const sessionQuery = useQuery({ queryKey: SESSION_QUERY_KEY, queryFn: fetchSessionState })
 
+  const refreshRole = useCallback(async () => {
+    const refreshSucceeded = await refreshAccountRole(queryClient)
+    setRoleError(!refreshSucceeded)
+  }, [queryClient])
+
+  const openSession = useCallback(
+    (accountName: string | null) => {
+      resetUnauthenticatedGuard()
+      setRoleError(false)
+      queryClient.setQueryData(SESSION_QUERY_KEY, { accountName, accountRole: null } satisfies SessionIdentity as SessionState)
+      void refreshRole()
+    },
+    [queryClient, refreshRole],
+  )
+
+  const retryRoleRefresh = useCallback(() => {
+    setRoleError(false)
+    void refreshRole()
+  }, [refreshRole])
+
   useEffect(() => {
-    setUnauthenticatedHandler(() => queryClient.setQueryData(SESSION_QUERY_KEY, false))
+    setUnauthenticatedHandler(() => {
+      setRoleError(false)
+      clearCachedData(queryClient)
+      queryClient.setQueryData(SESSION_QUERY_KEY, false)
+    })
     return () => setUnauthenticatedHandler(null)
   }, [queryClient])
 
@@ -70,6 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(sessionQuery.data),
       accountName: sessionQuery.data ? sessionQuery.data.accountName : null,
       accountRole: sessionQuery.data ? sessionQuery.data.accountRole : null,
+      roleError,
+      retryRoleRefresh,
       async login(accountName, password) {
         const loginProgress = await beginLogin(accountName, password)
         pendingAccountName.current = accountName
@@ -77,11 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async verifySecondFactor(method, value) {
         await verifyLoginSecondFactor(method, value)
-        openSession(queryClient, pendingAccountName.current)
+        openSession(pendingAccountName.current)
       },
       async completeLoginSetup() {
         await completeLoginSetup()
-        openSession(queryClient, pendingAccountName.current)
+        openSession(pendingAccountName.current)
       },
       async enroll(enrollmentToken, accountName, password) {
         const enrollResponse = await apiFetch<{ methods: string[] }>('/api/auth/enroll', {
@@ -93,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async completeEnrollment(enrollmentToken) {
         await completeSetup({ basePath: '/api/auth/enroll', extraBody: { token: enrollmentToken } })
-        openSession(queryClient, pendingAccountName.current)
+        openSession(pendingAccountName.current)
         queryClient.setQueryData(ENROLLMENT_STATUS_QUERY_KEY, { enrollment_required: false })
       },
       async logout() {
@@ -106,11 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         resetUnauthenticatedGuard()
-        queryClient.removeQueries({ predicate: (cachedQuery) => cachedQuery.queryKey[0] !== SESSION_QUERY_KEY[0] })
+        clearCachedData(queryClient)
         queryClient.setQueryData(SESSION_QUERY_KEY, false)
       },
     }),
-    [queryClient, sessionQuery.data],
+    [queryClient, sessionQuery.data, roleError, retryRoleRefresh, openSession],
   )
 
   if (sessionQuery.isPending) {
@@ -125,5 +165,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       </div>
     )
   }
-  return <AuthContext.Provider value={authState}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={authState}>
+      {roleError && (
+        <div role="alert" className="flex items-center gap-3 border-b px-4 py-2 text-sm">
+          <p>{t('auth.roleRefreshFailed')}</p>
+          <Button size="sm" variant="outline" onClick={retryRoleRefresh}>
+            {t('common.retry')}
+          </Button>
+        </div>
+      )}
+      {children}
+    </AuthContext.Provider>
+  )
 }

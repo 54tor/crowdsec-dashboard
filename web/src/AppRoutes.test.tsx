@@ -78,11 +78,18 @@ describe('app routing and auth', () => {
   })
 
   it('guardIsResetByLoginSoLaterExpiryRedirectsAgain', async () => {
+    let hasSession = false
     stubFetch({
-      'GET /api/auth/me': UNAUTHENTICATED,
+      'GET /api/auth/me': () => (hasSession ? { status: 200, body: { status: 'ok' } } : UNAUTHENTICATED),
       'POST /api/auth/login': TOTP_REQUIRED,
-      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
-      'GET /api/alerts': UNAUTHENTICATED,
+      'POST /api/auth/login/totp': () => {
+        hasSession = true
+        return { status: 200, body: { status: 'ok' } }
+      },
+      'GET /api/alerts': () => {
+        hasSession = false
+        return UNAUTHENTICATED
+      },
     })
     const user = userEvent.setup()
     const { visitedPaths } = renderApp('/login')
@@ -98,10 +105,14 @@ describe('app routing and auth', () => {
   })
 
   it('doesNotKeepThePasswordInTheMutationCache', async () => {
+    let hasSession = false
     stubFetch({
-      'GET /api/auth/me': UNAUTHENTICATED,
+      'GET /api/auth/me': () => (hasSession ? { status: 200, body: { status: 'ok' } } : UNAUTHENTICATED),
       'POST /api/auth/login': TOTP_REQUIRED,
-      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
+      'POST /api/auth/login/totp': () => {
+        hasSession = true
+        return { status: 200, body: { status: 'ok' } }
+      },
     })
     const user = userEvent.setup()
     const { queryClient } = renderApp('/login')
@@ -188,11 +199,15 @@ describe('app routing and auth', () => {
   })
 
   it('sendsAccountNameAndPasswordOnLogin', async () => {
+    let hasSession = false
     const fetchMock = stubFetch({
       'GET /api/auth/status': ENROLLMENT_CLOSED,
-      'GET /api/auth/me': UNAUTHENTICATED,
+      'GET /api/auth/me': () => (hasSession ? { status: 200, body: { status: 'ok' } } : UNAUTHENTICATED),
       'POST /api/auth/login': TOTP_REQUIRED,
-      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
+      'POST /api/auth/login/totp': () => {
+        hasSession = true
+        return { status: 200, body: { status: 'ok' } }
+      },
     })
     const user = userEvent.setup()
     renderApp('/login')
@@ -211,11 +226,15 @@ describe('app routing and auth', () => {
   })
 
   it('lowercasesTheAccountNameAtLogin', async () => {
+    let hasSession = false
     const fetchMock = stubFetch({
       'GET /api/auth/status': ENROLLMENT_CLOSED,
-      'GET /api/auth/me': UNAUTHENTICATED,
+      'GET /api/auth/me': () => (hasSession ? { status: 200, body: { status: 'ok' } } : UNAUTHENTICATED),
       'POST /api/auth/login': TOTP_REQUIRED,
-      'POST /api/auth/login/totp': { status: 200, body: { status: 'ok' } },
+      'POST /api/auth/login/totp': () => {
+        hasSession = true
+        return { status: 200, body: { status: 'ok' } }
+      },
     })
     const user = userEvent.setup()
     renderApp('/login')
