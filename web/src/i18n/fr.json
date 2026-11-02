@@ -134,6 +134,7 @@
     "would_lock_out_current_client": "Refusé : cette modification vous exclurait de votre connexion actuelle. Ajoutez d'abord une règle qui couvre votre adresse.",
     "geolocation_unavailable": "La base GeoLite2 n'est pas disponible : les règles par pays ne peuvent pas être gérées pour le moment.",
     "engine_exists": "Un moteur porte déjà ce nom.",
+    "engine_deleting": "Un moteur portant ce nom est encore en cours de suppression.",
     "engine_not_found": "Moteur introuvable.",
     "engine_local_readonly": "Le moteur local est configuré par le serveur et ne se modifie pas ici.",
     "invalid_engine": "Les paramètres du moteur sont invalides. Vérifiez le nom, les URL et les adresses ; les adresses de bouclage, de lien local et de métadonnées cloud sont refusées.",
