@@ -57,9 +57,13 @@ type recordedAuditEvent struct {
 	clientIP string
 }
 
-type fakeAuditRecorder struct{ events []recordedAuditEvent }
+type fakeAuditRecorder struct {
+	events          []recordedAuditEvent
+	actorAccountIDs []int64
+}
 
-func (recorder *fakeAuditRecorder) Record(_ context.Context, _ int64, action audit.Action, target, clientIP string) error {
+func (recorder *fakeAuditRecorder) Record(_ context.Context, actorAccountID int64, action audit.Action, target, clientIP string) error {
+	recorder.actorAccountIDs = append(recorder.actorAccountIDs, actorAccountID)
 	recorder.events = append(recorder.events, recordedAuditEvent{action: action, target: target, clientIP: clientIP})
 	return nil
 }

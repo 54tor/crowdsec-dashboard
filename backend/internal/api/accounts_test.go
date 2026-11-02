@@ -203,20 +203,21 @@ type accountActionRoute struct {
 	path        string
 	body        string
 	action      audit.Action
+	target      string
 }
 
 var accountActionRoutes = []accountActionRoute{
-	{"create", http.MethodPost, "/api/accounts", `{"account_name":"carol","password":"` + validPassword + `","account_role":"read_only"}`, audit.ActionAccountCreated},
-	{"role", http.MethodPost, "/api/accounts/bob/role", `{"account_role":"admin"}`, audit.ActionAccountRoleChanged},
-	{"second factor reset", http.MethodPost, "/api/accounts/bob/second-factor/reset", ``, audit.ActionAccountSecondFactorReset},
-	{"sessions revoke", http.MethodPost, "/api/accounts/bob/sessions/revoke", ``, audit.ActionAccountSessionsRevoked},
-	{"unlock", http.MethodPost, "/api/accounts/bob/unlock", ``, audit.ActionAccountUnlocked},
-	{"delete", http.MethodDelete, "/api/accounts/bob", `{"confirm":"bob"}`, audit.ActionAccountDeleted},
+	{"create", http.MethodPost, "/api/accounts", `{"account_name":"carol","password":"` + validPassword + `","account_role":"read_only"}`, audit.ActionAccountCreated, "account:carol:read_only"},
+	{"role", http.MethodPost, "/api/accounts/bob/role", `{"account_role":"admin"}`, audit.ActionAccountRoleChanged, "account:bob:read_only->admin"},
+	{"second factor reset", http.MethodPost, "/api/accounts/bob/second-factor/reset", ``, audit.ActionAccountSecondFactorReset, "account:bob"},
+	{"sessions revoke", http.MethodPost, "/api/accounts/bob/sessions/revoke", ``, audit.ActionAccountSessionsRevoked, "account:bob"},
+	{"unlock", http.MethodPost, "/api/accounts/bob/unlock", ``, audit.ActionAccountUnlocked, "account:bob"},
+	{"delete", http.MethodDelete, "/api/accounts/bob", `{"confirm":"bob"}`, audit.ActionAccountDeleted, "account:bob"},
 }
 
 func TestAccountRoutesRejectReadOnlySession(testContext *testing.T) {
 	fixture := newAccountFixture(testContext)
-	for _, route := range append(accountActionRoutes, accountActionRoute{"list", http.MethodGet, "/api/accounts", ``, ""}) {
+	for _, route := range append(accountActionRoutes, accountActionRoute{"list", http.MethodGet, "/api/accounts", ``, "", ""}) {
 		recorder := fixture.send(route.method, route.path, route.body, fixture.cookies[readOnlyCallerID], "")
 		expectError(testContext, recorder, http.StatusForbidden, "forbidden")
 	}
@@ -322,7 +323,6 @@ func TestRevokeSessionsLogsTargetOut(testContext *testing.T) {
 func TestLogoutAllAlsoRevokesTokens(testContext *testing.T) {
 	fixture := newAccountFixture(testContext)
 	fixture.tokens.Create(context.Background(), auth.AccountIdentity{AccountID: administratorAccountID, AccountRole: auth.RoleAdmin}, "ci", "read", 48*time.Hour)
-	fixture.manager.accountByName["alice"].accountID = administratorAccountID
 
 	recorder := fixture.asAdministrator(http.MethodPost, "/api/auth/logout-all", "")
 
@@ -360,8 +360,13 @@ func TestEveryAccountActionIsAudited(testContext *testing.T) {
 
 		recorder := fixture.asAdministrator(route.method, route.path, route.body)
 
-		if recorder.Code >= 300 || len(fixture.recorder.events) != 1 || fixture.recorder.events[0].action != route.action {
+		if recorder.Code >= 300 || len(fixture.recorder.events) != 1 {
 			testContext.Errorf("%s: code %d events %+v", route.description, recorder.Code, fixture.recorder.events)
+			continue
+		}
+		recordedEvent := fixture.recorder.events[0]
+		if recordedEvent.action != route.action || recordedEvent.target != route.target || fixture.recorder.actorAccountIDs[0] != administratorAccountID {
+			testContext.Errorf("%s: unexpected audit %+v by account %d", route.description, recordedEvent, fixture.recorder.actorAccountIDs[0])
 		}
 	}
 }
