@@ -11,6 +11,8 @@ type EncryptedColumn struct {
 	LegacyAssociatedData  func(values []string) []byte
 }
 
+const deletingEngineFilter = "engine_deleting_at IS NULL"
+
 var EncryptedColumns = []EncryptedColumn{
 	{
 		Table:                 "credential",
@@ -26,6 +28,7 @@ var EncryptedColumns = []EncryptedColumn{
 		IDColumn:              "engine_id",
 		CiphertextColumn:      "engine_machine_password_sealed",
 		KeyIDColumn:           "engine_machine_password_key_id",
+		Filter:                deletingEngineFilter,
 		AssociatedDataColumns: []string{"engine_id", "engine_lapi_url"},
 		AssociatedData: func(values []string) []byte {
 			return engineMachinePasswordAssociatedData(values[0], values[1])
@@ -37,6 +40,7 @@ var EncryptedColumns = []EncryptedColumn{
 		IDColumn:              "engine_id",
 		CiphertextColumn:      "engine_proxy_credential_sealed",
 		KeyIDColumn:           "engine_proxy_credential_key_id",
+		Filter:                deletingEngineFilter,
 		AssociatedDataColumns: []string{"engine_id", "engine_lapi_url", "engine_proxy_kind", "engine_proxy_url"},
 		AssociatedData: func(values []string) []byte {
 			return engineProxyCredentialAssociatedData(values[0], values[1], values[2], values[3])

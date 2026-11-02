@@ -126,3 +126,27 @@ func TestStartupCollectorArchivesLocalEngineAndStops(testContext *testing.T) {
 		testContext.Fatal("the collector did not stop")
 	}
 }
+
+func TestStartupWithAPendingEngineDeletionStartsAndFinishesIt(testContext *testing.T) {
+	database := storetest.New(testContext)
+	_, insertError := database.ExecContext(context.Background(),
+		`INSERT INTO engine (engine_name, engine_lapi_url, engine_machine_id, engine_machine_password_sealed,
+		 engine_machine_password_key_id, engine_deleting_at)
+		 VALUES ('edge-pending', 'https://edge.example.com:8080', 'machine', '\x'::bytea, 'deleted', now())`)
+	if insertError != nil {
+		testContext.Fatalf("seed deleting engine: %v", insertError)
+	}
+	sink := &capturedLog{}
+
+	_, accountsError := initialiseAccounts(context.Background(), database, newTestKeyring(testContext), sink.printf)
+	repository, _, enginesError := initialiseEngines(context.Background(), database, newTestKeyring(testContext), localSettingsForTest(), sink.printf)
+	repository.WaitPurges()
+
+	if accountsError != nil || enginesError != nil {
+		testContext.Fatalf("startup: %v / %v", accountsError, enginesError)
+	}
+	var remaining int
+	if countError := database.NewRaw(`SELECT count(*) FROM engine WHERE engine_name = 'edge-pending'`).Scan(context.Background(), &remaining); countError != nil || remaining != 0 {
+		testContext.Errorf("the pending deletion must be finished at startup: remaining=%d err=%v", remaining, countError)
+	}
+}

@@ -193,7 +193,8 @@ func rewriteRow(ctx context.Context, transaction bun.Tx, keyring *Keyring, colum
 		Set("? = ?", bun.Ident(column.KeyIDColumn), keyID).
 		Where("? = ?", bun.Ident(column.IDColumn), row.ID).
 		Where("? = ?", bun.Ident(column.KeyIDColumn), row.KeyID).
-		Where("? = ?", bun.Ident(column.CiphertextColumn), row.Ciphertext)
+		Where("? = ?", bun.Ident(column.CiphertextColumn), row.Ciphertext).
+		Where("(?)", bun.Safe(column.filterClause()))
 	for columnIndex, associatedColumn := range column.AssociatedDataColumns {
 		updateQuery = updateQuery.Where("CAST(? AS text) = ?", bun.Ident(associatedColumn), row.AssociatedValues[columnIndex])
 	}
