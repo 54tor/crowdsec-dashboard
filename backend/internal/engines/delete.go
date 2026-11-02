@@ -37,7 +37,10 @@ func (repository *Repository) Delete(ctx context.Context, name string) error {
 		if isLocal {
 			return ErrLocalReadOnly
 		}
-		if _, markError := transaction.ExecContext(ctx, `UPDATE engine SET engine_deleting_at = now() WHERE engine_name = ?`, name); markError != nil {
+		if _, markError := transaction.ExecContext(ctx, `UPDATE engine SET engine_deleting_at = now(),
+			engine_machine_password_sealed = '\x'::bytea, engine_machine_password_key_id = 'deleted',
+			engine_proxy_credential_sealed = NULL, engine_proxy_credential_key_id = NULL
+			WHERE engine_name = ?`, name); markError != nil {
 			return fmt.Errorf("mark engine deleting: %w", markError)
 		}
 		return nil
@@ -59,6 +62,13 @@ func (repository *Repository) startPurge(ctx context.Context) {
 	go func() {
 		defer repository.purges.Done()
 		defer cancelPurge()
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				slog.Error("engine_purge_failed", "error", "panic")
+			}
+		}()
+		repository.purgeMutex.Lock()
+		defer repository.purgeMutex.Unlock()
 		if purgeError := repository.purgeDeletingEngines(purgeContext); purgeError != nil {
 			slog.Error("engine_purge_failed", "error", purgeError.Error())
 		}

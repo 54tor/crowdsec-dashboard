@@ -18,6 +18,7 @@ type Repository struct {
 	keyring        *secrets.Keyring
 	purgeBatchSize int
 	purges         sync.WaitGroup
+	purgeMutex     sync.Mutex
 }
 
 func NewRepository(database *bun.DB, keyring *secrets.Keyring) *Repository {

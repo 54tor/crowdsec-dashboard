@@ -16,6 +16,20 @@ type purgeRunner interface {
 	Run(ctx context.Context, now time.Time) (retention.Report, error)
 }
 
+type deletionResumer interface {
+	ResumeDeletions(ctx context.Context)
+}
+
+type retentionWithDeletions struct {
+	purger  purgeRunner
+	resumer deletionResumer
+}
+
+func (runner retentionWithDeletions) Run(ctx context.Context, now time.Time) (retention.Report, error) {
+	runner.resumer.ResumeDeletions(ctx)
+	return runner.purger.Run(ctx, now)
+}
+
 func runPurgePeriodically(ctx context.Context, purger purgeRunner, interval time.Duration, now func() time.Time, logLine logFunction) {
 	runPurgeOnce(ctx, purger, now, logLine)
 	ticker := time.NewTicker(interval)

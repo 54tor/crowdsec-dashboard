@@ -19,7 +19,7 @@ func (repository *Repository) ResealLegacySecrets(ctx context.Context) (LegacyRe
 	var report LegacyResealReport
 	var rows []engineRow
 	queryError := repository.database.NewRaw(`SELECT `+engineColumns+` FROM engine
-		WHERE engine_machine_password_key_id IS NOT NULL OR engine_proxy_credential_key_id IS NOT NULL ORDER BY engine_id`).Scan(ctx, &rows)
+		WHERE engine_deleting_at IS NULL AND (engine_machine_password_key_id IS NOT NULL OR engine_proxy_credential_key_id IS NOT NULL) ORDER BY engine_id`).Scan(ctx, &rows)
 	if queryError != nil {
 		return report, fmt.Errorf("list sealed engines: %w", queryError)
 	}

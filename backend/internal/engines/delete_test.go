@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 )
 
 const testPurgeBatchSize = 3
@@ -154,10 +155,72 @@ func TestNameReuseWhileDeletingIsRefusedUntilPurged(testContext *testing.T) {
 	fixture.repository.WaitPurges()
 	_, allowedError := fixture.repository.Create(context.Background(), insecureInput("edge-reuse", "http://other.example.com"))
 
-	if !errors.Is(refusedError, ErrEngineExists) {
+	if !errors.Is(refusedError, ErrEngineDeleting) {
 		testContext.Errorf("reuse while deleting: %v", refusedError)
 	}
 	if allowedError != nil {
 		testContext.Errorf("reuse after purge: %v", allowedError)
+	}
+}
+
+func TestConcurrentDeletesPurgeOneAtATime(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	firstEngine := newDeletableEngine(testContext, fixture, "edge-first", 5)
+	secondEngine := newDeletableEngine(testContext, fixture, "edge-second", 5)
+	fixture.repository.purgeMutex.Lock()
+
+	firstError := fixture.repository.Delete(context.Background(), "edge-first")
+	secondError := fixture.repository.Delete(context.Background(), "edge-second")
+	time.Sleep(200 * time.Millisecond)
+	blockedAlerts := countRows(testContext, fixture, `SELECT count(*) FROM alert WHERE alert_engine_id IN (?, ?)`, firstEngine.ID, secondEngine.ID)
+	fixture.repository.purgeMutex.Unlock()
+	fixture.repository.WaitPurges()
+
+	if firstError != nil || secondError != nil {
+		testContext.Fatalf("delete: %v / %v", firstError, secondError)
+	}
+	if blockedAlerts != 10 {
+		testContext.Errorf("purges must wait for each other, %d alerts left while blocked", blockedAlerts)
+	}
+	if remaining := countRows(testContext, fixture, `SELECT count(*) FROM engine WHERE engine_name IN ('edge-first', 'edge-second')`); remaining != 0 {
+		testContext.Errorf("%d engines left", remaining)
+	}
+}
+
+func TestMarkingDeletionDropsTheSealedCredentials(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	deletedEngine := mustCreate(testContext, fixture, withProxy(insecureInput("edge-secrets", "http://edge-secrets.example.com")))
+	fixture.repository.purgeMutex.Lock()
+
+	deleteError := fixture.repository.Delete(context.Background(), "edge-secrets")
+	remainingSecrets := countRows(testContext, fixture,
+		`SELECT count(*) FROM engine WHERE engine_id = ? AND length(engine_machine_password_sealed) <= 1
+		 AND engine_proxy_credential_sealed IS NULL AND engine_proxy_credential_key_id IS NULL`, deletedEngine.ID)
+	fixture.repository.purgeMutex.Unlock()
+	fixture.repository.WaitPurges()
+
+	if deleteError != nil || remainingSecrets != 1 {
+		testContext.Errorf("delete: %v, credentials cleared: %d", deleteError, remainingSecrets)
+	}
+}
+
+func TestResumeRetriesAPurgeThatFailedEarlier(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	deletedEngine := newDeletableEngine(testContext, fixture, "edge-retry", 4)
+	markDeleting(testContext, fixture, "edge-retry")
+	fixture.repository.SetPurgeBatchSize(-1)
+	fixture.repository.ResumeDeletions(context.Background())
+	fixture.repository.WaitPurges()
+	leftAfterFailure := countRows(testContext, fixture, `SELECT count(*) FROM engine WHERE engine_id = ?`, deletedEngine.ID)
+
+	fixture.repository.SetPurgeBatchSize(testPurgeBatchSize)
+	fixture.repository.ResumeDeletions(context.Background())
+	fixture.repository.WaitPurges()
+
+	if leftAfterFailure != 1 {
+		testContext.Fatal("precondition: the first purge must fail and leave the engine")
+	}
+	if remaining := countRows(testContext, fixture, `SELECT count(*) FROM engine WHERE engine_id = ?`, deletedEngine.ID); remaining != 0 {
+		testContext.Error("the retry must finish the purge")
 	}
 }

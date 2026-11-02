@@ -133,7 +133,7 @@ func (reader *Reader) DeleteArchivedAlert(ctx context.Context, archiveID int64) 
 	var deletedAlert DeletedAlert
 	deleteError := reader.database.NewRaw(
 		`DELETE FROM alert USING engine
-		 WHERE engine_id = alert_engine_id AND alert_id = ?
+		 WHERE engine_id = alert_engine_id AND engine_deleting_at IS NULL AND alert_id = ?
 		 RETURNING engine_name, alert_upstream_id`,
 		archiveID,
 	).Scan(ctx, &deletedAlert)

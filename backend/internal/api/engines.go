@@ -195,6 +195,8 @@ func writeEngineError(responseWriter http.ResponseWriter, operation string, oper
 	switch {
 	case errors.Is(operationError, engines.ErrEngineExists):
 		writeError(responseWriter, http.StatusConflict, "engine_exists")
+	case errors.Is(operationError, engines.ErrEngineDeleting):
+		writeError(responseWriter, http.StatusConflict, "engine_deleting")
 	case errors.Is(operationError, engines.ErrEngineNotFound):
 		writeError(responseWriter, http.StatusNotFound, "engine_not_found")
 	case errors.Is(operationError, engines.ErrLocalReadOnly):

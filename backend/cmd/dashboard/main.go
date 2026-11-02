@@ -122,7 +122,7 @@ func main() {
 	purgeDone := make(chan struct{})
 	go func() {
 		defer close(purgeDone)
-		runPurgePeriodically(signalContext, purger, purgeInterval, time.Now, log.Printf)
+		runPurgePeriodically(signalContext, retentionWithDeletions{purger: purger, resumer: engineRepository}, purgeInterval, time.Now, log.Printf)
 	}()
 
 	reloadDone := make(chan struct{})

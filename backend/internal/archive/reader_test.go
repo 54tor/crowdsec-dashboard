@@ -619,3 +619,24 @@ func TestListAlertsHidesTheArchiveOfADeletingEngine(testContext *testing.T) {
 		testContext.Errorf("a deleting engine must leave the archive reads: %s / %s", upstreamIDsOf(everyAlert), upstreamIDsOf(filteredAlerts))
 	}
 }
+
+func TestDeleteArchivedAlertIgnoresADeletingEngine(testContext *testing.T) {
+	fixture := newReaderFixture(testContext)
+	fixture.storeFor(testContext, fixture.remoteEngineID, []lapi.Alert{
+		alertWith(2, "2026-11-01T11:59:00Z", "crowdsecurity/ssh-bf", "203.0.113.2"),
+	})
+	var archiveID int64
+	if scanError := fixture.database.NewRaw(`SELECT alert_id FROM alert WHERE alert_engine_id = ?`, fixture.remoteEngineID).Scan(context.Background(), &archiveID); scanError != nil {
+		testContext.Fatalf("read alert id: %v", scanError)
+	}
+	if _, markError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_deleting_at = now() WHERE engine_id = ?`, fixture.remoteEngineID); markError != nil {
+		testContext.Fatalf("mark deleting: %v", markError)
+	}
+
+	_, deleteError := fixture.reader.DeleteArchivedAlert(context.Background(), archiveID)
+
+	if !errors.Is(deleteError, ErrAlertNotFound) {
+		testContext.Errorf("expected ErrAlertNotFound, got %v", deleteError)
+	}
+}

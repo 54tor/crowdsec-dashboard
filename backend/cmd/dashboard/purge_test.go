@@ -87,3 +87,23 @@ func TestPurgeFailureIsLoggedWithCountsOnly(testContext *testing.T) {
 		testContext.Errorf("unexpected log lines %v", logged.lines)
 	}
 }
+
+type countingResumer struct{ resumeCount int }
+
+func (resumer *countingResumer) ResumeDeletions(context.Context) { resumer.resumeCount++ }
+
+func TestEachRetentionRunResumesPendingEngineDeletions(testContext *testing.T) {
+	runner := &fakePurgeRunner{callChannel: make(chan struct{}, 10)}
+	resumer := &countingResumer{}
+	combinedRunner := retentionWithDeletions{purger: runner, resumer: resumer}
+
+	for runNumber := 0; runNumber < 2; runNumber++ {
+		if _, runError := combinedRunner.Run(context.Background(), time.Now()); runError != nil {
+			testContext.Fatalf("run: %v", runError)
+		}
+	}
+
+	if resumer.resumeCount != 2 {
+		testContext.Errorf("expected a resume per run, got %d", resumer.resumeCount)
+	}
+}

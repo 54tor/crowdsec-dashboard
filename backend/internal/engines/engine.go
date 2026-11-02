@@ -8,6 +8,7 @@ import (
 
 var (
 	ErrEngineExists   = errors.New("engine already exists")
+	ErrEngineDeleting = errors.New("engine is being deleted")
 	ErrEngineNotFound = errors.New("engine not found")
 	ErrLocalReadOnly  = errors.New("local engine cannot be modified")
 	ErrInvalidEngine  = errors.New("invalid engine")

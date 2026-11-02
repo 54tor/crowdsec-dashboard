@@ -37,11 +37,12 @@ func (repository *Repository) Create(ctx context.Context, input Input) (Engine, 
 
 func ensureNameAndURLFree(ctx context.Context, transaction bun.Tx, name, lapiURL string, ignoredEngineID int64) error {
 	var existingEngines []struct {
-		ID   int64  `bun:"engine_id"`
-		Name string `bun:"engine_name"`
-		URL  string `bun:"engine_lapi_url"`
+		ID       int64  `bun:"engine_id"`
+		Name     string `bun:"engine_name"`
+		URL      string `bun:"engine_lapi_url"`
+		Deleting bool   `bun:"is_deleting"`
 	}
-	if queryError := transaction.NewRaw(`SELECT engine_id, engine_name, engine_lapi_url FROM engine`).Scan(ctx, &existingEngines); queryError != nil {
+	if queryError := transaction.NewRaw(`SELECT engine_id, engine_name, engine_lapi_url, engine_deleting_at IS NOT NULL AS is_deleting FROM engine`).Scan(ctx, &existingEngines); queryError != nil {
 		return fmt.Errorf("list engines: %w", queryError)
 	}
 	urlKey := NormalizedURLKey(lapiURL)
@@ -50,6 +51,9 @@ func ensureNameAndURLFree(ctx context.Context, transaction bun.Tx, name, lapiURL
 			continue
 		}
 		if existingEngine.Name == name || (lapiURL != "" && NormalizedURLKey(existingEngine.URL) == urlKey) {
+			if existingEngine.Deleting {
+				return ErrEngineDeleting
+			}
 			return ErrEngineExists
 		}
 	}
