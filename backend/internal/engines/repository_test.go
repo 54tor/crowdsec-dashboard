@@ -438,10 +438,10 @@ func TestRecordCollectionKeepsLastSuccessOnFailure(testContext *testing.T) {
 	createdEngine := mustCreate(testContext, fixture, remoteInput("edge-1", "https://one.example.com"))
 	successfulAt := time.Now().UTC().Truncate(time.Second)
 
-	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt, CollectionSucceeded); recordError != nil {
+	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt, CollectionSucceeded, false); recordError != nil {
 		testContext.Fatalf("record success: %v", recordError)
 	}
-	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt.Add(time.Hour), CollectionFailure(lapi.ErrAuthFailed)); recordError != nil {
+	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt.Add(time.Hour), CollectionFailure(lapi.ErrAuthFailed), false); recordError != nil {
 		testContext.Fatalf("record failure: %v", recordError)
 	}
 
@@ -453,7 +453,7 @@ func TestRecordCollectionKeepsLastSuccessOnFailure(testContext *testing.T) {
 		testContext.Errorf("a failure must keep the last success time, got %v", failedEngine.LastCollectedAt)
 	}
 
-	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt.Add(2*time.Hour), CollectionSucceeded); recordError != nil {
+	if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, successfulAt.Add(2*time.Hour), CollectionSucceeded, false); recordError != nil {
 		testContext.Fatalf("record second success: %v", recordError)
 	}
 	recoveredEngine, _ := fixture.repository.Get(context.Background(), "edge-1")
@@ -464,7 +464,7 @@ func TestRecordCollectionKeepsLastSuccessOnFailure(testContext *testing.T) {
 	if cursorError != nil || cursor != 0 {
 		testContext.Errorf("cursor: %d %v", cursor, cursorError)
 	}
-	if missingError := fixture.repository.RecordCollection(context.Background(), 987654, successfulAt, CollectionSucceeded); !errors.Is(missingError, ErrEngineNotFound) {
+	if missingError := fixture.repository.RecordCollection(context.Background(), 987654, successfulAt, CollectionSucceeded, false); !errors.Is(missingError, ErrEngineNotFound) {
 		testContext.Errorf("expected ErrEngineNotFound, got %v", missingError)
 	}
 }
@@ -476,7 +476,7 @@ func TestRecordCollectionRefusesFreeText(testContext *testing.T) {
 	createdEngine := mustCreate(testContext, fixture, remoteInput("edge-1", "https://one.example.com"))
 	rawErrorText := CollectionErrorCode(`Get "https://user:` + markerProxyPassword + `@proxy.example.com": dial tcp: refused`)
 
-	recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, time.Now(), rawErrorText)
+	recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, time.Now(), rawErrorText, false)
 
 	if !errors.Is(recordError, ErrUnknownCollectionErrorCode) {
 		testContext.Fatalf("expected ErrUnknownCollectionErrorCode, got %v", recordError)
@@ -488,7 +488,7 @@ func TestRecordCollectionRefusesFreeText(testContext *testing.T) {
 	for _, knownCode := range []CollectionErrorCode{
 		ErrorCodeUnreachable, ErrorCodeAuthFailed, ErrorCodeBlockedAddress, ErrorCodeSecretUnreadable, ErrorCodeArchiveWriteFailed,
 	} {
-		if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, time.Now(), knownCode); recordError != nil {
+		if recordError := fixture.repository.RecordCollection(context.Background(), createdEngine.ID, time.Now(), knownCode, false); recordError != nil {
 			testContext.Errorf("known code %q refused: %v", knownCode, recordError)
 		}
 	}

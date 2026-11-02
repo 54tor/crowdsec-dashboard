@@ -19,6 +19,8 @@ const (
 	defaultFullReadMaxBytes = 16 << 20
 	defaultFullReadTimeout  = 120 * time.Second
 	defaultMaxBackoff       = time.Hour
+	defaultDatabaseTimeout  = 10 * time.Second
+	firstImportConcurrency  = 2
 )
 
 var (
@@ -41,7 +43,7 @@ type AlertStore interface {
 }
 
 type CollectionRecorder interface {
-	RecordCollection(ctx context.Context, engineID int64, collectedAt time.Time, errorCode engines.CollectionErrorCode) error
+	RecordCollection(ctx context.Context, engineID int64, collectedAt time.Time, errorCode engines.CollectionErrorCode, historyIncomplete bool) error
 }
 
 type Settings struct {
@@ -51,6 +53,7 @@ type Settings struct {
 	FullReadMaxBytes int64
 	FullReadTimeout  time.Duration
 	MaxBackoff       time.Duration
+	DatabaseTimeout  time.Duration
 }
 
 func DefaultSettings(interval time.Duration, pollLimit int) Settings {
@@ -61,33 +64,36 @@ func DefaultSettings(interval time.Duration, pollLimit int) Settings {
 		FullReadMaxBytes: defaultFullReadMaxBytes,
 		FullReadTimeout:  defaultFullReadTimeout,
 		MaxBackoff:       defaultMaxBackoff,
+		DatabaseTimeout:  defaultDatabaseTimeout,
 	}
 }
 
 type Collector struct {
-	source     HandleSource
-	cursors    CursorReader
-	store      AlertStore
-	recorder   CollectionRecorder
-	settings   Settings
-	now        func() time.Time
-	logLine    func(string, ...any)
-	ticks      <-chan time.Time
-	stateMutex sync.Mutex
-	states     map[int64]*engineState
-	inFlight   sync.WaitGroup
+	source      HandleSource
+	cursors     CursorReader
+	store       AlertStore
+	recorder    CollectionRecorder
+	settings    Settings
+	now         func() time.Time
+	logLine     func(string, ...any)
+	ticks       <-chan time.Time
+	stateMutex  sync.Mutex
+	states      map[int64]*engineState
+	inFlight    sync.WaitGroup
+	importSlots chan struct{}
 }
 
 func New(source HandleSource, cursors CursorReader, store AlertStore, recorder CollectionRecorder, settings Settings, now func() time.Time, logLine func(string, ...any)) *Collector {
 	return &Collector{
-		source:   source,
-		cursors:  cursors,
-		store:    store,
-		recorder: recorder,
-		settings: settings,
-		now:      now,
-		logLine:  logLine,
-		states:   map[int64]*engineState{},
+		source:      source,
+		cursors:     cursors,
+		store:       store,
+		recorder:    recorder,
+		settings:    settings,
+		now:         now,
+		logLine:     logLine,
+		states:      map[int64]*engineState{},
+		importSlots: make(chan struct{}, firstImportConcurrency),
 	}
 }
 
@@ -138,9 +144,12 @@ func (collector *Collector) Stats() map[string]EngineStats {
 	defer collector.stateMutex.Unlock()
 	statsByName := make(map[string]EngineStats, len(handles))
 	for _, listedHandle := range handles {
+		var engineStats EngineStats
 		if currentState, found := collector.states[listedHandle.Engine.ID]; found {
-			statsByName[listedHandle.Engine.Name] = currentState.stats
+			engineStats = currentState.stats
 		}
+		engineStats.HistoryIncomplete = engineStats.HistoryIncomplete || listedHandle.Engine.HistoryIncomplete
+		statsByName[listedHandle.Engine.Name] = engineStats
 	}
 	return statsByName
 }
@@ -206,7 +215,7 @@ func (collector *Collector) collectClaimed(ctx context.Context, handle engines.H
 			currentState.countFailure(errorCode, collector.now())
 		})
 		collector.logLine("collector: engine %s collection failed: %s", handle.Engine.Name, errorCode)
-		collector.record(ctx, handle.Engine, collectedAt, errorCode)
+		collector.record(ctx, handle.Engine, collectedAt, errorCode, false)
 		return collectError
 	}
 	collector.release(handle.Engine.ID, func(currentState *engineState) {
@@ -216,7 +225,7 @@ func (collector *Collector) collectClaimed(ctx context.Context, handle engines.H
 	if outcome.gapCounted {
 		collector.logLine("collector: engine %s history incomplete: the full read fell back to the poll limit", handle.Engine.Name)
 	}
-	collector.record(ctx, handle.Engine, collectedAt, engines.CollectionSucceeded)
+	collector.record(ctx, handle.Engine, collectedAt, engines.CollectionSucceeded, outcome.gapCounted)
 	return nil
 }
 
@@ -228,8 +237,10 @@ func (collector *Collector) release(engineID int64, update func(*engineState)) {
 	currentState.running = false
 }
 
-func (collector *Collector) record(ctx context.Context, collectedEngine engines.Engine, collectedAt time.Time, errorCode engines.CollectionErrorCode) {
-	if recordError := collector.recorder.RecordCollection(ctx, collectedEngine.ID, collectedAt, errorCode); recordError != nil {
+func (collector *Collector) record(ctx context.Context, collectedEngine engines.Engine, collectedAt time.Time, errorCode engines.CollectionErrorCode, historyIncomplete bool) {
+	recordContext, cancelRecord := context.WithTimeout(ctx, collector.settings.DatabaseTimeout)
+	defer cancelRecord()
+	if recordError := collector.recorder.RecordCollection(recordContext, collectedEngine.ID, collectedAt, errorCode, historyIncomplete); recordError != nil {
 		collector.logLine("collector: engine %s record collection: %v", collectedEngine.Name, recordError)
 	}
 }
@@ -246,9 +257,16 @@ func (collector *Collector) collectRecoveringPanics(ctx context.Context, handle 
 
 func (collector *Collector) collect(ctx context.Context, handle engines.Handle, collectedAt time.Time) (collectionOutcome, error) {
 	var outcome collectionOutcome
-	cursor, cursorError := collector.cursors.CollectionCursor(ctx, handle.Engine.ID)
+	cursor, cursorError := collector.readCursor(ctx, handle.Engine.ID)
 	if cursorError != nil {
 		return outcome, fmt.Errorf("%w: %w", errStoreFailed, cursorError)
+	}
+	if cursor == 0 {
+		releaseSlot, slotError := collector.acquireImportSlot(ctx)
+		if slotError != nil {
+			return outcome, slotError
+		}
+		defer releaseSlot()
 	}
 	archiveRead, readError := collector.readAlerts(ctx, handle.Client, cursor, &outcome)
 	if readError != nil {
@@ -263,6 +281,21 @@ func (collector *Collector) collect(ctx context.Context, handle engines.Handle, 
 	}
 	outcome.storeResult = storeResult
 	return outcome, nil
+}
+
+func (collector *Collector) readCursor(ctx context.Context, engineID int64) (int64, error) {
+	cursorContext, cancelCursor := context.WithTimeout(ctx, collector.settings.DatabaseTimeout)
+	defer cancelCursor()
+	return collector.cursors.CollectionCursor(cursorContext, engineID)
+}
+
+func (collector *Collector) acquireImportSlot(ctx context.Context) (func(), error) {
+	select {
+	case collector.importSlots <- struct{}{}:
+		return func() { <-collector.importSlots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (collector *Collector) readAlerts(ctx context.Context, client *lapi.Client, cursor int64, outcome *collectionOutcome) (lapi.ArchiveRead, error) {

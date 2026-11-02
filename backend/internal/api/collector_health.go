@@ -12,17 +12,18 @@ type CollectorStatusSource interface {
 }
 
 type engineHealth struct {
-	EngineName    string     `json:"engine_name"`
-	LastSuccessAt *time.Time `json:"last_success_at"`
-	LagSeconds    *float64   `json:"lag_seconds"`
-	ErrorsTotal   uint64     `json:"errors_total"`
-	Stale         bool       `json:"stale"`
+	EngineName        string     `json:"engine_name"`
+	LastSuccessAt     *time.Time `json:"last_success_at"`
+	LagSeconds        *float64   `json:"lag_seconds"`
+	ErrorsTotal       uint64     `json:"errors_total"`
+	Stale             bool       `json:"stale"`
+	HistoryIncomplete bool       `json:"history_incomplete"`
 }
 
 func collectorHealth(statsByName map[string]collector.EngineStats, now time.Time, staleAfter time.Duration) []engineHealth {
 	health := make([]engineHealth, 0, len(statsByName))
 	for engineName, engineStats := range statsByName {
-		entry := engineHealth{EngineName: engineName, ErrorsTotal: engineStats.Failures, Stale: true}
+		entry := engineHealth{EngineName: engineName, ErrorsTotal: engineStats.Failures, Stale: true, HistoryIncomplete: engineStats.HistoryIncomplete}
 		if !engineStats.LastSuccessAt.IsZero() {
 			lastSuccess := engineStats.LastSuccessAt
 			lag := now.Sub(lastSuccess)

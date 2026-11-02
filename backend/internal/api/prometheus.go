@@ -17,6 +17,7 @@ type collectorMetrics struct {
 	lastSuccessDescriptor *prometheus.Desc
 	errorsDescriptor      *prometheus.Desc
 	staleDescriptor       *prometheus.Desc
+	historyDescriptor     *prometheus.Desc
 }
 
 func newCollectorMetrics(source CollectorStatusSource, now func() time.Time, staleAfter time.Duration) prometheus.Collector {
@@ -31,6 +32,8 @@ func newCollectorMetrics(source CollectorStatusSource, now func() time.Time, sta
 			"Failed collection attempts per engine since startup.", engineLabel, nil),
 		staleDescriptor: prometheus.NewDesc("csdash_collector_stale",
 			"1 when the engine has no recent successful collection.", engineLabel, nil),
+		historyDescriptor: prometheus.NewDesc("csdash_collector_history_incomplete",
+			"1 when the engine archive is known to miss part of its history.", engineLabel, nil),
 	}
 }
 
@@ -38,6 +41,7 @@ func (metrics *collectorMetrics) Describe(descriptors chan<- *prometheus.Desc) {
 	descriptors <- metrics.lastSuccessDescriptor
 	descriptors <- metrics.errorsDescriptor
 	descriptors <- metrics.staleDescriptor
+	descriptors <- metrics.historyDescriptor
 }
 
 func (metrics *collectorMetrics) Collect(collected chan<- prometheus.Metric) {
@@ -47,12 +51,16 @@ func (metrics *collectorMetrics) Collect(collected chan<- prometheus.Metric) {
 				float64(engine.LastSuccessAt.UnixNano())/float64(time.Second), engine.EngineName)
 		}
 		collected <- prometheus.MustNewConstMetric(metrics.errorsDescriptor, prometheus.CounterValue, float64(engine.ErrorsTotal), engine.EngineName)
-		staleValue := 0.0
-		if engine.Stale {
-			staleValue = 1
-		}
-		collected <- prometheus.MustNewConstMetric(metrics.staleDescriptor, prometheus.GaugeValue, staleValue, engine.EngineName)
+		collected <- prometheus.MustNewConstMetric(metrics.staleDescriptor, prometheus.GaugeValue, gaugeOf(engine.Stale), engine.EngineName)
+		collected <- prometheus.MustNewConstMetric(metrics.historyDescriptor, prometheus.GaugeValue, gaugeOf(engine.HistoryIncomplete), engine.EngineName)
 	}
+}
+
+func gaugeOf(condition bool) float64 {
+	if condition {
+		return 1
+	}
+	return 0
 }
 
 func prometheusHandler(source CollectorStatusSource, collectorInterval time.Duration) http.Handler {

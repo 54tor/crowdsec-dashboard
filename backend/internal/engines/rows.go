@@ -11,7 +11,7 @@ const engineColumns = `engine_id, engine_name, engine_is_local, engine_lapi_url,
 	engine_machine_password_sealed, engine_machine_password_key_id,
 	engine_proxy_kind, engine_proxy_url, engine_proxy_credential_sealed, engine_proxy_credential_key_id,
 	engine_allow_insecure_http, engine_public_address_list, engine_enabled, engine_sync_enabled,
-	engine_collection_cursor, engine_last_collected_at, engine_last_collection_error`
+	engine_collection_cursor, engine_last_collected_at, engine_last_collection_error, engine_history_incomplete`
 
 type engineRow struct {
 	ID                   int64      `bun:"engine_id"`
@@ -32,6 +32,7 @@ type engineRow struct {
 	CollectionCursor     int64      `bun:"engine_collection_cursor"`
 	LastCollectedAt      *time.Time `bun:"engine_last_collected_at"`
 	LastCollectionError  *string    `bun:"engine_last_collection_error"`
+	HistoryIncomplete    bool       `bun:"engine_history_incomplete"`
 }
 
 func (row engineRow) hasProxyCredentials() bool {
@@ -59,7 +60,7 @@ func (row engineRow) toEngine() (Engine, error) {
 		ID: row.ID, Name: row.Name, IsLocal: row.IsLocal, LAPIURL: row.LAPIURL, MachineID: row.MachineID,
 		AllowInsecureHTTP: row.AllowInsecureHTTP, PublicAddresses: publicAddresses,
 		Enabled: row.Enabled, SyncEnabled: row.SyncEnabled, CollectionCursor: row.CollectionCursor,
-		LastCollectedAt: row.LastCollectedAt,
+		LastCollectedAt: row.LastCollectedAt, HistoryIncomplete: row.HistoryIncomplete,
 	}
 	if row.LastCollectionError != nil {
 		convertedEngine.LastCollectionError = *row.LastCollectionError

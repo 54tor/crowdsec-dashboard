@@ -29,6 +29,7 @@ type Engine struct {
 	LastCollectedAt     *time.Time
 	LastCollectionError string
 	CursorReset         bool
+	HistoryIncomplete   bool
 }
 
 type Proxy struct {

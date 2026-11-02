@@ -42,6 +42,7 @@ func testSettings() Settings {
 		FullReadMaxBytes: 1 << 20,
 		FullReadTimeout:  300 * time.Millisecond,
 		MaxBackoff:       time.Hour,
+		DatabaseTimeout:  5 * time.Second,
 	}
 }
 
@@ -867,7 +868,7 @@ func TestCollectionErrorStoresCodeNotMessage(testContext *testing.T) {
 	fixture.source.set(handle)
 	fixture.collector = New(fixture.source, fixture.repository, archive.NewWriter(fixture.database, archive.DefaultBounds), fixture.repository,
 		testSettings(), time.Now, fixture.logs.logLine)
-	if recordError := fixture.repository.RecordCollection(context.Background(), engineID, time.Now(), engines.CollectionSucceeded); recordError != nil {
+	if recordError := fixture.repository.RecordCollection(context.Background(), engineID, time.Now(), engines.CollectionSucceeded, false); recordError != nil {
 		testContext.Fatalf("seed a success: %v", recordError)
 	}
 	seededEngine, _ := fixture.repository.Get(context.Background(), "edge-1")

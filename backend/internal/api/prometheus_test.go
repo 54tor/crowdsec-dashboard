@@ -93,6 +93,10 @@ func TestCollectExposesExpectedSeries(testContext *testing.T) {
 # TYPE csdash_collector_errors_total counter
 csdash_collector_errors_total{engine="core"} 0
 csdash_collector_errors_total{engine="edge"} 2
+# HELP csdash_collector_history_incomplete 1 when the engine archive is known to miss part of its history.
+# TYPE csdash_collector_history_incomplete gauge
+csdash_collector_history_incomplete{engine="core"} 0
+csdash_collector_history_incomplete{engine="edge"} 0
 # HELP csdash_collector_last_success_timestamp_seconds Unix time of the last successful collection per engine.
 # TYPE csdash_collector_last_success_timestamp_seconds gauge
 csdash_collector_last_success_timestamp_seconds{engine="edge"} 1.79353434e+09

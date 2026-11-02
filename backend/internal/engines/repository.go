@@ -158,9 +158,10 @@ func (repository *Repository) CollectionCursor(ctx context.Context, engineID int
 	return cursor, nil
 }
 
-func (repository *Repository) RecordCollection(ctx context.Context, engineID int64, collectedAt time.Time, errorCode CollectionErrorCode) error {
-	statement := `UPDATE engine SET engine_last_collected_at = ?, engine_last_collection_error = NULL WHERE engine_id = ?`
-	arguments := []any{collectedAt.UTC(), engineID}
+func (repository *Repository) RecordCollection(ctx context.Context, engineID int64, collectedAt time.Time, errorCode CollectionErrorCode, historyIncomplete bool) error {
+	statement := `UPDATE engine SET engine_last_collected_at = ?, engine_last_collection_error = NULL,
+		engine_history_incomplete = engine_history_incomplete OR ? WHERE engine_id = ?`
+	arguments := []any{collectedAt.UTC(), historyIncomplete, engineID}
 	if errorCode != CollectionSucceeded {
 		if !knownCollectionErrorCodes[errorCode] {
 			return ErrUnknownCollectionErrorCode
