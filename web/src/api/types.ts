@@ -90,6 +90,7 @@ export interface EngineHealth {
   lag_seconds: number | null
   errors_total: number
   stale: boolean
+  history_incomplete?: boolean
 }
 
 export interface HealthReport {

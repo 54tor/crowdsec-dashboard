@@ -261,14 +261,9 @@ func (collector *Collector) collect(ctx context.Context, handle engines.Handle, 
 	if cursorError != nil {
 		return outcome, fmt.Errorf("%w: %w", errStoreFailed, cursorError)
 	}
-	if cursor == 0 {
-		releaseSlot, slotError := collector.acquireImportSlot(ctx)
-		if slotError != nil {
-			return outcome, slotError
-		}
-		defer releaseSlot()
-	}
-	archiveRead, readError := collector.readAlerts(ctx, handle.Client, cursor, &outcome)
+	fullReadSlot := &importSlot{slots: collector.importSlots}
+	defer fullReadSlot.release()
+	archiveRead, readError := collector.readAlerts(ctx, handle.Client, cursor, &outcome, fullReadSlot)
 	if readError != nil {
 		return outcome, readError
 	}
@@ -289,16 +284,7 @@ func (collector *Collector) readCursor(ctx context.Context, engineID int64) (int
 	return collector.cursors.CollectionCursor(cursorContext, engineID)
 }
 
-func (collector *Collector) acquireImportSlot(ctx context.Context) (func(), error) {
-	select {
-	case collector.importSlots <- struct{}{}:
-		return func() { <-collector.importSlots }, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func (collector *Collector) readAlerts(ctx context.Context, client *lapi.Client, cursor int64, outcome *collectionOutcome) (lapi.ArchiveRead, error) {
+func (collector *Collector) readAlerts(ctx context.Context, client *lapi.Client, cursor int64, outcome *collectionOutcome, fullReadSlot *importSlot) (lapi.ArchiveRead, error) {
 	var fallbackRead *lapi.ArchiveRead
 	if cursor > 0 {
 		pollRead, pollError := collector.pollRead(ctx, client)
@@ -306,6 +292,9 @@ func (collector *Collector) readAlerts(ctx context.Context, client *lapi.Client,
 			return pollRead, pollError
 		}
 		fallbackRead = &pollRead
+	}
+	if slotError := fullReadSlot.acquire(ctx); slotError != nil {
+		return lapi.ArchiveRead{}, slotError
 	}
 	fullRead, fullReadError := client.ReadAlertsForArchive(ctx, 0, collector.settings.FullReadMaxBytes, collector.settings.FullReadTimeout)
 	if fullReadError == nil && !fullRead.Truncated {

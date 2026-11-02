@@ -59,6 +59,7 @@ type fakeEngine struct {
 	down              atomic.Bool
 	activeReads       atomic.Int64
 	maximumConcurrent atomic.Int64
+	fullReads         concurrencyGauge
 	releaseReads      chan struct{}
 }
 
@@ -98,6 +99,10 @@ func (fake *fakeEngine) ServeHTTP(responseWriter http.ResponseWriter, request *h
 		}
 		return
 	}
+	if requestedLimit == 0 {
+		fake.fullReads.enter()
+		defer fake.fullReads.leave()
+	}
 	if requestedLimit == 0 && slowFullRead > 0 {
 		select {
 		case <-request.Context().Done():
@@ -113,6 +118,27 @@ func (fake *fakeEngine) ServeHTTP(responseWriter http.ResponseWriter, request *h
 	}
 	encodedAlerts, _ := json.Marshal(servedAlerts)
 	_, _ = responseWriter.Write(encodedAlerts)
+}
+
+// concurrencyGauge tracks how many requests of one kind are in flight and the
+// highest count ever reached, race-free.
+type concurrencyGauge struct {
+	active  atomic.Int64
+	highest atomic.Int64
+}
+
+func (gauge *concurrencyGauge) enter() {
+	activeCount := gauge.active.Add(1)
+	for {
+		highestCount := gauge.highest.Load()
+		if activeCount <= highestCount || gauge.highest.CompareAndSwap(highestCount, activeCount) {
+			return
+		}
+	}
+}
+
+func (gauge *concurrencyGauge) leave() {
+	gauge.active.Add(-1)
 }
 
 func (fake *fakeEngine) addAlerts(firstID int64, lastID int64) {

@@ -160,3 +160,50 @@ func TestStatsIncludesEnginesWithoutState(testContext *testing.T) {
 		testContext.Errorf("the stored incomplete flag must be reported before any poll, got %v", statsByName)
 	}
 }
+
+// The realistic herd is a restart after downtime: every engine already has a cursor,
+// its poll finds a gap, and each one falls back to a full read. Those full reads
+// share the same limit as first imports; only full reads are measured, since the
+// quick polls before them are not gated.
+func TestGapFullReadsShareTheStartupLimit(testContext *testing.T) {
+	settings := testSettings()
+	settings.FullReadTimeout = 5 * time.Second
+	fixture := newCollectorFixture(testContext, settings)
+	sharedFake := &fakeEngine{slowFullRead: 200 * time.Millisecond}
+	sharedFake.addAlerts(1, 20)
+	server := startFakeEngine(testContext, sharedFake)
+	const engineCount = 4
+	engineIDs := make([]int64, 0, engineCount)
+	handles := make([]engines.Handle, 0, engineCount)
+	for engineNumber := 1; engineNumber <= engineCount; engineNumber++ {
+		engineName := fmt.Sprintf("edge-%d", engineNumber)
+		engineID := fixture.insertEngine(testContext, engineName)
+		// Cursor 1 with alerts 16-20 in the poll (limit 5): the poll leaves a gap.
+		fixture.setCursor(testContext, engineID, 1)
+		engineIDs = append(engineIDs, engineID)
+		handles = append(handles, handleFor(engineID, engineName, server))
+	}
+	fixture.source.set(handles...)
+	fixture.collector.ticks = make(chan time.Time)
+	runContext, cancelRun := context.WithCancel(context.Background())
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		fixture.collector.Run(runContext)
+	}()
+
+	waitUntil(testContext, "every engine to fill its gap", func() bool {
+		for _, engineID := range engineIDs {
+			if fixture.cursor(testContext, engineID) != 20 {
+				return false
+			}
+		}
+		return true
+	})
+	cancelRun()
+	<-runDone
+
+	if highestFullReads := sharedFake.fullReads.highest.Load(); highestFullReads > firstImportConcurrency {
+		testContext.Fatalf("at most %d full reads may run at once, saw %d", firstImportConcurrency, highestFullReads)
+	}
+}
