@@ -43,10 +43,13 @@ async function fetchSessionState(): Promise<SessionState> {
   }
 }
 
-async function refreshAccountRole(queryClient: QueryClient): Promise<boolean> {
+async function refreshAccountRole(queryClient: QueryClient, isCurrent: () => boolean): Promise<boolean> {
   for (let attemptNumber = 1; attemptNumber <= 2; attemptNumber += 1) {
     try {
       const sessionIdentity = await fetchSessionIdentity()
+      if (!isCurrent()) {
+        return true
+      }
       queryClient.setQueryData<SessionState>(SESSION_QUERY_KEY, (currentState) =>
         currentState ? { ...currentState, accountRole: sessionIdentity.accountRole } : currentState,
       )
@@ -76,8 +79,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionQuery = useQuery({ queryKey: SESSION_QUERY_KEY, queryFn: fetchSessionState })
 
   const refreshRole = useCallback(async () => {
-    const refreshSucceeded = await refreshAccountRole(queryClient)
-    setRoleError(!refreshSucceeded)
+    const refreshGeneration = loginGeneration.current
+    const isCurrent = () => refreshGeneration === loginGeneration.current
+    const refreshSucceeded = await refreshAccountRole(queryClient, isCurrent)
+    if (isCurrent()) {
+      setRoleError(!refreshSucceeded)
+    }
   }, [queryClient])
 
   const openSession = useCallback(
@@ -97,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setUnauthenticatedHandler(() => {
+      loginGeneration.current += 1
       setRoleError(false)
       clearCachedData(queryClient)
       queryClient.setQueryData(SESSION_QUERY_KEY, false)
@@ -129,10 +137,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         openSession(pendingAccountName.current)
       },
       async completeLoginSetup() {
+        const ceremonyGeneration = loginGeneration.current
         await completeLoginSetup()
+        if (ceremonyGeneration !== loginGeneration.current) {
+          return
+        }
         openSession(pendingAccountName.current)
       },
       async enroll(enrollmentToken, accountName, password) {
+        loginGeneration.current += 1
         const enrollResponse = await apiFetch<{ methods: string[] }>('/api/auth/enroll', {
           method: 'POST',
           body: JSON.stringify({ token: enrollmentToken, account_name: accountName, password }),
@@ -141,7 +154,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { methods: enrollResponse.methods }
       },
       async completeEnrollment(enrollmentToken) {
+        const ceremonyGeneration = loginGeneration.current
         await completeSetup({ basePath: '/api/auth/enroll', extraBody: { token: enrollmentToken } })
+        if (ceremonyGeneration !== loginGeneration.current) {
+          return
+        }
         openSession(pendingAccountName.current)
         queryClient.setQueryData(ENROLLMENT_STATUS_QUERY_KEY, { enrollment_required: false })
       },
@@ -154,6 +171,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw logoutError
           }
         }
+        loginGeneration.current += 1
+        setRoleError(false)
         resetUnauthenticatedGuard()
         clearCachedData(queryClient)
         queryClient.setQueryData(SESSION_QUERY_KEY, false)
@@ -176,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   return (
     <AuthContext.Provider value={authState}>
-      {roleError && (
+      {roleError && sessionQuery.data && (
         <div role="alert" className="flex items-center gap-3 border-b px-4 py-2 text-sm">
           <p>{t('auth.roleRefreshFailed')}</p>
           <Button size="sm" variant="outline" onClick={retryRoleRefresh}>

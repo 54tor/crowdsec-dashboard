@@ -9,7 +9,8 @@ import { AuthProvider } from './AuthProvider'
 import { useAuth } from './useAuth'
 
 function RoleProbe() {
-  const { accountRole, isAuthenticated, login, verifySecondFactor, roleError } = useAuth()
+  const { accountRole, isAuthenticated, login, verifySecondFactor, roleError, logout, completeLoginSetup, enroll, completeEnrollment } =
+    useAuth()
   return (
     <div>
       <p data-testid="role">{String(accountRole)}</p>
@@ -17,6 +18,10 @@ function RoleProbe() {
       <p data-testid="role-error">{String(roleError)}</p>
       <button onClick={() => void login('alice', 'password')}>login</button>
       <button onClick={() => void verifySecondFactor('totp', '123456')}>verify</button>
+      <button onClick={() => void logout()}>logout</button>
+      <button onClick={() => void completeLoginSetup()}>complete-setup</button>
+      <button onClick={() => void enroll('token', 'alice', 'password')}>enroll</button>
+      <button onClick={() => void completeEnrollment('token')}>complete-enrollment</button>
       <button onClick={() => void apiFetch('/api/anything').catch(() => undefined)}>call-api</button>
     </div>
   )
@@ -153,5 +158,101 @@ describe('AuthProvider', () => {
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.getByTestId('authenticated')).toHaveTextContent('false')
     expect(meCallCount).toBe(1)
+  })
+
+  describe('banniereDErreurDeRole', () => {
+    const FAILURE = { status: 500, body: { error: 'unknown' } }
+    const OK = { status: 200, body: {} }
+
+    it('disparaitApresLaDeconnexion', async () => {
+      let isInitialSessionCheck = true
+      stubFetch({
+        'GET /api/auth/me': () => {
+          if (isInitialSessionCheck) {
+            isInitialSessionCheck = false
+            return { status: 401, body: { error: 'unauthenticated' } }
+          }
+          return FAILURE
+        },
+        'POST /api/auth/login': { status: 200, body: { status: 'second_factor_required', methods: ['totp'] } },
+        'POST /api/auth/login/totp': OK,
+        'POST /api/auth/logout': OK,
+      })
+      renderProbe()
+      const user = userEvent.setup()
+      await user.click(await screen.findByText('login'))
+      await user.click(screen.getByText('verify'))
+      expect(await screen.findByRole('alert')).toBeInTheDocument()
+      await user.click(screen.getByText('logout'))
+      await waitFor(() => expect(screen.getByTestId('authenticated')).toHaveTextContent('false'))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByTestId('role-error')).toHaveTextContent('false')
+    })
+
+    it('neReapparaitPasSiLEchecArriveApresLaDeconnexion', async () => {
+      let releaseRefresh: () => void = () => undefined
+      const refreshGate = new Promise<void>((resolve) => {
+        releaseRefresh = resolve
+      })
+      let meCallCount = 0
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const path = String(input)
+          if (path === '/api/auth/me') {
+            meCallCount += 1
+            if (meCallCount === 1) return new Response(JSON.stringify({ error: 'unauthenticated' }), { status: 401 })
+            await refreshGate
+            return new Response(JSON.stringify({ error: 'unknown' }), { status: 500 })
+          }
+          return new Response(JSON.stringify({ status: 'second_factor_required', methods: ['totp'] }), { status: 200 })
+        }),
+      )
+      renderProbe()
+      const user = userEvent.setup()
+      await user.click(await screen.findByText('login'))
+      await user.click(screen.getByText('verify'))
+      await user.click(screen.getByText('logout'))
+      await waitFor(() => expect(screen.getByTestId('authenticated')).toHaveTextContent('false'))
+      releaseRefresh()
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByTestId('role-error')).toHaveTextContent('false')
+    })
+  })
+
+  describe.each([
+    ['completeLoginSetup', 'complete-setup', '/api/auth/login/setup/complete', 'login'],
+    ['completeEnrollment', 'complete-enrollment', '/api/auth/enroll/complete', 'enroll'],
+  ])('ignoreUneFinDeConfiguration %s perimee', (_name, completeButtonLabel, gatedPath, restartButtonLabel) => {
+    it('nOuvrePasDeSessionApresUnRedemarrage', async () => {
+      let releaseOldCompletion: () => void = () => undefined
+      const oldCompletionGate = new Promise<void>((resolve) => {
+        releaseOldCompletion = resolve
+      })
+      let meCallCount = 0
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const path = String(input)
+          if (path === '/api/auth/me') {
+            meCallCount += 1
+            return new Response(JSON.stringify({ error: 'unauthenticated' }), { status: 401 })
+          }
+          if (path === gatedPath) {
+            await oldCompletionGate
+          }
+          return new Response(JSON.stringify({ status: 'second_factor_setup_required', methods: ['totp'] }), { status: 200 })
+        }),
+      )
+      renderProbe()
+      const user = userEvent.setup()
+      await user.click(await screen.findByText(completeButtonLabel))
+      await user.click(screen.getByText(restartButtonLabel))
+      releaseOldCompletion()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false')
+      expect(meCallCount).toBe(1)
+    })
   })
 })
