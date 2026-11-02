@@ -320,3 +320,39 @@ func assertNoAPIHandle(testContext *testing.T, fileSet *token.FileSet, functionD
 		return true
 	})
 }
+
+var requiredSessionOnlyRoutes = map[string]routeAccess{
+	"POST /api/auth/logout-all":             accessSessionOnly,
+	"GET /api/account/access-rules":         accessSessionOnly,
+	"POST /api/account/access-rules":        accessSessionOnly,
+	"DELETE /api/account/access-rules/{id}": accessSessionOnly,
+}
+
+var publicRoutePattern = regexp.MustCompile(`^(POST /api/auth/(login|enroll|logout)(/.*)?|GET /api/healthz|GET /api/auth/status)$`)
+
+func TestSessionOnlyRoutesKeepTheirAccessClass(testContext *testing.T) {
+	foundAccessByPattern := map[string]routeAccess{}
+	for _, route := range routeTableForTest(newRouteAccessEnvironment(testContext)) {
+		foundAccessByPattern[route.Pattern] = route.Access
+	}
+	for pattern, expectedAccess := range requiredSessionOnlyRoutes {
+		foundAccess, isPresent := foundAccessByPattern[pattern]
+		if !isPresent || foundAccess != expectedAccess {
+			testContext.Errorf("%s: expected access %d, found %d (present=%v)", pattern, expectedAccess, foundAccess, isPresent)
+		}
+	}
+}
+
+func TestOnlyTheClosedSetOfRoutesIsPublic(testContext *testing.T) {
+	for _, route := range routeTableForTest(newRouteAccessEnvironment(testContext)) {
+		if route.Access == accessPublic && !publicRoutePattern.MatchString(route.Pattern) {
+			testContext.Errorf("%s must not be public", route.Pattern)
+		}
+		if !publicRoutePattern.MatchString(route.Pattern) {
+			continue
+		}
+		if route.Access != accessPublic {
+			testContext.Errorf("%s is expected to stay public", route.Pattern)
+		}
+	}
+}
