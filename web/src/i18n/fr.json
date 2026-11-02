@@ -14,7 +14,8 @@
     "machines": "Machines",
     "hub": "Hub",
     "engines": "Moteurs",
-    "tokens": "Jetons d’API"
+    "tokens": "Jetons d’API",
+    "accounts": "Comptes"
   },
   "common": {
     "retry": "Réessayer",
@@ -141,7 +142,11 @@
     "scope_not_allowed": "Votre compte ne peut pas créer un jeton avec cette portée.",
     "invalid_expiry": "La validité doit être comprise entre 1 et 365 jours.",
     "invalid_token_name": "Le nom du jeton est invalide. Utilisez 1 à 64 caractères.",
-    "token_name_taken": "Vous avez déjà un jeton portant ce nom."
+    "token_name_taken": "Vous avez déjà un jeton portant ce nom.",
+    "last_admin": "Refusé : au moins un administrateur doit subsister.",
+    "account_exists": "Un compte portant ce nom existe déjà.",
+    "invalid_role": "Le rôle est invalide.",
+    "token_denied": "Cette action n'est pas disponible avec un jeton d'API."
   },
   "filters": {
     "label": "Filtres",
@@ -503,5 +508,46 @@
     "revokeAria": "Révoquer {{name}}",
     "revokeTitle": "Révoquer le jeton {{name}}",
     "revokeDescription": "Les scripts qui utilisent le jeton {{name}} perdront immédiatement leur accès."
+  },
+  "accounts": {
+    "title": "Comptes",
+    "add": "Nouveau compte",
+    "addTitle": "Créer un compte",
+    "addDescription": "Le compte devra enrôler un second facteur à sa première connexion.",
+    "nameLabel": "Nom du compte",
+    "passwordLabel": "Mot de passe initial",
+    "passwordHint": "De 12 à 128 caractères.",
+    "roleLabel": "Rôle",
+    "roleOf": "Rôle de {{name}}",
+    "create": "Créer",
+    "roles": {
+      "admin": "Administrateur",
+      "read_only": "Lecture seule"
+    },
+    "tableCaption": "Comptes du tableau de bord",
+    "columns": {
+      "name": "Nom",
+      "role": "Rôle",
+      "secondFactor": "Second facteur",
+      "locked": "Verrouillé",
+      "createdAt": "Créé le",
+      "actions": "Actions"
+    },
+    "enrolled": "Enrôlé",
+    "notEnrolled": "Non enrôlé",
+    "lockedYes": "Verrouillé",
+    "lockedNo": "Non",
+    "resetSecondFactor": "Réinitialiser le second facteur",
+    "resetSecondFactorAria": "Réinitialiser le second facteur de {{name}}",
+    "resetSecondFactorTitle": "Réinitialiser le second facteur de {{name}}",
+    "resetSecondFactorDescription": "{{name}} devra enrôler un nouveau second facteur à sa prochaine connexion.",
+    "revokeSessions": "Révoquer les sessions",
+    "revokeSessionsAria": "Révoquer les sessions de {{name}}",
+    "unlock": "Déverrouiller",
+    "unlockAria": "Déverrouiller {{name}}",
+    "delete": "Supprimer",
+    "deleteAria": "Supprimer {{name}}",
+    "deleteTitle": "Supprimer le compte {{name}}",
+    "deleteDescription": "Le compte {{name}} sera supprimé avec ses sessions et ses jetons d'API."
   }
 }

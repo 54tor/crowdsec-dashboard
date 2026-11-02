@@ -14,7 +14,8 @@
     "machines": "Machines",
     "hub": "Hub",
     "engines": "Engines",
-    "tokens": "API tokens"
+    "tokens": "API tokens",
+    "accounts": "Accounts"
   },
   "common": {
     "retry": "Retry",
@@ -141,7 +142,11 @@
     "scope_not_allowed": "Your account cannot create a token with this scope.",
     "invalid_expiry": "The validity must be between 1 and 365 days.",
     "invalid_token_name": "The token name is invalid. Use 1 to 64 characters.",
-    "token_name_taken": "You already have a token with this name."
+    "token_name_taken": "You already have a token with this name.",
+    "last_admin": "Refused: at least one administrator must remain.",
+    "account_exists": "An account with this name already exists.",
+    "invalid_role": "The role is invalid.",
+    "token_denied": "This action is not available with an API token."
   },
   "filters": {
     "label": "Filters",
@@ -503,5 +508,46 @@
     "revokeAria": "Revoke {{name}}",
     "revokeTitle": "Revoke token {{name}}",
     "revokeDescription": "Scripts using the token {{name}} will immediately lose access."
+  },
+  "accounts": {
+    "title": "Accounts",
+    "add": "New account",
+    "addTitle": "Create an account",
+    "addDescription": "The account must enrol a second factor at its first sign-in.",
+    "nameLabel": "Account name",
+    "passwordLabel": "Initial password",
+    "passwordHint": "12 to 128 characters.",
+    "roleLabel": "Role",
+    "roleOf": "Role of {{name}}",
+    "create": "Create",
+    "roles": {
+      "admin": "Administrator",
+      "read_only": "Read only"
+    },
+    "tableCaption": "Dashboard accounts",
+    "columns": {
+      "name": "Name",
+      "role": "Role",
+      "secondFactor": "Second factor",
+      "locked": "Locked",
+      "createdAt": "Created",
+      "actions": "Actions"
+    },
+    "enrolled": "Enrolled",
+    "notEnrolled": "Not enrolled",
+    "lockedYes": "Locked",
+    "lockedNo": "No",
+    "resetSecondFactor": "Reset second factor",
+    "resetSecondFactorAria": "Reset second factor of {{name}}",
+    "resetSecondFactorTitle": "Reset the second factor of {{name}}",
+    "resetSecondFactorDescription": "{{name}} will have to enrol a new second factor at the next sign-in.",
+    "revokeSessions": "Revoke sessions",
+    "revokeSessionsAria": "Revoke sessions of {{name}}",
+    "unlock": "Unlock",
+    "unlockAria": "Unlock {{name}}",
+    "delete": "Delete",
+    "deleteAria": "Delete {{name}}",
+    "deleteTitle": "Delete account {{name}}",
+    "deleteDescription": "The account {{name}} will be deleted along with its sessions and API tokens."
   }
 }

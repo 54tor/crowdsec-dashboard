@@ -8,6 +8,7 @@ import { Enroll } from '@/pages/Enroll'
 import { Login } from '@/pages/Login'
 import { Placeholder } from '@/pages/Placeholder'
 import { AccountSecurity } from '@/pages/AccountSecurity'
+import { Accounts } from '@/pages/Accounts'
 import { Alerts } from '@/pages/Alerts'
 import { Bouncers } from '@/pages/Bouncers'
 import { Config } from '@/pages/Config'
@@ -32,6 +33,7 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/hub': <Hub />,
   '/engines': <Engines />,
   '/tokens': <Tokens />,
+  '/accounts': <Accounts />,
 }
 
 function pageFor(navItem: NavItem): ReactElement {
