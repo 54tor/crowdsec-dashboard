@@ -247,7 +247,7 @@ func TestHealthReturnsEmptyListsWhenCscliPrintsNull(testContext *testing.T) {
 
 	recorder := fixture.get("/api/health", true)
 
-	expectedBody := `{"version":"v1.6.4-rc1-abcdef","bouncers":[],"machines":[],"degraded":[]}`
+	expectedBody := `{"version":"v1.6.4-rc1-abcdef","database":"unavailable","schema_version":null,"collector":[],"bouncers":[],"machines":[],"degraded":[]}`
 	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != expectedBody {
 		testContext.Errorf("expected %s, got %d %q", expectedBody, recorder.Code, recorder.Body.String())
 	}
@@ -270,7 +270,7 @@ func TestHealthProjectsOnlyTheFieldsTheUINeeds(testContext *testing.T) {
 			testContext.Errorf("%q must not be exposed: %q", droppedKey, recorder.Body.String())
 		}
 	}
-	expectedBody := `{"version":"v1.6.4","bouncers":[{"name":"fw","type":"firewall","version":"0.0.30","ip_address":"10.0.0.2","last_pull":"2026-10-31T10:00:00Z","revoked":false,"auth_type":"api-key"}],` +
+	expectedBody := `{"version":"v1.6.4","database":"unavailable","schema_version":null,"collector":[],"bouncers":[{"name":"fw","type":"firewall","version":"0.0.30","ip_address":"10.0.0.2","last_pull":"2026-10-31T10:00:00Z","revoked":false,"auth_type":"api-key"}],` +
 		`"machines":[{"machine_id":"watcher","ip_address":"10.0.0.3","last_heartbeat":"2026-10-31T10:01:00Z","version":"v1.6.4","is_validated":true,"auth_type":"password","self":false}],"degraded":[]}`
 	if strings.TrimSpace(recorder.Body.String()) != expectedBody {
 		testContext.Errorf("expected %s, got %q", expectedBody, recorder.Body.String())

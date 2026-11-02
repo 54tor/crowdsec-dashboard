@@ -29,3 +29,19 @@ func Migrate(ctx context.Context, database *bun.DB) error {
 	}
 	return nil
 }
+
+type VersionReader struct{ database *bun.DB }
+
+func NewVersionReader(database *bun.DB) VersionReader { return VersionReader{database: database} }
+
+func (reader VersionReader) SchemaVersion(ctx context.Context) (int64, error) {
+	migrationFiles, subError := fs.Sub(embeddedMigrations, "migrations")
+	if subError != nil {
+		return 0, fmt.Errorf("load migrations: %w", subError)
+	}
+	provider, providerError := goose.NewProvider(goose.DialectPostgres, reader.database.DB, migrationFiles)
+	if providerError != nil {
+		return 0, fmt.Errorf("create migration provider: %w", providerError)
+	}
+	return provider.GetDBVersion(ctx)
+}

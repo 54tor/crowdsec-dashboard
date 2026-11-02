@@ -99,6 +99,8 @@ func main() {
 	}, sessionStore, tokenRepository, newArchivePurgeAdapter(database, loadedConfig), auditRecorder)
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
+	services.CollectorStatus = engineCollector
+	services.SchemaVersion = store.NewVersionReader(database)
 
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,

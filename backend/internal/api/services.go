@@ -26,31 +26,33 @@ type AlertLookup interface {
 }
 
 type Services struct {
-	Sessions       auth.SessionStore
-	Tokens         auth.TokenStore
-	TokenGate      auth.TokenGate
-	Login          LoginService
-	Enrollment     EnrollmentService
-	Database       Pinger
-	Decisions      DecisionService
-	Alerts         AlertService
-	AlertReader    AlertLister
-	DecisionReader DecisionLister
-	AlertLookup    AlertLookup
-	Archive        *archive.Reader
-	Platform       Platform
-	ConfigFiles    ConfigFiles
-	Bouncers       BouncerService
-	Machines       MachineService
-	Hub            HubService
-	Reloader       Reloader
-	Audit          audit.Recorder
-	Geolocator     geo.Geolocator
-	AccessRules    AccessRuleService
-	Engines        EngineService
-	WebAuthn       *secondfactor.WebAuthn
-	TokenManager   TokenManager
-	AccountManager AccountManager
+	Sessions        auth.SessionStore
+	Tokens          auth.TokenStore
+	TokenGate       auth.TokenGate
+	Login           LoginService
+	Enrollment      EnrollmentService
+	Database        Pinger
+	Decisions       DecisionService
+	Alerts          AlertService
+	AlertReader     AlertLister
+	DecisionReader  DecisionLister
+	AlertLookup     AlertLookup
+	Archive         *archive.Reader
+	Platform        Platform
+	ConfigFiles     ConfigFiles
+	Bouncers        BouncerService
+	Machines        MachineService
+	Hub             HubService
+	Reloader        Reloader
+	Audit           audit.Recorder
+	Geolocator      geo.Geolocator
+	AccessRules     AccessRuleService
+	Engines         EngineService
+	WebAuthn        *secondfactor.WebAuthn
+	TokenManager    TokenManager
+	AccountManager  AccountManager
+	CollectorStatus CollectorStatusSource
+	SchemaVersion   SchemaVersionSource
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {

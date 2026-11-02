@@ -628,3 +628,13 @@ func TestDeletingAlertCascadesEventsAndDecisions(testContext *testing.T) {
 		}
 	}
 }
+
+func TestSchemaVersionReportsLatestAppliedMigration(testContext *testing.T) {
+	database := storetest.New(testContext)
+
+	schemaVersion, versionError := store.NewVersionReader(database).SchemaVersion(context.Background())
+
+	if versionError != nil || schemaVersion < 3 {
+		testContext.Errorf("schema version = %d, error = %v", schemaVersion, versionError)
+	}
+}

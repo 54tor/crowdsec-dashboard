@@ -104,7 +104,11 @@ func readRoutes(loadedConfig config.Config, services Services) []apiRoute {
 		{"GET /api/alerts/archive/{archive_id}", accessAuthenticated, http.HandlerFunc(archivedAlerts.detail)},
 		{"DELETE /api/alerts/archive/{archive_id}", accessAdmin, http.HandlerFunc(archivedAlerts.remove)},
 		{"DELETE /api/alerts/{id}", accessAdmin, http.HandlerFunc(liveAlerts.remove)},
-		{"GET /api/health", accessAuthenticated, http.HandlerFunc(healthReportHandlers{platform: services.Platform, selfMachineID: loadedConfig.LAPIMachineID}.get)},
+		{"GET /api/health", accessAuthenticated, http.HandlerFunc(healthReportHandlers{
+			platform: services.Platform, selfMachineID: loadedConfig.LAPIMachineID, database: services.Database, schemaVersion: services.SchemaVersion,
+			collectorStatus: services.CollectorStatus, collectorInterval: loadedConfig.CollectorInterval,
+		}.get)},
+		{"GET /api/prometheus/metrics", accessAuthenticated, prometheusHandler(services.CollectorStatus, loadedConfig.CollectorInterval)},
 		{"GET /api/metrics", accessAuthenticated, http.HandlerFunc(metricsHandlers{platform: services.Platform}.get)},
 		{"GET /api/config/files", accessAdmin, http.HandlerFunc(configFiles.list)},
 		{"GET /api/config/files/{name...}", accessAdmin, http.HandlerFunc(configFiles.get)},
