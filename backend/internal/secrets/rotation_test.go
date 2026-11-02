@@ -18,13 +18,13 @@ import (
 // rotation tests control every row without depending on the account or engine
 // schemas. The filter mirrors the credential kind filter of the real registry.
 var sampleColumn = EncryptedColumn{
-	Table:                "rotation_sample",
-	IDColumn:             "rotation_sample_id",
-	CiphertextColumn:     "rotation_sample_sealed",
-	KeyIDColumn:          "rotation_sample_key_id",
-	Filter:               "rotation_sample_kind = 'secret'",
-	AssociatedDataLabel:  "sample",
-	AssociatedDataColumn: "rotation_sample_owner_id",
+	Table:                 "rotation_sample",
+	IDColumn:              "rotation_sample_id",
+	CiphertextColumn:      "rotation_sample_sealed",
+	KeyIDColumn:           "rotation_sample_key_id",
+	Filter:                "rotation_sample_kind = 'secret'",
+	AssociatedDataColumns: []string{"rotation_sample_owner_id"},
+	AssociatedData:        labelledAssociatedData("sample"),
 }
 
 const testBatchSize = 2
@@ -348,8 +348,11 @@ func TestRotateKeepsAssociatedDataPerColumn(testContext *testing.T) {
 		 VALUES ('remote', 'https://lapi.example.com', 'machine', '\x00', 'placeholder') RETURNING engine_id`).Scan(&engineID); scanError != nil {
 		testContext.Fatalf("insert engine: %v", scanError)
 	}
-	passwordAssociatedData := []byte("engine.machine_password:" + strconv.FormatInt(engineID, 10))
-	passwordCiphertext, passwordKeyID, _ := fixture.retiredKeyring.Seal([]byte("machine-password"), passwordAssociatedData)
+	// The engine password is sealed in the legacy id-only form: the rotation
+	// must reseal it under the destination-bound form.
+	legacyPasswordAssociatedData := LegacyEngineMachinePasswordAssociatedData(engineID)
+	passwordAssociatedData := EngineMachinePasswordAssociatedData(engineID, "https://lapi.example.com")
+	passwordCiphertext, passwordKeyID, _ := fixture.retiredKeyring.Seal([]byte("machine-password"), legacyPasswordAssociatedData)
 	if _, updateError := fixture.database.ExecContext(ctx,
 		`UPDATE engine SET engine_machine_password_sealed = ?, engine_machine_password_key_id = ? WHERE engine_id = ?`,
 		passwordCiphertext, passwordKeyID, engineID); updateError != nil {
@@ -390,7 +393,7 @@ func TestRotateKeepsAssociatedDataPerColumn(testContext *testing.T) {
 	if plaintext, openError := fixture.rotatingKeyring.Open(rotatedPassword.ciphertext, rotatedPassword.keyID, passwordAssociatedData); openError != nil || string(plaintext) != "machine-password" {
 		testContext.Errorf("rotated engine password must open with its own engine, got %q %v", plaintext, openError)
 	}
-	proxyAssociatedData := []byte("engine.proxy_credential:" + strconv.FormatInt(engineID, 10))
+	proxyAssociatedData := EngineProxyCredentialAssociatedData(engineID, "https://lapi.example.com", "socks5", "socks5://proxy.example.com:1080")
 	if _, openError := fixture.rotatingKeyring.Open(rotatedPassword.ciphertext, rotatedPassword.keyID, proxyAssociatedData); !errors.Is(openError, ErrDecrypt) {
 		testContext.Errorf("engine password must fail under another column's label, got %v", openError)
 	}

@@ -34,10 +34,10 @@ func (report RotationReport) Rewritten() int64 {
 }
 
 type sealedRow struct {
-	ID              int64  `bun:"row_id"`
-	Ciphertext      []byte `bun:"row_ciphertext"`
-	KeyID           string `bun:"row_key_id"`
-	AssociatedValue string `bun:"row_associated_value"`
+	ID               int64    `bun:"row_id"`
+	Ciphertext       []byte   `bun:"row_ciphertext"`
+	KeyID            string   `bun:"row_key_id"`
+	AssociatedValues []string `bun:"row_associated_values,array"`
 }
 
 type batchOutcome struct {
@@ -110,12 +110,17 @@ func rotateColumn(ctx context.Context, database *bun.DB, keyring *Keyring, colum
 
 func selectBatch(ctx context.Context, database bun.IDB, column EncryptedColumn, currentKeyID string, afterID int64, batchSize int) ([]sealedRow, error) {
 	var rows []sealedRow
+	associatedValuesExpression, associatedValuesArguments := associatedValuesSelection(column)
+	arguments := []any{bun.Ident(column.IDColumn), bun.Ident(column.CiphertextColumn), bun.Ident(column.KeyIDColumn)}
+	arguments = append(arguments, associatedValuesArguments...)
+	arguments = append(arguments, bun.Ident(column.Table), bun.Safe(column.filterClause()), bun.Ident(column.KeyIDColumn))
+	pendingCondition, pendingArguments := pendingRowCondition(column, currentKeyID)
+	arguments = append(arguments, pendingArguments...)
+	arguments = append(arguments, bun.Ident(column.IDColumn), afterID, bun.Ident(column.IDColumn), batchSize)
 	selectError := database.NewRaw(
-		`SELECT ? AS row_id, ? AS row_ciphertext, ? AS row_key_id, CAST(? AS text) AS row_associated_value
-		 FROM ? WHERE (?) AND ? IS NOT NULL AND ? <> ? AND ? > ? ORDER BY ? LIMIT ?`,
-		bun.Ident(column.IDColumn), bun.Ident(column.CiphertextColumn), bun.Ident(column.KeyIDColumn), bun.Ident(column.AssociatedDataColumn),
-		bun.Ident(column.Table), bun.Safe(column.filterClause()), bun.Ident(column.KeyIDColumn),
-		bun.Ident(column.KeyIDColumn), currentKeyID, bun.Ident(column.IDColumn), afterID, bun.Ident(column.IDColumn), batchSize,
+		`SELECT ? AS row_id, ? AS row_ciphertext, ? AS row_key_id, `+associatedValuesExpression+` AS row_associated_values
+		 FROM ? WHERE (?) AND ? IS NOT NULL AND `+pendingCondition+` AND ? > ? ORDER BY ? LIMIT ?`,
+		arguments...,
 	).Scan(ctx, &rows)
 	if selectError != nil {
 		return nil, fmt.Errorf("select %s batch: %w", column.Name(), selectError)
@@ -123,18 +128,36 @@ func selectBatch(ctx context.Context, database bun.IDB, column EncryptedColumn, 
 	return rows, nil
 }
 
+func pendingRowCondition(column EncryptedColumn, currentKeyID string) (string, []any) {
+	if column.LegacyAssociatedData != nil {
+		return "TRUE", nil
+	}
+	return "? <> ?", []any{bun.Ident(column.KeyIDColumn), currentKeyID}
+}
+
+func associatedValuesSelection(column EncryptedColumn) (string, []any) {
+	placeholders := make([]string, 0, len(column.AssociatedDataColumns))
+	arguments := make([]any, 0, len(column.AssociatedDataColumns))
+	for _, associatedColumn := range column.AssociatedDataColumns {
+		placeholders = append(placeholders, "CAST(? AS text)")
+		arguments = append(arguments, bun.Ident(associatedColumn))
+	}
+	return "ARRAY[" + strings.Join(placeholders, ", ") + "]", arguments
+}
+
 func rewriteBatch(ctx context.Context, database *bun.DB, keyring *Keyring, column EncryptedColumn, rows []sealedRow) (batchOutcome, error) {
 	var outcome batchOutcome
 	transactionError := database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
 		outcome = batchOutcome{}
 		for _, row := range rows {
-			isRewritten, rewriteError := rewriteRow(ctx, transaction, keyring, column, row)
+			rowResult, rewriteError := rewriteRow(ctx, transaction, keyring, column, row)
 			if rewriteError != nil {
 				return rewriteError
 			}
-			if isRewritten {
+			switch rowResult {
+			case rowRewritten:
 				outcome.rewritten++
-			} else {
+			case rowSkippedConcurrent:
 				outcome.skippedConcurrent++
 			}
 		}
@@ -146,15 +169,25 @@ func rewriteBatch(ctx context.Context, database *bun.DB, keyring *Keyring, colum
 	return outcome, nil
 }
 
-func rewriteRow(ctx context.Context, transaction bun.Tx, keyring *Keyring, column EncryptedColumn, row sealedRow) (bool, error) {
-	associatedData := column.associatedData(row)
-	plaintext, openError := keyring.Open(row.Ciphertext, row.KeyID, associatedData)
+type rowResult int
+
+const (
+	rowRewritten rowResult = iota
+	rowSkippedConcurrent
+	rowAlreadyCurrent
+)
+
+func rewriteRow(ctx context.Context, transaction bun.Tx, keyring *Keyring, column EncryptedColumn, row sealedRow) (rowResult, error) {
+	plaintext, isLegacyForm, openError := openRow(keyring, column, row)
 	if openError != nil {
-		return false, fmt.Errorf("open %s row %d: %w", column.Name(), row.ID, openError)
+		return rowSkippedConcurrent, fmt.Errorf("open %s row %d: %w", column.Name(), row.ID, openError)
 	}
-	ciphertext, keyID, sealError := keyring.Seal(plaintext, associatedData)
+	if !isLegacyForm && row.KeyID == keyring.CurrentKeyID() {
+		return rowAlreadyCurrent, nil
+	}
+	ciphertext, keyID, sealError := keyring.Seal(plaintext, column.AssociatedData(row.AssociatedValues))
 	if sealError != nil {
-		return false, fmt.Errorf("seal %s row %d: %w", column.Name(), row.ID, sealError)
+		return rowSkippedConcurrent, fmt.Errorf("seal %s row %d: %w", column.Name(), row.ID, sealError)
 	}
 	result, updateError := transaction.NewRaw(
 		`UPDATE ? SET ? = ?, ? = ? WHERE ? = ? AND ? = ? AND ? = ?`,
@@ -162,13 +195,28 @@ func rewriteRow(ctx context.Context, transaction bun.Tx, keyring *Keyring, colum
 		bun.Ident(column.IDColumn), row.ID, bun.Ident(column.KeyIDColumn), row.KeyID, bun.Ident(column.CiphertextColumn), row.Ciphertext,
 	).Exec(ctx)
 	if updateError != nil {
-		return false, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, updateError)
+		return rowSkippedConcurrent, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, updateError)
 	}
 	affectedRows, affectedError := result.RowsAffected()
 	if affectedError != nil {
-		return false, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, affectedError)
+		return rowSkippedConcurrent, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, affectedError)
 	}
-	return affectedRows == 1, nil
+	if affectedRows != 1 {
+		return rowSkippedConcurrent, nil
+	}
+	return rowRewritten, nil
+}
+
+func openRow(keyring *Keyring, column EncryptedColumn, row sealedRow) ([]byte, bool, error) {
+	plaintext, openError := keyring.Open(row.Ciphertext, row.KeyID, column.AssociatedData(row.AssociatedValues))
+	if openError == nil || column.LegacyAssociatedData == nil {
+		return plaintext, false, openError
+	}
+	legacyPlaintext, legacyError := keyring.Open(row.Ciphertext, row.KeyID, column.LegacyAssociatedData(row.AssociatedValues))
+	if legacyError != nil {
+		return nil, false, openError
+	}
+	return legacyPlaintext, true, nil
 }
 
 type keyIDCount struct {
