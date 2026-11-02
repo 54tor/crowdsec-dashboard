@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/uptrace/bun"
+
+	"crowdsec-dashboard/internal/netparse"
 )
 
 func (repository *Repository) EnsureLocal(ctx context.Context, lapiURL, machineID string) (Engine, error) {
@@ -44,7 +46,7 @@ func insertLocalIfAbsent(ctx context.Context, transaction bun.Tx, lapiURL, machi
 
 func updateLocal(ctx context.Context, transaction bun.Tx, currentRow engineRow, lapiURL, machineID string) error {
 	cursorExpression := "engine_collection_cursor"
-	if destinationKey(lapiURL) != destinationKey(currentRow.LAPIURL) {
+	if netparse.DestinationKey(lapiURL) != netparse.DestinationKey(currentRow.LAPIURL) {
 		cursorExpression = "0"
 	}
 	_, updateError := transaction.ExecContext(ctx,

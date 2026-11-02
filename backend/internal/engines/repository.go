@@ -97,10 +97,11 @@ func (repository *Repository) engineWithCredentials(ctx context.Context, engineI
 	if queryError != nil {
 		return Engine{}, Credentials{}, fmt.Errorf("load engine: %w", queryError)
 	}
-	credentials, openError := repository.openCredentials(row)
+	credentials, pendingReseals, openError := repository.openCredentials(row)
 	if openError != nil {
 		return Engine{}, Credentials{}, errors.Join(errUnusableEngine, openError)
 	}
+	repository.resealLegacySecrets(ctx, row.ID, pendingReseals)
 	loadedEngine, convertError := row.toEngine()
 	if convertError != nil {
 		return Engine{}, Credentials{}, errors.Join(errUnusableEngine, convertError)
@@ -108,23 +109,41 @@ func (repository *Repository) engineWithCredentials(ctx context.Context, engineI
 	return loadedEngine, credentials, nil
 }
 
-func (repository *Repository) openCredentials(row engineRow) (Credentials, error) {
+func (repository *Repository) openCredentials(row engineRow) (Credentials, []legacyReseal, error) {
 	var credentials Credentials
+	var pendingReseals []legacyReseal
+	binding := row.secretBinding()
 	if row.PasswordKeyID != nil {
-		plaintext, openError := repository.keyring.Open(row.PasswordSealed, *row.PasswordKeyID, machinePasswordAssociatedData(row.ID))
+		storedPassword := sealedValue{ciphertext: row.PasswordSealed, keyID: *row.PasswordKeyID}
+		password, isLegacyForm, openError := openMachinePassword(repository.keyring, binding, storedPassword)
 		if openError != nil {
-			return Credentials{}, fmt.Errorf("open machine password: %w", openError)
+			return Credentials{}, nil, openError
 		}
-		credentials.MachinePassword = string(plaintext)
+		credentials.MachinePassword = password
+		if isLegacyForm {
+			pendingReseal, resealError := resealedMachinePassword(repository.keyring, binding, storedPassword, password)
+			if resealError != nil {
+				return Credentials{}, nil, resealError
+			}
+			pendingReseals = append(pendingReseals, pendingReseal)
+		}
 	}
 	if row.ProxyCredentialKeyID != nil {
-		payload, openError := openProxyCredential(repository.keyring, row.ID, row.ProxyCredentialBytes, *row.ProxyCredentialKeyID)
+		storedCredential := row.storedProxyCredential()
+		payload, isLegacyForm, openError := openProxyCredential(repository.keyring, binding, storedCredential)
 		if openError != nil {
-			return Credentials{}, openError
+			return Credentials{}, nil, openError
 		}
 		credentials.ProxyUsername, credentials.ProxyPassword = payload.Username, payload.Password
+		if isLegacyForm {
+			pendingReseal, resealError := resealedProxyCredential(repository.keyring, binding, storedCredential, payload)
+			if resealError != nil {
+				return Credentials{}, nil, resealError
+			}
+			pendingReseals = append(pendingReseals, pendingReseal)
+		}
 	}
-	return credentials, nil
+	return credentials, pendingReseals, nil
 }
 
 func (repository *Repository) CollectionCursor(ctx context.Context, engineID int64) (int64, error) {

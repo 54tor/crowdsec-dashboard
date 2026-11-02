@@ -57,7 +57,11 @@ func ensureNameAndURLFree(ctx context.Context, transaction bun.Tx, name, lapiURL
 }
 
 func (repository *Repository) insertEngine(ctx context.Context, transaction bun.Tx, engineID int64, input Input, publicAddressJSON string) error {
-	sealedPassword, sealError := sealMachinePassword(repository.keyring, engineID, *input.MachinePassword)
+	binding := secretBinding{engineID: engineID, lapiURL: input.LAPIURL}
+	if input.Proxy != nil {
+		binding.proxyKind, binding.proxyURL = input.Proxy.Kind, input.Proxy.URL
+	}
+	sealedPassword, sealError := sealMachinePassword(repository.keyring, binding, *input.MachinePassword)
 	if sealError != nil {
 		return sealError
 	}
@@ -65,7 +69,7 @@ func (repository *Repository) insertEngine(ctx context.Context, transaction bun.
 	if input.Proxy != nil {
 		proxyKind, proxyURL = input.Proxy.Kind, input.Proxy.URL
 		if input.Proxy.Username != nil {
-			sealedCredential, credentialError := sealProxyCredential(repository.keyring, engineID,
+			sealedCredential, credentialError := sealProxyCredential(repository.keyring, binding,
 				proxyCredentialPayload{Username: *input.Proxy.Username, Password: *input.Proxy.Password})
 			if credentialError != nil {
 				return credentialError

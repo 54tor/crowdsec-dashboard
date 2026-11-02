@@ -3,10 +3,11 @@ package engines
 import (
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
 	"regexp"
 	"strings"
+
+	"crowdsec-dashboard/internal/netparse"
 )
 
 const (
@@ -16,8 +17,7 @@ const (
 )
 
 var (
-	namePattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
-	defaultPorts = map[string]string{"https": "443", "http": "80"}
+	namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 	ErrNameInvalid  = errors.New("name is not valid")
 	ErrNameReserved = errors.New("name is reserved")
@@ -80,19 +80,7 @@ func parseValidatedURL(rawURL string) *url.URL {
 	return parsedURL
 }
 
-func hostAndPort(parsedURL *url.URL) string {
-	port := parsedURL.Port()
-	if port == "" {
-		port = defaultPorts[parsedURL.Scheme]
-	}
-	return parsedURL.Scheme + "://" + net.JoinHostPort(strings.ToLower(parsedURL.Hostname()), port)
-}
-
 func NormalizedURLKey(rawURL string) string {
 	parsedURL := parseValidatedURL(rawURL)
-	return hostAndPort(parsedURL) + strings.TrimRight(parsedURL.EscapedPath(), "/")
-}
-
-func destinationKey(rawURL string) string {
-	return hostAndPort(parseValidatedURL(rawURL))
+	return netparse.DestinationKeyOf(parsedURL) + strings.TrimRight(parsedURL.EscapedPath(), "/")
 }

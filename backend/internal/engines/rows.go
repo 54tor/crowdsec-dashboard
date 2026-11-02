@@ -38,6 +38,10 @@ func (row engineRow) hasProxyCredentials() bool {
 	return len(row.ProxyCredentialBytes) > 0
 }
 
+func (row engineRow) storedProxyCredential() sealedValue {
+	return sealedValue{ciphertext: row.ProxyCredentialBytes, keyID: *row.ProxyCredentialKeyID}
+}
+
 func (row engineRow) toEngine() (Engine, error) {
 	var rawAddresses []string
 	if unmarshalError := json.Unmarshal(row.PublicAddressJSON, &rawAddresses); unmarshalError != nil {

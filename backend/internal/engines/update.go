@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/uptrace/bun"
+
+	"crowdsec-dashboard/internal/netparse"
 )
 
 const cursorResetExpression = "engine_collection_cursor = ?"
@@ -83,6 +85,11 @@ func (repository *Repository) planUpdate(ctx context.Context, transaction bun.Tx
 	if proxyError != nil {
 		return nil, proxyError
 	}
+	resealChanges, resealError := repository.planKeptProxyCredentialReseal(currentRow, input, proxyChanges)
+	if resealError != nil {
+		return nil, resealError
+	}
+	proxyChanges = append(proxyChanges, resealChanges...)
 	flagChanges, flagError := planFlags(input)
 	if flagError != nil {
 		return nil, flagError
@@ -120,10 +127,7 @@ func (repository *Repository) planIdentity(ctx context.Context, transaction bun.
 
 func (repository *Repository) planURL(currentRow engineRow, input Input) ([]columnChange, error) {
 	allowInsecureHTTP := boolOrDefault(input.AllowInsecureHTTP, currentRow.AllowInsecureHTTP)
-	effectiveURL := currentRow.LAPIURL
-	if input.LAPIURL != "" {
-		effectiveURL = input.LAPIURL
-	}
+	effectiveURL := effectiveLAPIURL(currentRow, input)
 	if urlError := validateLAPIURLField(effectiveURL, allowInsecureHTTP); urlError != nil {
 		return nil, urlError
 	}
@@ -132,7 +136,7 @@ func (repository *Repository) planURL(currentRow engineRow, input Input) ([]colu
 	if passwordProvided && *input.MachinePassword == "" {
 		return nil, invalidField("machine_password", "must not be empty")
 	}
-	destinationChanged := destinationKey(effectiveURL) != destinationKey(currentRow.LAPIURL)
+	destinationChanged := netparse.DestinationKey(effectiveURL) != netparse.DestinationKey(currentRow.LAPIURL)
 	if destinationChanged {
 		if !passwordProvided {
 			return nil, ErrSecretRequired
@@ -146,7 +150,7 @@ func (repository *Repository) planURL(currentRow engineRow, input Input) ([]colu
 		changes = append(changes, columnChange{"engine_allow_insecure_http = ?", *input.AllowInsecureHTTP})
 	}
 	if passwordProvided {
-		sealedPassword, sealError := sealMachinePassword(repository.keyring, currentRow.ID, *input.MachinePassword)
+		sealedPassword, sealError := sealMachinePassword(repository.keyring, secretBinding{engineID: currentRow.ID, lapiURL: effectiveURL}, *input.MachinePassword)
 		if sealError != nil {
 			return nil, sealError
 		}
