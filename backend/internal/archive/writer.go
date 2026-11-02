@@ -1,10 +1,12 @@
 package archive
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -22,9 +24,12 @@ var (
 
 var alertScopedErrorClasses = map[string]bool{"22": true, "23": true, "54": true, "P0": true}
 
+const defaultAlertsPerTransaction = 64
+
 type Writer struct {
-	database *bun.DB
-	bounds   Bounds
+	database             *bun.DB
+	bounds               Bounds
+	alertsPerTransaction int
 }
 
 type StoreResult struct {
@@ -57,14 +62,37 @@ func (failure *storeFailure) Unwrap() []error {
 }
 
 func NewWriter(database *bun.DB, bounds Bounds) *Writer {
-	return &Writer{database: database, bounds: bounds}
+	return &Writer{database: database, bounds: bounds, alertsPerTransaction: defaultAlertsPerTransaction}
 }
 
 func (writer *Writer) Store(ctx context.Context, engineID int64, lapiURL string, alerts []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
-	var storeResult StoreResult
+	remainingAlerts := ascendingByID(alerts)
+	resetCandidates := remainingAlerts
+	var totalResult StoreResult
+	for isFirstChunk := true; isFirstChunk || len(remainingAlerts) > 0; isFirstChunk = false {
+		chunkLength := min(len(remainingAlerts), writer.alertsPerTransaction)
+		chunkResult, chunkError := writer.storeChunk(ctx, engineID, lapiURL, remainingAlerts[:chunkLength], resetCandidates, collectedAt)
+		if chunkError != nil {
+			return StoreResult{}, chunkError
+		}
+		totalResult.add(chunkResult)
+		remainingAlerts = remainingAlerts[chunkLength:]
+		resetCandidates = nil
+	}
+	return totalResult, nil
+}
+
+func ascendingByID(alerts []lapi.Alert) []lapi.Alert {
+	return slices.SortedStableFunc(slices.Values(alerts), func(firstAlert, secondAlert lapi.Alert) int {
+		return cmp.Compare(firstAlert.ID, secondAlert.ID)
+	})
+}
+
+func (writer *Writer) storeChunk(ctx context.Context, engineID int64, lapiURL string, chunk []lapi.Alert, resetCandidates []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
+	var chunkResult StoreResult
 	transactionError := writer.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
 		var storeError error
-		storeResult, storeError = writer.storeInTransaction(ctx, transaction, engineID, lapiURL, alerts, collectedAt)
+		chunkResult, storeError = writer.storeInTransaction(ctx, transaction, engineID, lapiURL, chunk, resetCandidates, collectedAt)
 		return storeError
 	})
 	if errors.Is(transactionError, ErrEngineNotFound) {
@@ -76,15 +104,15 @@ func (writer *Writer) Store(ctx context.Context, engineID int64, lapiURL string,
 	if transactionError != nil {
 		return StoreResult{}, &storeFailure{cause: transactionError}
 	}
-	return storeResult, nil
+	return chunkResult, nil
 }
 
-func (writer *Writer) storeInTransaction(ctx context.Context, transaction bun.Tx, engineID int64, lapiURL string, alerts []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
+func (writer *Writer) storeInTransaction(ctx context.Context, transaction bun.Tx, engineID int64, lapiURL string, alerts []lapi.Alert, resetCandidates []lapi.Alert, collectedAt time.Time) (StoreResult, error) {
 	cursor, lockError := lockEngineCursor(ctx, transaction, engineID, lapiURL)
 	if lockError != nil {
 		return StoreResult{}, lockError
 	}
-	resetDetected, resetError := detectEngineReset(ctx, transaction, engineID, cursor, alerts)
+	resetDetected, resetError := detectEngineReset(ctx, transaction, engineID, cursor, resetCandidates)
 	if resetError != nil {
 		return StoreResult{}, resetError
 	}
@@ -123,6 +151,15 @@ func (writer *Writer) storeInTransaction(ctx context.Context, transaction bun.Tx
 	}
 	storeResult.Cursor = highestProcessedID
 	return storeResult, nil
+}
+
+func (storeResult *StoreResult) add(chunkResult StoreResult) {
+	storeResult.Inserted += chunkResult.Inserted
+	storeResult.Duplicates += chunkResult.Duplicates
+	storeResult.Skipped += chunkResult.Skipped
+	storeResult.DecisionsDropped += chunkResult.DecisionsDropped
+	storeResult.Cursor = chunkResult.Cursor
+	storeResult.ResetDetected = storeResult.ResetDetected || chunkResult.ResetDetected
 }
 
 func (storeResult *StoreResult) countOutcome(outcome alertOutcome) {
