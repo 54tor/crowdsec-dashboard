@@ -93,8 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async completeEnrollment(enrollmentToken) {
         await completeSetup({ basePath: '/api/auth/enroll', extraBody: { token: enrollmentToken } })
-        queryClient.setQueryData(ENROLLMENT_STATUS_QUERY_KEY, { enrollment_required: false })
         openSession(queryClient, pendingAccountName.current)
+        queryClient.setQueryData(ENROLLMENT_STATUS_QUERY_KEY, { enrollment_required: false })
       },
       async logout() {
         try {
