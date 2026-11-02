@@ -78,7 +78,8 @@
       "download": "Télécharger en fichier texte",
       "acknowledge": "J'ai enregistré ces codes",
       "finish": "Terminer",
-      "finishing": "Finalisation…"
+      "finishing": "Finalisation…",
+      "retry": "Réessayer"
     }
   },
   "logout": "Se déconnecter",
@@ -118,7 +119,8 @@
     "second_factor_required": "Validez un second facteur avant de continuer.",
     "enrollment_not_started": "Créez d'abord le compte.",
     "second_factor_unavailable": "Le service de second facteur est indisponible. Réessayez dans un instant.",
-    "account_locked": "Ce compte est temporairement verrouillé. Réessayez dans {{minutes}} minute(s).",
+    "account_locked_one": "Ce compte est temporairement verrouillé. Réessayez dans {{count}} minute.",
+    "account_locked_other": "Ce compte est temporairement verrouillé. Réessayez dans {{count}} minutes.",
     "pending_login_expired": "Votre tentative de connexion a expiré. Veuillez recommencer.",
     "access_denied": "Accès refusé.",
     "second_factor_setup_not_allowed": "Un second facteur ne peut pas être configuré ici. Contactez un administrateur.",

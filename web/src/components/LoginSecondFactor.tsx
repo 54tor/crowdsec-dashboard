@@ -6,6 +6,7 @@ import { LabelledInput } from '@/components/LabelledInput'
 import { StepHeading } from '@/components/StepHeading'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/auth/useAuth'
+import { useIsMounted } from '@/hooks/useIsMounted'
 import { isLoginRestartFailure } from '@/lib/loginErrors'
 
 type CodeView = 'totp' | 'recovery_code'
@@ -22,10 +23,12 @@ function stripWhitespace(rawCode: string): string {
 export function LoginSecondFactor({ methods, onRestart }: LoginSecondFactorProps) {
   const { t } = useTranslation()
   const { verifySecondFactor } = useAuth()
+  const isMounted = useIsMounted()
   const isTotpOffered = methods.includes('totp')
   const isWebAuthnOffered = methods.includes('webauthn')
   const [codeView, setCodeView] = useState<CodeView>(isTotpOffered || !isWebAuthnOffered ? 'totp' : 'recovery_code')
   const [code, setCode] = useState('')
+  const [hasSwitchedView, setHasSwitchedView] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [failure, setFailure] = useState<{ cause: unknown } | null>(null)
 
@@ -36,6 +39,7 @@ export function LoginSecondFactor({ methods, onRestart }: LoginSecondFactorProps
     try {
       await verifySecondFactor(method, value)
     } catch (verifyFailure) {
+      if (!isMounted()) return
       if (isLoginRestartFailure(verifyFailure)) {
         onRestart(verifyFailure)
         return
@@ -54,6 +58,7 @@ export function LoginSecondFactor({ methods, onRestart }: LoginSecondFactorProps
     setCode('')
     setFailure(null)
     setCodeView(nextView)
+    setHasSwitchedView(true)
   }
 
   const isTotpView = codeView === 'totp'
@@ -70,6 +75,7 @@ export function LoginSecondFactor({ methods, onRestart }: LoginSecondFactorProps
           inputMode={isTotpView ? 'numeric' : 'text'}
           autoCapitalize="none"
           spellCheck={false}
+          autoFocus={hasSwitchedView}
           value={code}
           onChange={(changeEvent) => setCode(changeEvent.target.value)}
         />

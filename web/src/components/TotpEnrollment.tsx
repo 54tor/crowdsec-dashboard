@@ -57,7 +57,7 @@ export function TotpEnrollment({ flow, onConfirmed, onFailure }: TotpEnrollmentP
   }
 
   if (!details) {
-    return failure ? <FormError failure={failure.cause} /> : <p className="text-sm text-muted-foreground">{t('enroll.secondFactor.loadingTotp')}</p>
+    return failure ? <FormError failure={failure.cause} /> : <p role="status" className="text-sm text-muted-foreground">{t('enroll.secondFactor.loadingTotp')}</p>
   }
 
   return (

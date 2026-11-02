@@ -4,6 +4,7 @@ import { confirmWebAuthn, webAuthnRegistrationOptions, type SecondFactorFlow } f
 import { createWebAuthnCredential, requireCredentialsApi } from '@/auth/webauthn'
 import { FormError } from '@/components/FormError'
 import { StepHeading } from '@/components/StepHeading'
+import { useIsMounted } from '@/hooks/useIsMounted'
 import { TotpEnrollment } from '@/components/TotpEnrollment'
 import { Button } from '@/components/ui/button'
 
@@ -22,6 +23,7 @@ function isKnownMethod(method: string): method is SecondFactorMethod {
 
 export function SecondFactorStep({ flow, methods, onConfirmed, onFailure }: SecondFactorStepProps) {
   const { t } = useTranslation()
+  const isMounted = useIsMounted()
   const offeredMethods = methods.filter(isKnownMethod)
   const [chosenMethod, setChosenMethod] = useState<SecondFactorMethod | null>(
     offeredMethods.length === 1 && offeredMethods[0] === 'totp' ? 'totp' : null,
@@ -36,12 +38,15 @@ export function SecondFactorStep({ flow, methods, onConfirmed, onFailure }: Seco
       requireCredentialsApi()
       const creationOptions = await webAuthnRegistrationOptions(flow)
       const credential = await createWebAuthnCredential(creationOptions)
+      if (!isMounted()) return
       await confirmWebAuthn(flow, credential)
+      if (!isMounted()) return
       onConfirmed()
     } catch (registrationFailure) {
+      if (!isMounted()) return
       if (!onFailure?.(registrationFailure)) setFailure({ cause: registrationFailure })
     } finally {
-      setIsRegistering(false)
+      if (isMounted()) setIsRegistering(false)
     }
   }
 

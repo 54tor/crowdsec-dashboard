@@ -78,7 +78,8 @@
       "download": "Download as a text file",
       "acknowledge": "I have saved these codes",
       "finish": "Finish",
-      "finishing": "Finishing…"
+      "finishing": "Finishing…",
+      "retry": "Try again"
     }
   },
   "logout": "Log out",
@@ -118,7 +119,8 @@
     "second_factor_required": "Confirm a second factor before continuing.",
     "enrollment_not_started": "Create the account first.",
     "second_factor_unavailable": "The second factor service is unavailable. Please try again shortly.",
-    "account_locked": "This account is temporarily locked. Try again in {{minutes}} minute(s).",
+    "account_locked_one": "This account is temporarily locked. Try again in {{count}} minute.",
+    "account_locked_other": "This account is temporarily locked. Try again in {{count}} minutes.",
     "pending_login_expired": "Your sign-in attempt has expired. Please start again.",
     "access_denied": "Access denied.",
     "second_factor_setup_not_allowed": "A second factor cannot be set up from here. Contact an administrator.",

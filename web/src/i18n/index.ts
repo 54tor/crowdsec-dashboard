@@ -51,7 +51,7 @@ export function errorMessage(error: unknown): string {
       ? error.retryAfterSeconds
       : DEFAULT_RETRY_AFTER_SECONDS
   const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60))
-  return i18next.t(`errors.${code}`, { defaultValue: i18next.t('errors.unknown'), minutes })
+  return i18next.t(`errors.${code}`, { defaultValue: i18next.t('errors.unknown'), count: minutes })
 }
 
 export function initI18n(): Promise<unknown> {

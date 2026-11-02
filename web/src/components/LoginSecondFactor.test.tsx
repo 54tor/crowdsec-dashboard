@@ -157,7 +157,7 @@ describe('two-step login', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('10 minute')
     await setLanguage('fr')
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('10 minute'))
-    expect(screen.getByRole('alert')).toHaveTextContent(fr.errors.account_locked.split('{{')[0])
+    expect(screen.getByRole('alert')).toHaveTextContent(fr.errors.account_locked_other.split('{{')[0])
   })
 
   it('showsAGenericDenialWithoutASession', async () => {

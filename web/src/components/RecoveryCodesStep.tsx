@@ -29,6 +29,7 @@ export function RecoveryCodesStep({ flow, onFinish, onFailure }: RecoveryCodesSt
   const [hasCopied, setHasCopied] = useState(false)
   const [isFinishing, setIsFinishing] = useState(false)
   const [failure, setFailure] = useState<{ cause: unknown } | null>(null)
+  const [fetchAttempt, setFetchAttempt] = useState(0)
   const onFailureReference = useRef(onFailure)
   useEffect(() => {
     onFailureReference.current = onFailure
@@ -51,7 +52,12 @@ export function RecoveryCodesStep({ flow, onFinish, onFailure }: RecoveryCodesSt
     return () => {
       isCancelled = true
     }
-  }, [flow])
+  }, [flow, fetchAttempt])
+
+  function retryFetch() {
+    setFailure(null)
+    setFetchAttempt((previousAttempt) => previousAttempt + 1)
+  }
 
   async function copyCodes() {
     try {
@@ -99,9 +105,18 @@ export function RecoveryCodesStep({ flow, onFinish, onFailure }: RecoveryCodesSt
           </label>
         </>
       ) : (
-        !failure && <p className="text-sm text-muted-foreground">{t('enroll.recoveryCodes.loading')}</p>
+        !failure && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t('enroll.recoveryCodes.loading')}
+          </p>
+        )
       )}
       {failure && <FormError failure={failure.cause} />}
+      {failure && !recoveryCodes && (
+        <Button type="button" variant="outline" onClick={retryFetch}>
+          {t('enroll.recoveryCodes.retry')}
+        </Button>
+      )}
       <Button type="button" className="w-full" disabled={!recoveryCodes || !isAcknowledged || isFinishing} onClick={() => void finish()}>
         {isFinishing ? t('enroll.recoveryCodes.finishing') : t('enroll.recoveryCodes.finish')}
       </Button>
