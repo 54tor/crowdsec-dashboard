@@ -35,7 +35,7 @@ const (
 	purgeEventsStatement = `
 		DELETE FROM event WHERE event_id IN (
 			SELECT event_id FROM event JOIN alert ON alert_id = event_alert_id
-			WHERE alert_collected_at < ? LIMIT ?)`
+			WHERE alert_collected_at >= COALESCE(?::timestamptz, '-infinity') AND alert_collected_at < ? LIMIT ?)`
 	purgeDecisionsStatement = `
 		DELETE FROM decision WHERE decision_id IN (
 			SELECT decision_id FROM decision JOIN alert ON alert_id = decision_alert_id
@@ -53,29 +53,44 @@ func Purge(ctx context.Context, database *bun.DB, retention Retention, now time.
 
 func (batchPurger purger) purge(ctx context.Context, retention Retention, now time.Time) (PurgeResult, error) {
 	var result PurgeResult
+	deletedEvents, eventsError := batchPurger.purgeEvents(ctx, now.Add(-retention.Event))
+	result.Events = deletedEvents
+	if eventsError != nil {
+		return result, fmt.Errorf("purge events: %w", eventsError)
+	}
 	steps := []struct {
 		label     string
 		statement string
 		horizon   time.Duration
 		deleted   *int64
-		withNow   bool
 	}{
-		{"events", purgeEventsStatement, retention.Event, &result.Events, false},
-		{"decisions", purgeDecisionsStatement, retention.Decision, &result.Decisions, true},
-		{"alerts", purgeAlertsStatement, retention.Alert, &result.Alerts, true},
+		{"decisions", purgeDecisionsStatement, retention.Decision, &result.Decisions},
+		{"alerts", purgeAlertsStatement, retention.Alert, &result.Alerts},
 	}
 	for _, step := range steps {
-		statementArguments := []any{now.Add(-step.horizon)}
-		if step.withNow {
-			statementArguments = append(statementArguments, now)
-		}
-		deletedRows, purgeError := batchPurger.deleteInBatches(ctx, step.statement, statementArguments)
+		deletedRows, purgeError := batchPurger.deleteInBatches(ctx, step.statement, []any{now.Add(-step.horizon), now})
 		*step.deleted = deletedRows
 		if purgeError != nil {
 			return result, fmt.Errorf("purge %s: %w", step.label, purgeError)
 		}
 	}
 	return result, nil
+}
+
+func (batchPurger purger) purgeEvents(ctx context.Context, eventCutoff time.Time) (int64, error) {
+	previousHorizon, readError := readEventPurgeHorizon(ctx, batchPurger.database)
+	if readError != nil {
+		return 0, readError
+	}
+	deletedEvents, deleteError := batchPurger.deleteInBatches(ctx, purgeEventsStatement, []any{previousHorizon, eventCutoff})
+	if deleteError != nil {
+		return deletedEvents, deleteError
+	}
+	horizonMovesForward := previousHorizon == nil || eventCutoff.After(*previousHorizon)
+	if !horizonMovesForward {
+		return deletedEvents, nil
+	}
+	return deletedEvents, writeEventPurgeHorizon(ctx, batchPurger.database, eventCutoff)
 }
 
 func (batchPurger purger) deleteInBatches(ctx context.Context, statement string, statementArguments []any) (int64, error) {
