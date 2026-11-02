@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/uptrace/bun"
 
+	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/secrets"
 	"crowdsec-dashboard/internal/store/storetest"
 )
@@ -88,5 +90,37 @@ func TestRotateSecretsCommandAuditsOnlyTheRealRun(testContext *testing.T) {
 	combinedOutput := dryRunOutput.String() + realRunOutput.String()
 	if strings.Contains(combinedOutput, retiredEncodedKey) || strings.Contains(combinedOutput, currentEncodedKey) {
 		testContext.Error("the report must never print key material")
+	}
+}
+
+func TestRotateSecretsCommandFailsOnUnreadableRows(testContext *testing.T) {
+	database := storetest.New(testContext)
+	keyring := newTestKeyring(testContext)
+	password := "rotate-marker-password-0c4e"
+	createdEngine, createError := engines.NewRepository(database, keyring).Create(context.Background(), engines.Input{
+		Name: "edge-1", LAPIURL: "https://edge.example.com", MachineID: "dashboard", MachinePassword: &password,
+	})
+	if createError != nil {
+		testContext.Fatalf("create engine: %v", createError)
+	}
+	// Pointing the engine elsewhere in the database makes its sealed
+	// password unreadable under the destination-bound associated data.
+	if _, tamperError := database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_lapi_url = 'https://attacker.example.com' WHERE engine_id = ?`, createdEngine.ID); tamperError != nil {
+		testContext.Fatalf("tamper: %v", tamperError)
+	}
+
+	var output bytes.Buffer
+	rotateError := rotateSecrets(context.Background(), database, keyring, false, &output)
+
+	if !errors.Is(rotateError, secrets.ErrUnreadableRows) {
+		testContext.Fatalf("the command must fail on unreadable rows, got %v", rotateError)
+	}
+	expectedLine := "unreadable row ids: [" + strconv.FormatInt(createdEngine.ID, 10) + "]"
+	if !strings.Contains(output.String(), expectedLine) {
+		testContext.Errorf("expected %q in the report:\n%s", expectedLine, output.String())
+	}
+	if strings.Contains(output.String()+rotateError.Error(), password) {
+		testContext.Error("the report must never print the secret")
 	}
 }

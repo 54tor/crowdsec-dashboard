@@ -13,26 +13,6 @@ import (
 
 var ErrMissingKeys = errors.New("database rows use key ids absent from the keyring")
 
-type ColumnReport struct {
-	Column            string
-	KeyIDCounts       map[string]int64
-	Rewritten         int64
-	SkippedConcurrent int64
-}
-
-type RotationReport struct {
-	CurrentKeyID string
-	Columns      []ColumnReport
-}
-
-func (report RotationReport) Rewritten() int64 {
-	var rewrittenTotal int64
-	for _, columnReport := range report.Columns {
-		rewrittenTotal += columnReport.Rewritten
-	}
-	return rewrittenTotal
-}
-
 type sealedRow struct {
 	ID               int64    `bun:"row_id"`
 	Ciphertext       []byte   `bun:"row_ciphertext"`
@@ -43,11 +23,13 @@ type sealedRow struct {
 type batchOutcome struct {
 	rewritten         int64
 	skippedConcurrent int64
+	unreadableIDs     []int64
 }
 
 func (outcome *batchOutcome) add(other batchOutcome) {
 	outcome.rewritten += other.rewritten
 	outcome.skippedConcurrent += other.skippedConcurrent
+	outcome.unreadableIDs = append(outcome.unreadableIDs, other.unreadableIDs...)
 }
 
 func Rotate(ctx context.Context, database *bun.DB, keyring *Keyring, dryRun bool, batchSize int) (RotationReport, error) {
@@ -69,23 +51,19 @@ func rotateColumns(ctx context.Context, database *bun.DB, keyring *Keyring, colu
 		if countError != nil {
 			return report, countError
 		}
-		columnReport := ColumnReport{Column: column.Name(), KeyIDCounts: keyIDCounts}
-		if dryRun {
-			report.Columns = append(report.Columns, columnReport)
-			continue
-		}
-		outcome, rotateError := rotateColumn(ctx, database, keyring, column, batchSize)
-		columnReport.Rewritten = outcome.rewritten
-		columnReport.SkippedConcurrent = outcome.skippedConcurrent
-		report.Columns = append(report.Columns, columnReport)
+		outcome, rotateError := rotateColumn(ctx, database, keyring, column, dryRun, batchSize)
+		report.Columns = append(report.Columns, ColumnReport{
+			Column: column.Name(), KeyIDCounts: keyIDCounts,
+			Rewritten: outcome.rewritten, SkippedConcurrent: outcome.skippedConcurrent, UnreadableIDs: outcome.unreadableIDs,
+		})
 		if rotateError != nil {
 			return report, rotateError
 		}
 	}
-	return report, nil
+	return report, report.unreadableError()
 }
 
-func rotateColumn(ctx context.Context, database *bun.DB, keyring *Keyring, column EncryptedColumn, batchSize int) (batchOutcome, error) {
+func rotateColumn(ctx context.Context, database *bun.DB, keyring *Keyring, column EncryptedColumn, dryRun bool, batchSize int) (batchOutcome, error) {
 	var columnOutcome batchOutcome
 	var lastSeenID int64
 	for {
@@ -99,9 +77,9 @@ func rotateColumn(ctx context.Context, database *bun.DB, keyring *Keyring, colum
 		if len(rows) == 0 {
 			return columnOutcome, nil
 		}
-		outcome, rewriteError := rewriteBatch(ctx, database, keyring, column, rows)
-		if rewriteError != nil {
-			return columnOutcome, rewriteError
+		outcome, batchError := processBatch(ctx, database, keyring, column, rows, dryRun)
+		if batchError != nil {
+			return columnOutcome, batchError
 		}
 		columnOutcome.add(outcome)
 		lastSeenID = rows[len(rows)-1].ID
@@ -159,6 +137,8 @@ func rewriteBatch(ctx context.Context, database *bun.DB, keyring *Keyring, colum
 				outcome.rewritten++
 			case rowSkippedConcurrent:
 				outcome.skippedConcurrent++
+			case rowUnreadable:
+				outcome.unreadableIDs = append(outcome.unreadableIDs, row.ID)
 			}
 		}
 		return nil
@@ -172,22 +152,41 @@ func rewriteBatch(ctx context.Context, database *bun.DB, keyring *Keyring, colum
 type rowResult int
 
 const (
-	rowRewritten rowResult = iota
+	rowNotProcessed rowResult = iota
+	rowRewritten
 	rowSkippedConcurrent
 	rowAlreadyCurrent
+	rowUnreadable
 )
+
+func processBatch(ctx context.Context, database *bun.DB, keyring *Keyring, column EncryptedColumn, rows []sealedRow, dryRun bool) (batchOutcome, error) {
+	if dryRun {
+		return inspectBatch(keyring, column, rows), nil
+	}
+	return rewriteBatch(ctx, database, keyring, column, rows)
+}
+
+func inspectBatch(keyring *Keyring, column EncryptedColumn, rows []sealedRow) batchOutcome {
+	var outcome batchOutcome
+	for _, row := range rows {
+		if _, _, openError := openRow(keyring, column, row); openError != nil {
+			outcome.unreadableIDs = append(outcome.unreadableIDs, row.ID)
+		}
+	}
+	return outcome
+}
 
 func rewriteRow(ctx context.Context, transaction bun.Tx, keyring *Keyring, column EncryptedColumn, row sealedRow) (rowResult, error) {
 	plaintext, isLegacyForm, openError := openRow(keyring, column, row)
 	if openError != nil {
-		return rowSkippedConcurrent, fmt.Errorf("open %s row %d: %w", column.Name(), row.ID, openError)
+		return rowUnreadable, nil
 	}
 	if !isLegacyForm && row.KeyID == keyring.CurrentKeyID() {
 		return rowAlreadyCurrent, nil
 	}
 	ciphertext, keyID, sealError := keyring.Seal(plaintext, column.AssociatedData(row.AssociatedValues))
 	if sealError != nil {
-		return rowSkippedConcurrent, fmt.Errorf("seal %s row %d: %w", column.Name(), row.ID, sealError)
+		return rowNotProcessed, fmt.Errorf("seal %s row %d: %w", column.Name(), row.ID, sealError)
 	}
 	result, updateError := transaction.NewRaw(
 		`UPDATE ? SET ? = ?, ? = ? WHERE ? = ? AND ? = ? AND ? = ?`,
@@ -195,11 +194,11 @@ func rewriteRow(ctx context.Context, transaction bun.Tx, keyring *Keyring, colum
 		bun.Ident(column.IDColumn), row.ID, bun.Ident(column.KeyIDColumn), row.KeyID, bun.Ident(column.CiphertextColumn), row.Ciphertext,
 	).Exec(ctx)
 	if updateError != nil {
-		return rowSkippedConcurrent, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, updateError)
+		return rowNotProcessed, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, updateError)
 	}
 	affectedRows, affectedError := result.RowsAffected()
 	if affectedError != nil {
-		return rowSkippedConcurrent, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, affectedError)
+		return rowNotProcessed, fmt.Errorf("update %s row %d: %w", column.Name(), row.ID, affectedError)
 	}
 	if affectedRows != 1 {
 		return rowSkippedConcurrent, nil

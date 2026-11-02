@@ -59,6 +59,9 @@ func printRotationReport(output io.Writer, report secrets.RotationReport, dryRun
 		if !dryRun {
 			fmt.Fprintf(output, "  rewritten: %d, skipped_concurrent: %d\n", columnReport.Rewritten, columnReport.SkippedConcurrent)
 		}
+		if len(columnReport.UnreadableIDs) > 0 {
+			fmt.Fprintf(output, "  unreadable row ids: %v\n", columnReport.UnreadableIDs)
+		}
 	}
 	if dryRun {
 		fmt.Fprintln(output, "dry run: nothing was rewritten")

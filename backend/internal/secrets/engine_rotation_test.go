@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -147,5 +151,71 @@ func TestEngineAssociatedDataSeparatesItsParts(testContext *testing.T) {
 	}
 	if string(EngineMachinePasswordAssociatedData(7, "https://a.example.com")) != "engine.machine_password:7:https://a.example.com:443" {
 		testContext.Errorf("unexpected machine password associated data %q", EngineMachinePasswordAssociatedData(7, "https://a.example.com"))
+	}
+}
+
+func TestRotateReportsUnreadableRowsAndContinues(testContext *testing.T) {
+	fixture := newRotationFixture(testContext)
+	ctx := context.Background()
+	var accountID int64
+	if scanError := fixture.database.QueryRowContext(ctx,
+		`INSERT INTO account (account_name) VALUES ('alice') RETURNING account_id`).Scan(&accountID); scanError != nil {
+		testContext.Fatalf("insert account: %v", scanError)
+	}
+	totpCiphertext, totpKeyID, _ := fixture.retiredKeyring.Seal([]byte("totp-secret"), []byte("totp:"+strconv.FormatInt(accountID, 10)))
+	if _, insertError := fixture.database.ExecContext(ctx,
+		`INSERT INTO credential (credential_account_id, credential_kind, credential_secret_ciphertext, credential_key_id) VALUES (?, 'totp', ?, ?)`,
+		accountID, totpCiphertext, totpKeyID); insertError != nil {
+		testContext.Fatalf("insert totp credential: %v", insertError)
+	}
+	tamperedEngineID := insertProxiedEngine(testContext, fixture, fixture.retiredKeyring, "tampered",
+		destinationPasswordAssociatedData, destinationCredentialAssociatedData)
+	readableEngineID := insertProxiedEngine(testContext, fixture, fixture.retiredKeyring, "readable",
+		destinationPasswordAssociatedData, destinationCredentialAssociatedData)
+	// The tampered engine was pointed elsewhere directly in the database: both
+	// of its secrets no longer open, and the rotation must step over them.
+	if _, tamperError := fixture.database.ExecContext(ctx,
+		`UPDATE engine SET engine_lapi_url = 'https://attacker.example.com' WHERE engine_id = ?`, tamperedEngineID); tamperError != nil {
+		testContext.Fatalf("tamper: %v", tamperError)
+	}
+	expectedUnreadable := []int64{tamperedEngineID}
+
+	dryRunReport, dryRunError := Rotate(ctx, fixture.database, fixture.rotatingKeyring, true, testBatchSize)
+	if !errors.Is(dryRunError, ErrUnreadableRows) {
+		testContext.Errorf("the dry run must report the unreadable rows, got %v", dryRunError)
+	}
+	for _, columnReport := range dryRunReport.Columns[1:] {
+		if fmt.Sprint(columnReport.UnreadableIDs) != fmt.Sprint(expectedUnreadable) {
+			testContext.Errorf("dry run %s: expected unreadable %v, got %v", columnReport.Column, expectedUnreadable, columnReport.UnreadableIDs)
+		}
+	}
+	if dryRunReport.Rewritten() != 0 {
+		testContext.Errorf("a dry run must not rewrite, got %d", dryRunReport.Rewritten())
+	}
+
+	report, rotateError := Rotate(ctx, fixture.database, fixture.rotatingKeyring, false, testBatchSize)
+
+	if !errors.Is(rotateError, ErrUnreadableRows) {
+		testContext.Fatalf("expected ErrUnreadableRows, got %v", rotateError)
+	}
+	if !strings.Contains(rotateError.Error(), strconv.FormatInt(tamperedEngineID, 10)) || strings.Contains(rotateError.Error(), "machine-password") {
+		testContext.Errorf("the error must list the row id and nothing secret: %v", rotateError)
+	}
+	if report.Rewritten() != 3 || len(report.Columns) != len(EncryptedColumns) {
+		testContext.Errorf("expected the totp and both readable engine secrets rewritten over every column, got %+v", report)
+	}
+	for _, columnReport := range report.Columns[1:] {
+		if fmt.Sprint(columnReport.UnreadableIDs) != fmt.Sprint(expectedUnreadable) {
+			testContext.Errorf("%s: expected unreadable %v, got %v", columnReport.Column, expectedUnreadable, columnReport.UnreadableIDs)
+		}
+	}
+	requireDestinationBound(testContext, fixture, readableEngineID, "readable")
+	var totpKeyIDAfter string
+	if scanError := fixture.database.QueryRowContext(ctx,
+		`SELECT credential_key_id FROM credential WHERE credential_account_id = ?`, accountID).Scan(&totpKeyIDAfter); scanError != nil {
+		testContext.Fatalf("load totp: %v", scanError)
+	}
+	if totpKeyIDAfter != fixture.rotatingKeyring.CurrentKeyID() {
+		testContext.Errorf("the totp column must be rotated, got key id %q", totpKeyIDAfter)
 	}
 }
