@@ -46,6 +46,9 @@ func newTestHandlerAndSessions(testContext *testing.T, services Services, machin
 		return authenticator.IdentityByID(accountID)
 	})
 	services.Sessions = sessions
+	if services.AccountManager == nil {
+		services.AccountManager = sessionOnlyAccountManager{sessions: sessions}
+	}
 	if services.Login == nil {
 		services.Login = newFakeLoginService(authenticator)
 	}
@@ -292,4 +295,13 @@ func TestUnknownApiRouteRequiresSession(testContext *testing.T) {
 	if recorder.Code != http.StatusUnauthorized {
 		testContext.Errorf("expected 401, got %d", recorder.Code)
 	}
+}
+
+type sessionOnlyAccountManager struct {
+	AccountManager
+	sessions *authtest.SessionStore
+}
+
+func (manager sessionOnlyAccountManager) RevokeSessionsAndTokens(ctx context.Context, _ string) error {
+	return manager.sessions.DestroyAllForAccount(ctx, testAccountID)
 }

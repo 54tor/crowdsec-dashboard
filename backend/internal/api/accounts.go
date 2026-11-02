@@ -21,7 +21,7 @@ const (
 type AccountManager interface {
 	List(ctx context.Context) ([]accounts.AccountSummary, error)
 	CreateAccount(ctx context.Context, accountName, password, role string, setupWindow time.Duration) (int64, error)
-	ChangeRole(ctx context.Context, accountName, role string) error
+	ChangeRole(ctx context.Context, accountName, role string) (string, error)
 	Delete(ctx context.Context, accountName string) error
 	ResetSecondFactor(ctx context.Context, accountName string) error
 	RevokeSessionsAndTokens(ctx context.Context, accountName string) error
@@ -96,26 +96,13 @@ func (handlers accountHandlers) changeRole(responseWriter http.ResponseWriter, r
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	previousRole := handlers.currentRole(request.Context(), accountName)
-	if changeError := handlers.manager.ChangeRole(request.Context(), accountName, submission.AccountRole); changeError != nil {
+	previousRole, changeError := handlers.manager.ChangeRole(request.Context(), accountName, submission.AccountRole)
+	if changeError != nil {
 		writeAccountError(responseWriter, changeError)
 		return
 	}
 	handlers.record(request, audit.ActionAccountRoleChanged, accountName+":"+previousRole+"->"+submission.AccountRole)
 	writeStatus(responseWriter, "ok")
-}
-
-func (handlers accountHandlers) currentRole(ctx context.Context, accountName string) string {
-	summaries, listError := handlers.manager.List(ctx)
-	if listError != nil {
-		return ""
-	}
-	for _, summary := range summaries {
-		if summary.AccountName == accountName {
-			return summary.AccountRole
-		}
-	}
-	return ""
 }
 
 func (handlers accountHandlers) simpleAction(action audit.Action, operate func(AccountManager, context.Context, string) error) http.HandlerFunc {

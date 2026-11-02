@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -69,19 +71,20 @@ func (manager *fakeAccountManager) CreateAccount(_ context.Context, accountName,
 	return createdID, nil
 }
 
-func (manager *fakeAccountManager) ChangeRole(_ context.Context, accountName, role string) error {
+func (manager *fakeAccountManager) ChangeRole(_ context.Context, accountName, role string) (string, error) {
 	if role != auth.RoleAdmin && role != auth.RoleReadOnly {
-		return accounts.ErrInvalidRole
+		return "", accounts.ErrInvalidRole
 	}
 	account, findError := manager.find(accountName)
 	if findError != nil {
-		return findError
+		return "", findError
 	}
 	if role == auth.RoleReadOnly && account.role == auth.RoleAdmin && manager.administratorCount() == 1 {
-		return accounts.ErrLastAdmin
+		return "", accounts.ErrLastAdmin
 	}
+	previousRole := account.role
 	account.role = role
-	return nil
+	return previousRole, nil
 }
 
 func (manager *fakeAccountManager) administratorCount() int {
@@ -376,8 +379,18 @@ func TestRoleChangeAuditTargetNamesBothRoles(testContext *testing.T) {
 func TestAuditNeverContainsPassword(testContext *testing.T) {
 	fixture := newAccountFixture(testContext)
 
-	fixture.asAdministrator(http.MethodPost, "/api/accounts", `{"account_name":"carol","password":"`+validPassword+`","account_role":"read_only"}`)
+	var capturedLogs strings.Builder
+	log.SetOutput(&capturedLogs)
+	defer log.SetOutput(os.Stderr)
 
+	recorder := fixture.asAdministrator(http.MethodPost, "/api/accounts", `{"account_name":"carol","password":"`+validPassword+`","account_role":"read_only"}`)
+
+	if recorder.Code != http.StatusCreated || len(fixture.recorder.events) != 1 {
+		testContext.Fatalf("expected 201 and one audit event, got %d and %+v", recorder.Code, fixture.recorder.events)
+	}
+	if strings.Contains(capturedLogs.String(), validPassword) {
+		testContext.Errorf("password leaked into logs %q", capturedLogs.String())
+	}
 	for _, event := range fixture.recorder.events {
 		if strings.Contains(event.target, validPassword) {
 			testContext.Errorf("password leaked into audit target %q", event.target)
