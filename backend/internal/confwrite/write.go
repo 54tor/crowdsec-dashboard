@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 )
 
 var (
@@ -32,6 +33,8 @@ func (inconsistentError *InconsistentError) Is(target error) bool {
 	return target == ErrConfigInconsistent
 }
 
+var applyMutex sync.Mutex
+
 type renameFunc func(root *os.Root, fromName, toName string) error
 
 type fileSystemHooks struct {
@@ -52,6 +55,8 @@ func Apply(rootDir string, changes []FileChange, test func(ctx context.Context) 
 }
 
 func applyWith(rootDir string, changes []FileChange, test func(ctx context.Context) error, hooks fileSystemHooks) (Result, error) {
+	applyMutex.Lock()
+	defer applyMutex.Unlock()
 	if validationError := validateChanges(changes); validationError != nil {
 		return Result{}, validationError
 	}
@@ -90,6 +95,16 @@ func refusePendingRecovery(root *os.Root) error {
 		return ErrRecoveryPending
 	}
 	return nil
+}
+
+func HasPendingRecovery(rootDir string) (bool, error) {
+	root, openError := openImportRoot(rootDir)
+	if openError != nil {
+		return false, openError
+	}
+	defer root.Close()
+	pendingDirs, listError := pendingJournalDirs(root)
+	return len(pendingDirs) > 0, listError
 }
 
 func sortedChanges(changes []FileChange) []FileChange {

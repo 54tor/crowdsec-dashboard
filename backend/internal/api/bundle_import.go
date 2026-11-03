@@ -179,6 +179,10 @@ func sectionErrorCode(failure error) string {
 		return bundle.ErrorCodeConfigInconsistent
 	case errors.Is(failure, bundle.ErrConfigTestFailed):
 		return bundle.ErrorCodeConfigTestFailed
+	case errors.Is(failure, bundle.ErrConcurrentChange):
+		return bundle.ErrorCodeConfigChangedConcurrently
+	case errors.Is(failure, bundle.ErrRecoveryPending):
+		return bundle.ErrorCodeConfigRecoveryPending
 	case errors.Is(failure, context.DeadlineExceeded):
 		return "import_timeout"
 	case errors.Is(failure, context.Canceled):

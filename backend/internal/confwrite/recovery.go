@@ -1,17 +1,35 @@
 package confwrite
 
 import (
-	"errors"
 	"os"
 	"slices"
 )
 
+const (
+	ReasonUnrestoredFiles   = "unrestored_files"
+	ReasonUnreadableJournal = "unreadable_journal"
+	ReasonSyncFailed        = "sync_failed"
+	ReasonJournalNotRemoved = "journal_not_removed"
+)
+
+type PendingJournal struct {
+	BackupDir string
+	Files     []string
+	Reason    string
+}
+
 type Recovery struct {
 	Recovered    []string
-	Inconsistent []string
+	Inconsistent []PendingJournal
 }
 
 func RecoverPending(rootDir string) (Recovery, error) {
+	return recoverPendingWith(rootDir, syncDirectory)
+}
+
+func recoverPendingWith(rootDir string, syncDir func(*os.Root, string) error) (Recovery, error) {
+	applyMutex.Lock()
+	defer applyMutex.Unlock()
 	root, openError := openImportRoot(rootDir)
 	if openError != nil {
 		return Recovery{}, openError
@@ -21,20 +39,19 @@ func RecoverPending(rootDir string) (Recovery, error) {
 	if listError != nil {
 		return Recovery{}, listError
 	}
-	recovery := Recovery{Recovered: []string{}, Inconsistent: []string{}}
-	journalErrors := []error{}
+	recovery := Recovery{Recovered: []string{}, Inconsistent: []PendingJournal{}}
 	for _, backupDir := range pendingDirs {
-		journalErrors = append(journalErrors, recovery.recoverJournal(root, backupDir))
+		recovery.recoverJournal(root, backupDir, syncDir)
 	}
 	slices.Sort(recovery.Recovered)
-	slices.Sort(recovery.Inconsistent)
-	return recovery, errors.Join(journalErrors...)
+	return recovery, nil
 }
 
-func (recovery *Recovery) recoverJournal(root *os.Root, backupDir string) error {
+func (recovery *Recovery) recoverJournal(root *os.Root, backupDir string, syncDir func(*os.Root, string) error) {
 	entry, readError := readJournal(root, backupDir)
 	if readError != nil {
-		return readError
+		recovery.keep(backupDir, []string{}, ReasonUnreadableJournal)
+		return
 	}
 	failedNames := []string{}
 	for _, createdName := range entry.Created {
@@ -47,15 +64,25 @@ func (recovery *Recovery) recoverJournal(root *os.Root, backupDir string) error 
 			failedNames = append(failedNames, replacedName)
 		}
 	}
-	syncDirectory(root, ".")
 	for _, journaledName := range append(append([]string{}, entry.Created...), entry.Replaced...) {
 		if !slices.Contains(failedNames, journaledName) {
 			recovery.Recovered = append(recovery.Recovered, journaledName)
 		}
 	}
-	recovery.Inconsistent = append(recovery.Inconsistent, failedNames...)
 	if len(failedNames) > 0 {
-		return nil
+		slices.Sort(failedNames)
+		recovery.keep(backupDir, failedNames, ReasonUnrestoredFiles)
+		return
 	}
-	return removeJournal(root, backupDir, syncDirectory)
+	if syncDir(root, ".") != nil {
+		recovery.keep(backupDir, []string{}, ReasonSyncFailed)
+		return
+	}
+	if removeJournal(root, backupDir, syncDir) != nil {
+		recovery.keep(backupDir, []string{}, ReasonJournalNotRemoved)
+	}
+}
+
+func (recovery *Recovery) keep(backupDir string, files []string, reason string) {
+	recovery.Inconsistent = append(recovery.Inconsistent, PendingJournal{BackupDir: backupDir, Files: files, Reason: reason})
 }

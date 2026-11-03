@@ -85,4 +85,10 @@ func TestSectionErrorCodeMapsConfigInconsistent(testContext *testing.T) {
 	if obtainedCode := sectionErrorCode(bundle.ErrConfigTestFailed); obtainedCode != "config_test_failed" {
 		testContext.Errorf("expected config_test_failed, got %s", obtainedCode)
 	}
+	if obtainedCode := sectionErrorCode(bundle.ErrConcurrentChange); obtainedCode != "config_changed_concurrently" {
+		testContext.Errorf("expected config_changed_concurrently, got %s", obtainedCode)
+	}
+	if obtainedCode := sectionErrorCode(bundle.ErrRecoveryPending); obtainedCode != "config_recovery_pending" {
+		testContext.Errorf("expected config_recovery_pending, got %s", obtainedCode)
+	}
 }

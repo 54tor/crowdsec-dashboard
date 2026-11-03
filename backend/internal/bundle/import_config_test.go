@@ -289,3 +289,18 @@ func TestImportConfigRefusesForbiddenSources(testContext *testing.T) {
 		testContext.Errorf("refused files must write nothing, got %v", entries)
 	}
 }
+
+func TestImportConfigPreviewReportsPendingRecovery(testContext *testing.T) {
+	fixture := newConfigImportFixture(testContext)
+	backupDirectory := filepath.Join(fixture.importDirectory, ".dashboard-backup", "20261103T120000.000000000Z")
+	if mkdirError := os.MkdirAll(backupDirectory, 0o750); mkdirError != nil {
+		testContext.Fatalf("mkdir: %v", mkdirError)
+	}
+	writeImportDirFile(testContext, backupDirectory, ".pending", `{"created":["ssh.yaml"],"replaced":[]}`)
+
+	plan := planConfigOrFail(testContext, fixture.configDeps(), configBundle(ConfigFile{Name: "acquis.d/ssh.yaml", Content: sshAcquisition}))
+
+	if plan.UnavailableCodes[SectionConfig] != ErrorCodeConfigRecoveryPending {
+		testContext.Errorf("a pending recovery must show in the preview, got %v", plan.UnavailableCodes)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runUntilCrash runs an apply in its own goroutine; a hook that calls runtime.Goexit stops it on
@@ -61,7 +62,7 @@ func recoverAndCompare(testContext *testing.T, importDirectory string, before ma
 
 func pendingJournals(testContext *testing.T, importDirectory string) int {
 	testContext.Helper()
-	journals, _ := filepath.Glob(filepath.Join(importDirectory, BackupDirName, "*", journalName))
+	journals, _ := filepath.Glob(filepath.Join(importDirectory, BackupDirName, "*", JournalName))
 	return len(journals)
 }
 
@@ -115,7 +116,8 @@ func TestFailedRecoveryKeepsTheJournal(testContext *testing.T) {
 
 	recovery, _ := RecoverPending(importDirectory)
 
-	if !slices.Equal(recovery.Inconsistent, []string{"a.yaml"}) {
+	if len(recovery.Inconsistent) != 1 || !slices.Equal(recovery.Inconsistent[0].Files, []string{"a.yaml"}) ||
+		!strings.HasPrefix(recovery.Inconsistent[0].BackupDir, BackupDirName+"/") || recovery.Inconsistent[0].Reason != ReasonUnrestoredFiles {
 		testContext.Errorf("the unrestorable file must be reported, got %+v", recovery)
 	}
 	if pendingJournals(testContext, importDirectory) != 1 {
@@ -196,6 +198,9 @@ func TestRollbackWithOnlyFinalSyncFailureIsARollback(testContext *testing.T) {
 	if after := directorySnapshot(testContext, importDirectory); !mapsEqual(before, after) {
 		testContext.Error("directory must be restored")
 	}
+	if pendingJournals(testContext, importDirectory) != 1 {
+		testContext.Error("an unsynced rollback keeps its journal so the next start recovers again")
+	}
 }
 
 func TestCleanStaleTempsRemovesOnlyDashboardTemps(testContext *testing.T) {
@@ -213,5 +218,89 @@ func TestCleanStaleTempsRemovesOnlyDashboardTemps(testContext *testing.T) {
 	}
 	if !strings.HasPrefix(tempFilePrefix, ".dashboard-tmp-") {
 		testContext.Errorf("temp prefix must be .dashboard-tmp-, got %s", tempFilePrefix)
+	}
+}
+
+func TestCrashBeforeFirstRenameRecoveryIsAHarmlessRestore(testContext *testing.T) {
+	importDirectory, before, changes := crashFixture(testContext)
+	hooks := defaultHooks()
+	hooks.rename = func(*os.Root, string, string) error {
+		runtime.Goexit()
+		return nil
+	}
+
+	runUntilCrash(importDirectory, changes, passingConfigTest, hooks)
+
+	if readFixtureFile(testContext, importDirectory, "a.yaml") != originalAcquisition || pendingJournals(testContext, importDirectory) != 1 {
+		testContext.Fatal("the crash must leave the old files and a pending journal")
+	}
+	recoverAndCompare(testContext, importDirectory, before)
+}
+
+func TestRecoverySyncFailureKeepsTheJournal(testContext *testing.T) {
+	importDirectory, _, changes := crashFixture(testContext)
+	crashingConfigTest := func(context.Context) error {
+		runtime.Goexit()
+		return nil
+	}
+	runUntilCrash(importDirectory, changes, crashingConfigTest, defaultHooks())
+	failingSync := func(*os.Root, string) error { return errors.New("simulated fsync failure") }
+
+	recovery, _ := recoverPendingWith(importDirectory, failingSync)
+
+	if len(recovery.Inconsistent) != 1 || recovery.Inconsistent[0].Reason != ReasonSyncFailed {
+		testContext.Errorf("an unsynced recovery must be reported, got %+v", recovery)
+	}
+	if pendingJournals(testContext, importDirectory) != 1 {
+		testContext.Error("an unsynced recovery keeps its journal")
+	}
+}
+
+func TestPendingRecoveryIsVisibleBeforeApply(testContext *testing.T) {
+	importDirectory, _, changes := crashFixture(testContext)
+	if pending, _ := HasPendingRecovery(importDirectory); pending {
+		testContext.Fatal("no journal yet")
+	}
+	runUntilCrash(importDirectory, changes, func(context.Context) error {
+		runtime.Goexit()
+		return nil
+	}, defaultHooks())
+	if pending, checkError := HasPendingRecovery(importDirectory); !pending || checkError != nil {
+		testContext.Errorf("a pending journal must be reported, got %v %v", pending, checkError)
+	}
+}
+
+func TestConcurrentImportsAreSerialised(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	secondFinished := make(chan error, 1)
+	secondReturnedEarly := false
+	// The first import's config test starts a second import and checks it cannot run while the
+	// first one still holds its journal; without serialisation it would see the journal and fail.
+	blockingConfigTest := func(context.Context) error {
+		go func() {
+			_, secondError := Apply(importDirectory, []FileChange{{Name: "second.yaml", Content: []byte(createdAcquisition)}}, passingConfigTest)
+			secondFinished <- secondError
+		}()
+		select {
+		case <-secondFinished:
+			secondReturnedEarly = true
+		case <-time.After(200 * time.Millisecond):
+		}
+		return nil
+	}
+
+	_, firstError := Apply(importDirectory, []FileChange{{Name: "first.yaml", Content: []byte(createdAcquisition)}}, blockingConfigTest)
+
+	if firstError != nil {
+		testContext.Fatalf("first apply: %v", firstError)
+	}
+	if secondReturnedEarly {
+		testContext.Fatal("a second import ran while the first was in progress")
+	}
+	if secondError := <-secondFinished; secondError != nil {
+		testContext.Errorf("the second import runs after the first, got %v", secondError)
+	}
+	if readFixtureFile(testContext, importDirectory, "second.yaml") != createdAcquisition {
+		testContext.Error("second import must be written")
 	}
 }

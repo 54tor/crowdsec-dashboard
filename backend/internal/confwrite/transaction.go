@@ -155,11 +155,13 @@ func (writeTransaction *transaction) rollback(result Result, cause error) (Resul
 			affectedFiles = append(affectedFiles, write.name)
 		}
 	}
-	writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")
+	syncError := writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")
 	if len(affectedFiles) > 0 {
 		return result, &InconsistentError{Files: affectedFiles}
 	}
-	removeJournal(writeTransaction.root, writeTransaction.backupDir, writeTransaction.hooks.syncDirectory)
+	if syncError == nil {
+		removeJournal(writeTransaction.root, writeTransaction.backupDir, writeTransaction.hooks.syncDirectory)
+	}
 	result.RolledBack = true
 	return result, cause
 }

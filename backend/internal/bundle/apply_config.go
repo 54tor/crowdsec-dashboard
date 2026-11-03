@@ -14,27 +14,31 @@ import (
 )
 
 const (
-	ReasonForbiddenName           = "forbidden_name"
-	ReasonForbiddenSource         = "forbidden_source"
-	ReasonRedactedContent         = "redacted_content"
-	ReasonInvalidYAML             = "invalid_yaml"
-	ReasonFileTooLarge            = "too_large"
-	ReasonNotRegularFile          = "not_regular_file"
-	ReasonUnchanged               = "unchanged"
-	ErrorCodeImportDisabled       = "import_disabled"
-	ErrorCodeImportDirUnavailable = "section_unavailable"
-	ErrorCodeConfigTestFailed     = "config_test_failed"
-	ErrorCodeConfigInconsistent   = "config_inconsistent"
-	FileCreated                   = "created"
-	FileUpdated                   = "updated"
-	FileUnchanged                 = "unchanged"
-	acquisitionDirPrefix          = "acquis.d/"
-	rejectedFilePrefix            = "file#"
+	ReasonForbiddenName                = "forbidden_name"
+	ReasonForbiddenSource              = "forbidden_source"
+	ReasonRedactedContent              = "redacted_content"
+	ReasonInvalidYAML                  = "invalid_yaml"
+	ReasonFileTooLarge                 = "too_large"
+	ReasonNotRegularFile               = "not_regular_file"
+	ReasonUnchanged                    = "unchanged"
+	ErrorCodeImportDisabled            = "import_disabled"
+	ErrorCodeImportDirUnavailable      = "section_unavailable"
+	ErrorCodeConfigTestFailed          = "config_test_failed"
+	ErrorCodeConfigInconsistent        = "config_inconsistent"
+	ErrorCodeConfigChangedConcurrently = "config_changed_concurrently"
+	ErrorCodeConfigRecoveryPending     = "config_recovery_pending"
+	FileCreated                        = "created"
+	FileUpdated                        = "updated"
+	FileUnchanged                      = "unchanged"
+	acquisitionDirPrefix               = "acquis.d/"
+	rejectedFilePrefix                 = "file#"
 )
 
 var (
 	ErrConfigTestFailed   = confwrite.ErrConfigTestFailed
 	ErrConfigInconsistent = confwrite.ErrConfigInconsistent
+	ErrConcurrentChange   = confwrite.ErrConcurrentChange
+	ErrRecoveryPending    = confwrite.ErrRecoveryPending
 )
 
 var displayableFileName = regexp.MustCompile(`^[A-Za-z0-9._/-]{1,128}$`)
@@ -60,6 +64,13 @@ func (configImport) Plan(_ context.Context, deps ImportDeps, imported Bundle) (S
 	}
 	if deps.TestConfig == nil || confwrite.CheckWritable(deps.ConfigImportDir) != nil {
 		return SectionPlan{Unavailable: true, UnavailableCode: ErrorCodeImportDirUnavailable}, nil
+	}
+	recoveryPending, recoveryError := confwrite.HasPendingRecovery(deps.ConfigImportDir)
+	if recoveryError != nil {
+		return SectionPlan{Unavailable: true, UnavailableCode: ErrorCodeImportDirUnavailable}, nil
+	}
+	if recoveryPending {
+		return SectionPlan{Unavailable: true, UnavailableCode: ErrorCodeConfigRecoveryPending}, nil
 	}
 	sectionPlan := SectionPlan{}
 	plannedNames := map[string]bool{}

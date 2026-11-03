@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path"
 	"strings"
 	"time"
 
@@ -26,13 +27,16 @@ func enableConfigImport(services *api.Services, loadedConfig config.Config, now 
 
 func recoverInterruptedImport(importDir string, logLine logFunction) {
 	recovery, recoveryError := confwrite.RecoverPending(importDir)
+	if recoveryError != nil {
+		logLine("config import: pending journals not checked: %v", recoveryError)
+		return
+	}
 	if len(recovery.Recovered) > 0 {
 		logLine("config import: config_recovered files=%s", strings.Join(recovery.Recovered, ","))
 	}
-	if len(recovery.Inconsistent) > 0 {
-		logLine("config import: config_inconsistent files=%s", strings.Join(recovery.Inconsistent, ","))
-	}
-	if recoveryError != nil {
-		logLine("config import: config_inconsistent pending journal unreadable: %v", recoveryError)
+	for _, pendingJournal := range recovery.Inconsistent {
+		logLine("config import: config_inconsistent reason=%s files=%s backup=%s: restore the listed files from %s/ then delete %s",
+			pendingJournal.Reason, strings.Join(pendingJournal.Files, ","), pendingJournal.BackupDir,
+			pendingJournal.BackupDir, path.Join(pendingJournal.BackupDir, confwrite.JournalName))
 	}
 }

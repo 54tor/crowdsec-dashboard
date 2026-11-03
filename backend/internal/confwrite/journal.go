@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	journalName     = ".pending"
+	JournalName     = ".pending"
 	maxJournalBytes = 64 << 10
 )
 
@@ -34,7 +34,7 @@ func writeJournal(root *os.Root, backupDir string, entry journal, syncDir func(*
 	if writeError != nil {
 		return writeError
 	}
-	if renameError := root.Rename(tempName, path.Join(backupDir, journalName)); renameError != nil {
+	if renameError := root.Rename(tempName, path.Join(backupDir, JournalName)); renameError != nil {
 		root.Remove(tempName)
 		return renameError
 	}
@@ -42,14 +42,14 @@ func writeJournal(root *os.Root, backupDir string, entry journal, syncDir func(*
 }
 
 func removeJournal(root *os.Root, backupDir string, syncDir func(*os.Root, string) error) error {
-	if removeError := removeIfPresent(root, path.Join(backupDir, journalName)); removeError != nil {
+	if removeError := removeIfPresent(root, path.Join(backupDir, JournalName)); removeError != nil {
 		return removeError
 	}
 	return syncDir(root, backupDir)
 }
 
 func readJournal(root *os.Root, backupDir string) (journal, error) {
-	file, _, openError := openVerified(root, path.Join(backupDir, journalName))
+	file, _, openError := openVerified(root, path.Join(backupDir, JournalName))
 	if openError != nil {
 		return journal{}, openError
 	}
@@ -96,6 +96,6 @@ func pendingJournalDirs(root *os.Root) ([]string, error) {
 }
 
 func hasJournal(root *os.Root, backupDir string) bool {
-	_, lstatError := root.Lstat(path.Join(backupDir, journalName))
+	_, lstatError := root.Lstat(path.Join(backupDir, JournalName))
 	return !errors.Is(lstatError, fs.ErrNotExist)
 }

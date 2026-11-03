@@ -83,3 +83,27 @@ func TestStartupRecoversAnInterruptedConfigImport(testContext *testing.T) {
 		testContext.Errorf("unexpected log %v", loggedLines)
 	}
 }
+
+func TestStartupNamesTheBackupWhenRecoveryFails(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	backupDirectory := filepath.Join(importDirectory, confwrite.BackupDirName, "20261103T120000.000000000Z")
+	if mkdirError := os.MkdirAll(backupDirectory, 0o750); mkdirError != nil {
+		testContext.Fatalf("mkdir: %v", mkdirError)
+	}
+	// The journal names a replaced file whose backup is missing: recovery cannot restore it.
+	if writeError := os.WriteFile(filepath.Join(backupDirectory, ".pending"), []byte(`{"created":[],"replaced":["nginx.yaml"]}`), 0o640); writeError != nil {
+		testContext.Fatalf("write: %v", writeError)
+	}
+	loggedLines := []string{}
+	recordLog := func(format string, arguments ...any) {
+		loggedLines = append(loggedLines, fmt.Sprintf(format, arguments...))
+	}
+
+	enableConfigImport(&api.Services{}, config.Config{ConfigImportEnabled: true, ConfigImportDir: importDirectory}, time.Now(), recordLog)
+
+	expectedLine := "config import: config_inconsistent reason=unrestored_files files=nginx.yaml backup=.dashboard-backup/20261103T120000.000000000Z: " +
+		"restore the listed files from .dashboard-backup/20261103T120000.000000000Z/ then delete .dashboard-backup/20261103T120000.000000000Z/.pending"
+	if !slices.Equal(loggedLines, []string{expectedLine}) {
+		testContext.Errorf("unexpected log %q", loggedLines)
+	}
+}
