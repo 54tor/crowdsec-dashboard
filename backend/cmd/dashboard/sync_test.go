@@ -83,3 +83,15 @@ func TestScheduledRunWithChangesOrErrorsIsAudited(testContext *testing.T) {
 		}
 	}
 }
+
+func TestScheduledRunWithOnlyABackedOffPeerIsNotAudited(testContext *testing.T) {
+	recorder := &countingAuditRecorder{}
+	backedOffReport := enginesync.Report{PerEngine: map[string]*enginesync.EngineReport{
+		"local": {Status: enginesync.StatusOK, Skipped: map[string]int{}},
+		"peer":  {Status: enginesync.StatusFailed, ErrorCode: enginesync.ErrorCodeEngineBackoff, Skipped: map[string]int{}},
+	}}
+	auditScheduledRun(recorder, backedOffReport)
+	if recorder.recordCount != 0 {
+		testContext.Errorf("a backed-off peer alone must not write an audit row on every tick, got %d", recorder.recordCount)
+	}
+}

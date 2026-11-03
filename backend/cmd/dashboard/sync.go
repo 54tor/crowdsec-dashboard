@@ -50,7 +50,8 @@ func scheduledRunIsWorthAuditing(report enginesync.Report) bool {
 	}
 	for _, engineReport := range report.PerEngine {
 		changeCount := engineReport.Added + engineReport.Removed + engineReport.Replaced + engineReport.Failed
-		if engineReport.ErrorCode != "" || changeCount > 0 {
+		hasRealError := engineReport.ErrorCode != "" && engineReport.ErrorCode != enginesync.ErrorCodeEngineBackoff
+		if hasRealError || changeCount > 0 {
 			return true
 		}
 	}
