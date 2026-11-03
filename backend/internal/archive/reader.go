@@ -15,7 +15,7 @@ const (
 	alertSelection = `alert_id, engine_name, alert_upstream_id, alert_upstream_uuid, alert_scenario_name,
 		alert_scenario_version, alert_message, alert_machine_id, alert_source_scope, alert_source_value,
 		alert_source_country_code, alert_source_autonomous_system_number, alert_source_autonomous_system_name,
-		alert_events_count, alert_events_truncated, alert_simulated, alert_started_at, alert_stopped_at,
+		alert_events_count, alert_events_truncated, alert_source_kind, alert_simulated, alert_started_at, alert_stopped_at,
 		alert_created_at, alert_collected_at`
 	decisionSelection = `decision_id, decision_alert_id, engine_name, alert_upstream_id, decision_upstream_id,
 		decision_type, decision_origin, decision_scope, decision_value,
@@ -29,6 +29,7 @@ type Reader struct {
 
 type AlertQuery struct {
 	Engine, Scenario, IP string
+	SourceKind           string
 	Since                time.Time
 	IncludeExpired       bool
 	Offset, Limit        int
@@ -58,6 +59,7 @@ type ArchivedAlert struct {
 	SourceASName    string             `bun:"alert_source_autonomous_system_name"`
 	EventsCount     int32              `bun:"alert_events_count"`
 	EventsTruncated bool               `bun:"alert_events_truncated"`
+	SourceKind      string             `bun:"alert_source_kind"`
 	Simulated       bool               `bun:"alert_simulated"`
 	StartedAt       *time.Time         `bun:"alert_started_at"`
 	StoppedAt       *time.Time         `bun:"alert_stopped_at"`
@@ -152,6 +154,9 @@ func (reader *Reader) alertQuery(query AlertQuery) *bun.SelectQuery {
 	selectQuery = applyCommonFilters(selectQuery, query)
 	if query.IP != "" {
 		selectQuery = selectQuery.Where("alert_source_value = ?", query.IP)
+	}
+	if query.SourceKind != "" {
+		selectQuery = selectQuery.Where("alert_source_kind = ?", query.SourceKind)
 	}
 	if query.ExcludedEngine != "" && len(query.ExcludedKeys) > 0 {
 		excludedIDs, excludedUUIDs := splitKeys(query.ExcludedKeys)
@@ -253,7 +258,7 @@ func isValidWindow(query AlertQuery) bool {
 }
 
 func hasUnstorableFilter(query AlertQuery) bool {
-	for _, filterText := range []string{query.Engine, query.Scenario, query.IP, query.ExcludedEngine} {
+	for _, filterText := range []string{query.Engine, query.Scenario, query.IP, query.ExcludedEngine, query.SourceKind} {
 		if strings.ContainsRune(filterText, 0) {
 			return true
 		}

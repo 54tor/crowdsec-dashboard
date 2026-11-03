@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/engines"
 )
@@ -36,6 +37,7 @@ type listQuery struct {
 	IP             string
 	Since          string
 	Engine         string
+	SourceKind     string
 	IncludeExpired bool
 }
 
@@ -72,6 +74,7 @@ func parseListQuery(request *http.Request) (listQuery, bool) {
 		IP:             normalisedIP,
 		Since:          values.Get("since"),
 		Engine:         values.Get("engine"),
+		SourceKind:     values.Get("source_kind"),
 		IncludeExpired: includeExpired,
 	}
 	valid := pageValid && perPageValid && ipValid && includeExpiredValid
@@ -79,6 +82,7 @@ func parseListQuery(request *http.Request) (listQuery, bool) {
 	valid = valid && (query.IP == "" || cscli.ValidateTarget(query.IP) == nil)
 	valid = valid && (query.Since == "" || cscli.ValidateDuration(query.Since) == nil)
 	valid = valid && (query.Engine == "" || engineNamePattern.MatchString(query.Engine))
+	valid = valid && (query.SourceKind == "" || archive.IsSourceKind(query.SourceKind))
 	return query, valid
 }
 

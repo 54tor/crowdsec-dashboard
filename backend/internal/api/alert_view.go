@@ -11,9 +11,10 @@ import (
 
 type alertItem struct {
 	lapi.Alert
-	Engine    string `json:"engine"`
-	ArchiveID *int64 `json:"archive_id"`
-	Live      bool   `json:"live"`
+	Engine     string `json:"engine"`
+	ArchiveID  *int64 `json:"archive_id"`
+	Live       bool   `json:"live"`
+	SourceKind string `json:"source_kind"`
 }
 
 type decisionItem struct {
@@ -34,10 +35,14 @@ type alertDetailItem struct {
 	Events          []eventItem `json:"events"`
 }
 
-func liveAlertItems(window []lapi.Alert, archivedIDs map[archive.UpstreamKey]int64) []alertItem {
+func liveAlertItems(window []lapi.Alert, archivedIDs map[archive.UpstreamKey]int64, sourceKind string) []alertItem {
 	items := make([]alertItem, 0, len(window))
-	for _, liveAlert := range prepareAlertsForResponse(window) {
-		item := alertItem{Alert: liveAlert, Engine: engines.ReservedLocalName, Live: true}
+	for _, liveAlert := range window {
+		liveSourceKind := archive.SourceKind(liveAlert)
+		if sourceKind != "" && liveSourceKind != sourceKind {
+			continue
+		}
+		item := alertItem{Alert: alertForResponse(liveAlert), Engine: engines.ReservedLocalName, Live: true, SourceKind: liveSourceKind}
 		if archiveID, archived := archivedIDs[archive.UpstreamKey{UpstreamID: liveAlert.ID, UUID: liveAlert.UUID}]; archived {
 			item.ArchiveID = &archiveID
 		}
@@ -68,8 +73,9 @@ func archivedAlertItem(archivedAlert archive.ArchivedAlert) alertItem {
 			Source:          archivedSource(archivedAlert),
 			Decisions:       decisions,
 		},
-		Engine:    archivedAlert.Engine,
-		ArchiveID: &archiveID,
+		Engine:     archivedAlert.Engine,
+		ArchiveID:  &archiveID,
+		SourceKind: archivedAlert.SourceKind,
 	}
 }
 

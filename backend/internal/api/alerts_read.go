@@ -40,13 +40,14 @@ func (handlers alertReadHandlers) listLiveOnly(responseWriter http.ResponseWrite
 		writeUpstreamError(responseWriter, listError)
 		return
 	}
+	alertsOfKind := liveAlertsOfKind(window, query.SourceKind)
 	writeJSON(responseWriter, http.StatusOK, page[lapi.Alert]{
-		Items:          prepareAlertsForResponse(slicePage(window, query)),
+		Items:          prepareAlertsForResponse(slicePage(alertsOfKind, query)),
 		Page:           query.Page,
 		PerPage:        query.PerPage,
 		WindowSize:     len(window),
 		MayBeTruncated: len(window) >= alertWindowSize,
-		Total:          len(window),
+		Total:          len(alertsOfKind),
 		LiveStatus:     liveStatusOK,
 	})
 }
@@ -75,7 +76,7 @@ func (handlers alertReadHandlers) listMerged(responseWriter http.ResponseWriter,
 		}
 		return archivedItems, archiveTotal, listError
 	}
-	items, total, mergeError := archive.MergePage(liveAlertItems(window, archivedIDs), readArchivePage, query.Page, query.PerPage)
+	items, total, mergeError := archive.MergePage(liveAlertItems(window, archivedIDs, query.SourceKind), readArchivePage, query.Page, query.PerPage)
 	if mergeError != nil {
 		writeArchiveError(responseWriter, "list archived alerts", mergeError)
 		return
@@ -126,10 +127,28 @@ func keysOf(archivedIDs map[archive.UpstreamKey]int64) []archive.UpstreamKey {
 
 func prepareAlertsForResponse(alerts []lapi.Alert) []lapi.Alert {
 	for alertIndex := range alerts {
-		alerts[alertIndex].Events = nil
-		if alerts[alertIndex].Decisions == nil {
-			alerts[alertIndex].Decisions = []lapi.Decision{}
-		}
+		alerts[alertIndex] = alertForResponse(alerts[alertIndex])
 	}
 	return alerts
+}
+
+func alertForResponse(liveAlert lapi.Alert) lapi.Alert {
+	liveAlert.Events = nil
+	if liveAlert.Decisions == nil {
+		liveAlert.Decisions = []lapi.Decision{}
+	}
+	return liveAlert
+}
+
+func liveAlertsOfKind(window []lapi.Alert, sourceKind string) []lapi.Alert {
+	if sourceKind == "" {
+		return window
+	}
+	alertsOfKind := make([]lapi.Alert, 0, len(window))
+	for _, liveAlert := range window {
+		if archive.SourceKind(liveAlert) == sourceKind {
+			alertsOfKind = append(alertsOfKind, liveAlert)
+		}
+	}
+	return alertsOfKind
 }

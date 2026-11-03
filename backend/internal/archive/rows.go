@@ -37,6 +37,7 @@ type alertRow struct {
 	SourceASName    string     `bun:"alert_source_autonomous_system_name,nullzero"`
 	EventsCount     int32      `bun:"alert_events_count"`
 	EventsTruncated bool       `bun:"alert_events_truncated"`
+	SourceKind      string     `bun:"alert_source_kind"`
 	Simulated       bool       `bun:"alert_simulated"`
 	StartedAt       *time.Time `bun:"alert_started_at"`
 	StoppedAt       *time.Time `bun:"alert_stopped_at"`
@@ -105,6 +106,7 @@ func buildAlertRows(engineID int64, upstreamUUID string, receivedAlert lapi.Aler
 			SourceASName:    SanitizeText(receivedAlert.Source.ASName, bounds.MaxTextBytes),
 			EventsCount:     receivedAlert.EventsCount,
 			EventsTruncated: eventsTruncated,
+			SourceKind:      SourceKind(receivedAlert),
 			Simulated:       receivedAlert.Simulated,
 			StartedAt:       parseUpstreamTimestamp(receivedAlert.StartAt),
 			StoppedAt:       parseUpstreamTimestamp(receivedAlert.StopAt),

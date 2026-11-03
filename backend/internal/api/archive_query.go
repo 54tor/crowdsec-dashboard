@@ -17,6 +17,7 @@ func archiveQueryFor(query listQuery, now time.Time) (archive.AlertQuery, error)
 		Engine:         query.Engine,
 		Scenario:       query.Scenario,
 		IP:             query.IP,
+		SourceKind:     query.SourceKind,
 		IncludeExpired: query.IncludeExpired,
 		ExcludedEngine: engines.ReservedLocalName,
 	}
