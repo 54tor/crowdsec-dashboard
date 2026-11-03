@@ -26,6 +26,7 @@ export interface SyncStatus {
   dry_run: boolean
   interval_seconds: number
   running: boolean
+  error_code: string
   peers: SyncPeer[]
   last_plan: SyncPlanEntry[]
 }

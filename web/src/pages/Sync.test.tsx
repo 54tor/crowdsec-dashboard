@@ -28,7 +28,7 @@ function makePeer(overrides: Partial<SyncPeer> = {}): SyncPeer {
 }
 
 function makeStatus(overrides: Partial<SyncStatus> = {}): SyncStatus {
-  return { enabled: true, dry_run: false, interval_seconds: 300, running: false, peers: [makePeer()], last_plan: [], ...overrides }
+  return { enabled: true, dry_run: false, interval_seconds: 300, running: false, error_code: '', peers: [makePeer()], last_plan: [], ...overrides }
 }
 
 function syncRoutes(status: SyncStatus, session: { status: number; body: object } = ADMIN_SESSION, extraRoutes = {}) {
@@ -146,6 +146,30 @@ describe('sync page', () => {
     renderApp('/sync')
     await screen.findByText(en.sync.errorCodes.engine_unreachable)
     expect(screen.queryByText(en.sync.allowlistUnavailable)).not.toBeInTheDocument()
+  })
+
+  it('translatesTheRunDeadlineSkipReason', async () => {
+    stubFetch(syncRoutes(makeStatus({
+      last_plan: [{ engine: 'edge-1', kind: 'add', target: '203.0.113.8', source: 'edge-2', reason: 'run_deadline' }],
+    })))
+    renderApp('/sync')
+    expect(await screen.findByText(en.sync.reasons.run_deadline)).toBeInTheDocument()
+    expect(screen.queryByText(en.sync.unknownCode.replace('{{code}}', 'run_deadline'))).not.toBeInTheDocument()
+  })
+
+  it('showsTheRunLevelErrorCodeInATopNotice', async () => {
+    // The backend also copies the run-level code onto engine rows without a code of their own, hence the scoped lookup.
+    stubFetch(syncRoutes(makeStatus({ error_code: 'run_deadline', peers: [makePeer({ error_code: 'run_deadline' })] })))
+    renderApp('/sync')
+    const notice = (await screen.findByText(en.sync.runErrorTitle)).closest('[role="status"]') as HTMLElement
+    expect(within(notice).getByText(en.sync.errorCodes.run_deadline)).toBeInTheDocument()
+  })
+
+  it('showsNoRunLevelNoticeWithoutACode', async () => {
+    stubFetch(syncRoutes(makeStatus()))
+    renderApp('/sync')
+    await screen.findByText('edge-1', { selector: 'bdi' })
+    expect(screen.queryByText(en.sync.runErrorTitle)).not.toBeInTheDocument()
   })
 
   it('showsAGenericFallbackForUnknownCodes', async () => {
@@ -274,3 +298,5 @@ describe('sync page', () => {
     expect(Object.keys(fr.sync.reasons).sort()).toEqual(Object.keys(en.sync.reasons).sort())
   })
 })
+      // A participating peer missing from the registry: its copies are kept on the other engines.
+      'engine_unavailable',

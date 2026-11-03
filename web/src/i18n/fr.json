@@ -599,6 +599,7 @@
     "dryRun": "Le mode simulation est actif : le plan est calculé mais aucun changement n'est appliqué.",
     "disabled": "La synchronisation est désactivée sur ce tableau de bord. Les pairs sont listés mais aucune exécution planifiée n'a lieu et « Synchroniser maintenant » est indisponible.",
     "running": "Une synchronisation est en cours. Cette page se rafraîchit automatiquement.",
+    "runErrorTitle": "La dernière exécution a signalé une erreur",
     "allowlistUnavailableTitle": "Listes d'autorisation indisponibles",
     "allowlistUnavailable": "Les listes d'autorisation de ces moteurs sont illisibles, la route des listes d'autorisation est absente, ou elles dépassent 10 000 entrées. Rien n'y est écrit.",
     "manageEngines": "Ajouter ou retirer des pairs dans la page Moteurs",
@@ -656,7 +657,8 @@
       "not_a_copy": "Pas une copie",
       "engine_failed": "Moteur en échec",
       "write_failed": "Écriture en échec",
-      "invalid_target": "Cible invalide"
+      "invalid_target": "Cible invalide",
+      "run_deadline": "Limite de temps de l'exécution atteinte"
     },
     "errorCodes": {
       "operation_running": "Une autre opération est en cours",
@@ -672,7 +674,8 @@
       "engine_backoff": "Ignoré : moteur en attente après des échecs",
       "engine_unreachable": "Moteur injoignable",
       "engine_auth_failed": "Le moteur a refusé les identifiants de la machine",
-      "engine_blocked_address": "Adresse du moteur bloquée par la politique de sécurité réseau"
+      "engine_blocked_address": "Adresse du moteur bloquée par la politique de sécurité réseau",
+      "engine_unavailable": "Moteur indisponible : ses copies sont conservées"
     },
     "guardedTitle": "Pairs bloqués par le garde-fou",
     "guarded": "Trop de changements sont en attente pour ces pairs. Ils restent bloqués tant que les changements en attente ne repassent pas sous la limite ; les autres pairs sont synchronisés normalement.",

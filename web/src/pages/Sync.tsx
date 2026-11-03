@@ -11,7 +11,7 @@ import { TableSkeleton } from '@/components/TableSkeleton'
 import { UntrustedText } from '@/components/UntrustedText'
 import { WriteOnly } from '@/components/WriteOnly'
 import { useCanWrite } from '@/hooks/useCanWrite'
-import { hasUnavailableAllowlist, isGuardedPeer } from '@/lib/syncCodes'
+import { hasUnavailableAllowlist, isGuardedPeer, translateSyncCode } from '@/lib/syncCodes'
 
 function useSyncStatus() {
   const [startedAt, setStartedAt] = useState<number | null>(null)
@@ -49,6 +49,7 @@ function SyncNotices({ status }: { status: SyncStatus }) {
       {status.dry_run && <WarningNotice title={t('sync.dryRunTitle')}>{t('sync.dryRun')}</WarningNotice>}
       {!status.enabled && <InfoNotice>{t('sync.disabled')}</InfoNotice>}
       {status.running && <InfoNotice>{t('sync.running')}</InfoNotice>}
+      {status.error_code !== '' && <WarningNotice title={t('sync.runErrorTitle')}>{translateSyncCode(t, 'errorCodes', status.error_code)}</WarningNotice>}
       {guardedPeers.length > 0 && (
         <WarningNotice title={t('sync.guardedTitle')}>
           <p>{t('sync.guarded')}</p>
