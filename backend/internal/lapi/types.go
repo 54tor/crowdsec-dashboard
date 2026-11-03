@@ -3,6 +3,7 @@ package lapi
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 var (
@@ -84,6 +85,9 @@ type Alert struct {
 	ID              int64      `json:"id"`
 	UUID            string     `json:"uuid"`
 	ScenarioVersion string     `json:"scenario_version"`
+	ScenarioHash    string     `json:"scenario_hash"`
+	Capacity        int32      `json:"capacity"`
+	Leakspeed       string     `json:"leakspeed"`
 	CreatedAt       string     `json:"created_at"`
 	MachineID       string     `json:"machine_id"`
 	Scenario        string     `json:"scenario"`
@@ -125,6 +129,23 @@ type NewDecision struct {
 	Type     string
 	Duration string
 	Reason   string
+}
+
+type SyncDecision struct {
+	ID        int64
+	Origin    string
+	Scope     string
+	Value     string
+	Scenario  string
+	MachineID string
+	Remaining time.Duration
+}
+
+type NewCopy struct {
+	Scope     string
+	Value     string
+	Source    string
+	Remaining time.Duration
 }
 
 type DecisionList struct {

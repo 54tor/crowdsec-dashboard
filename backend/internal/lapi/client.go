@@ -148,33 +148,55 @@ func (client *Client) AddDecision(ctx context.Context, newDecision NewDecision) 
 	if !isValidTarget(newDecision.Target) {
 		return ErrInvalidTarget
 	}
-	now := time.Now().UTC().Format(alertTimeLayout)
-	alert := map[string]any{
-		"scenario":         manualScenario,
+	alert := singleDecisionAlert(alertDecision{
+		Scenario: manualScenario,
+		Message:  newDecision.Reason,
+		Origin:   manualOrigin,
+		Type:     newDecision.Type,
+		Scope:    newDecision.Scope,
+		Value:    newDecision.Target,
+		Duration: newDecision.Duration,
+	}, time.Now())
+	return client.authorizedRequest(ctx, http.MethodPost, "/v1/alerts", nil, []any{alert}, nil)
+}
+
+type alertDecision struct {
+	Scenario string
+	Message  string
+	Origin   string
+	Type     string
+	Scope    string
+	Value    string
+	Duration string
+}
+
+func singleDecisionAlert(decision alertDecision, now time.Time) map[string]any {
+	timestamp := now.UTC().Format(alertTimeLayout)
+	return map[string]any{
+		"scenario":         decision.Scenario,
 		"scenario_hash":    "",
 		"scenario_version": "",
-		"message":          newDecision.Reason,
+		"message":          decision.Message,
 		"capacity":         0,
 		"events_count":     0,
 		"leakspeed":        "0",
 		"simulated":        false,
-		"start_at":         now,
-		"stop_at":          now,
+		"start_at":         timestamp,
+		"stop_at":          timestamp,
 		"events":           []any{},
 		"source": map[string]string{
-			"scope": newDecision.Scope,
-			"value": newDecision.Target,
+			"scope": decision.Scope,
+			"value": decision.Value,
 		},
 		"decisions": []map[string]any{{
-			"type":     newDecision.Type,
-			"duration": newDecision.Duration,
-			"origin":   manualOrigin,
-			"scenario": manualScenario,
-			"scope":    newDecision.Scope,
-			"value":    newDecision.Target,
+			"type":     decision.Type,
+			"duration": decision.Duration,
+			"origin":   decision.Origin,
+			"scenario": decision.Scenario,
+			"scope":    decision.Scope,
+			"value":    decision.Value,
 		}},
 	}
-	return client.authorizedRequest(ctx, http.MethodPost, "/v1/alerts", nil, []any{alert}, nil)
 }
 
 func (client *Client) GetAlert(ctx context.Context, alertID int64) (Alert, error) {
