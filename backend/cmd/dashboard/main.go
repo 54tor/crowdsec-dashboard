@@ -18,6 +18,7 @@ import (
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/oplock"
 	"crowdsec-dashboard/internal/retention"
 	"crowdsec-dashboard/internal/sessions"
 	"crowdsec-dashboard/internal/store"
@@ -101,6 +102,10 @@ func main() {
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
 	services.CollectorStatus = engineCollector
 	services.SchemaVersion = store.NewVersionReader(database)
+	operationLock := oplock.New()
+	services.OperationLock = operationLock
+	syncRunner := newSyncRunner(loadedConfig, engineRegistry, engineRepository, operationLock)
+	services.Sync = syncRunner
 
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,
@@ -124,6 +129,8 @@ func main() {
 		defer close(purgeDone)
 		runPurgePeriodically(signalContext, retentionWithDeletions{purger: purger, resumer: engineRepository}, purgeInterval, time.Now, log.Printf)
 	}()
+
+	syncScheduler := startSyncScheduler(signalContext, loadedConfig, syncRunner, auditRecorder)
 
 	reloadDone := make(chan struct{})
 	go func() {
@@ -150,6 +157,9 @@ func main() {
 	<-collectorDone
 	<-purgeDone
 	<-reloadDone
+	if syncScheduler != nil {
+		syncScheduler.Stop()
+	}
 }
 
 func runRotateSecretsCommand(loadedConfig config.Config) {

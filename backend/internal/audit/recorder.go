@@ -44,6 +44,7 @@ const (
 	ActionSecretsRotated           Action = "secrets_rotated"
 	ActionRetentionPurged          Action = "retention_purged"
 	ActionDecisionRemoved          Action = "decision_removed"
+	ActionSyncRun                  Action = "sync_run"
 )
 
 const maximumTargetRunes = 64

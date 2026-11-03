@@ -2,7 +2,7 @@ package enginesync
 
 import "net/url"
 
-func urlHost(rawURL string) string {
+func URLHost(rawURL string) string {
 	parsedURL, parseError := url.Parse(rawURL)
 	if parseError != nil {
 		return ""

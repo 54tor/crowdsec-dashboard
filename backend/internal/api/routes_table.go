@@ -5,6 +5,7 @@ import (
 
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/enginesync"
 )
 
 func apiRoutes(loadedConfig config.Config, services Services, authenticationHandlers *authHandlers) []apiRoute {
@@ -16,6 +17,7 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, engineRoutes(loadedConfig, services)...)
 	routes = append(routes, readRoutes(loadedConfig, services)...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
+	routes = append(routes, syncRoutes(loadedConfig, services)...)
 	return routes
 }
 
@@ -134,5 +136,13 @@ func crowdsecWriteRoutes(loadedConfig config.Config, services Services) []apiRou
 		{"POST /api/hub/collections", accessAdmin, longWrite(http.HandlerFunc(hub.install))},
 		{"DELETE /api/hub/collections/{name...}", accessAdmin, longWrite(http.HandlerFunc(hub.remove))},
 		{"POST /api/crowdsec/reload", accessAdmin, http.HandlerFunc(reloadHandlers{service: services.Reloader}.reload)},
+	}
+}
+
+func syncRoutes(loadedConfig config.Config, services Services) []apiRoute {
+	handlers := newSyncHandlers(loadedConfig, services)
+	return []apiRoute{
+		{"GET /api/sync", accessAuthenticated, http.HandlerFunc(handlers.status)},
+		{"POST /api/sync/run", accessAdmin, extendWriteDeadline(enginesync.RunDeadline)(http.HandlerFunc(handlers.run))},
 	}
 }

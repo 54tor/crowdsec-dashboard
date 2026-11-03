@@ -341,6 +341,11 @@ var requiredSessionOnlyRoutes = map[string]routeAccess{
 	"DELETE /api/accounts/{name}":                   accessAdminSessionOnly,
 }
 
+var requiredSyncRoutes = map[string]routeAccess{
+	"GET /api/sync":      accessAuthenticated,
+	"POST /api/sync/run": accessAdmin,
+}
+
 var publicRoutePattern = regexp.MustCompile(`^(POST /api/auth/(login|enroll|logout)(/.*)?|GET /api/healthz|GET /api/auth/status)$`)
 
 func TestSessionOnlyRoutesKeepTheirAccessClass(testContext *testing.T) {

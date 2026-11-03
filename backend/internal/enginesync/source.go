@@ -30,7 +30,7 @@ type SyncEngine struct {
 }
 
 func (syncEngine SyncEngine) String() string {
-	return fmt.Sprintf("engine{name=%s host=%s machine_id=%s client=%s}", syncEngine.Name, urlHost(syncEngine.LAPIURL), syncEngine.MachineID, redactedClient)
+	return fmt.Sprintf("engine{name=%s host=%s machine_id=%s client=%s}", syncEngine.Name, URLHost(syncEngine.LAPIURL), syncEngine.MachineID, redactedClient)
 }
 
 func (syncEngine SyncEngine) GoString() string {

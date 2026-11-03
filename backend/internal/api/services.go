@@ -9,6 +9,7 @@ import (
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/oplock"
 	"crowdsec-dashboard/internal/secondfactor"
 )
 
@@ -53,6 +54,8 @@ type Services struct {
 	AccountManager  AccountManager
 	CollectorStatus CollectorStatusSource
 	SchemaVersion   SchemaVersionSource
+	Sync            SyncService
+	OperationLock   *oplock.Lock
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {
