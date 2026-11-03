@@ -349,7 +349,7 @@ func TestHubUnknownKindReturns404(testContext *testing.T) {
 	}
 }
 
-func TestHubMutationsRequireAdmin(testContext *testing.T) {
+func TestHubMutationsRequireASession(testContext *testing.T) {
 	fixture := newAdminFixture(testContext, nil, nil)
 
 	for _, kind := range []string{"collections", "appsec-rules", "appsec-configs"} {

@@ -370,12 +370,44 @@ func TestHubRoutesKeepTheirAccessClass(testContext *testing.T) {
 	foundAccessByPattern := map[string]routeAccess{}
 	for _, route := range routeTableForTest(newRouteAccessEnvironment(testContext)) {
 		foundAccessByPattern[route.Pattern] = route.Access
+		_, path := splitRoutePattern(route.Pattern)
+		_, isPinned := requiredHubRoutes[route.Pattern]
+		if strings.HasPrefix(path, "/api/hub") && !isPinned {
+			testContext.Errorf("%s is not pinned in requiredHubRoutes", route.Pattern)
+		}
 	}
 	for pattern, expectedAccess := range requiredHubRoutes {
 		foundAccess, isPresent := foundAccessByPattern[pattern]
 		if !isPresent || foundAccess != expectedAccess {
 			testContext.Errorf("%s: expected access %d, found %d (present=%v)", pattern, expectedAccess, foundAccess, isPresent)
 		}
+	}
+}
+
+// A read-only session is refused before the hub handler runs: no cscli
+// command is executed for any hub mutation.
+func TestReadOnlySessionGets403OnHubMutations(testContext *testing.T) {
+	environment := newRouteAccessEnvironment(testContext)
+	runner := &outputRunner{}
+	services := environment.services()
+	services.Hub = cscliHub{runner: runner}
+	realHandler := newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, services)
+	checkedRoutes := 0
+	for _, route := range routeTableForTest(environment) {
+		if requiredHubRoutes[route.Pattern] != accessAdmin {
+			continue
+		}
+		checkedRoutes++
+		response := requestRoute(realHandler, route, environment.readOnlyCookie, "")
+		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "forbidden") {
+			testContext.Errorf("%s: expected 403 forbidden, got %d %q", route.Pattern, response.Code, response.Body.String())
+		}
+	}
+	if checkedRoutes != 4 {
+		testContext.Errorf("expected 4 hub mutation routes, checked %d", checkedRoutes)
+	}
+	if len(runner.argvCalls) != 0 {
+		testContext.Errorf("cscli must not run, got %v", runner.argvCalls)
 	}
 }
 
