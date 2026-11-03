@@ -3,6 +3,7 @@ package lapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -227,5 +228,28 @@ func TestAddCopyRefusesInvalidCopyWithoutNetworkCall(testContext *testing.T) {
 	}
 	if len(fake.postedPayloads) != 0 {
 		testContext.Errorf("no request may leave for an invalid copy, got %d", len(fake.postedPayloads))
+	}
+}
+
+func TestDeleteDecisionMapsServerErrorToRefusal(testContext *testing.T) {
+	// The LAPI answers 500 for an unknown decision id: the caller must be able to tell this
+	// refusal apart from a transport failure, while it still counts as LAPI unavailable.
+	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v1/watchers/login" {
+			_ = json.NewEncoder(responseWriter).Encode(map[string]any{"token": "jwt"})
+			return
+		}
+		http.Error(responseWriter, `{"message":"decision not found"}`, http.StatusInternalServerError)
+	}))
+	testContext.Cleanup(server.Close)
+	client := NewClient(server.URL, "machine-1", testPassword, server.Client())
+	deleteError := client.DeleteDecision(context.Background(), 42)
+	if !errors.Is(deleteError, ErrDeleteRefused) || !errors.Is(deleteError, ErrLAPIUnavailable) {
+		testContext.Errorf("expected ErrDeleteRefused wrapping ErrLAPIUnavailable, got %v", deleteError)
+	}
+	server.Close()
+	transportError := client.DeleteDecision(context.Background(), 42)
+	if errors.Is(transportError, ErrDeleteRefused) {
+		testContext.Error("a transport failure is not a refusal")
 	}
 }

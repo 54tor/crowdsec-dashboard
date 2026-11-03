@@ -216,7 +216,14 @@ func (client *Client) DeleteDecision(ctx context.Context, decisionID int64) erro
 		return ErrInvalidTarget
 	}
 	path := "/v1/decisions/" + strconv.FormatInt(decisionID, 10)
-	return client.authorizedRequest(ctx, http.MethodDelete, path, nil, nil, nil)
+	status, _, exchangeError := client.authorizedExchange(ctx, http.MethodDelete, path, nil, nil, defaultLimits)
+	if exchangeError != nil {
+		return exchangeError
+	}
+	if status == http.StatusInternalServerError {
+		return ErrDeleteRefused
+	}
+	return decodeResponse(status, nil, nil)
 }
 
 func isValidTarget(target string) bool {

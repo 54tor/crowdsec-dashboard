@@ -13,6 +13,7 @@ var (
 	ErrBadRequest      = errors.New("lapi: bad request")
 	ErrForbidden       = errors.New("lapi: forbidden")
 	ErrAuthFailed      = fmt.Errorf("lapi: authentication failed: %w", ErrLAPIUnavailable)
+	ErrDeleteRefused   = fmt.Errorf("lapi: decision delete refused: %w", ErrLAPIUnavailable)
 )
 
 type transportError struct {
