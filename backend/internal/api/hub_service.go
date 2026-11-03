@@ -16,6 +16,8 @@ const maxHubItems = 1000
 
 var ErrUnknownHubKind = errors.New("unknown hub kind")
 
+var ErrHubItemStillInstalled = errors.New("hub item still installed")
+
 type HubItem struct {
 	Type         string `json:"type"`
 	Name         string `json:"name"`
@@ -112,6 +114,25 @@ func (service cscliHub) Remove(ctx context.Context, kind, name string) error {
 	if !isKnown {
 		return ErrUnknownHubKind
 	}
-	_, executeError := cscli.Execute(ctx, service.runner, kindCommands.remove, map[string]string{"name": name})
-	return executeError
+	if _, executeError := cscli.Execute(ctx, service.runner, kindCommands.remove, map[string]string{"name": name}); executeError != nil {
+		return executeError
+	}
+	if service.isStillInstalled(ctx, kind, name) {
+		return ErrHubItemStillInstalled
+	}
+	return nil
+}
+
+func (service cscliHub) isStillInstalled(ctx context.Context, kind, name string) bool {
+	items, listError := service.List(ctx)
+	if listError != nil {
+		return false
+	}
+	return slices.ContainsFunc(items, func(hubItem HubItem) bool {
+		return hubItem.Type == kind && hubItem.Name == name && isEnabledStatus(hubItem.Status)
+	})
+}
+
+func isEnabledStatus(status string) bool {
+	return slices.Contains(strings.Split(status, ","), "enabled")
 }

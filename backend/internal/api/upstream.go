@@ -24,6 +24,8 @@ func classifyUpstreamError(upstreamError error) (int, string) {
 		return http.StatusNotFound, "not_found"
 	case errors.Is(upstreamError, lapi.ErrBadRequest), errors.Is(upstreamError, lapi.ErrInvalidTarget), errors.Is(upstreamError, cscli.ErrInvalidField):
 		return http.StatusBadRequest, "invalid_request"
+	case errors.Is(upstreamError, ErrHubItemStillInstalled):
+		return http.StatusConflict, "hub_item_still_installed"
 	case errors.Is(upstreamError, cscli.ErrTimeout):
 		return http.StatusGatewayTimeout, "cscli_timeout"
 	case errors.Is(upstreamError, lapi.ErrForbidden), errors.As(upstreamError, &statusError):
@@ -45,6 +47,7 @@ var loggableSentinels = []error{
 	cscli.ErrOutputTooLarge,
 	cscli.ErrExecStillRunning,
 	cscli.ErrUnknownCommand,
+	ErrHubItemStillInstalled,
 }
 
 func logUpstreamError(code string, upstreamError error) {

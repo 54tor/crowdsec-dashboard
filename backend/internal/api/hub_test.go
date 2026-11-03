@@ -326,7 +326,7 @@ func TestHubRemoveRoutesByKindAndRequiresRetypedName(testContext *testing.T) {
 		accepted := fixture.send(http.MethodDelete, path, `{"confirm":"crowdsecurity/linux"}`, true)
 
 		expectedCommand := "cscli " + kind + " remove crowdsecurity/linux"
-		if accepted.Code != http.StatusOK || len(fixture.runner.argvCalls) != 1 || strings.Join(fixture.runner.argvCalls[0], " ") != expectedCommand {
+		if accepted.Code != http.StatusOK || len(fixture.runner.argvCalls) != 2 || strings.Join(fixture.runner.argvCalls[0], " ") != expectedCommand || strings.Join(fixture.runner.argvCalls[1], " ") != hubListCommand {
 			testContext.Errorf("%s: unexpected %d %v", kind, accepted.Code, fixture.runner.argvCalls)
 		}
 	}
