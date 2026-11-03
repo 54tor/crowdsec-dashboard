@@ -29,7 +29,6 @@ type syncSettings struct {
 	DryRun            bool
 	MaxChanges        int
 	ReadLimit         int
-	PeersFile         string
 	ShareExcludeCIDRs []netip.Prefix
 	ImportEnabled     bool
 	ImportDir         string
@@ -61,9 +60,8 @@ func loadSyncSettings(getenv func(string) string) (syncSettings, error) {
 		return syncSettings{}, parseError
 	}
 
-	settings.PeersFile = getenv("SYNC_PEERS_FILE")
-	if settings.Enabled && settings.PeersFile == "" {
-		return syncSettings{}, errors.New("SYNC_PEERS_FILE is required when SYNC_ENABLED is true")
+	if getenv("SYNC_PEERS_FILE") != "" {
+		return syncSettings{}, errors.New("SYNC_PEERS_FILE is no longer supported: add sync peers on the Engines page")
 	}
 
 	settings.ImportDir = getenv("CONFIG_IMPORT_DIR")

@@ -36,7 +36,6 @@ type Config struct {
 	SyncDryRun          bool
 	SyncMaxChanges      int
 	SyncReadLimit       int
-	SyncPeersFile       string
 	ShareExcludeCIDRs   []netip.Prefix
 	ConfigImportEnabled bool
 	ConfigImportDir     string
@@ -120,7 +119,6 @@ func Load(getenv func(string) string) (Config, error) {
 		SyncDryRun:          syncConfig.DryRun,
 		SyncMaxChanges:      syncConfig.MaxChanges,
 		SyncReadLimit:       syncConfig.ReadLimit,
-		SyncPeersFile:       syncConfig.PeersFile,
 		ShareExcludeCIDRs:   syncConfig.ShareExcludeCIDRs,
 		ConfigImportEnabled: syncConfig.ImportEnabled,
 		ConfigImportDir:     syncConfig.ImportDir,

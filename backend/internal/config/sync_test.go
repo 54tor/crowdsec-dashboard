@@ -71,16 +71,22 @@ func TestSyncBounds(testContext *testing.T) {
 	}
 }
 
-func TestSyncEnabledRequiresPeersFile(testContext *testing.T) {
-	_, loadError := Load(syncEnvironment(map[string]string{"SYNC_ENABLED": "true"}))
+func TestConfigRefusesRemovedSyncPeersFile(testContext *testing.T) {
+	_, loadError := Load(syncEnvironment(map[string]string{"SYNC_PEERS_FILE": "/run/secrets/peers.yaml"}))
 	if loadError == nil {
-		testContext.Fatal("expected an error when SYNC_PEERS_FILE is missing")
+		testContext.Fatal("expected an error when SYNC_PEERS_FILE is set")
 	}
+	if !strings.Contains(loadError.Error(), "SYNC_PEERS_FILE is no longer supported: add sync peers on the Engines page") {
+		testContext.Errorf("unexpected message %q", loadError)
+	}
+	if strings.Contains(loadError.Error(), "/run/secrets") {
+		testContext.Errorf("the path must not be echoed: %q", loadError)
+	}
+}
 
-	loadedConfig, loadError := Load(syncEnvironment(map[string]string{
-		"SYNC_ENABLED": "true", "SYNC_PEERS_FILE": "/run/secrets/peers.yaml",
-	}))
-	if loadError != nil || !loadedConfig.SyncEnabled || loadedConfig.SyncPeersFile != "/run/secrets/peers.yaml" {
+func TestSyncEnabledWithoutPeersIsValid(testContext *testing.T) {
+	loadedConfig, loadError := Load(syncEnvironment(map[string]string{"SYNC_ENABLED": "true"}))
+	if loadError != nil || !loadedConfig.SyncEnabled {
 		testContext.Fatalf("unexpected result %+v %v", loadedConfig, loadError)
 	}
 }
