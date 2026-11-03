@@ -18,11 +18,13 @@ const schedulerTestInterval = 40 * time.Millisecond
 // schedulerWaitLimit bounds every wait so a broken scheduler fails the test instead of hanging it.
 const schedulerWaitLimit = 5 * time.Second
 
-// failingEngine always fails its read and counts how often it was contacted.
+// failingEngine fails its read whenever failOnRead says so for that read number (1-based);
+// with failOnRead nil it always fails. It counts how often it was contacted.
 type failingEngine struct {
-	mutex     sync.Mutex
-	name      string
-	readCount int
+	mutex      sync.Mutex
+	name       string
+	readCount  int
+	failOnRead func(readNumber int) bool
 }
 
 func (engine *failingEngine) Name() string { return engine.name }
@@ -31,6 +33,9 @@ func (engine *failingEngine) Read(context.Context) (Snapshot, error) {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
 	engine.readCount++
+	if engine.failOnRead != nil && !engine.failOnRead(engine.readCount) {
+		return Snapshot{Engine: engine.name, State: ReadComplete, DashboardMachineID: runnerDashboardAccount}, nil
+	}
 	return Snapshot{}, errors.New("peer unreachable")
 }
 
@@ -144,6 +149,10 @@ func TestSchedulerRunsOnIntervalAndStopsGracefully(testContext *testing.T) {
 	if collector.count() != 1 {
 		testContext.Errorf("the running tick must complete before Stop returns, got %d reports", collector.count())
 	}
+	// Stop cancels the tick's context: the run finishes but is reported as canceled.
+	if finalCode := collector.snapshot()[0].ErrorCode; finalCode != ErrorCodeCanceled {
+		testContext.Errorf("a tick interrupted by Stop must end canceled, got %q", finalCode)
+	}
 	time.Sleep(3 * schedulerTestInterval)
 	if collector.count() != 1 {
 		testContext.Errorf("no run may start after Stop, got %d reports", collector.count())
@@ -203,4 +212,106 @@ func TestSchedulerKeepsCopiesOfBackedOffPeer(testContext *testing.T) {
 	if gamma.writeCount() != 0 {
 		testContext.Errorf("the copies of a backed-off peer must never be removed, got %d writes", gamma.writeCount())
 	}
+}
+
+func TestSchedulerStartAndStopAreIdempotent(testContext *testing.T) {
+	alpha := &memoryEngine{name: "alpha"}
+	runner := runnerOverEngines(map[string]Engine{"alpha": alpha}, "alpha")
+
+	stoppedFirst := NewScheduler(runner, schedulerTestInterval, func(int) time.Duration { return time.Hour })
+	stoppedFirst.Stop()
+	collector := newReportCollector()
+	stoppedFirst.AfterRun = collector.hook
+	// A Start after Stop must not launch anything: the scheduler is finished for good.
+	stoppedFirst.Start(context.Background())
+	time.Sleep(3 * schedulerTestInterval)
+	stoppedFirst.Stop()
+	if collector.count() != 0 {
+		testContext.Errorf("a scheduler stopped before Start must never run, got %d runs", collector.count())
+	}
+
+	startedTwice := NewScheduler(runner, schedulerTestInterval, func(int) time.Duration { return time.Hour })
+	twiceCollector := newReportCollector()
+	startedTwice.AfterRun = twiceCollector.hook
+	startedTwice.Start(context.Background())
+	startedTwice.Start(context.Background())
+	twiceCollector.waitForRuns(testContext, 2)
+	startedTwice.Stop()
+	startedTwice.Stop()
+	reports := twiceCollector.snapshot()
+	// Two loops would produce runs closer together than one interval.
+	for runIndex := 1; runIndex < len(reports); runIndex++ {
+		gapBetweenRuns := reports[runIndex].StartedAt.Sub(reports[runIndex-1].StartedAt)
+		if gapBetweenRuns < schedulerTestInterval/2 {
+			testContext.Errorf("a second Start must not start a second loop, runs %d and %d are %s apart", runIndex, runIndex+1, gapBetweenRuns)
+		}
+	}
+}
+
+func TestSchedulerResetsBackoffAfterPeerRecovers(testContext *testing.T) {
+	// beta fails on its first read, recovers on the second, fails again on the third: the third
+	// failure must start over at attempt 1 because the success in between cleared the backoff.
+	beta := &failingEngine{name: "beta", failOnRead: func(readNumber int) bool { return readNumber != 2 }}
+	runner := runnerOverEngines(map[string]Engine{"beta": beta}, "beta")
+	collector := newReportCollector()
+	attemptsSeen := make(chan int, 16)
+	scheduler := NewScheduler(runner, schedulerTestInterval, func(attempt int) time.Duration {
+		attemptsSeen <- attempt
+		// A zero delay lets the next tick read beta again.
+		return 0
+	})
+	scheduler.AfterRun = collector.hook
+	scheduler.Start(context.Background())
+	collector.waitForRuns(testContext, 3)
+	scheduler.Stop()
+
+	firstAttempt, secondAttempt := <-attemptsSeen, <-attemptsSeen
+	if firstAttempt != 1 || secondAttempt != 1 {
+		testContext.Errorf("the failure after a recovery must restart at attempt 1, got %d then %d", firstAttempt, secondAttempt)
+	}
+	if recovered := collector.snapshot()[1].PerEngine["beta"]; recovered.Status != StatusOK {
+		testContext.Errorf("the recovered peer must be read again once its delay elapsed, got %+v", recovered)
+	}
+}
+
+func TestManualRunNeitherHonoursNorUpdatesSchedulerBackoff(testContext *testing.T) {
+	// beta fails only on its first read (the first scheduled tick); later reads succeed.
+	beta := &failingEngine{name: "beta", failOnRead: func(readNumber int) bool { return readNumber == 1 }}
+	runner := runnerOverEngines(map[string]Engine{"beta": beta}, "beta")
+	collector := newReportCollector()
+	scheduler := NewScheduler(runner, schedulerTestInterval, func(int) time.Duration { return time.Hour })
+	scheduler.AfterRun = collector.hook
+	scheduler.Start(context.Background())
+	collector.waitForRuns(testContext, 1)
+
+	manualReport := runManualBetweenTicks(testContext, runner)
+	if manualReport.PerEngine["beta"].Status != StatusOK {
+		testContext.Errorf("a manual run must read a backed-off peer, got %+v", manualReport.PerEngine["beta"])
+	}
+	collector.waitForRuns(testContext, collector.count()+2)
+	scheduler.Stop()
+
+	for runIndex, report := range collector.snapshot()[1:] {
+		if report.PerEngine["beta"].ErrorCode != ErrorCodeEngineBackoff {
+			testContext.Errorf("scheduled run %d: a manual success must not clear the backoff, got %+v", runIndex+2, report.PerEngine["beta"])
+		}
+	}
+	if beta.reads() != 2 {
+		testContext.Errorf("beta must be read by the first tick and the manual run only, got %d reads", beta.reads())
+	}
+}
+
+// runManualBetweenTicks retries a manual run until it does not collide with a scheduled tick.
+func runManualBetweenTicks(testContext *testing.T, runner *Runner) Report {
+	testContext.Helper()
+	deadline := time.Now().Add(schedulerWaitLimit)
+	for time.Now().Before(deadline) {
+		report, runError := runner.Run(context.Background(), RunOptions{})
+		if !errors.Is(runError, ErrOperationRunning) {
+			return report
+		}
+		time.Sleep(time.Millisecond)
+	}
+	testContext.Fatal("the manual run never got the lock")
+	return Report{}
 }

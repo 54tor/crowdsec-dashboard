@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -13,6 +14,9 @@ type Scheduler struct {
 	backoff  func(attempt int) time.Duration
 	now      func() time.Time
 	failures map[string]engineFailure
+	mutex    sync.Mutex
+	started  bool
+	stopped  bool
 	cancel   context.CancelFunc
 	done     chan struct{}
 	AfterRun func(report Report)
@@ -28,6 +32,12 @@ func NewScheduler(runner *Runner, interval time.Duration, backoff func(attempt i
 }
 
 func (scheduler *Scheduler) Start(ctx context.Context) {
+	scheduler.mutex.Lock()
+	defer scheduler.mutex.Unlock()
+	if scheduler.started || scheduler.stopped {
+		return
+	}
+	scheduler.started = true
 	loopContext, cancel := context.WithCancel(ctx)
 	scheduler.cancel = cancel
 	scheduler.done = make(chan struct{})
@@ -35,8 +45,15 @@ func (scheduler *Scheduler) Start(ctx context.Context) {
 }
 
 func (scheduler *Scheduler) Stop() {
-	scheduler.cancel()
-	<-scheduler.done
+	scheduler.mutex.Lock()
+	scheduler.stopped = true
+	cancel, done := scheduler.cancel, scheduler.done
+	scheduler.mutex.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+	<-done
 }
 
 func (scheduler *Scheduler) loop(ctx context.Context) {
