@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import type { ListFilters } from '@/api/types'
 import type { FilterErrors } from '@/lib/filterValidation'
 import { EngineFilter } from '@/components/EngineFilter'
+import { OriginFilter } from '@/components/OriginFilter'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -9,11 +10,12 @@ interface FilterBarProps {
   values: ListFilters
   errors: FilterErrors
   onChange: (filterName: keyof ListFilters, value: string) => void
+  showOriginFilter?: boolean
 }
 
 const FILTER_FIELDS = ['scenario', 'ip', 'since'] as const
 
-export function FilterBar({ values, errors, onChange }: FilterBarProps) {
+export function FilterBar({ values, errors, onChange, showOriginFilter = false }: FilterBarProps) {
   const { t } = useTranslation()
   return (
     <form role="search" aria-label={t('filters.label')} onSubmit={(submitEvent) => submitEvent.preventDefault()} className="grid gap-3 sm:grid-cols-4">
@@ -43,6 +45,7 @@ export function FilterBar({ values, errors, onChange }: FilterBarProps) {
         )
       })}
       <EngineFilter value={values.engine} onChange={(engineName) => onChange('engine', engineName)} />
+      {showOriginFilter && <OriginFilter value={values.source_kind} onChange={(sourceKind) => onChange('source_kind', sourceKind)} />}
     </form>
   )
 }

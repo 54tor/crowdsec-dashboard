@@ -24,6 +24,8 @@ export interface AlertSource {
   as_number?: string
 }
 
+export type AlertSourceKind = 'log' | 'appsec'
+
 export interface Alert {
   id: number
   uuid?: string
@@ -40,6 +42,7 @@ export interface Alert {
   simulated: boolean
   source: AlertSource
   decisions: Decision[]
+  source_kind?: AlertSourceKind
 }
 
 export interface Page<Item> {
@@ -145,6 +148,7 @@ export interface ListFilters {
   ip: string
   since: string
   engine: string
+  source_kind: '' | AlertSourceKind
 }
 
 export interface HubItem {

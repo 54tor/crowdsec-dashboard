@@ -45,6 +45,7 @@ export function Alerts() {
           <>
             <UntrustedText value={alertRow.scenario} />
             {alertRow.simulated && <Badge variant="outline" className="ml-2">{t('alerts.simulated')}</Badge>}
+            {alertRow.source_kind === 'appsec' && <Badge variant="secondary" className="ml-2">{t('alerts.appSecBadge')}</Badge>}
           </>
         ),
       },
@@ -61,7 +62,7 @@ export function Alerts() {
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">{t('alerts.title')}</h1>
-      <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} />
+      <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} showOriginFilter />
       <section aria-labelledby="alerts-chart-title" className="space-y-2">
         <h2 id="alerts-chart-title" className="text-base font-medium">{t('alerts.chartTitle')}</h2>
         <TimelineChart alerts={chartQuery.data?.items ?? []} />

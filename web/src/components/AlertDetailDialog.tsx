@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '@/api/client'
 import type { AlertDetail, AlertEvent } from '@/api/types'
+import { AppSecSummary } from '@/components/AppSecSummary'
 import { EventMetaList } from '@/components/EventMetaList'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { TableSkeleton } from '@/components/TableSkeleton'
@@ -45,6 +46,7 @@ function AlertDetailBody({ archiveId }: { archiveId: number }) {
         <UntrustedText value={alertDetail.message} />
       </p>
       {alertDetail.events_truncated && <WarningNotice>{t('alertDetail.truncated')}</WarningNotice>}
+      {alertDetail.source_kind === 'appsec' && <AppSecSummary events={alertDetail.events} />}
       <h3 className="text-sm font-medium">{t('alertDetail.events')}</h3>
       {alertDetail.events.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('alertDetail.noEvents')}</p>

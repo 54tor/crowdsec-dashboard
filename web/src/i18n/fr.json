@@ -192,7 +192,11 @@
     "ipInvalid": "Saisissez une IPv4, IPv6 ou un CIDR valide.",
     "sinceInvalid": "Utilisez un nombre suivi de s, m, h ou d (ex. 24h).",
     "engine": "Moteur",
-    "allEngines": "Tous les moteurs"
+    "allEngines": "Tous les moteurs",
+    "origin": "Origine",
+    "allOrigins": "Toutes les origines",
+    "originLogs": "Journaux",
+    "originAppSec": "AppSec"
   },
   "list": {
     "truncated": "La partie en direct ne contient que les {{count}} entrées les plus récentes de la LAPI locale ; les plus anciennes sont listées depuis l'archive.",
@@ -235,7 +239,8 @@
     "liveBadge": "En direct",
     "archivedBadge": "Archivée",
     "details": "Détail",
-    "detailsAria": "Détail de l'alerte {{id}} du moteur {{engine}}"
+    "detailsAria": "Détail de l'alerte {{id}} du moteur {{engine}}",
+    "appSecBadge": "AppSec"
   },
   "decisions": {
     "title": "Décisions",
@@ -872,5 +877,20 @@
     "textLeadingDash": "Ne doit pas commencer par un tiret.",
     "textInvalidCharacter": "Les sauts de ligne, caractères de contrôle et caractères invisibles sont interdits.",
     "wideRangeMismatch": "La valeur saisie ne correspond pas à la plage ci-dessus."
+  },
+  "appsec": {
+    "summaryTitle": "Résumé AppSec",
+    "fields": {
+      "rule_name": "Règle",
+      "message": "Message",
+      "uri": "URI",
+      "target_fqdn": "Nom d'hôte ciblé",
+      "matched_zones": "Zones correspondantes",
+      "target_host": "Hôte ciblé",
+      "target_uri": "URI ciblée",
+      "log_type": "Type de journal",
+      "remediation_cmpt_ip": "IP du composant de remédiation",
+      "appsec_action": "Action AppSec"
+    }
   }
 }

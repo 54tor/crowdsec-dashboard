@@ -119,6 +119,46 @@ describe('alerts page', () => {
     expect(container.querySelector('img')).toBeNull()
   })
 
+  it('affiche le badge AppSec', async () => {
+    stubFetch(
+      alertsRoutes(
+        makePage([
+          makeAlert({ id: 1, scenario: 'crowdsecurity/vpatch-env-access', source_kind: 'appsec' }),
+          makeAlert({ id: 2, scenario: 'crowdsecurity/ssh-bf', source_kind: 'log' }),
+        ]),
+      ),
+    )
+    renderApp('/alerts')
+
+    const table = await screen.findByRole('table', { name: en.alerts.caption })
+    const appSecRow = within(table).getByText('crowdsecurity/vpatch-env-access').closest('tr') as HTMLElement
+    const logRow = within(table).getByText('crowdsecurity/ssh-bf').closest('tr') as HTMLElement
+    expect(within(appSecRow).getByText(en.alerts.appSecBadge)).toBeInTheDocument()
+    expect(within(logRow).queryByText(en.alerts.appSecBadge)).toBeNull()
+  })
+
+  // The origin filter is sent as source_kind; "all" sends no parameter at all,
+  // which the default FIRST_PAGE_URL of every other test already proves.
+  it('filtre par origine AppSec', async () => {
+    const appSecUrl = '/api/alerts?page=1&per_page=20&source_kind=appsec'
+    const logUrl = '/api/alerts?page=1&per_page=20&source_kind=log'
+    const fetchMock = stubFetch({
+      ...alertsRoutes(makePage([makeAlert()])),
+      [`GET ${appSecUrl}`]: { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/appsec-only', source_kind: 'appsec' })]) },
+      [`GET ${logUrl}`]: { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/log-only', source_kind: 'log' })]) },
+    })
+    renderApp('/alerts')
+    await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td bdi' })
+
+    await userEvent.selectOptions(screen.getByLabelText(en.filters.origin), 'appsec')
+    expect(await screen.findByText('crowdsecurity/appsec-only')).toBeInTheDocument()
+    expect(requestedUrls(fetchMock)).toContain(appSecUrl)
+
+    await userEvent.selectOptions(screen.getByLabelText(en.filters.origin), 'log')
+    expect(await screen.findByText('crowdsecurity/log-only')).toBeInTheDocument()
+    expect(requestedUrls(fetchMock)).toContain(logUrl)
+  })
+
   it('sendsVisitorToLoginWhenDataCallIsUnauthenticated', async () => {
     stubFetch({
       'GET /api/auth/me': SESSION_OK,

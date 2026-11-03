@@ -5,7 +5,7 @@ import { validateFilters } from '@/lib/filterValidation'
 
 const FILTER_DEBOUNCE_MILLISECONDS = 300
 const LOCAL_ENGINE_NAME = 'local'
-const EMPTY_FILTERS: ListFilters = { scenario: '', ip: '', since: '', engine: '' }
+const EMPTY_FILTERS: ListFilters = { scenario: '', ip: '', since: '', engine: '', source_kind: '' }
 
 export function useListControls() {
   const [draftFilters, setDraftFilters] = useState<ListFilters>(EMPTY_FILTERS)

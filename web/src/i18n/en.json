@@ -192,7 +192,11 @@
     "ipInvalid": "Enter a valid IPv4, IPv6 or CIDR.",
     "sinceInvalid": "Use a number followed by s, m, h or d (e.g. 24h).",
     "engine": "Engine",
-    "allEngines": "All engines"
+    "allEngines": "All engines",
+    "origin": "Origin",
+    "allOrigins": "All origins",
+    "originLogs": "Logs",
+    "originAppSec": "AppSec"
   },
   "list": {
     "truncated": "The live part holds only the {{count}} most recent entries of the local LAPI; older entries are listed from the archive.",
@@ -235,7 +239,8 @@
     "liveBadge": "Live",
     "archivedBadge": "Archived",
     "details": "Details",
-    "detailsAria": "Details of alert {{id}} from engine {{engine}}"
+    "detailsAria": "Details of alert {{id}} from engine {{engine}}",
+    "appSecBadge": "AppSec"
   },
   "decisions": {
     "title": "Decisions",
@@ -872,5 +877,20 @@
     "textLeadingDash": "Must not start with a dash.",
     "textInvalidCharacter": "Line breaks, control and invisible characters are not allowed.",
     "wideRangeMismatch": "The typed value does not match the range above."
+  },
+  "appsec": {
+    "summaryTitle": "AppSec summary",
+    "fields": {
+      "rule_name": "Rule",
+      "message": "Message",
+      "uri": "URI",
+      "target_fqdn": "Target host name",
+      "matched_zones": "Matched zones",
+      "target_host": "Target host",
+      "target_uri": "Target URI",
+      "log_type": "Log type",
+      "remediation_cmpt_ip": "Remediation component IP",
+      "appsec_action": "AppSec action"
+    }
   }
 }

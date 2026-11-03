@@ -168,6 +168,39 @@ describe('alerts page with archive', () => {
     expect(dialog.querySelector('img')).toBeNull()
   })
 
+  // AppSec alerts get a plain-text summary of the real engine keys above the
+  // raw event metadata, which stays listed in full underneath.
+  it('showsAppSecSummaryAboveUnchangedEventMeta', async () => {
+    const detail = makeAlertDetail({
+      id: 3,
+      source_kind: 'appsec',
+      events: [{ timestamp: '2026-10-31T10:14:30Z', meta: { rule_name: 'crowdsecurity/vpatch-env-access', uri: MALICIOUS_SCENARIO, target_fqdn: 'example.com' } }],
+    })
+    stubFetch(alertRoutes(makePage([ARCHIVED_REMOTE_ALERT]), { [`GET ${DETAIL_URL}`]: { status: 200, body: detail } }))
+    const user = userEvent.setup()
+    renderApp('/alerts')
+
+    const dialog = await openArchivedDetail(user)
+
+    const summary = await within(dialog).findByRole('region', { name: en.appsec.summaryTitle })
+    expect(within(summary).getByText(en.appsec.fields.rule_name)).toBeInTheDocument()
+    expect(within(dialog).getAllByText('crowdsecurity/vpatch-env-access')).toHaveLength(2)
+    expect(within(dialog).getByText('rule_name')).toBeInTheDocument()
+    expect(dialog.querySelector('img')).toBeNull()
+  })
+
+  it('omitsAppSecSummaryForLogAlerts', async () => {
+    const detail = makeAlertDetail({ id: 3, source_kind: 'log', events: [{ timestamp: '2026-10-31T10:14:30Z', meta: { target_uri: '/login' } }] })
+    stubFetch(alertRoutes(makePage([ARCHIVED_REMOTE_ALERT]), { [`GET ${DETAIL_URL}`]: { status: 200, body: detail } }))
+    const user = userEvent.setup()
+    renderApp('/alerts')
+
+    const dialog = await openArchivedDetail(user)
+
+    expect(await within(dialog).findByText('/login')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('region', { name: en.appsec.summaryTitle })).toBeNull()
+  })
+
   // Events are purged before alerts by retention: the detail explains it
   // instead of showing an error.
   it('showsEmptyStateWhenEventsWerePurged', async () => {
