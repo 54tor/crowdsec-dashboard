@@ -12,10 +12,10 @@ func repeatedArray(element string, elementCount int) string {
 }
 
 // documentWithValueCount builds {"sections":[[1,...],[1,...],...]} holding exactly totalValues JSON
-// values: the object, the outer array, 80 inner arrays and the scalars they share. Object keys are
-// not values.
+// values: the object, the outer array, the inner arrays and the scalars they share. Object keys are
+// not values. Enough inner arrays are used for none of them to exceed the per-array cap.
 func documentWithValueCount(totalValues int) string {
-	const innerArrayCount = 80
+	innerArrayCount := totalValues/MaxArrayLength + 2
 	scalarCount := totalValues - 2 - innerArrayCount
 	innerArrays := make([]string, 0, innerArrayCount)
 	for arrayIndex := range innerArrayCount {
@@ -48,8 +48,13 @@ func TestDecodeAcceptsAnArrayAtTheCap(testContext *testing.T) {
 	}
 }
 
+// The hostile document stays far below the byte cap (2 bytes per value): only the value cap stops it.
 func TestDecodeRefusesMoreValuesThanTheCap(testContext *testing.T) {
-	if _, decodeError := Decode(strings.NewReader(documentWithValueCount(MaxValueCount+1)), MaxBytes); !errors.Is(decodeError, ErrTooLarge) {
+	hostileBody := documentWithValueCount(MaxValueCount + 1)
+	if len(hostileBody) > MaxBytes {
+		testContext.Fatalf("the hostile body must fit the byte cap, got %d bytes", len(hostileBody))
+	}
+	if _, decodeError := Decode(strings.NewReader(hostileBody), MaxBytes); !errors.Is(decodeError, ErrTooLarge) {
 		testContext.Errorf("expected ErrTooLarge for %d values, got %v", MaxValueCount+1, decodeError)
 	}
 	if _, decodeError := Decode(strings.NewReader(documentWithValueCount(MaxValueCount)), MaxBytes); errors.Is(decodeError, ErrTooLarge) {
@@ -58,7 +63,7 @@ func TestDecodeRefusesMoreValuesThanTheCap(testContext *testing.T) {
 }
 
 func TestDecodeCapsHaveTheirDocumentedValues(testContext *testing.T) {
-	if MaxArrayLength != 5000 || MaxValueCount != 400000 {
+	if MaxArrayLength != 5000 || MaxValueCount != 1_500_000 {
 		testContext.Errorf("unexpected caps: array %d, values %d", MaxArrayLength, MaxValueCount)
 	}
 }

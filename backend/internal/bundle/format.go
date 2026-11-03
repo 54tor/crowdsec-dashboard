@@ -14,7 +14,7 @@ const (
 	MaxBytes        = 8 << 20
 	MaxDepth        = 32
 	MaxArrayLength  = 5000
-	MaxValueCount   = 400000
+	MaxValueCount   = 1_500_000
 	MaxDecisions    = 5000
 	MaxAlerts       = 1000
 	SectionHub      = "hub"
