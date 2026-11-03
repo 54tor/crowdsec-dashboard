@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"crowdsec-dashboard/internal/allowguard"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/oplock"
 )
@@ -14,13 +15,14 @@ const (
 	syncLockName       = "sync"
 	minShareRemaining  = 5 * time.Minute
 	minExtendThreshold = time.Minute
-	runDeadline        = 10 * time.Minute
+	RunDeadline        = 10 * time.Minute
 
 	ErrorCodeEngineAddressesUnknown = "engine_addresses_unknown"
 	ErrorCodeGuardTripped           = "sync_guard_tripped"
 	ErrorCodeCanceled               = "canceled"
 	ErrorCodeRunDeadline            = "run_deadline"
 	ErrorCodeRunPanicked            = "run_panicked"
+	ErrorCodeEngineBackoff          = "engine_backoff"
 )
 
 var (
@@ -36,6 +38,7 @@ type RulesProvider func(engineSet EngineSet) Rules
 
 type RunOptions struct {
 	ApplyEvenIfGuarded map[string]int
+	SkipEngines        map[string]bool
 }
 
 type Runner struct {
@@ -56,7 +59,7 @@ func NewRunner(source EngineSource, rules RulesProvider, lock *oplock.Lock, read
 		lock:        lock,
 		dryRun:      dryRun,
 		now:         now,
-		runDeadline: runDeadline,
+		runDeadline: RunDeadline,
 		newEngine: func(syncEngine SyncEngine) Engine {
 			return NewLAPIEngine(syncEngine, readLimit, now)
 		},
@@ -122,7 +125,7 @@ func (runner *Runner) execute(ctx context.Context, options RunOptions, report *R
 		}
 		return
 	}
-	targets, snapshots := runner.readEngines(ctx, engineSet.Engines, report)
+	targets, snapshots := runner.readEngines(ctx, engineSet.Engines, options.SkipEngines, report)
 	plan := buildRunPlan(snapshots, runner.rules(engineSet), options.ApplyEvenIfGuarded, runner.now())
 	report.recordPlan(plan.Plan, runner.dryRun)
 	plan.recordGuards(report)
@@ -131,10 +134,15 @@ func (runner *Runner) execute(ctx context.Context, options RunOptions, report *R
 	}
 }
 
-func (runner *Runner) readEngines(ctx context.Context, syncEngines []SyncEngine, report *Report) (map[string]applyTarget, []Snapshot) {
+func (runner *Runner) readEngines(ctx context.Context, syncEngines []SyncEngine, skipEngines map[string]bool, report *Report) (map[string]applyTarget, []Snapshot) {
 	targets := make(map[string]applyTarget, len(syncEngines))
 	snapshots := make([]Snapshot, 0, len(syncEngines))
 	for _, syncEngine := range syncEngines {
+		if skipEngines[syncEngine.Name] {
+			report.engine(syncEngine.Name).ErrorCode = ErrorCodeEngineBackoff
+			snapshots = append(snapshots, skippedSnapshot(syncEngine))
+			continue
+		}
 		engine := runner.newEngine(syncEngine)
 		engineReport := report.engine(syncEngine.Name)
 		readAt := runner.now()
@@ -151,6 +159,10 @@ func (runner *Runner) readEngines(ctx context.Context, syncEngines []SyncEngine,
 		targets[syncEngine.Name] = target
 	}
 	return targets, snapshots
+}
+
+func skippedSnapshot(syncEngine SyncEngine) Snapshot {
+	return Snapshot{Engine: syncEngine.Name, State: ReadFailed, DashboardMachineID: syncEngine.MachineID, Allowlist: allowguard.Unavailable()}
 }
 
 func engineErrorCode(ctx context.Context, engineError error) string {
