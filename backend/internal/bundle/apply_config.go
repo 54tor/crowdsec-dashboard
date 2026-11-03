@@ -15,6 +15,7 @@ import (
 
 const (
 	ReasonForbiddenName           = "forbidden_name"
+	ReasonForbiddenSource         = "forbidden_source"
 	ReasonRedactedContent         = "redacted_content"
 	ReasonInvalidYAML             = "invalid_yaml"
 	ReasonFileTooLarge            = "too_large"
@@ -47,6 +48,7 @@ var configSkipReasons = []struct {
 	{confwrite.ErrTooLarge, ReasonFileTooLarge},
 	{confwrite.ErrRedactedContent, ReasonRedactedContent},
 	{confwrite.ErrInvalidYAML, ReasonInvalidYAML},
+	{confwrite.ErrForbiddenSource, ReasonForbiddenSource},
 	{confwrite.ErrNotRegularFile, ReasonNotRegularFile},
 }
 

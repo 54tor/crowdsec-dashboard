@@ -158,7 +158,7 @@ func TestImportConfigRefusesRedactedAndInvalidFiles(testContext *testing.T) {
 
 func TestPreviewDiffIsBoundedAndHasNoSecrets(testContext *testing.T) {
 	fixture := newConfigImportFixture(testContext)
-	currentSecret := "source: http\nlisten_addr: 0.0.0.0:8080\nauth:\n  password: current-disk-secret\n"
+	currentSecret := "source: docker\ncontainer_name: [app]\nauth:\n  password: current-disk-secret\n"
 	writeImportDirFile(testContext, fixture.importDirectory, "http.yaml", currentSecret)
 	var longFile strings.Builder
 	longFile.WriteString("source: file\nlabels:\n  type: nginx\nheaders:\n  api_key: new-bundle-secret\nfilenames:\n")
@@ -166,7 +166,7 @@ func TestPreviewDiffIsBoundedAndHasNoSecrets(testContext *testing.T) {
 		longFile.WriteString("  - /var/log/app-" + strings.Repeat("x", lineIndex%7) + ".log\n")
 	}
 	imported := configBundle(
-		ConfigFile{Name: "acquis.d/http.yaml", Content: "source: http\nlisten_addr: 0.0.0.0:8080\nauth:\n  password: replaced-bundle-secret\n"},
+		ConfigFile{Name: "acquis.d/http.yaml", Content: "source: docker\ncontainer_name: [app]\nauth:\n  password: replaced-bundle-secret\n"},
 		ConfigFile{Name: "acquis.d/long.yaml", Content: longFile.String()},
 	)
 
@@ -260,5 +260,32 @@ func TestImportConfigTestFailureRollsBackAndReportsCode(testContext *testing.T) 
 	restored, _ := os.ReadFile(filepath.Join(fixture.importDirectory, "nginx.yaml"))
 	if string(restored) != nginxAcquisition {
 		testContext.Error("nginx.yaml must be restored")
+	}
+}
+
+func TestImportConfigRefusesForbiddenSources(testContext *testing.T) {
+	fixture := newConfigImportFixture(testContext)
+	imported := configBundle(
+		ConfigFile{Name: "acquis.d/http.yaml", Content: "source: http\nlisten_addr: 0.0.0.0:8080\nlabels:\n  type: nginx\n"},
+		ConfigFile{Name: "acquis.d/mixed.yaml", Content: "source: file\nfilenames: [/var/log/a.log]\nlabels: {type: syslog}\n---\nsource: kafka\nlabels: {type: syslog}\n"},
+		ConfigFile{Name: "acquis.d/ssh.yaml", Content: sshAcquisition},
+	)
+	deps := fixture.configDeps()
+
+	plan := planConfigOrFail(testContext, deps, imported)
+
+	for _, refusedName := range []string{"http.yaml", "mixed.yaml"} {
+		if obtainedReason := skippedReason(plan, refusedName); obtainedReason != ReasonForbiddenSource {
+			testContext.Errorf("%s: expected %s, got %q", refusedName, ReasonForbiddenSource, obtainedReason)
+		}
+	}
+	if len(plan.Config) != 1 || plan.Config[0].Name != "ssh.yaml" {
+		testContext.Fatalf("only ssh.yaml may be planned, got %+v", plan.Config)
+	}
+	if _, applyError := Apply(context.Background(), deps, plan); applyError != nil {
+		testContext.Fatalf("apply: %v", applyError)
+	}
+	if entries := importDirEntries(testContext, fixture.importDirectory); !slices.Equal(entries, []string{".dashboard-backup", "ssh.yaml"}) {
+		testContext.Errorf("refused files must write nothing, got %v", entries)
 	}
 }

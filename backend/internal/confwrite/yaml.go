@@ -5,9 +5,17 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
+
+const (
+	sourceKey    = "source"
+	transformKey = "transform"
+)
+
+var allowedSources = []string{"file", "journalctl", "docker"}
 
 func validateYAML(content []byte) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
@@ -20,6 +28,9 @@ func validateYAML(content []byte) error {
 		}
 		if decodeError != nil || usesAnchorsOrAliases(&document) {
 			return ErrInvalidYAML
+		}
+		if !declaresAllowedSource(&document) {
+			return ErrForbiddenSource
 		}
 		documentCount++
 	}
@@ -34,4 +45,31 @@ func usesAnchorsOrAliases(node *yaml.Node) bool {
 		return true
 	}
 	return slices.ContainsFunc(node.Content, usesAnchorsOrAliases)
+}
+
+func declaresAllowedSource(document *yaml.Node) bool {
+	if document.Kind != yaml.DocumentNode || len(document.Content) != 1 {
+		return false
+	}
+	mapping := document.Content[0]
+	if mapping.Kind != yaml.MappingNode {
+		return false
+	}
+	sourceCount := 0
+	for keyIndex := 0; keyIndex+1 < len(mapping.Content); keyIndex += 2 {
+		keyName := strings.ToLower(mapping.Content[keyIndex].Value)
+		valueNode := mapping.Content[keyIndex+1]
+		if keyName == transformKey {
+			return false
+		}
+		if keyName != sourceKey {
+			continue
+		}
+		isAllowedValue := valueNode.Kind == yaml.ScalarNode && slices.Contains(allowedSources, valueNode.Value)
+		if !isAllowedValue {
+			return false
+		}
+		sourceCount++
+	}
+	return sourceCount == 1
 }

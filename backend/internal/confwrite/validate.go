@@ -20,6 +20,7 @@ var (
 	ErrRedactedContent = errors.New("confwrite: redacted content")
 	ErrInvalidYAML     = errors.New("confwrite: invalid yaml")
 	ErrNotRegularFile  = errors.New("confwrite: not a regular file or directory")
+	ErrForbiddenSource = errors.New("confwrite: forbidden acquisition source")
 )
 
 var acquisitionNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.yaml$`)
