@@ -419,7 +419,7 @@
     "installName": "Item name",
     "installSubmit": "Install",
     "appsecSuggestions": "AppSec suggestions: the collections crowdsecurity/appsec-virtual-patching and crowdsecurity/appsec-generic-rules (install them with the Collection type).",
-    "appsecActivationNote": "Installing is not enough: enabling AppSec needs an appsec acquisition and a compatible bouncer. Install crowdsecurity/appsec-generic-rules before enabling the appsec acquisition, otherwise the engine does not start. See docs/operations.md.",
+    "appsecActivationNote": "Installing is not enough: enabling AppSec needs an appsec acquisition and a compatible bouncer. Install crowdsecurity/appsec-generic-rules then crowdsecurity/appsec-virtual-patching before enabling the appsec acquisition (the default appsec configuration loads both), otherwise the engine does not start. See docs/operations.md.",
     "kinds": {
       "collections": "Collection",
       "appsec-rules": "AppSec rule",
@@ -836,11 +836,11 @@
   "allowlists": {
     "title": "Allowlists",
     "intro": "Engine allowlists: the engine ignores the listed addresses and ranges. Manual bans and synchronization refuse every allowlisted target.",
-    "configNote": "Parser whitelists of the local engine are shown read-only on the <configLink>Config page</configLink>.",
+    "configNote": "Parser and postoverflow whitelists of the local engine are shown read-only on the <configLink>Config page</configLink>.",
     "engine": "Engine",
     "readOnly": "Read-only: the dashboard can only write the allowlists of the local engine, the LAPI of a remote engine does not allow writing them.",
-    "truncated": "More than 10,000 entries: manual bans and synchronization are refused on this engine as a precaution.",
-    "refreshFailed": "The change was written, but the allowlists could not be read again: reload the page to see the current state.",
+    "truncated": "More than 10,000 entries or an answer larger than 4 MiB (nothing listed): manual bans and synchronization are refused on this engine as a precaution.",
+    "refreshFailed": "The change was written, but the allowlists could not be read again or the list is too large to verify: reload the page to see the current state.",
     "empty": "No allowlist on this engine.",
     "noEntries": "No entry in this allowlist.",
     "consoleManaged": "Managed by the console",

@@ -163,7 +163,7 @@ describe('decision actions', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(en.errors.self_ban)
   })
 
-  it('le formulaire de ban traduit target_allowlisted et laisse le dialogue ouvert', async () => {
+  it('banFormTranslatesTargetAllowlistedAndKeepsTheDialogOpen', async () => {
     stubFetch(decisionRoutes({ 'POST /api/decisions': { status: 409, body: { error: 'target_allowlisted' } } }))
     const user = userEvent.setup()
     renderApp('/decisions')
@@ -179,7 +179,7 @@ describe('decision actions', () => {
     expect(within(dialog).getByLabelText(en.ban.ip)).toHaveValue('203.0.113.9')
   })
 
-  it('le formulaire de ban traduit allowlist_unavailable', async () => {
+  it('banFormTranslatesAllowlistUnavailable', async () => {
     stubFetch(decisionRoutes({ 'POST /api/decisions': { status: 503, body: { error: 'allowlist_unavailable' } } }))
     const user = userEvent.setup()
     renderApp('/decisions')

@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
+import fr from '@/i18n/fr.json'
 import { makeHealth, makeHubItem } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
 import { prepareEnglishApp, requestsTo, SESSION_OK, slowResponse } from '@/test/pageHarness'
@@ -355,6 +356,17 @@ describe('hub page', () => {
     expect(en.hub.appsecActivationNote).toContain('docs/operations.md')
     expect(en.hub.appsecSuggestions).toContain('crowdsecurity/appsec-virtual-patching')
     expect(en.hub.appsecSuggestions).toContain('crowdsecurity/appsec-generic-rules')
+  })
+
+  // The default appsec configuration loads the vpatch rules too: both
+  // collections are named, generic rules first, in each language.
+  it('activationNoteNamesBothAppSecCollectionsInOrder', () => {
+    for (const activationNote of [en.hub.appsecActivationNote, fr.hub.appsecActivationNote]) {
+      const genericRulesPosition = activationNote.indexOf('crowdsecurity/appsec-generic-rules')
+      const virtualPatchingPosition = activationNote.indexOf('crowdsecurity/appsec-virtual-patching')
+      expect(genericRulesPosition).toBeGreaterThanOrEqual(0)
+      expect(virtualPatchingPosition).toBeGreaterThan(genericRulesPosition)
+    }
   })
 
   it('marksReloadRequiredAfterInstall', async () => {

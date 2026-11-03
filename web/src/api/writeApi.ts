@@ -44,6 +44,5 @@ export const isHubItemKind = (type: string): type is HubItemKind => (HUB_ITEM_KI
 export const installHubItem = (kind: HubItemKind, name: string) => sendJson<StatusResponse>('POST', `/api/hub/${kind}`, { name })
 export const removeHubItem = async (kind: HubItemKind, name: string, confirm: string) =>
   deleteConfirmed(`/api/hub/${kind}/${encodeSegments(name)}`, confirm)
-export const removeCollection = (name: string, confirm: string) => removeHubItem('collections', name, confirm)
 
 export const reloadCrowdsec = () => sendJson<StatusResponse>('POST', '/api/crowdsec/reload')

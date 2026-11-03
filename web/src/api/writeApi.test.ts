@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { removeCollection } from '@/api/writeApi'
+import { removeHubItem } from '@/api/writeApi'
 
 describe('hub path building', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -8,7 +8,7 @@ describe('hub path building', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(removeCollection(hostileName, hostileName)).rejects.toMatchObject({ code: 'invalid_request' })
+    await expect(removeHubItem('collections', hostileName, hostileName)).rejects.toMatchObject({ code: 'invalid_request' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

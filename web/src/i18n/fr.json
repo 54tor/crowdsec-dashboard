@@ -419,7 +419,7 @@
     "installName": "Nom de l'élément",
     "installSubmit": "Installer",
     "appsecSuggestions": "Suggestions AppSec : les collections crowdsecurity/appsec-virtual-patching et crowdsecurity/appsec-generic-rules (à installer avec le type Collection).",
-    "appsecActivationNote": "Installer ne suffit pas : activer AppSec demande une acquisition appsec et un bouncer compatible. Installez crowdsecurity/appsec-generic-rules avant d'activer l'acquisition appsec, sinon le moteur ne démarre pas. Voir docs/operations.md.",
+    "appsecActivationNote": "Installer ne suffit pas : activer AppSec demande une acquisition appsec et un bouncer compatible. Installez crowdsecurity/appsec-generic-rules puis crowdsecurity/appsec-virtual-patching avant d'activer l'acquisition appsec (la configuration appsec par défaut charge les deux), sinon le moteur ne démarre pas. Voir docs/operations.md.",
     "kinds": {
       "collections": "Collection",
       "appsec-rules": "Règle AppSec",
@@ -836,11 +836,11 @@
   "allowlists": {
     "title": "Listes d'autorisation",
     "intro": "Listes d'autorisation des moteurs : le moteur ignore les adresses et plages listées. Le ban manuel et la synchronisation refusent toute cible en liste d'autorisation.",
-    "configNote": "Les whitelists de parseurs du moteur local sont affichées en lecture seule sur la <configLink>page Configuration</configLink>.",
+    "configNote": "Les whitelists de parseurs et de postoverflow du moteur local sont affichées en lecture seule sur la <configLink>page Configuration</configLink>.",
     "engine": "Moteur",
     "readOnly": "Lecture seule : le tableau de bord n'écrit que les listes d'autorisation du moteur local, la LAPI d'un moteur distant ne permet pas de les écrire.",
-    "truncated": "Plus de 10 000 entrées : ban manuel et synchronisation refusés sur ce moteur par sécurité.",
-    "refreshFailed": "La modification est écrite, mais les listes d'autorisation n'ont pas pu être relues : rechargez la page pour voir l'état actuel.",
+    "truncated": "Plus de 10 000 entrées ou réponse de plus de 4 Mio (rien n'est listé) : ban manuel et synchronisation refusés sur ce moteur par sécurité.",
+    "refreshFailed": "La modification est écrite, mais les listes d'autorisation n'ont pas pu être relues ou la liste est trop grande pour être vérifiée : rechargez la page pour voir l'état actuel.",
     "empty": "Aucune liste d'autorisation sur ce moteur.",
     "noEntries": "Aucune entrée dans cette liste d'autorisation.",
     "consoleManaged": "Gérée par la console",

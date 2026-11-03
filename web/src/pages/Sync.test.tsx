@@ -249,7 +249,18 @@ describe('sync page', () => {
   })
 
   it('doubleClickCannotPostTwice', async () => {
-    const fetchMock = stubFetch(syncRoutes(makeStatus(), ADMIN_SESSION, { [`POST ${SYNC_URL}/run`]: { status: 202, body: { status: 'started' } } }))
+    // Once the POST is served the status reports a running sync, as the real
+    // backend does, so the button stays disabled for the whole double click
+    // whatever the scheduling under load.
+    let hasStarted = false
+    const fetchMock = stubFetch({
+      ...syncRoutes(makeStatus()),
+      [`GET ${SYNC_URL}`]: () => ({ status: 200, body: makeStatus({ running: hasStarted }) }),
+      [`POST ${SYNC_URL}/run`]: () => {
+        hasStarted = true
+        return { status: 202, body: { status: 'started' } }
+      },
+    })
     const user = userEvent.setup()
     renderApp('/sync')
     await user.dblClick(await screen.findByRole('button', { name: en.sync.syncNow }))

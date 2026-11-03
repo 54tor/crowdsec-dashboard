@@ -327,6 +327,20 @@ describe('allowlists page', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  // The notices must name every case they cover: more than 10 000 entries or
+  // an answer over 4 MiB, parser and postoverflow whitelists, a re-read that
+  // failed or a list too large to verify.
+  it('wordsEveryCaseInTheAllowlistNotices', () => {
+    expect(en.allowlists.truncated).toContain('10,000')
+    expect(en.allowlists.truncated).toContain('4 MiB')
+    expect(fr.allowlists.truncated).toContain('10 000')
+    expect(fr.allowlists.truncated).toContain('4 Mio')
+    expect(en.allowlists.configNote).toContain('postoverflow')
+    expect(fr.allowlists.configNote).toContain('postoverflow')
+    expect(en.allowlists.refreshFailed).toContain('too large')
+    expect(fr.allowlists.refreshFailed).toContain('trop grande')
+  })
+
   it('les fichiers de langue ont les mêmes clés', () => {
     expect(collectKeyPaths(fr.allowlists).sort()).toEqual(collectKeyPaths(en.allowlists).sort())
     expect(fr.nav.allowlists).toBeTruthy()
