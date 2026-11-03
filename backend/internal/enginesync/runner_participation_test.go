@@ -97,3 +97,21 @@ func TestEngineLeavingTheSyncStillHasItsCopiesRemoved(testContext *testing.T) {
 		})
 	}
 }
+
+// A peer whose row is deleted (or being deleted) is absent from the table listing and from the
+// registry: it no longer takes part, so its copies on the other engines are orphans and removed.
+func TestDeletedPeerHasItsCopiesRemoved(testContext *testing.T) {
+	alpha := &memoryEngine{name: "alpha"}
+	charlie := &memoryEngine{name: "charlie", bans: []Ban{copyOnMemoryEngine(testContext, 7, "203.0.113.7", "beta")}}
+	tableRows := []engines.Engine{tableEngine("alpha", "1", true, true), tableEngine("charlie", "3", true, true)}
+	runner := runnerOverTable([]*memoryEngine{alpha, charlie}, tableRows)
+
+	report := runOnce(testContext, runner, RunOptions{})
+
+	if len(charlie.bans) != 0 || report.PerEngine["charlie"].Removed != 1 {
+		testContext.Fatalf("orphan copy of the deleted beta must be removed: bans=%d report=%+v", len(charlie.bans), report.PerEngine["charlie"])
+	}
+	if _, reported := report.PerEngine["beta"]; reported {
+		testContext.Fatalf("a deleted engine must not be reported: %+v", report.PerEngine["beta"])
+	}
+}
