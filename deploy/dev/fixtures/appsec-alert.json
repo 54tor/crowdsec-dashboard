@@ -1,0 +1,351 @@
+[
+  {
+    "capacity": 1,
+    "created_at": "2026-11-03T13:44:28Z",
+    "decisions": [
+      {
+        "duration": "3h59m55s",
+        "id": 3,
+        "origin": "crowdsec",
+        "scenario": "crowdsecurity/appsec-vpatch",
+        "scope": "Ip",
+        "simulated": false,
+        "type": "ban",
+        "value": "198.51.100.10"
+      }
+    ],
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "ASNNumber",
+            "value": "0"
+          },
+          {
+            "key": "IsInEU",
+            "value": "false"
+          },
+          {
+            "key": "appsec_action",
+            "value": "deny"
+          },
+          {
+            "key": "appsec_interrupted",
+            "value": "true"
+          },
+          {
+            "key": "datasource_path",
+            "value": "appsec"
+          },
+          {
+            "key": "datasource_type",
+            "value": "appsec"
+          },
+          {
+            "key": "log_type",
+            "value": "appsec-block"
+          },
+          {
+            "key": "remediation_cmpt_ip",
+            "value": "192.0.2.1"
+          },
+          {
+            "key": "request_uuid",
+            "value": "89350494-9580-4ad1-9edc-1a0ef888c98d"
+          },
+          {
+            "key": "rule_ids",
+            "value": "[373950650]"
+          },
+          {
+            "key": "rule_name",
+            "value": "crowdsecurity/vpatch-env-access"
+          },
+          {
+            "key": "service",
+            "value": "appsec"
+          },
+          {
+            "key": "source_ip",
+            "value": "198.51.100.10"
+          },
+          {
+            "key": "target_host",
+            "value": "www.example.com"
+          },
+          {
+            "key": "target_uri",
+            "value": "/app/.env"
+          }
+        ],
+        "timestamp": "2026-11-03 13:44:27.743425627 +0000 UTC"
+      },
+      {
+        "meta": [
+          {
+            "key": "ASNNumber",
+            "value": "0"
+          },
+          {
+            "key": "IsInEU",
+            "value": "false"
+          },
+          {
+            "key": "appsec_action",
+            "value": "deny"
+          },
+          {
+            "key": "appsec_interrupted",
+            "value": "true"
+          },
+          {
+            "key": "datasource_path",
+            "value": "appsec"
+          },
+          {
+            "key": "datasource_type",
+            "value": "appsec"
+          },
+          {
+            "key": "log_type",
+            "value": "appsec-block"
+          },
+          {
+            "key": "remediation_cmpt_ip",
+            "value": "192.0.2.1"
+          },
+          {
+            "key": "request_uuid",
+            "value": "a83148f9-d840-4096-b625-93005c053f4a"
+          },
+          {
+            "key": "rule_ids",
+            "value": "[3420221735]"
+          },
+          {
+            "key": "rule_name",
+            "value": "crowdsecurity/vpatch-CVE-2017-9841"
+          },
+          {
+            "key": "service",
+            "value": "appsec"
+          },
+          {
+            "key": "source_ip",
+            "value": "198.51.100.10"
+          },
+          {
+            "key": "target_host",
+            "value": "www.example.com"
+          },
+          {
+            "key": "target_uri",
+            "value": "/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php"
+          }
+        ],
+        "timestamp": "2026-11-03 13:44:27.788392513 +0000 UTC"
+      }
+    ],
+    "events_count": 2,
+    "id": 5,
+    "kind": "crowdsec",
+    "labels": null,
+    "leakspeed": "1m0s",
+    "machine_id": "localhost",
+    "message": "Ip 198.51.100.10 performed 'crowdsecurity/appsec-vpatch' (2 events over 44.831644ms) at 2026-11-03 13:44:27.788493675 +0000 UTC",
+    "meta": [
+      {
+        "key": "rules",
+        "value": "[\"crowdsecurity/vpatch-env-access\",\"crowdsecurity/vpatch-CVE-2017-9841\"]"
+      },
+      {
+        "key": "target_uri",
+        "value": "[\"/app/.env\",\"/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php\"]"
+      }
+    ],
+    "remediation": true,
+    "scenario": "crowdsecurity/appsec-vpatch",
+    "scenario_hash": "a3494b1898ee95caab663d92d804c08af4a79ba140c9f4b10ee641f2a183ab45",
+    "scenario_version": "0.7",
+    "simulated": false,
+    "source": {
+      "as_number": "0",
+      "ip": "198.51.100.10",
+      "scope": "Ip",
+      "value": "198.51.100.10"
+    },
+    "start_at": "2026-11-03T13:44:27Z",
+    "stop_at": "2026-11-03T13:44:27Z",
+    "uuid": "e670aff1-f615-435a-b7cb-5c4d639cbbb9"
+  },
+  {
+    "capacity": 1,
+    "created_at": "2026-11-03T13:44:28Z",
+    "decisions": null,
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "rule_name",
+            "value": "crowdsecurity/vpatch-CVE-2017-9841"
+          },
+          {
+            "key": "message",
+            "value": "PHPUnit RCE (CVE-2017-9841)"
+          },
+          {
+            "key": "uri",
+            "value": "/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php"
+          },
+          {
+            "key": "matched_zones",
+            "value": "REQUEST_FILENAME"
+          },
+          {
+            "key": "data"
+          },
+          {
+            "key": "target_fqdn",
+            "value": "www.example.com"
+          }
+        ],
+        "timestamp": "2026-11-03 13:44:27 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 4,
+    "kind": "waf",
+    "labels": null,
+    "leakspeed": "",
+    "machine_id": "localhost",
+    "message": "WAF block: crowdsecurity/vpatch-CVE-2017-9841 from 198.51.100.10 (192.0.2.1)",
+    "meta": [
+      {
+        "key": "user_agent",
+        "value": "[\"probe-agent/1.0\"]"
+      },
+      {
+        "key": "target_uri",
+        "value": "[\"/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php\"]"
+      },
+      {
+        "key": "msg",
+        "value": "[\"PHPUnit RCE (CVE-2017-9841)\"]"
+      },
+      {
+        "key": "method",
+        "value": "[\"GET\"]"
+      },
+      {
+        "key": "name",
+        "value": "[\"crowdsecurity/vpatch-CVE-2017-9841\"]"
+      },
+      {
+        "key": "ja4h",
+        "value": "[\"ge11nn020000_cf69e1861692_000000000000_000000000000\"]"
+      },
+      {
+        "key": "matched_zones",
+        "value": "[\"REQUEST_FILENAME\"]"
+      }
+    ],
+    "scenario": "crowdsecurity/vpatch-CVE-2017-9841",
+    "scenario_hash": "b2873741e827a81c2e1d49d0f3b78cb1ede672c847fd0d3f7b70be43172e65ed",
+    "scenario_version": "0.4",
+    "simulated": false,
+    "source": {
+      "as_number": "0",
+      "ip": "198.51.100.10",
+      "scope": "Ip",
+      "value": "198.51.100.10"
+    },
+    "start_at": "2026-11-03T13:44:27Z",
+    "stop_at": "2026-11-03T13:44:27Z",
+    "uuid": "9d097c8d-b65a-4f57-a6a3-390ebe25a1ad"
+  },
+  {
+    "capacity": 1,
+    "created_at": "2026-11-03T13:44:28Z",
+    "decisions": null,
+    "events": [
+      {
+        "meta": [
+          {
+            "key": "rule_name",
+            "value": "crowdsecurity/vpatch-env-access"
+          },
+          {
+            "key": "message",
+            "value": "Detect access to .env files"
+          },
+          {
+            "key": "uri",
+            "value": "/app/.env"
+          },
+          {
+            "key": "matched_zones",
+            "value": "REQUEST_FILENAME"
+          },
+          {
+            "key": "data"
+          },
+          {
+            "key": "target_fqdn",
+            "value": "www.example.com"
+          }
+        ],
+        "timestamp": "2026-11-03 13:44:27 +0000 UTC"
+      }
+    ],
+    "events_count": 1,
+    "id": 3,
+    "kind": "waf",
+    "labels": null,
+    "leakspeed": "",
+    "machine_id": "localhost",
+    "message": "WAF block: crowdsecurity/vpatch-env-access from 198.51.100.10 (192.0.2.1)",
+    "meta": [
+      {
+        "key": "method",
+        "value": "[\"GET\"]"
+      },
+      {
+        "key": "user_agent",
+        "value": "[\"probe-agent/1.0\"]"
+      },
+      {
+        "key": "name",
+        "value": "[\"crowdsecurity/vpatch-env-access\"]"
+      },
+      {
+        "key": "msg",
+        "value": "[\"Detect access to .env files\"]"
+      },
+      {
+        "key": "target_uri",
+        "value": "[\"/app/.env\"]"
+      },
+      {
+        "key": "ja4h",
+        "value": "[\"ge11nn020000_cf69e1861692_000000000000_000000000000\"]"
+      },
+      {
+        "key": "matched_zones",
+        "value": "[\"REQUEST_FILENAME\"]"
+      }
+    ],
+    "scenario": "crowdsecurity/vpatch-env-access",
+    "scenario_hash": "c7cf3ad69e13c2422f0891e8f1ad1c28fe6a4f03e59b0279f8c2b9fa9c7fc62a",
+    "scenario_version": "0.3",
+    "simulated": false,
+    "source": {
+      "as_number": "0",
+      "ip": "198.51.100.10",
+      "scope": "Ip",
+      "value": "198.51.100.10"
+    },
+    "start_at": "2026-11-03T13:44:27Z",
+    "stop_at": "2026-11-03T13:44:27Z",
+    "uuid": "7cb90120-560d-481d-8957-df4235d4cb0a"
+  }
+]

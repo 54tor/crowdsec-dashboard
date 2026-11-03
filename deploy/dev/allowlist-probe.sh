@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # DISPOSABLE probe of the CrowdSec LAPI allowlist behaviour. Development only, never run in production.
 #
-# It starts its OWN throwaway engine (compose project "csdash-allowlist-probe": private network, no
+# It starts its OWN throwaway engine (compose project "csdash-lot5-probe": private network, no
 # published port, anonymous volumes), then asks the LAPI from inside the container and prints one
 # JSON line per observation on stdout (progress on stderr):
 #   (a) GET /v1/allowlists?with_content=true with no allowlist, an empty one, then permanent / expired
@@ -11,16 +11,23 @@
 #   (c) POST /v1/alerts by a machine account for an allowlisted IP: alert WITH a ban decision and the
 #       same alert WITHOUT a decision; what is stored and what bouncers can see.
 #
+#   (d) lot 5: cscli allowlists writes (create / add / remove / delete): accepted flag forms, exit
+#       codes and messages (unknown name, duplicate, invalid value), expiry of covered decisions.
+#   (e) lot 5: hub items (appsec-rules / appsec-configs / collections, `hub list -o json` keys) and a
+#       REAL AppSec alert: an appsec acquisition (written inside the container, nothing on the host),
+#       two requests hitting two distinct vpatch rules with a bouncer's AppSec headers, then the
+#       alerts as the LAPI returns them (scenario, exact meta keys, decision created).
+#
 # Usage: ./allowlist-probe.sh            run, then tear the probe project down
 #        PROBE_KEEP=1 ./allowlist-probe.sh   leave the engine up (tear down by hand with the same project name)
 # Only documentation addresses are used (RFC 5737). The machine password is random per run and never
 # written to disk. Re-running is safe: a leftover probe project is removed first.
 set -euo pipefail
 
-project="csdash-allowlist-probe"
-container_name="csdash-allowlist-probe-crowdsec"
+project="csdash-lot5-probe"
+container_name="csdash-lot5-probe-crowdsec"
 lapi="http://crowdsec:8080"
-client_container="csdash-allowlist-probe-client"
+client_container="csdash-lot5-probe-client"
 allowlist_name="probe_allowlist"
 unknown_allowlist="probe_unknown_list"
 machine_name="dashboard-probe"
@@ -29,11 +36,11 @@ machine_password="$(head -c 24 /dev/urandom | base64 | tr -d '/+=\n')"
 # The compose file is piped on stdin so nothing is written to disk. Floating tag on purpose.
 compose_file() {
   cat <<'YAML'
-name: csdash-allowlist-probe
+name: csdash-lot5-probe
 services:
   crowdsec:
     image: crowdsecurity/crowdsec:latest
-    container_name: csdash-allowlist-probe-crowdsec
+    container_name: csdash-lot5-probe-crowdsec
     restart: "no"
     mem_limit: 768m
     pids_limit: 256
@@ -45,7 +52,7 @@ services:
   # The crowdsec image ships no curl: a sidecar on the same private network issues the HTTP calls.
   client:
     image: curlimages/curl:latest
-    container_name: csdash-allowlist-probe-client
+    container_name: csdash-lot5-probe-client
     restart: "no"
     entrypoint: ["sleep", "infinity"]
     depends_on:
@@ -219,6 +226,110 @@ teardown_probe() {
   compose down -v --remove-orphans >&2 || true
 }
 
+# emit_cscli NAME CSCLI_ARGS...: run a cscli command, print one JSON line with its exit code and merged output.
+emit_cscli() {
+  local label="$1" exit_code=0 output
+  shift
+  output="$(cscli "$@" 2>&1)" || exit_code=$?
+  jq -cn --arg label "d" --arg name "$label" --arg command "cscli $*" --argjson exit_code "$exit_code" \
+    --arg output "$output" \
+    '{label: $label, name: $name, command: $command, exit_code: $exit_code,
+      output: ($output | try fromjson catch $output)}'
+}
+
+probe_d_cscli_writes() {
+  local list="probe_write_list"
+  emit_cscli create_equals_form allowlists create "$list" --description=probe_description
+  emit_cscli create_duplicate allowlists create "$list" -d again
+  emit_cscli add_equals_forms allowlists add "$list" 203.0.113.60 --comment=probe_comment --expiration=12h
+  emit_cscli add_days_expiration allowlists add "$list" 203.0.113.61 -e 7d -d seven_days
+  emit_cscli add_duplicate_value allowlists add "$list" 203.0.113.60
+  emit_cscli add_invalid_value allowlists add "$list" not-an-address
+  emit_cscli add_cidr_value allowlists add "$list" 198.51.100.0/24 -d range
+  emit_cscli add_unknown_allowlist allowlists add probe_unknown_list 203.0.113.62
+  emit_cscli remove_missing_value allowlists remove "$list" 203.0.113.99
+  emit_cscli remove_unknown_allowlist allowlists remove probe_unknown_list 203.0.113.60
+  emit_cscli delete_unknown_allowlist allowlists delete probe_unknown_list
+  cscli decisions add -i 203.0.113.70 -d 2h >&2
+  emit_cscli add_covering_active_decision allowlists add "$list" 203.0.113.70 -d covers_decision
+  emit_cscli decisions_after_add decisions list -o json
+  emit_cscli inspect_json allowlists inspect "$list" -o json
+  emit_cscli remove_existing_value allowlists remove "$list" 203.0.113.70
+  emit_cscli delete_existing allowlists delete "$list"
+  emit_cscli delete_twice allowlists delete "$list"
+}
+
+install_appsec_hub_items() {
+  emit_cscli appsec_rules_install_collection_item appsec-rules install crowdsecurity/appsec-virtual-patching
+  emit_cscli appsec_configs_install_collection_item appsec-configs install crowdsecurity/appsec-virtual-patching
+  emit_cscli waf_rules_alias_help waf-rules --help
+  emit_cscli collection_install_virtual_patching collections install crowdsecurity/appsec-virtual-patching
+  emit_cscli collection_install_generic_rules collections install crowdsecurity/appsec-generic-rules
+  emit_cscli appsec_rules_remove_owned_by_collection appsec-rules remove crowdsecurity/vpatch-env-access
+  emit_cscli appsec_rules_remove_unknown appsec-rules remove probe/unknown
+  emit_cscli appsec_configs_remove_unknown appsec-configs remove probe/unknown
+  emit_note d hub_list_keys "$(cscli hub list -o json 2>/dev/null | jq -c 'keys')"
+  emit_note d hub_list_appsec_configs "$(cscli hub list -o json 2>/dev/null | jq -c '."appsec-configs"')"
+  emit_note d hub_list_appsec_rules_sample "$(cscli hub list -o json 2>/dev/null | jq -c '."appsec-rules"[0:2]')"
+  emit_note d hub_list_collections "$(cscli hub list -o json 2>/dev/null | jq -c '.collections')"
+  emit_note d appsec_rules_list "$(cscli appsec-rules list -o json 2>/dev/null | jq -c '."appsec-rules"[0:2]')"
+}
+
+# The appsec acquisition is written inside the container (stdin, nothing on the host). The hub items
+# the config references must be installed BEFORE it exists: a missing rule pattern is fatal at boot.
+enable_appsec_acquisition() {
+  docker exec -i "$container_name" sh -c 'cat > /etc/crowdsec/acquis.d/appsec.yaml' <<'ACQUIS'
+source: appsec
+listen_addr: 0.0.0.0:7422
+path: /
+appsec_configs:
+  - crowdsecurity/appsec-default
+labels:
+  type: appsec
+ACQUIS
+  docker restart "$container_name" >&2
+  wait_for_lapi
+  wait_for_appsec
+}
+
+wait_for_appsec() {
+  local attempt appsec_status
+  for attempt in $(seq 1 60); do
+    appsec_status="$(docker exec "$client_container" curl -s -o /dev/null -w '%{http_code}' http://crowdsec:7422/ 2>/dev/null || true)"
+    if [ "$appsec_status" != "000" ] && [ -n "$appsec_status" ]; then
+      return 0
+    fi
+    sleep 2
+  done
+  progress "AppSec listener did not become ready"
+  return 1
+}
+
+# send_appsec_request KEY URI: mimics a bouncer forwarding one request (AppSec headers).
+send_appsec_request() {
+  local key="$1" request_uri="$2"
+  http_body="$(docker exec "$client_container" curl -sS -w ' http_status=%{http_code}' http://crowdsec:7422/ \
+    -H "X-Crowdsec-Appsec-Api-Key: $key" -H "X-Crowdsec-Appsec-Ip: 198.51.100.10" \
+    -H "X-Crowdsec-Appsec-Uri: $request_uri" -H "X-Crowdsec-Appsec-Host: www.example.com" \
+    -H "X-Crowdsec-Appsec-Verb: GET" -H "X-Crowdsec-Appsec-User-Agent: probe-agent/1.0")"
+  jq -cn --arg label "e" --arg request "$request_uri" --arg body "$http_body" \
+    '{label: $label, name: "appsec_response", request: $request, body: $body}'
+}
+
+probe_e_appsec() {
+  install_appsec_hub_items
+  enable_appsec_acquisition
+  login_machine
+  local bouncer_key
+  bouncer_key="$(cscli bouncers add appsec-probe-bouncer -o raw)"
+  send_appsec_request "$bouncer_key" /app/.env
+  send_appsec_request "$bouncer_key" /vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php
+  sleep 5
+  call GET '/v1/alerts?limit=50' "$machine_token"
+  emit e appsec_alerts "GET /v1/alerts?limit=50 (machine token, after two vpatch requests)"
+  emit_cscli appsec_metrics metrics show appsec
+}
+
 main() {
   if [ "${PROBE_KEEP:-0}" != "1" ]; then
     trap teardown_probe EXIT
@@ -235,6 +346,8 @@ main() {
   probe_a_allowlists
   probe_b_not_found
   probe_c_alerts
+  probe_d_cscli_writes
+  probe_e_appsec
 }
 
 main "$@"
