@@ -669,7 +669,10 @@
       "write_failed": "Write failed",
       "run_deadline": "Run exceeded its time limit",
       "run_panicked": "Run failed unexpectedly",
-      "engine_backoff": "Skipped: engine in backoff after failures"
+      "engine_backoff": "Skipped: engine in backoff after failures",
+      "engine_unreachable": "Engine unreachable",
+      "engine_auth_failed": "The engine refused the machine credentials",
+      "engine_blocked_address": "Engine address blocked by the network safety policy"
     },
     "guardedTitle": "Peers blocked by the safety guard",
     "guarded": "Too many changes are pending for these peers. They stay blocked until the pending changes drop below the limit; the other peers are synchronized normally.",

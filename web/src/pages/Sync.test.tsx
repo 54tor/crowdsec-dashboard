@@ -238,6 +238,8 @@ describe('sync page', () => {
     const serverErrorCodes = [
       'operation_running', 'sync_disabled', 'sync_guard_tripped', 'engine_addresses_unknown', 'canceled', 'not_a_copy',
       'engine_failed', 'write_failed', 'run_deadline', 'run_panicked', 'engine_backoff',
+      // Per-engine read and write failures reuse engines.ErrorCode (backend/internal/engines/errorcode.go).
+      'engine_unreachable', 'engine_auth_failed', 'engine_blocked_address',
     ]
     serverErrorCodes.forEach((serverErrorCode) => {
       expect(en.sync.errorCodes).toHaveProperty(serverErrorCode)

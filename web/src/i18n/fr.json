@@ -669,7 +669,10 @@
       "write_failed": "Écriture en échec",
       "run_deadline": "Exécution au-delà de sa limite de temps",
       "run_panicked": "Échec inattendu de l'exécution",
-      "engine_backoff": "Ignoré : moteur en attente après des échecs"
+      "engine_backoff": "Ignoré : moteur en attente après des échecs",
+      "engine_unreachable": "Moteur injoignable",
+      "engine_auth_failed": "Le moteur a refusé les identifiants de la machine",
+      "engine_blocked_address": "Adresse du moteur bloquée par la politique de sécurité réseau"
     },
     "guardedTitle": "Pairs bloqués par le garde-fou",
     "guarded": "Trop de changements sont en attente pour ces pairs. Ils restent bloqués tant que les changements en attente ne repassent pas sous la limite ; les autres pairs sont synchronisés normalement.",
