@@ -345,3 +345,34 @@ func TestAlertImportDigestCoversThePlannedAlerts(testContext *testing.T) {
 		testContext.Errorf("a different set of alerts must change the digest")
 	}
 }
+
+func TestAlertImportHonoursConfigLocalOverride(testContext *testing.T) {
+	configDir := testContext.TempDir()
+	writeConfig := func(name, content string) {
+		if writeError := os.WriteFile(filepath.Join(configDir, name), []byte(content), 0o600); writeError != nil {
+			testContext.Fatal(writeError)
+		}
+	}
+	writeConfig("config.yaml", "db_config:\n  flush:\n    max_items: 1000\n")
+	// CrowdSec merges config.yaml.local over config.yaml: its lower value must win.
+	writeConfig("config.yaml.local", "db_config:\n  flush:\n    max_items: 20\n")
+	fixture := newImportFixture()
+	fixture.configDir = configDir
+	for alertIndex := range 16 {
+		fixture.localAlerts = append(fixture.localAlerts, importedAlertFrom(fmt.Sprintf("198.51.100.%d", alertIndex+1), 0))
+	}
+	overflowing := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0), importedAlertFrom("203.0.113.31", 0), importedAlertFrom("203.0.113.32", 0)), SectionAlerts)
+	if overflowing.UnavailableCodes[SectionAlerts] != ErrorCodeFlushLimit {
+		testContext.Errorf("the .local max_items must lower the threshold, got %+v", overflowing)
+	}
+	writeConfig("config.yaml.local", "db_config: [unterminated\n")
+	unreadable := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0)), SectionAlerts)
+	if unreadable.UnavailableCodes[SectionAlerts] != ErrorCodeFlushConfigUnreadable {
+		testContext.Errorf("an unparsable config.yaml.local must make the section unavailable, got %+v", unreadable)
+	}
+	writeConfig("config.yaml.local", "api:\n  server:\n    log_level: info\n")
+	unrelatedOverride := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0), importedAlertFrom("203.0.113.31", 0), importedAlertFrom("203.0.113.32", 0)), SectionAlerts)
+	if len(unrelatedOverride.Unavailable) != 0 {
+		testContext.Errorf("a .local without max_items keeps the config.yaml value, got %+v", unrelatedOverride)
+	}
+}

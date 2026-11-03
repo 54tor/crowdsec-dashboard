@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-const maxFileBytes = 256 << 10
+const (
+	maxFileBytes      = 256 << 10
+	localOverrideName = "config.yaml.local"
+)
 
 var (
 	ErrNotAllowed = errors.New("confread: file not allowed")
@@ -92,6 +95,22 @@ func ReadUnredacted(dir, name string) ([]byte, error) {
 		return nil, fmt.Errorf("confread: open dir: %w", openError)
 	}
 	defer root.Close()
+	return readRegularFile(root, name)
+}
+
+func ReadUnredactedLocalOverride(dir string) ([]byte, error) {
+	root, openError := os.OpenRoot(dir)
+	if openError != nil {
+		return nil, fmt.Errorf("confread: open dir: %w", openError)
+	}
+	defer root.Close()
+	if _, lstatError := root.Lstat(localOverrideName); lstatError != nil {
+		return nil, fmt.Errorf("confread: local override: %w", lstatError)
+	}
+	return readRegularFile(root, localOverrideName)
+}
+
+func readRegularFile(root *os.Root, name string) ([]byte, error) {
 	if containsSymlink(root, name) {
 		return nil, ErrNotAllowed
 	}
