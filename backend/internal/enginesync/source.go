@@ -6,12 +6,18 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"slices"
+	"time"
 
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/lapi"
 )
 
-const redactedClient = "[REDACTED]"
+const (
+	redactedClient    = "[REDACTED]"
+	lookupTimeout     = 5 * time.Second
+	maxAddrsPerEngine = 16
+)
 
 type SyncEngine struct {
 	Name        string
@@ -50,14 +56,21 @@ type AllEngineLister interface {
 }
 
 type TableSource struct {
-	registry    EngineRegistry
-	lister      AllEngineLister
-	exclude     []netip.Prefix
-	resolveHost func(ctx context.Context, host string) ([]netip.Addr, error)
+	registry      EngineRegistry
+	lister        AllEngineLister
+	exclude       []netip.Prefix
+	lookupNetIP   func(ctx context.Context, host string) ([]netip.Addr, error)
+	lookupTimeout time.Duration
 }
 
 func NewTableSource(registry EngineRegistry, lister AllEngineLister, exclude []netip.Prefix) *TableSource {
-	return &TableSource{registry: registry, lister: lister, exclude: exclude, resolveHost: lookupHost}
+	return &TableSource{
+		registry:      registry,
+		lister:        lister,
+		exclude:       exclude,
+		lookupNetIP:   systemLookupNetIP,
+		lookupTimeout: lookupTimeout,
+	}
 }
 
 func (source *TableSource) Load(ctx context.Context) EngineSet {
@@ -78,7 +91,7 @@ func (source *TableSource) Load(ctx context.Context) EngineSet {
 			PublicAddrs: addrs,
 			Client:      handle.Client,
 		})
-		engineSet.AllEngineAddrs[handle.Engine.Name] = addrs
+		engineSet.AllEngineAddrs[handle.Engine.Name] = slices.Clone(addrs)
 	}
 	listed, listError := source.lister.List(ctx)
 	if listError != nil {
@@ -89,15 +102,30 @@ func (source *TableSource) Load(ctx context.Context) EngineSet {
 		if participating[listedEngine.Name] {
 			continue
 		}
-		addrs, _ := source.engineAddrs(ctx, listedEngine)
+		addrs, addrsComplete := source.engineAddrs(ctx, listedEngine)
+		engineSet.AddrsError = engineSet.AddrsError || (listedEngine.Enabled && !addrsComplete)
 		engineSet.AllEngineAddrs[listedEngine.Name] = addrs
 	}
 	return engineSet
 }
 
 func (source *TableSource) engineAddrs(ctx context.Context, engine engines.Engine) ([]netip.Addr, bool) {
-	addrs, resolveError := source.resolveHost(ctx, hostname(engine.LAPIURL))
-	return append(addrs, engine.PublicAddresses...), resolveError == nil
+	resolved, resolveError := source.resolveHost(ctx, hostname(engine.LAPIURL))
+	return normalizeAddrs(slices.Concat(resolved, engine.PublicAddresses)), resolveError == nil
+}
+
+func normalizeAddrs(candidates []netip.Addr) []netip.Addr {
+	var addrs []netip.Addr
+	seen := map[netip.Addr]bool{}
+	for _, candidate := range candidates {
+		addr := candidate.Unmap().WithZone("")
+		if seen[addr] || len(addrs) >= maxAddrsPerEngine {
+			continue
+		}
+		seen[addr] = true
+		addrs = append(addrs, addr)
+	}
+	return addrs
 }
 
 func hostname(rawURL string) string {
@@ -108,19 +136,18 @@ func hostname(rawURL string) string {
 	return parsedURL.Hostname()
 }
 
-func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
+func (source *TableSource) resolveHost(ctx context.Context, host string) ([]netip.Addr, error) {
 	if host == "" {
 		return nil, nil
 	}
 	if literal, parseError := netip.ParseAddr(host); parseError == nil {
-		return []netip.Addr{literal.Unmap()}, nil
+		return []netip.Addr{literal}, nil
 	}
-	resolved, lookupError := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-	if lookupError != nil {
-		return nil, lookupError
-	}
-	for addrIndex := range resolved {
-		resolved[addrIndex] = resolved[addrIndex].Unmap()
-	}
-	return resolved, nil
+	lookupContext, cancel := context.WithTimeout(ctx, source.lookupTimeout)
+	defer cancel()
+	return source.lookupNetIP(lookupContext, host)
+}
+
+func systemLookupNetIP(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 }

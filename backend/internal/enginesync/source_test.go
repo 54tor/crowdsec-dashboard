@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/lapi"
@@ -72,15 +73,23 @@ func (lister fakeLister) List(context.Context) ([]engines.Engine, error) {
 	return lister.listed, lister.listError
 }
 
-func fakeResolve(resolveContext context.Context, host string) ([]netip.Addr, error) {
-	if host == "alpha.example.com" {
+func fakeLookup(lookupContext context.Context, host string) ([]netip.Addr, error) {
+	switch host {
+	case "alpha.example.com":
 		return []netip.Addr{netip.MustParseAddr("198.51.100.1")}, nil
-	}
-	if host == "broken.example.com" {
+	case "broken.example.com":
 		return nil, errors.New("lookup failed")
-	}
-	if _, parseError := netip.ParseAddr(host); parseError == nil {
-		return lookupHost(resolveContext, host)
+	case "hang.example.com":
+		<-lookupContext.Done()
+		return nil, lookupContext.Err()
+	case "many.example.com":
+		var addrs []netip.Addr
+		for suffix := 1; suffix <= 40; suffix++ {
+			addrs = append(addrs, netip.MustParseAddr(fmt.Sprintf("203.0.113.%d", suffix)), netip.MustParseAddr("203.0.113.1"))
+		}
+		return addrs, nil
+	case "zone.example.com":
+		return []netip.Addr{netip.MustParseAddr("fe80::1%eth0")}, nil
 	}
 	return nil, nil
 }
@@ -95,7 +104,7 @@ func newTestSource(registry *fakeRegistry) *TableSource {
 
 func newTestSourceWithLister(registry EngineRegistry, lister AllEngineLister) *TableSource {
 	source := NewTableSource(registry, lister, nil)
-	source.resolveHost = fakeResolve
+	source.lookupNetIP = fakeLookup
 	return source
 }
 
@@ -181,11 +190,12 @@ func TestTableSourceNeverExposesCredentials(testContext *testing.T) {
 	}
 }
 
-func TestTableSourceExcludesAddressesOfDisabledAndNonSyncEngines(testContext *testing.T) {
+func TestTableSourceKeepsAddressesOfNonParticipatingEngines(testContext *testing.T) {
 	registry := &fakeRegistry{handles: []engines.Handle{localHandle(), remoteHandle("alpha", true, true, "198.51.100.2")}}
 	bravo := remoteHandle("bravo", true, false, "198.51.100.3").Engine
 	charlie := remoteHandle("charlie", false, true, "198.51.100.4").Engine
 	charlie.LAPIURL = "https://192.0.2.77:8080"
+	bravo.LAPIURL = "https://alpha.example.com"
 	lister := fakeLister{listed: []engines.Engine{localHandle().Engine, remoteHandle("alpha", true, true, "198.51.100.2").Engine, bravo, charlie}}
 	source := newTestSourceWithLister(registry, lister)
 
@@ -194,7 +204,7 @@ func TestTableSourceExcludesAddressesOfDisabledAndNonSyncEngines(testContext *te
 	if got := strings.Join(engineNames(engineSet), ","); got != "local,alpha" {
 		testContext.Fatalf("participating engines = %s", got)
 	}
-	if addrs := engineSet.AllEngineAddrs["bravo"]; len(addrs) != 1 || addrs[0] != netip.MustParseAddr("198.51.100.3") {
+	if addrs := engineSet.AllEngineAddrs["bravo"]; len(addrs) != 2 || addrs[0] != netip.MustParseAddr("198.51.100.1") || addrs[1] != netip.MustParseAddr("198.51.100.3") {
 		testContext.Errorf("bravo addresses = %v", addrs)
 	}
 	charlieAddrs := engineSet.AllEngineAddrs["charlie"]
@@ -215,21 +225,81 @@ func TestTableSourceMarksAddrsErrorWhenListFails(testContext *testing.T) {
 	}
 }
 
-func TestTableSourceMarksAddrsErrorOnlyForParticipatingResolutionFailure(testContext *testing.T) {
-	brokenParticipant := remoteHandle("broken", true, true, "198.51.100.5")
-	brokenParticipant.Engine.LAPIURL = "https://broken.example.com"
-	brokenSpectator := remoteHandle("spectator", true, false, "198.51.100.6").Engine
-	brokenSpectator.LAPIURL = "https://broken.example.com"
-
-	spectatorOnly := &fakeRegistry{handles: []engines.Handle{localHandle()}}
-	spectatorSource := newTestSourceWithLister(spectatorOnly, fakeLister{listed: []engines.Engine{localHandle().Engine, brokenSpectator}})
-	if spectatorSource.Load(context.Background()).AddrsError {
-		testContext.Error("a non-participating engine must not set AddrsError")
+func TestTableSourceMarksAddrsErrorByEngineUsage(testContext *testing.T) {
+	testCases := []struct {
+		caseName     string
+		enabled      bool
+		syncEnabled  bool
+		expectsError bool
+	}{
+		{"participating engine", true, true, true},
+		{"enabled engine without sync", true, false, true},
+		{"disabled engine", false, true, false},
 	}
+	for _, testCase := range testCases {
+		testContext.Run(testCase.caseName, func(subTest *testing.T) {
+			brokenHandle := remoteHandle("broken", testCase.enabled, testCase.syncEnabled, "198.51.100.5")
+			brokenHandle.Engine.LAPIURL = "https://broken.example.com"
+			registry := &fakeRegistry{handles: []engines.Handle{localHandle()}}
+			if testCase.enabled {
+				registry.handles = append(registry.handles, brokenHandle)
+			}
+			lister := fakeLister{listed: []engines.Engine{localHandle().Engine, brokenHandle.Engine}}
 
-	participant := &fakeRegistry{handles: []engines.Handle{localHandle(), brokenParticipant}}
-	participantSource := newTestSourceWithLister(participant, fakeLister{listed: []engines.Engine{localHandle().Engine, brokenParticipant.Engine}})
-	if !participantSource.Load(context.Background()).AddrsError {
-		testContext.Error("a participating engine failing resolution must set AddrsError")
+			engineSet := newTestSourceWithLister(registry, lister).Load(context.Background())
+
+			if engineSet.AddrsError != testCase.expectsError {
+				subTest.Errorf("AddrsError = %v, expected %v", engineSet.AddrsError, testCase.expectsError)
+			}
+		})
+	}
+}
+
+func TestTableSourceBoundsEachLookupWithADeadline(testContext *testing.T) {
+	hangingHandle := remoteHandle("hang", true, true, "198.51.100.5")
+	hangingHandle.Engine.LAPIURL = "https://hang.example.com"
+	registry := &fakeRegistry{handles: []engines.Handle{localHandle(), hangingHandle}}
+	source := newTestSourceWithLister(registry, fakeLister{listed: []engines.Engine{localHandle().Engine, hangingHandle.Engine}})
+	source.lookupTimeout = 50 * time.Millisecond
+
+	startedAt := time.Now()
+	engineSet := source.Load(context.Background())
+
+	if elapsed := time.Since(startedAt); elapsed > 2*time.Second {
+		testContext.Errorf("Load took %v", elapsed)
+	}
+	if !engineSet.AddrsError {
+		testContext.Error("a timed out lookup must set AddrsError")
+	}
+}
+
+func TestTableSourceDedupesCapsAndNormalisesAddresses(testContext *testing.T) {
+	manyHandle := remoteHandle("many", true, true, "::ffff:203.0.113.1")
+	manyHandle.Engine.LAPIURL = "https://many.example.com"
+	zoneHandle := remoteHandle("zone", true, true, "198.51.100.9")
+	zoneHandle.Engine.LAPIURL = "https://zone.example.com"
+	registry := &fakeRegistry{handles: []engines.Handle{localHandle(), manyHandle, zoneHandle}}
+
+	engineSet := newTestSource(registry).Load(context.Background())
+
+	manyAddrs := engineSet.AllEngineAddrs["many"]
+	if len(manyAddrs) != maxAddrsPerEngine {
+		testContext.Errorf("expected %d addresses, got %d", maxAddrsPerEngine, len(manyAddrs))
+	}
+	seen := map[netip.Addr]bool{}
+	for _, addr := range manyAddrs {
+		if seen[addr] || addr.Is4In6() {
+			testContext.Errorf("duplicate or mapped address %v", addr)
+		}
+		seen[addr] = true
+	}
+	for _, addr := range engineSet.AllEngineAddrs["zone"] {
+		if addr.Zone() != "" {
+			testContext.Errorf("zone kept on %v", addr)
+		}
+	}
+	engineSet.AllEngineAddrs["many"][0] = netip.MustParseAddr("192.0.2.200")
+	if engineSet.Engines[1].PublicAddrs[0] == netip.MustParseAddr("192.0.2.200") {
+		testContext.Error("AllEngineAddrs and SyncEngine.PublicAddrs share a slice")
 	}
 }
