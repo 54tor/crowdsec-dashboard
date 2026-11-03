@@ -15,7 +15,8 @@
     "hub": "Hub",
     "engines": "Moteurs",
     "tokens": "Jetons d'API",
-    "accounts": "Comptes"
+    "accounts": "Comptes",
+    "sync": "Synchro"
   },
   "common": {
     "retry": "Réessayer",
@@ -154,7 +155,9 @@
     "cannot_delete_own_account": "Refusé : vous ne pouvez pas supprimer le compte avec lequel vous êtes connecté.",
     "account_exists": "Un compte portant ce nom existe déjà.",
     "invalid_role": "Le rôle est invalide.",
-    "token_denied": "Cette action n'est pas disponible avec un jeton d'API."
+    "token_denied": "Cette action n'est pas disponible avec un jeton d'API.",
+    "operation_running": "Une autre opération est déjà en cours. Réessayez quand elle sera terminée.",
+    "sync_disabled": "La synchronisation est désactivée."
   },
   "filters": {
     "label": "Filtres",
@@ -578,5 +581,87 @@
     "deleteAria": "Supprimer {{name}}",
     "deleteTitle": "Supprimer le compte {{name}}",
     "deleteDescription": "Le compte {{name}} sera supprimé avec ses sessions et ses jetons d'API."
+  },
+  "sync": {
+    "title": "Synchronisation",
+    "dryRunTitle": "Mode simulation",
+    "dryRun": "Le mode simulation est actif : le plan est calculé mais aucun changement n'est appliqué.",
+    "disabled": "La synchronisation est désactivée sur ce tableau de bord. Les pairs sont listés mais aucune exécution planifiée n'a lieu et « Synchroniser maintenant » est indisponible.",
+    "running": "Une synchronisation est en cours. Cette page se rafraîchit automatiquement.",
+    "allowlistUnavailableTitle": "Listes d'autorisation indisponibles",
+    "allowlistUnavailable": "Les listes d'autorisation de ces moteurs sont illisibles, la route des listes d'autorisation est absente, ou elles dépassent 10 000 entrées. Rien n'y est écrit.",
+    "manageEngines": "Ajouter ou retirer des pairs dans la page Moteurs",
+    "syncNow": "Synchroniser maintenant",
+    "confirmRun": "Lancer la synchronisation",
+    "guardTitle": "Pairs sous garde",
+    "guardDescription": "Le garde-fou a bloqué ces pairs car trop de changements sont en attente. Ils restent bloqués pendant cette exécution ; les autres pairs sont synchronisés. Retapez chaque nom pour confirmer.",
+    "peersCaption": "Pairs",
+    "planCaption": "Dernier plan (100 entrées au maximum)",
+    "noPeers": "Aucun pair ne participe à la synchronisation.",
+    "noPlan": "Aucun changement prévu ni entrée ignorée.",
+    "neverRun": "Jamais exécuté",
+    "unknownCode": "Code inconnu ({{code}})",
+    "columns": {
+      "name": "Moteur",
+      "host": "Hôte",
+      "lastRun": "Dernière exécution",
+      "status": "Statut",
+      "added": "Ajoutées",
+      "removed": "Retirées",
+      "skipped": "Ignorées",
+      "skippedAllowlisted": "Ignorées (liste d'autorisation)",
+      "blocked": "Blocage",
+      "error": "Erreur",
+      "kind": "Action",
+      "target": "Cible",
+      "source": "Source",
+      "reason": "Raison"
+    },
+    "status": {
+      "never_run": "Jamais exécuté",
+      "ok": "OK",
+      "blocked": "Bloqué",
+      "failed": "En échec"
+    },
+    "kinds": {
+      "add": "Ajout",
+      "remove": "Retrait",
+      "replace": "Remplacement"
+    },
+    "blocked": {
+      "allowlist_unavailable": "Listes d'autorisation indisponibles : rien n'est écrit",
+      "target_guard": "Trop de changements pour ce moteur",
+      "source_guard": "Trop de changements depuis cette source",
+      "engine_addresses_unknown": "Adresses des moteurs inconnues"
+    },
+    "reasons": {
+      "allowlisted": "Dans une liste d'autorisation",
+      "allowlist_unavailable": "Listes d'autorisation indisponibles",
+      "origin": "Origine exclue",
+      "simulated": "Décision simulée",
+      "too_short": "Trop courte",
+      "prefix_too_wide": "Plage trop large",
+      "private": "Adresse privée",
+      "engine_address": "Adresse de moteur",
+      "excluded": "Plage exclue",
+      "covered": "Déjà couverte",
+      "not_a_copy": "Pas une copie",
+      "engine_failed": "Moteur en échec",
+      "write_failed": "Écriture en échec",
+      "invalid_target": "Cible invalide"
+    },
+    "errorCodes": {
+      "operation_running": "Une autre opération est en cours",
+      "sync_disabled": "La synchronisation est désactivée",
+      "sync_guard_tripped": "Garde-fou déclenché : la dérogation a été refusée",
+      "engine_addresses_unknown": "Les adresses des moteurs n'ont pas pu être résolues",
+      "canceled": "Exécution annulée",
+      "not_a_copy": "La décision n'est pas une copie",
+      "engine_failed": "Moteur en échec",
+      "write_failed": "Écriture en échec",
+      "run_deadline": "Exécution au-delà de sa limite de temps",
+      "run_panicked": "Échec inattendu de l'exécution",
+      "engine_backoff": "Ignoré : moteur en attente après des échecs"
+    }
   }
 }

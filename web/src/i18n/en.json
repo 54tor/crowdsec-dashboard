@@ -15,7 +15,8 @@
     "hub": "Hub",
     "engines": "Engines",
     "tokens": "API tokens",
-    "accounts": "Accounts"
+    "accounts": "Accounts",
+    "sync": "Sync"
   },
   "common": {
     "retry": "Retry",
@@ -154,7 +155,9 @@
     "cannot_delete_own_account": "Refused: you cannot delete the account you are signed in with.",
     "account_exists": "An account with this name already exists.",
     "invalid_role": "The role is invalid.",
-    "token_denied": "This action is not available with an API token."
+    "token_denied": "This action is not available with an API token.",
+    "operation_running": "Another operation is already running. Try again when it has finished.",
+    "sync_disabled": "Synchronisation is disabled."
   },
   "filters": {
     "label": "Filters",
@@ -578,5 +581,87 @@
     "deleteAria": "Delete {{name}}",
     "deleteTitle": "Delete account {{name}}",
     "deleteDescription": "The account {{name}} will be deleted along with its sessions and API tokens."
+  },
+  "sync": {
+    "title": "Synchronization",
+    "dryRunTitle": "Dry-run mode",
+    "dryRun": "Dry-run mode is on: the plan is computed but no change is applied.",
+    "disabled": "Synchronization is disabled on this dashboard. Peers are listed but no scheduled run takes place and \"Sync now\" is unavailable.",
+    "running": "A synchronization run is in progress. This page refreshes automatically.",
+    "allowlistUnavailableTitle": "Allowlists unavailable",
+    "allowlistUnavailable": "The allowlists of these engines are unreadable, the allowlist route is missing, or they hold more than 10,000 entries. Nothing is written on them.",
+    "manageEngines": "Add or remove peers on the Engines page",
+    "syncNow": "Sync now",
+    "confirmRun": "Run the synchronization",
+    "guardTitle": "Guarded peers",
+    "guardDescription": "The safety guard blocked these peers because too many changes are pending. They stay blocked during this run; the other peers are synchronized. Retype each name to confirm.",
+    "peersCaption": "Peers",
+    "planCaption": "Last plan (100 entries at most)",
+    "noPeers": "No peer takes part in the synchronization.",
+    "noPlan": "No planned change or skipped entry.",
+    "neverRun": "Never run",
+    "unknownCode": "Unknown code ({{code}})",
+    "columns": {
+      "name": "Engine",
+      "host": "Host",
+      "lastRun": "Last run",
+      "status": "Status",
+      "added": "Added",
+      "removed": "Removed",
+      "skipped": "Skipped",
+      "skippedAllowlisted": "Skipped (allowlisted)",
+      "blocked": "Blocked",
+      "error": "Error",
+      "kind": "Action",
+      "target": "Target",
+      "source": "Source",
+      "reason": "Reason"
+    },
+    "status": {
+      "never_run": "Never run",
+      "ok": "OK",
+      "blocked": "Blocked",
+      "failed": "Failed"
+    },
+    "kinds": {
+      "add": "Add",
+      "remove": "Remove",
+      "replace": "Replace"
+    },
+    "blocked": {
+      "allowlist_unavailable": "Allowlists unavailable: nothing is written",
+      "target_guard": "Too many changes for this engine",
+      "source_guard": "Too many changes from this source",
+      "engine_addresses_unknown": "Engine addresses unknown"
+    },
+    "reasons": {
+      "allowlisted": "Allowlisted",
+      "allowlist_unavailable": "Allowlists unavailable",
+      "origin": "Origin excluded",
+      "simulated": "Simulated decision",
+      "too_short": "Too short",
+      "prefix_too_wide": "Range too wide",
+      "private": "Private address",
+      "engine_address": "Engine address",
+      "excluded": "Excluded range",
+      "covered": "Already covered",
+      "not_a_copy": "Not a copy",
+      "engine_failed": "Engine failed",
+      "write_failed": "Write failed",
+      "invalid_target": "Invalid target"
+    },
+    "errorCodes": {
+      "operation_running": "Another operation is running",
+      "sync_disabled": "Synchronization is disabled",
+      "sync_guard_tripped": "Safety guard tripped: the override was refused",
+      "engine_addresses_unknown": "Engine addresses could not be resolved",
+      "canceled": "Run canceled",
+      "not_a_copy": "Decision is not a copy",
+      "engine_failed": "Engine failed",
+      "write_failed": "Write failed",
+      "run_deadline": "Run exceeded its time limit",
+      "run_panicked": "Run failed unexpectedly",
+      "engine_backoff": "Skipped: engine in backoff after failures"
+    }
   }
 }

@@ -16,6 +16,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/machines', labelKey: 'nav.machines' },
   { path: '/hub', labelKey: 'nav.hub' },
   { path: '/engines', labelKey: 'nav.engines', requiredRole: 'admin' },
+  { path: '/sync', labelKey: 'nav.sync' },
   { path: '/tokens', labelKey: 'nav.tokens' },
   { path: '/accounts', labelKey: 'nav.accounts', requiredRole: 'admin' },
 ]
