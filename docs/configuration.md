@@ -27,15 +27,15 @@ these files, which compose would otherwise expand.
 | `GEOIPUPDATE_FREQUENCY_HOURS` | `24` | Hours between two GeoLite2 updates: `1`, `2`, `3`, `4`, `6`, `8` or `12`, or a multiple of 24 up to `168` (`24`, `48`, ... `168`). Any other value is reported in the log and replaced by `24`. Hourly values run at minute 17 (`17 */N * * *`); `24` and above run at 03:17, multi-day values (`48` to `168`) with a day-of-month step (`17 3 */D * *`, `D` = N/24), so the step restarts on the 1st and the last gap of a month is shorter. Used by the image only, not by the Go process. |
 | `DOCKER_USER_UID`, `DOCKER_USER_GID` | `10000` | Image only. UID and GID of the unprivileged `docker-user` that runs the dashboard. Changing them rewrites `/etc/passwd` and `/etc/group` and therefore needs a writable root filesystem (`read_only: false`); with `read_only: true` the container stops. |
 | `WAIT_FOR_NETWORK` | `true` in the image, `"false"` in the example compose | Image only. When true, the container waits at start until `WAIT_FOR_NETWORK_HOST:WAIT_FOR_NETWORK_PORT` (default `1.1.1.1:443`) accepts a connection, for at most `WAIT_FOR_NETWORK_TIMEOUT` seconds (default 15, polled every `WAIT_FOR_NETWORK_INTERVAL`, default 1), then continues anyway unless `WAIT_FOR_NETWORK_STRICT` is true. The example disables it: the database is already guaranteed by `depends_on: service_healthy`, and the default probe would add an external dependency. |
-| `SYNC_ENABLED` | `false` | Turns on the engine synchronisation. When `true`, `SYNC_PEERS_FILE` is required. |
-| `SYNC_INTERVAL` | `5m` | Delay between two synchronisation runs, a Go duration. Any configured value below `1m` is refused. |
+| `SYNC_ENABLED` | `false` | Turns on the scheduled engine synchronisation ([sync.md](sync.md)). Peers are the engines of the Engines page with "Use as a synchronisation peer" checked. |
+| `SYNC_INTERVAL` | `5m` | Delay between two scheduled synchronisation runs, a Go duration, at least `1m`. It is also the extension threshold: a copy is renewed when its source has more than this much time left beyond the copy (floored at 1 minute). |
 | `SYNC_DRY_RUN` | `true` | Compute and show the plan without writing anything. Set `false` once the plan looks right. |
-| `SYNC_MAX_CHANGES` | `500` | Circuit breaker: maximum additions plus removals per engine and run, from 1 to 100000. |
+| `SYNC_MAX_CHANGES` | `500` | Circuit breaker: maximum additions plus removals per target engine, and per source engine, in one run, from 1 to 100000. Also caps the decisions of one bundle import (with 500). |
 | `SYNC_READ_LIMIT` | `5000` | Maximum number of alerts read per request from each engine, from 100 to 50000. A read that hits the limit is treated as incomplete. |
-| `SYNC_PEERS_FILE` | none | Path of the peers file (see below). Required when `SYNC_ENABLED` is `true`. |
-| `SHARE_EXCLUDE_CIDRS` | empty | Comma-separated CIDRs that are never shared with other engines, for example `203.0.113.0/24`. An invalid entry stops the start. |
-| `CONFIG_IMPORT_ENABLED` | `false` | Allows importing configuration files from a bundle. |
-| `CONFIG_IMPORT_DIR` | none | Absolute, clean path of the directory the import may write to, at least two components deep (`/` and top-level directories such as `/etc` are refused). Required when `CONFIG_IMPORT_ENABLED` is `true`. |
+| `SYNC_PEERS_FILE` | removed | Refused: when set, the dashboard does not start (`SYNC_PEERS_FILE is no longer supported: add sync peers on the Engines page`). Re-enter the peers on the Engines page ([sync.md](sync.md#peers-come-from-the-engine-table)). |
+| `SHARE_EXCLUDE_CIDRS` | empty | Comma-separated CIDRs that are never shared by the sync nor imported from a bundle, for example `203.0.113.0/24`. An invalid entry stops the start. |
+| `CONFIG_IMPORT_ENABLED` | `false` | Allows importing `acquis.d` files from a bundle into `CONFIG_IMPORT_DIR` ([bundles.md](bundles.md#configuration)). |
+| `CONFIG_IMPORT_DIR` | none | Absolute, clean path of the dedicated writable directory the import writes to, at least two components deep (`/` and top-level directories such as `/etc` are refused). Required when `CONFIG_IMPORT_ENABLED` is `true`. It must be the directory CrowdSec reads as its `acquis.d`, mounted at another path in the dashboard ([Config import mount](#config-import-mount)). |
 | `COLLECTOR_INTERVAL` | `1m` | Delay between two archive collections of each enabled engine, a Go duration. Any value below `15s` is refused. A failing engine is retried with an exponential backoff (doubling from this interval, ±20 %, at most 1 h) without delaying the others. |
 | `COLLECTOR_POLL_LIMIT` | `1000` | Number of newest alerts read from an engine on each collection, from 100 to 5000. The first collection, and any collection that finds a gap since the last one, reads the whole history instead (at most 16 MiB and 120 s); when that full read is truncated or too slow the collection falls back to this limit and the engine is marked `history_incomplete`. |
 | `ARCHIVE_ALERT_RETENTION_DAYS` | `365` | Days an archived alert is kept, counted from its collection time, from 1 to 3650. |
@@ -138,36 +138,33 @@ This product includes GeoLite2 data created by MaxMind, available from https://w
 Use of the GeoLite2 data is governed by MaxMind's GeoLite2 licence terms, which you accept with your
 account.
 
-## Peers file
+## Engine synchronisation
 
-`SYNC_PEERS_FILE` points to a YAML file listing the other engines to synchronise with. It holds the
-peers' machine passwords: treat it as a secret, keep it out of version control and mount it
-read-only into the container. The API never serves it.
+The sync is configured by the `SYNC_*` and `SHARE_EXCLUDE_CIDRS` variables above; the peers
+themselves, with their machine credentials and public addresses, are rows of the engine table,
+managed on the Engines page ([sync.md](sync.md)). There is no peers file any more: `SYNC_PEERS_FILE`
+stops the start. The safe first deployment is `SYNC_ENABLED=true` with `SYNC_DRY_RUN=true`, then
+`SYNC_DRY_RUN=false` once the plan on the Sync page looks right.
 
-```yaml
-peers:
-  - name: edge-1
-    url: https://engine-one.example.com:8080
-    machine_id: dashboard
-    password: change-me-please
-    public_ips: [203.0.113.10]
-  - name: lab
-    url: http://198.51.100.20:8080
-    allow_insecure_http: true
-    machine_id: dashboard
-    password: change-me-too
-exclude:
-  - 203.0.113.0/24
-```
+## Config import mount
 
-- `name`: unique, matches `^[a-z0-9][a-z0-9-]{0,31}$`; `local` is reserved for the local engine.
-- `url`: absolute, `https` unless `allow_insecure_http: true` is set for that peer; no credentials,
-  query or fragment in it.
-- `machine_id` and `password` (at least 8 characters): the LAPI machine account of the peer.
-- `public_ips`: optional addresses other engines see this peer under, added to the exclusions (IPv4-mapped IPv6 forms are converted to IPv4, zones are refused).
-- `exclude`: optional CIDRs that are never shared.
-- At least one and at most 16 peers, one YAML document, no two peers with the same URL, file at most 64 KiB, regular file only. Unknown fields are refused, and the
-  start fails on any error. Error messages name the peer and the field, never the password or the URL.
+Importing configuration files from a bundle is off unless `CONFIG_IMPORT_ENABLED=true`. When you
+turn it on, give the dashboard **one dedicated writable directory**, and nothing else of the
+CrowdSec configuration:
+
+- a host directory (for example `./acquis.d`) owned by the dashboard user, uid and gid 10000 by
+  default (`DOCKER_USER_UID`, `DOCKER_USER_GID`): `install -d -o 10000 -g 10000 -m 0750 acquis.d`.
+  Existing files in it must be readable by that user, or they cannot be backed up and replaced;
+- mounted read-write in the dashboard at `CONFIG_IMPORT_DIR` (for example
+  `/var/lib/dashboard-acquis.d`);
+- mounted **read-only** in the CrowdSec container at its acquisition directory
+  (`/etc/crowdsec/acquis.d`), so that CrowdSec, and `crowdsec -t`, read the same files. Move the
+  files you already have in `acquis.d` into it first.
+
+Never mount `/etc/crowdsec` (or the CrowdSec configuration volume) writable in the dashboard. The
+commented lines of `deploy/compose.example.yaml` show the setup; the threat model is in
+[security.md](security.md#configuration-import). Turn the feature off again once the migration is
+done.
 
 ## LAPI machine account
 

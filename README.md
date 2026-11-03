@@ -3,18 +3,21 @@
 A small web dashboard for a self-hosted [CrowdSec](https://www.crowdsec.net/) Security Engine
 running in Docker. It reads alerts and decisions from the local API (LAPI) and manages bouncers,
 machines and hub collections by running a fixed set of `cscli` commands in the CrowdSec container.
+It can also archive the alerts of remote engines, share bans between engines, and export or import
+the state of the local engine.
 
 ## What it is, and what it is not
 
-It is a single-admin, stateless web UI (French and English, light and dark) shipped as one Go
-binary that embeds the React front end.
+It is a web UI (French and English, light and dark) shipped as one Go binary that embeds the React
+front end, with its state in PostgreSQL: named accounts with an `admin` or `read_only` role, API
+tokens, the engines, an archive of their alerts and an audit log.
 
 It is not:
 
-- a role-based tool: every account is an administrator for now;
-- a replacement for the CrowdSec Console: no history beyond what the LAPI keeps, no community
-  blocklist (CAPI) decisions, no charts of past metrics;
-- a configuration editor: configuration files are shown read-only, with secrets redacted;
+- a replacement for the CrowdSec Console: history is limited to the dashboard's own archive and its
+  retention, no community blocklist (CAPI) decisions, no charts of past metrics;
+- a configuration editor: configuration files are shown read-only, with secrets redacted; the only
+  write is the optional import of `acquis.d` files from a bundle, off by default;
 - a hardened boundary on its own: it holds the power to run `cscli` in your CrowdSec container, so
   protect it like the Docker daemon (see [docs/security.md](docs/security.md)).
 
@@ -22,7 +25,7 @@ It is not:
 
 | Page | What you can do |
 |---|---|
-| Alerts | List the 100 most recent alerts, hourly timeline, filter by scenario, IP/CIDR and age, delete an alert |
+| Alerts | List the 100 most recent live alerts, then the archive of every engine, hourly timeline, filter by scenario, IP/CIDR and age, delete an alert |
 | Decisions | List active local decisions, filter, ban an IP or range (manual ban), unban |
 | Health | CrowdSec version, bouncers and machines with last contact, stale and revoked status |
 | Metrics | Acquisition and parser counters from `cscli metrics` (needs Prometheus enabled in CrowdSec) |
@@ -30,6 +33,10 @@ It is not:
 | Bouncers | Create (API key shown once), delete |
 | Machines | Create (password shown once), validate, delete |
 | Hub | List installed items, install or remove a collection, update and upgrade the hub, reload CrowdSec |
+| Engines | Register remote CrowdSec engines (administrators), archive their alerts, mark them as sync peers |
+| Sync | Share native bans between engines through their LAPI, with dry run, circuit breaker and allowlist filter ([docs/sync.md](docs/sync.md)) |
+| Export / Import | Download the hub collections, bans, alerts and configuration of the local engine as a bundle; preview and apply a bundle (administrators, [docs/bundles.md](docs/bundles.md)) |
+| Accounts, API tokens | Manage accounts and roles (administrators); create `read` or `write` API tokens |
 
 Every destructive action asks you to retype the target, and the server checks it again.
 
@@ -63,6 +70,9 @@ Every destructive action asks you to retype the target, and the server checks it
   `cscli` command (see [docs/security.md](docs/security.md)). The dashboard never mounts the Docker
   socket: it talks to a filtering proxy.
 - Configuration files are read from a read-only mount of the CrowdSec configuration volume.
+- Remote engines (archive, sync) are reached over their LAPI with a machine account each, sealed in
+  the database; the optional config import writes only to a dedicated `acquis.d` mount
+  ([docs/bundles.md](docs/bundles.md#configuration)).
 - Accounts and sessions are stored in PostgreSQL (passwords and session tokens are hashed); schema migrations run at every start.
 - Sign-in is password, then a second factor (TOTP, or a passkey / security key when WebAuthn is configured, with recovery codes), then an optional per-account IP and country allowlist (country rules use GeoLite2 data, refreshed inside the image when you provide a MaxMind account).
 
@@ -95,4 +105,6 @@ Every destructive action asks you to retype the target, and the server checks it
 - [docs/security.md](docs/security.md): threat model, protections and their limits
 - [docs/operations.md](docs/operations.md): known limits, troubleshooting by error code, secrets key, dashboard image, account recovery, backup
 - [docs/api.md](docs/api.md): HTTP API reference
+- [docs/sync.md](docs/sync.md): engine synchronisation
+- [docs/bundles.md](docs/bundles.md): export and import bundles
 - [docs/development.md](docs/development.md): layout, tests, dev stack, conventions

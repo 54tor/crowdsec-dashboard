@@ -179,6 +179,49 @@ On an isolated copy (above), with `peer-a`:
 The "10 000+" total needs more than 10 000 archived alerts and is covered by the API tests, not
 by this check.
 
+### Smoke test of the sync and bundles
+
+Always on an isolated project, never on `csdash-dev` (its database holds demo data):
+
+```
+cd deploy/dev
+CSDASH_PROJECT=csdash-sync-smoke CSDASH_DASHBOARD_PORT=18280 ./up.sh peer
+```
+
+1. Append `SYNC_ENABLED=true`, `SYNC_DRY_RUN=true` and `SYNC_INTERVAL=1m` to
+   `secrets/csdash-sync-smoke/env.local` (the dashboard's `env_file`) and run the same `up.sh`
+   command again to recreate the dashboard. Enrol on `http://127.0.0.1:18280/enroll`.
+2. Create the dashboard's machine on the peer: `docker exec csdash-sync-smoke-peer-a cscli machines
+   add dashboard-sync --auto -f /dev/stdout`; add `peer-a` on the Engines page
+   (`http://peer-a:8080`, that machine and password, a public address, plain HTTP allowed,
+   "Use as a synchronisation peer"), test it.
+3. Ban an address natively on each engine (`cscli decisions add --ip 203.0.113.77`), press "Sync
+   now": the dry-run plan adds each ban on the other engine and nothing is written. Switch
+   `SYNC_DRY_RUN=false`, recreate, run again: copies appear with scenario `sync/<engine>`; an unban
+   on the source removes the copy at the next run; turning `sync_enabled` off removes the copies of
+   that engine from the others.
+4. Allowlists: `cscli allowlists create smoke` and `cscli allowlists add smoke 203.0.113.7` on the
+   local engine, ban `203.0.113.7` on `peer-a`: the run skips it `allowlisted`.
+5. Export / Import page: export every section, import a decision and an alert (preview, then apply
+   with `IMPORT`), replay (nothing written), and check `import_conflict` by adding a ban between
+   preview and apply. A `read_only` account sees the Sync page without "Sync now" and gets 403 on
+   `POST /api/sync/run`, `/api/export` and `/api/import`.
+6. The config import needs a dedicated volume mounted at `/etc/crowdsec/acquis.d` in `crowdsec` and
+   at `CONFIG_IMPORT_DIR` in `dashboard`, owned by uid 10000: add it with an extra compose override
+   file kept outside the repository, plus `CONFIG_IMPORT_ENABLED=true` and `CONFIG_IMPORT_DIR` in
+   the env file. An invalid acquisition file must end `config_test_failed` and leave no file.
+   Hub installs are not exercised: they download from the public hub.
+
+Tear it down with its own project name (add the extra override file if you used one, so its
+volume goes too), then remove its generated state:
+
+```
+docker compose -p csdash-sync-smoke --env-file secrets/csdash-sync-smoke/env.local \
+  -f compose.yaml -f peer/compose.override.yaml down -v --remove-orphans
+docker image rm csdash-sync-smoke-dashboard:local
+rm -r secrets/csdash-sync-smoke
+```
+
 ## Refreshing the fixtures
 
 `deploy/dev/fixtures` holds real outputs of the CrowdSec version the parsers were written against.

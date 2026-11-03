@@ -41,10 +41,10 @@ the route table so that no write route can be added without one:
 | Access | Who | Routes |
 |---|---|---|
 | Public | nobody authenticated | `healthz`, `auth/status`, `auth/enroll...`, `auth/login...`, `auth/logout` |
-| Authenticated | any session, any token | `auth/me`, the list and detail reads (alerts, decisions, `alerts/archive/{id}`, hub, `metrics`), `health`, `prometheus/metrics`, `engines/names` |
-| Admin | `admin` session, or a `write` token of an `admin` account | `GET /api/engines`, `POST /api/engines/{name}/test`, configuration files, ban and unban, alert deletion (live and archive), bouncers, machines, hub changes, reload |
+| Authenticated | any session, any token | `auth/me`, the list and detail reads (alerts, decisions, `alerts/archive/{id}`, hub, `metrics`), `health`, `prometheus/metrics`, `engines/names`, `GET /api/sync` |
+| Admin | `admin` session, or a `write` token of an `admin` account | `GET /api/engines`, `POST /api/engines/{name}/test`, configuration files, ban and unban, alert deletion (live and archive), bouncers, machines, hub changes, reload, `POST /api/sync/run`, `POST /api/export` (a secrets export needs a session) |
 | Session only | a browser session, any role | `auth/logout-all`, the account's own allowlist rules, API token management |
-| Admin and session only | an `admin` session | account administration, engine create, change and delete |
+| Admin and session only | an `admin` session | account administration, engine create, change and delete, `POST /api/import` |
 
 A `read_only` account, or a `read` token, gets 403 `forbidden` on every admin route; a token on a
 session-only route gets 403 `session_required`, whatever its scope. The interface hides the actions
@@ -307,6 +307,9 @@ of control characters and cut at 64 characters. Recorded actions:
 | `account_created`, `account_role_changed`, `account_second_factor_reset`, `account_sessions_revoked`, `account_unlocked`, `account_deleted` | an administrator acted on an account | `account:<name>`; at creation `account:<name>:<role>`; role change `account:<name>:<previous role>-><new role>` |
 | `secrets_rotated` | `dashboard rotate-secrets` finished a real run (no account) | number of rows rewritten |
 | `retention_purged` | the hourly job removed or scrubbed something (no account) | counts: `ips=… audit=… sessions=… tokens=… archive=…` |
+| `sync_run` | a manual sync run finished, or a scheduled one planned or applied a change or ended with an error (no account) | `dry_run=<bool> engines=<n> added=<n> removed=<n> skipped=<n>` |
+| `bundle_exported` | a bundle was exported | `secrets=<bool> [skipped=<n>] [skipped_files=<n>] sections=<list>` |
+| `bundle_imported` | a bundle import was applied (previews are not audited) | `dry=false hub=<n> config=<n> decisions=<n> alerts=<n> skipped=<n> failed=<n>` |
 
 The client address is stored as plain text with an IPv4-mapped IPv6 address shown as IPv4 (empty when
 it cannot be parsed). Not audited: rate-limited requests, session creation and logout, bouncer,
@@ -382,7 +385,7 @@ HSTS is not sent: terminate TLS at the reverse proxy and set it there.
 
 ## Command allowlist: the security boundary
 
-The dashboard never builds a shell command. The API maps to 16 named commands, each a fixed argv:
+The dashboard never builds a shell command. The API maps to 17 named commands, each a fixed argv:
 
 | Area | Commands |
 |---|---|
@@ -390,7 +393,7 @@ The dashboard never builds a shell command. The API maps to 16 named commands, e
 | Bouncers | `bouncers list -o json`, `bouncers add <name>`, `bouncers delete <name>` |
 | Machines | `machines list -o json`, `machines add <name> --auto -f /dev/stdout`, `machines validate <name>`, `machines delete <name>` |
 | Hub | `hub list -o json`, `hub update`, `hub upgrade`, `collections install <name>`, `collections remove <name>` |
-| Other | `metrics -o json`, `version`, and `kill -HUP 1` (reload) |
+| Other | `metrics -o json`, `version`, `kill -HUP 1` (reload), and `crowdsec -t` (configuration test of the [config import](#configuration-import), no argument) |
 
 Each variable field is validated before the exec: names `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`, hub names
 the same with one optional `vendor/item` slash, ids 1 to 10 digits, durations 1 to 4 digits plus
@@ -420,7 +423,8 @@ so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 
 Only administrators can read configuration files, and only an allowlist is readable: `config.yaml`, `acquis.yaml`, `profiles.yaml`, `acquis.d/*.yaml|yml`
 and `parsers/*/*whitelist*.yaml|yml`, each at most 256 KiB. Any file whose name contains
-`credentials` is refused, as is any path through a symlink. The mount is read-only.
+`credentials` is refused, as is any path through a symlink. The mount is read-only; the only
+writable CrowdSec path is the optional, dedicated import directory ([Configuration import](#configuration-import)).
 
 Redaction is line based. A value is replaced by `[REDACTED]` when its key contains `password`,
 `passwd`, `token`, `secret`, `api_key`, `apikey`, `key`, `authorization`, `bearer`, `credential` or
@@ -558,10 +562,82 @@ unavailable and every target is refused (`allowlist_unavailable`). This holds fo
 that too): it is never read as "allowlists unsupported". Consequence: an engine whose CrowdSec is too
 old to have allowlists refuses the writes guarded this way.
 
-No write path uses the filter in this release. In particular the manual ban `POST /api/decisions`
-does NOT check allowlists yet: it writes through `POST /v1/alerts`, and the LAPI stores a ban on an
-allowlisted IP and serves it to bouncers. Wrapping that write with the filter is planned for a later
-release (lot 5); the filter is the shared one for all dashboard-initiated writes.
+The engine sync ([sync.md](sync.md#allowlists)) and the bundle import of decisions and alerts
+([bundles.md](bundles.md#decisions)) use this filter on the allowlists of the engine they write to,
+read at the start of the run or plan, and check again before each write; an unavailable allowlist
+means nothing is written to that engine. An entry added during a sync run is honoured at the next
+run (window: one run plus one interval).
+
+**The manual ban `POST /api/decisions` does NOT check allowlists yet**: it writes through
+`POST /v1/alerts`, and the LAPI stores a ban on an allowlisted IP and serves it to bouncers.
+Wrapping that write with the same filter is planned for the next release (lot 5). Until then, check
+the allowlists yourself before a manual ban.
+
+### Engine synchronisation
+
+The sync ([sync.md](sync.md)) uses the remote engines of the engine table marked as sync peers.
+Their machine passwords and proxy credentials are the sealed engine secrets above: never in a
+response, a log, the Sync page (which shows the host and port only) or an environment variable.
+The peers file of earlier designs is refused at start.
+
+- **A peer can ban addresses everywhere.** A ban native on any participating engine is copied to
+  all the others. A compromised or misconfigured peer (or anyone holding its machine password or
+  `cscli` on it) can therefore have addresses banned on every engine, within the guards: only bans
+  of origin `crowdsec`/`cscli`, no range wider than IPv4 /8 or IPv6 /32, never a private,
+  loopback, link-local or carrier-grade NAT address, never an address of an engine of the table or
+  of `SHARE_EXCLUDE_CIDRS`, never an address allowlisted on the target engine, at most
+  `SYNC_MAX_CHANGES` changes per source and per target in one run, and the dry run as the default.
+  Put the addresses you administer from in `SHARE_EXCLUDE_CIDRS` (the sync has no "own address"
+  check) and in the CrowdSec allowlists of each engine.
+- The dashboard only writes copies tagged `sync/<engine>` with its own machine account and only
+  deletes decisions it can identify as its copies (that scenario prefix **and** its machine id);
+  a native ban is never deleted.
+- Unbanning a copy does not propagate: lift the ban on the engine where it is native.
+
+### Bundles
+
+- Export and import touch the local engine only. The import route is **admin and session only**:
+  a stolen `write` token cannot import a bundle. An export is admin (session or `write` token), but
+  an export with secrets (`include_secrets`) needs a session and the retyped word `SECRETS`; the
+  file then holds the unredacted configuration (`contains_secrets: true`): treat it as a secret.
+  `config.yaml` and credential-like file names are never exported.
+- A bundle is untrusted input: decoded strictly (8 MiB, 32 levels, no unknown field), every
+  decision passes the sync sharing rules, the own-address guard and the allowlist filter, alerts
+  are sanitised and pushed without effect ([bundles.md](bundles.md#alerts)), and an apply must
+  match the previewed digest.
+
+### Configuration import
+
+Off by default. Enabling it (`CONFIG_IMPORT_ENABLED=true`) **gives the dashboard a write permission
+on part of the CrowdSec configuration**: the dedicated directory `CONFIG_IMPORT_DIR`, mounted
+read-write in the dashboard and read-only in CrowdSec as its `acquis.d`. Nothing else of
+`/etc/crowdsec` may be writable ([configuration.md](configuration.md#config-import-mount)).
+
+- **Threat model.** A compromised dashboard, or an administrator session, with the import enabled
+  can add or change acquisition files, that is decide what CrowdSec reads: it can blind detection
+  (replace a source) or make CrowdSec read other files. It cannot write profiles, whitelists,
+  parsers, scenarios or `config.yaml` through this feature. A compromised dashboard process with
+  write access to the directory can of course write anything there directly, bypassing every check
+  below; the checks bind the import feature, not a compromised process.
+- **Datasource policy** (operator decision): only `file`, `journalctl` and `docker` sources, no
+  `transform`, plain YAML only (no tags, anchors, aliases, merge keys, non-string keys). So an
+  imported file cannot open a network listener (http, syslog, kafka, ...) or send lines elsewhere.
+  Residual reach: `file` `filenames` can name any path readable by CrowdSec, `docker_host` can point
+  to a remote Docker daemon, and journalctl filters pass arbitrary `journalctl` arguments (no
+  shell).
+- **Writing.** Names `acquis.d/<name>.yaml` only (no `profiles.yaml`, `acquis.yaml`, whitelists,
+  credentials), 256 KiB, no `[REDACTED]` marker. Paths go through `os.Root` (no escape from the
+  directory), no symlink is followed or accepted (file, import directory, backup directory), each
+  file is checked to be the one classified before it is backed up or replaced, writes are a
+  temporary file then a rename, and the whole set is validated by `crowdsec -t` and rolled back on
+  failure, with a crash-recovery journal ([bundles.md](bundles.md#configuration)).
+- **Ownership.** Created files are 0640 owned by the dashboard user; a replaced file keeps its
+  mode but takes the dashboard owner.
+- **Logs.** The import never returns or logs the output of `crowdsec -t`. The Docker runner logs the
+  stderr of a failed command at debug level, `crowdsec -t` included, which may show paths; the
+  dashboard uses the default Go logger, which does not emit debug lines, and has no setting to
+  raise the level.
+- Turn it off again once the migration is done.
 
 ## Honest limits
 
@@ -588,6 +664,11 @@ release (lot 5); the filter is the shared one for all dashboard-initiated writes
   - without a GeoLite2 database, country rules refuse everyone not matched by an IP rule;
   - the audit log is not complete (see [Audit log](#audit-log)).
 - The login rate limiter, the pending logins and the enrolment state are per process (one replica).
+- The manual ban does not check the target engine's allowlists yet ([Allowlist check before
+  writes](#allowlist-check-before-writes)); the sync and the bundle import do.
+- Engine sync widens the blast radius of one compromised engine to every engine within the guards
+  ([Engine synchronisation](#engine-synchronisation)); the config import, when enabled, gives the
+  dashboard write access to CrowdSec's acquisition files ([Configuration import](#configuration-import)).
 
 ## Exposure advice
 

@@ -21,6 +21,8 @@
 | Audit log | Written to `audit_event`; no page to read it. Client addresses are scrubbed after 30 days and rows deleted after 365 days by default ([Retention and purge](#retention-and-purge)); some events are not recorded ([security.md](security.md#audit-log)). |
 | Engines | Managed on the Engines page by `admin` accounts only ([Engines and the archive](#engines-and-the-archive)). The collection counters restart with the process, and so does the "History incomplete" notice of the Engines page, which only covers gaps seen by the current process. The persisted flag is in `/api/health` (`collector[].history_incomplete`) and the `csdash_collector_history_incomplete` gauge: it survives restarts and only goes away when the engine is deleted. |
 | Roles | Every route that writes to CrowdSec or the archive, creates a LAPI credential, manages engines or accounts, or reads configuration files needs the `admin` role, for a session as for an API token; `read_only` accounts and `read` tokens get 403 `forbidden`, and the interface hides the write buttons for them ([security.md](security.md#roles-and-access)). Your own API tokens (`POST`/`DELETE /api/tokens`), your own allowlist rules and `logout-all` are open to `read_only` accounts too, from a browser session only. |
+| Sync | Off by default, dry run by default. Peers are engines of the table marked as sync peers; results stay in memory (lost at restart); runs are sequential per engine and share one lock with exports and imports ([Sync and bundles](#sync-and-bundles), [sync.md](sync.md)). |
+| Export / Import | Local engine only. Exports at most 5000 bans and the newest 1000 native alerts; imports at most 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions and 500 alerts per apply; config import of `acquis.d` files only, off by default ([bundles.md](bundles.md)). |
 | Prometheus | `GET /api/prometheus/metrics` accepts a session or an API token of any scope; give Prometheus a `read` token. There is no anonymous scrape ([Health and metrics](#health-and-metrics)). |
 
 ## Troubleshooting
@@ -84,6 +86,27 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `engine_secret_unreadable` | engine status | The stored secret cannot be decrypted with the current secrets key (key changed or row restored from another installation): edit the engine and re-enter the secrets. The engine is left out of collection meanwhile. |
 | `archive_write_failed` | engine status | The archive write failed (database). The engine is retried with backoff. |
 | `cscli_timeout` | 504 | The command exceeded 30 s (120 s for hub operations). Retry; check the network of the CrowdSec container for hub calls. |
+| `operation_running` | 409 | A sync run, an export or an import is already in progress (one lock for the three). Wait for it; the Sync page shows a running run. |
+| `operation_lock_unavailable` | 503 | Import refused because no operation lock is wired (fail closed). A build or startup problem: report it. |
+| `sync_disabled` | 409 | "Sync now" while `SYNC_ENABLED` is false. |
+| `sync_guard_tripped` | engine status | An `expected_changes` override was refused: the recomputed plan exceeds the expected count by more than 10 %. |
+| `engine_addresses_unknown` | engine status | The host of an enabled engine could not be resolved (or the engine table could not be listed): the whole run was skipped, nothing written. Fix or disable that engine ([Sync and bundles](#sync-and-bundles)). |
+| `engine_backoff` | engine status | The engine failed recently; scheduled runs skip it for a doubling delay (at most 1 h). "Sync now" still tries it. |
+| `run_deadline`, `canceled`, `run_panicked` | engine status | The run hit its 10 minute deadline, was stopped by a shutdown, or an internal error stopped it; the next run starts afresh. |
+| `bundle_invalid`, `bundle_version` | 400 | The file is not a dashboard bundle of version 1, or holds unknown fields or sections, or is too deeply nested. |
+| `bundle_too_large` | 413 | Import over 8 MiB, over 5000 decisions or 1000 alerts; export over 5000 bans, an incomplete ban read, an alert read over 16 MiB or a bundle over 8 MiB. Export fewer sections. |
+| `import_conflict` | 409 | The local state changed since the preview (a ban, an allowlist entry, a file), or the preview was made before midnight UTC: run the preview again. |
+| `section_unavailable` | 409 | A selected section cannot be applied (see its code in the preview): deselect it or fix the cause. |
+| `too_many_changes` | 422 | More than 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions or 500 alerts to apply: split the bundle. |
+| `import_timeout` | 504 | The preview took over 45 s, or the apply plan over 10 minutes. Retry; check the LAPI. |
+| `import_disabled` | section | `CONFIG_IMPORT_ENABLED` is false ([configuration.md](configuration.md#config-import-mount)). |
+| `config_test_failed` | section | `crowdsec -t` refused the imported acquisition files: everything was rolled back. Fix the file and import again. |
+| `config_inconsistent` | section, log | A rollback or a startup recovery could not restore every file ([Config import recovery](#config-import-recovery)). |
+| `config_recovery_pending` | section | An interrupted import awaits recovery ([Config import recovery](#config-import-recovery)). |
+| `config_changed_concurrently` | section | A file of the import directory changed during the apply: rolled back. Preview again. |
+| `flush_limit`, `flush_config_unreadable`, `local_alerts_unreadable` | section | Alerts import refused: the import would push CrowdSec over 90 % of `flush.max_items`, that setting cannot be read, or the local alerts cannot be counted ([bundles.md](bundles.md#alerts)). |
+| `alert_import_side_effect`, `alert_import_side_effect_unverifiable`, `alert_import_cleanup_failed` | section | An imported alert produced a decision (deleted), could not be verified, or its cleanup failed: check `cscli decisions list` for that address. |
+| `allowlist_unavailable` | engine status, section | The allowlists of the engine could not be read (error, any 404, more than 10 000 entries): nothing is written to it. |
 
 Quick checks:
 
@@ -353,6 +376,52 @@ source scope and value, country, AS, decision type and origin) are stored as tex
 lookup tables, and `event_meta` and `engine_public_address_list` are JSONB documents. Upgrading to
 the release that adds the archive applies migration 00003 at the next start: back up the database
 first (see [PostgreSQL](#postgresql)).
+
+## Sync and bundles
+
+Set-up and semantics: [sync.md](sync.md) and [bundles.md](bundles.md); variables:
+[configuration.md](configuration.md).
+
+**An engine is blocked or failed on the Sync page.** Nothing is written to it and its copies
+elsewhere are kept, so a blocked engine is safe; but it is not synchronised until fixed.
+
+- `allowlist_unavailable` with no error code: its allowlists cannot be read. Check that its
+  CrowdSec has allowlists (`cscli allowlists list`: an engine without the route is never synced),
+  that it has at most 10 000 entries, and that the URL points to the LAPI, not a proxy answering 404.
+- An error code (`engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`): fix it like
+  for the collector, then "Test connection" on the Engines page.
+- `target_guard` or `source_guard`: too many changes at once. Read the last plan: a mass unban, a
+  new engine with many bans (bootstrap: raise `SYNC_MAX_CHANGES` for one run, in dry run first), or
+  a misbehaving engine (disable its sync on the Engines page). There is no override button.
+- `engine_addresses_unknown` on every engine: one engine host does not resolve (for example a
+  stopped container). Bring it back, fix its URL, or disable it: a disabled engine does not block.
+- Copies left on an engine that left the sync expire by themselves; delete them earlier with
+  `cscli decisions delete --scenario sync/<engine>` on that engine if needed.
+
+**Import step by step.** Export from the old engine, import on the new one: choose the sections,
+preview, read the skipped items and warnings, type `IMPORT`, apply, then reload CrowdSec for the
+hub and configuration sections (Hub page). An `import_conflict` only means "preview again".
+
+### Config import recovery
+
+An import that was interrupted (crash, kill) leaves a journal
+`<CONFIG_IMPORT_DIR>/.dashboard-backup/<timestamp>/.pending`. At the next start with
+`CONFIG_IMPORT_ENABLED=true` the dashboard restores the replaced files from that backup and deletes
+the created ones, then logs `config import: config_recovered files=...`. A crash after
+`crowdsec -t` passed also reverts that import: import it again.
+
+When a file cannot be restored, the log says
+`config import: config_inconsistent reason=<unrestored_files|unreadable_journal|sync_failed|journal_not_removed> files=<names> backup=.dashboard-backup/<ts>: restore the listed files from .dashboard-backup/<ts>/ then delete .dashboard-backup/<ts>/.pending`,
+the journal is kept, and every config import is refused with `config_recovery_pending` (an apply
+that hit the same state reports `config_inconsistent` with `affected_files`). To recover:
+
+1. copy the listed files back from `.dashboard-backup/<ts>/` into the import directory (keep their
+   mode, readable by CrowdSec); a listed file absent from the backup was created by the import:
+   delete it;
+2. run `docker exec crowdsec crowdsec -t` to check the configuration, then reload CrowdSec;
+3. delete `.dashboard-backup/<ts>/.pending` (or restart the dashboard to let it retry the recovery).
+
+Backups are kept 30 days and purged at start; a backup directory holding a journal is never purged.
 
 ## Retention and purge
 
