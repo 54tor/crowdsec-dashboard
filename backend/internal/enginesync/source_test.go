@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -141,7 +142,7 @@ func TestTableSourceKeepsOnlyEnabledSyncEngines(testContext *testing.T) {
 		}
 	}
 	alphaAddrs := engineSet.AllEngineAddrs["alpha"]
-	if len(alphaAddrs) != 2 || alphaAddrs[0] != netip.MustParseAddr("198.51.100.1") || alphaAddrs[1] != netip.MustParseAddr("198.51.100.2") {
+	if len(alphaAddrs) != 2 || alphaAddrs[0] != netip.MustParseAddr("198.51.100.2") || alphaAddrs[1] != netip.MustParseAddr("198.51.100.1") {
 		testContext.Errorf("alpha addresses = %v", alphaAddrs)
 	}
 }
@@ -204,11 +205,11 @@ func TestTableSourceKeepsAddressesOfNonParticipatingEngines(testContext *testing
 	if got := strings.Join(engineNames(engineSet), ","); got != "local,alpha" {
 		testContext.Fatalf("participating engines = %s", got)
 	}
-	if addrs := engineSet.AllEngineAddrs["bravo"]; len(addrs) != 2 || addrs[0] != netip.MustParseAddr("198.51.100.1") || addrs[1] != netip.MustParseAddr("198.51.100.3") {
+	if addrs := engineSet.AllEngineAddrs["bravo"]; len(addrs) != 2 || addrs[0] != netip.MustParseAddr("198.51.100.3") || addrs[1] != netip.MustParseAddr("198.51.100.1") {
 		testContext.Errorf("bravo addresses = %v", addrs)
 	}
 	charlieAddrs := engineSet.AllEngineAddrs["charlie"]
-	if len(charlieAddrs) != 2 || charlieAddrs[0] != netip.MustParseAddr("192.0.2.77") || charlieAddrs[1] != netip.MustParseAddr("198.51.100.4") {
+	if len(charlieAddrs) != 2 || charlieAddrs[0] != netip.MustParseAddr("198.51.100.4") || charlieAddrs[1] != netip.MustParseAddr("192.0.2.77") {
 		testContext.Errorf("charlie addresses = %v", charlieAddrs)
 	}
 	if engineSet.AddrsError {
@@ -286,6 +287,12 @@ func TestTableSourceDedupesCapsAndNormalisesAddresses(testContext *testing.T) {
 	if len(manyAddrs) != maxAddrsPerEngine {
 		testContext.Errorf("expected %d addresses, got %d", maxAddrsPerEngine, len(manyAddrs))
 	}
+	if !engineSet.AddrsError {
+		testContext.Error("a truncated address list must set AddrsError")
+	}
+	if manyAddrs[0] != netip.MustParseAddr("203.0.113.1") {
+		testContext.Errorf("configured public address must come first, got %v", manyAddrs[0])
+	}
 	seen := map[netip.Addr]bool{}
 	for _, addr := range manyAddrs {
 		if seen[addr] || addr.Is4In6() {
@@ -301,5 +308,44 @@ func TestTableSourceDedupesCapsAndNormalisesAddresses(testContext *testing.T) {
 	engineSet.AllEngineAddrs["many"][0] = netip.MustParseAddr("192.0.2.200")
 	if engineSet.Engines[1].PublicAddrs[0] == netip.MustParseAddr("192.0.2.200") {
 		testContext.Error("AllEngineAddrs and SyncEngine.PublicAddrs share a slice")
+	}
+}
+
+func TestTableSourceKeepsConfiguredAddressesWhenResolvedOnesOverflow(testContext *testing.T) {
+	manyHandle := remoteHandle("many", true, true, "192.0.2.201")
+	manyHandle.Engine.LAPIURL = "https://many.example.com"
+	registry := &fakeRegistry{handles: []engines.Handle{localHandle(), manyHandle}}
+
+	engineSet := newTestSource(registry).Load(context.Background())
+
+	if !slices.Contains(engineSet.AllEngineAddrs["many"], netip.MustParseAddr("192.0.2.201")) {
+		testContext.Error("the configured public address was dropped")
+	}
+}
+
+func TestTableSourceBoundsTheWholeResolutionPhase(testContext *testing.T) {
+	var handles []engines.Handle
+	var listed []engines.Engine
+	handles = append(handles, localHandle())
+	for _, engineName := range []string{"one", "two", "three", "four"} {
+		hangingHandle := remoteHandle(engineName, true, true, "198.51.100.5")
+		hangingHandle.Engine.LAPIURL = "https://hang.example.com"
+		handles = append(handles, hangingHandle)
+	}
+	for _, handle := range handles {
+		listed = append(listed, handle.Engine)
+	}
+	source := newTestSourceWithLister(&fakeRegistry{handles: handles}, fakeLister{listed: listed})
+	source.lookupTimeout = 10 * time.Second
+	source.resolutionBudget = 100 * time.Millisecond
+
+	startedAt := time.Now()
+	engineSet := source.Load(context.Background())
+
+	if elapsed := time.Since(startedAt); elapsed > 2*time.Second {
+		testContext.Errorf("Load took %v", elapsed)
+	}
+	if !engineSet.AddrsError {
+		testContext.Error("an exhausted budget must set AddrsError")
 	}
 }

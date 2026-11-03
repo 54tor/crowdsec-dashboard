@@ -16,6 +16,7 @@ import (
 const (
 	redactedClient    = "[REDACTED]"
 	lookupTimeout     = 5 * time.Second
+	resolutionBudget  = 30 * time.Second
 	maxAddrsPerEngine = 16
 )
 
@@ -56,31 +57,35 @@ type AllEngineLister interface {
 }
 
 type TableSource struct {
-	registry      EngineRegistry
-	lister        AllEngineLister
-	exclude       []netip.Prefix
-	lookupNetIP   func(ctx context.Context, host string) ([]netip.Addr, error)
-	lookupTimeout time.Duration
+	registry         EngineRegistry
+	lister           AllEngineLister
+	exclude          []netip.Prefix
+	lookupNetIP      func(ctx context.Context, host string) ([]netip.Addr, error)
+	lookupTimeout    time.Duration
+	resolutionBudget time.Duration
 }
 
 func NewTableSource(registry EngineRegistry, lister AllEngineLister, exclude []netip.Prefix) *TableSource {
 	return &TableSource{
-		registry:      registry,
-		lister:        lister,
-		exclude:       exclude,
-		lookupNetIP:   systemLookupNetIP,
-		lookupTimeout: lookupTimeout,
+		registry:         registry,
+		lister:           lister,
+		exclude:          exclude,
+		lookupNetIP:      systemLookupNetIP,
+		lookupTimeout:    lookupTimeout,
+		resolutionBudget: resolutionBudget,
 	}
 }
 
 func (source *TableSource) Load(ctx context.Context) EngineSet {
 	engineSet := EngineSet{AllEngineAddrs: map[string][]netip.Addr{}, Exclude: source.exclude}
 	participating := map[string]bool{}
+	resolutionContext, cancelResolution := context.WithTimeout(ctx, source.resolutionBudget)
+	defer cancelResolution()
 	for _, handle := range source.registry.Handles() {
 		if !handle.Engine.IsLocal && !(handle.Engine.Enabled && handle.Engine.SyncEnabled) {
 			continue
 		}
-		addrs, addrsComplete := source.engineAddrs(ctx, handle.Engine)
+		addrs, addrsComplete := source.engineAddrs(resolutionContext, handle.Engine)
 		engineSet.AddrsError = engineSet.AddrsError || !addrsComplete
 		participating[handle.Engine.Name] = true
 		engineSet.Engines = append(engineSet.Engines, SyncEngine{
@@ -102,7 +107,7 @@ func (source *TableSource) Load(ctx context.Context) EngineSet {
 		if participating[listedEngine.Name] {
 			continue
 		}
-		addrs, addrsComplete := source.engineAddrs(ctx, listedEngine)
+		addrs, addrsComplete := source.engineAddrs(resolutionContext, listedEngine)
 		engineSet.AddrsError = engineSet.AddrsError || (listedEngine.Enabled && !addrsComplete)
 		engineSet.AllEngineAddrs[listedEngine.Name] = addrs
 	}
@@ -111,21 +116,27 @@ func (source *TableSource) Load(ctx context.Context) EngineSet {
 
 func (source *TableSource) engineAddrs(ctx context.Context, engine engines.Engine) ([]netip.Addr, bool) {
 	resolved, resolveError := source.resolveHost(ctx, hostname(engine.LAPIURL))
-	return normalizeAddrs(slices.Concat(resolved, engine.PublicAddresses)), resolveError == nil
+	addrs, truncated := normalizeAddrs(slices.Concat(engine.PublicAddresses, resolved))
+	return addrs, resolveError == nil && !truncated
 }
 
-func normalizeAddrs(candidates []netip.Addr) []netip.Addr {
+func normalizeAddrs(candidates []netip.Addr) ([]netip.Addr, bool) {
+	truncated := false
 	var addrs []netip.Addr
 	seen := map[netip.Addr]bool{}
 	for _, candidate := range candidates {
 		addr := candidate.Unmap().WithZone("")
-		if seen[addr] || len(addrs) >= maxAddrsPerEngine {
+		if seen[addr] {
+			continue
+		}
+		if len(addrs) >= maxAddrsPerEngine {
+			truncated = true
 			continue
 		}
 		seen[addr] = true
 		addrs = append(addrs, addr)
 	}
-	return addrs
+	return addrs, truncated
 }
 
 func hostname(rawURL string) string {
@@ -142,6 +153,9 @@ func (source *TableSource) resolveHost(ctx context.Context, host string) ([]neti
 	}
 	if literal, parseError := netip.ParseAddr(host); parseError == nil {
 		return []netip.Addr{literal}, nil
+	}
+	if budgetError := ctx.Err(); budgetError != nil {
+		return nil, budgetError
 	}
 	lookupContext, cancel := context.WithTimeout(ctx, source.lookupTimeout)
 	defer cancel()
