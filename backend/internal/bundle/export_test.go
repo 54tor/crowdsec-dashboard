@@ -117,10 +117,10 @@ func TestExportOverCapIsTooLarge(testContext *testing.T) {
 	if !errors.Is(decisionsError, ErrTooLarge) {
 		testContext.Errorf("more than %d decisions: expected ErrTooLarge, got %v", MaxDecisions, decisionsError)
 	}
-	alerts := lapi.ArchiveRead{Alerts: make([]lapi.Alert, MaxAlerts+1)}
-	_, alertsError := Export(context.Background(), exportFixture(testContext, nil, alerts), ExportRequest{Sections: []string{SectionAlerts}})
-	if !errors.Is(alertsError, ErrTooLarge) {
-		testContext.Errorf("more than %d alerts: expected ErrTooLarge, got %v", MaxAlerts, alertsError)
+	// Alerts are a newest window, not a refusal: more than MaxAlerts native alerts read keeps the newest MaxAlerts.
+	alerts := lapi.ArchiveRead{Alerts: nativeAlerts(MaxAlerts+1, "alert")}
+	if exportedUUIDs := exportedAlertUUIDs(testContext, exportFixture(testContext, nil, alerts)); len(exportedUUIDs) != MaxAlerts {
+		testContext.Errorf("more than %d alerts: expected the newest %d, got %d", MaxAlerts, MaxAlerts, len(exportedUUIDs))
 	}
 }
 
@@ -246,26 +246,58 @@ func TestExportKeepsSyncScenarioAlertOfForeignMachine(testContext *testing.T) {
 	}
 }
 
-func TestExportAlertReadLimitHitBeforeTheCapIsFilledIsTooLarge(testContext *testing.T) {
-	// The read stops at MaxAlerts; once copies are dropped, older native alerts may be missing: refuse, never truncate silently.
-	readAlerts := make([]lapi.Alert, MaxAlerts)
-	for alertIndex := range readAlerts {
-		readAlerts[alertIndex] = lapi.Alert{UUID: "alert", Scenario: "crowdsecurity/ssh-bf", MachineID: "localhost"}
+func nativeAlerts(count int, uuid string) []lapi.Alert {
+	alerts := make([]lapi.Alert, count)
+	for alertIndex := range alerts {
+		alerts[alertIndex] = lapi.Alert{UUID: uuid, Scenario: "crowdsecurity/ssh-bf", MachineID: "localhost"}
 	}
+	return alerts
+}
+
+func TestExportAlertReadLimitHitExportsTheRemainingNativeAlerts(testContext *testing.T) {
+	// Contract: the newest MaxAlerts native alerts within the newest raw read window. A raw read that reached
+	// its count limit with copies inside it exports what remains; it is never a refusal.
+	readAlerts := nativeAlerts(MaxAlerts, "native")
 	readAlerts[0] = lapi.Alert{UUID: "own-copy", Scenario: "sync/peer-a", MachineID: "dashboard"}
 	deps := exportFixture(testContext, nil, lapi.ArchiveRead{Alerts: readAlerts, LimitReached: true})
-	_, exportError := Export(context.Background(), deps, ExportRequest{Sections: []string{SectionAlerts}})
-	if !errors.Is(exportError, ErrTooLarge) {
-		testContext.Errorf("a read limit hit before the cap is filled must refuse the export, got %v", exportError)
+	if exportedUUIDs := exportedAlertUUIDs(testContext, deps); len(exportedUUIDs) != MaxAlerts-1 || slices.Contains(exportedUUIDs, "own-copy") {
+		testContext.Errorf("expected the %d remaining native alerts, got %d", MaxAlerts-1, len(exportedUUIDs))
+	}
+}
+
+func TestExportKeepsTheNewestNativeAlertsWhenCopiesAreMixedInAWiderRead(testContext *testing.T) {
+	// LAPI returns newest first: copies interleaved at the top must not push native alerts out of the cap.
+	readAlerts := []lapi.Alert{}
+	for copyIndex := 0; copyIndex < 500; copyIndex++ {
+		readAlerts = append(readAlerts, lapi.Alert{UUID: "own-copy", Scenario: "sync/peer-a", MachineID: "dashboard"})
+		readAlerts = append(readAlerts, lapi.Alert{UUID: "newest-native", Scenario: "crowdsecurity/ssh-bf", MachineID: "localhost"})
+	}
+	readAlerts = append(readAlerts, nativeAlerts(MaxAlerts, "older-native")...)
+	deps := exportFixture(testContext, nil, lapi.ArchiveRead{Alerts: readAlerts, LimitReached: true})
+	exportedUUIDs := exportedAlertUUIDs(testContext, deps)
+	if len(exportedUUIDs) != MaxAlerts || slices.Contains(exportedUUIDs, "own-copy") {
+		testContext.Fatalf("expected exactly %d native alerts without copies, got %d", MaxAlerts, len(exportedUUIDs))
+	}
+	if exportedUUIDs[0] != "newest-native" || exportedUUIDs[499] != "newest-native" || exportedUUIDs[500] != "older-native" {
+		testContext.Errorf("expected the newest native alerts first, got %s, %s, %s", exportedUUIDs[0], exportedUUIDs[499], exportedUUIDs[500])
+	}
+}
+
+func TestExportReadsAWiderRawAlertWindow(testContext *testing.T) {
+	deps := exportFixture(testContext, nil, lapi.ArchiveRead{})
+	requestedLimit, requestedBytes := 0, int64(0)
+	deps.ReadAlerts = func(_ context.Context, limit int, maxBytes int64, _ time.Duration) (lapi.ArchiveRead, error) {
+		requestedLimit, requestedBytes = limit, maxBytes
+		return lapi.ArchiveRead{}, nil
+	}
+	exportedAlertUUIDs(testContext, deps)
+	if requestedLimit != 3*MaxAlerts || requestedBytes != 2*MaxBytes {
+		testContext.Errorf("expected a raw read of %d alerts within %d bytes, got %d within %d", 3*MaxAlerts, 2*MaxBytes, requestedLimit, requestedBytes)
 	}
 }
 
 func TestExportAlertReadLimitHitWithTheCapFilledExportsTheNewest(testContext *testing.T) {
-	readAlerts := make([]lapi.Alert, MaxAlerts)
-	for alertIndex := range readAlerts {
-		readAlerts[alertIndex] = lapi.Alert{UUID: "alert", Scenario: "crowdsecurity/ssh-bf", MachineID: "localhost"}
-	}
-	deps := exportFixture(testContext, nil, lapi.ArchiveRead{Alerts: readAlerts, LimitReached: true})
+	deps := exportFixture(testContext, nil, lapi.ArchiveRead{Alerts: nativeAlerts(MaxAlerts, "alert"), LimitReached: true})
 	if exportedUUIDs := exportedAlertUUIDs(testContext, deps); len(exportedUUIDs) != MaxAlerts {
 		testContext.Errorf("a full read of native alerts keeps the newest %d as before, got %d", MaxAlerts, len(exportedUUIDs))
 	}

@@ -10,13 +10,15 @@ import (
 )
 
 const (
-	hubCollectionType = "collections"
-	hubStatusEnabled  = "enabled"
-	hubStatusLocal    = "local"
-	banDecisionType   = "ban"
-	alertsReadTimeout = 30 * time.Second
-	syncCopyPrefix    = "sync/"
-	importedPrefix    = "import/"
+	hubCollectionType     = "collections"
+	hubStatusEnabled      = "enabled"
+	hubStatusLocal        = "local"
+	banDecisionType       = "ban"
+	alertsReadTimeout     = 30 * time.Second
+	alertsRawReadLimit    = 3 * MaxAlerts
+	alertsRawReadMaxBytes = 2 * MaxBytes
+	syncCopyPrefix        = "sync/"
+	importedPrefix        = "import/"
 )
 
 var exportedOrigins = []string{"crowdsec", "cscli"}
@@ -88,17 +90,16 @@ func isDashboardSyncScenario(scenario, machineID, localMachineID string) bool {
 }
 
 func exportAlerts(ctx context.Context, deps ExportDeps, stripEvents bool) (*AlertsSection, int, error) {
-	read, readError := deps.ReadAlerts(ctx, MaxAlerts, MaxBytes, alertsReadTimeout)
+	read, readError := deps.ReadAlerts(ctx, alertsRawReadLimit, alertsRawReadMaxBytes, alertsReadTimeout)
 	if readError != nil {
 		return nil, 0, readError
 	}
-	if read.Truncated || len(read.Alerts) > MaxAlerts {
+	if read.Truncated {
 		return nil, 0, ErrTooLarge
 	}
 	alerts := exportableAlerts(read.Alerts, deps.LocalMachineID)
-	readStoppedBeforeTheCapWasFilled := read.LimitReached && len(alerts) < MaxAlerts
-	if readStoppedBeforeTheCapWasFilled {
-		return nil, 0, ErrTooLarge
+	if len(alerts) > MaxAlerts {
+		alerts = alerts[:MaxAlerts]
 	}
 	if stripEvents {
 		for alertIndex := range alerts {
