@@ -17,6 +17,10 @@ services:
     volumes:
       - crowdsec-config:/etc/crowdsec
       - crowdsec-data:/var/lib/crowdsec/data
+      # Optional config import (CONFIG_IMPORT_ENABLED below): CrowdSec reads the dedicated
+      # directory the dashboard writes to, read-only, as its acquis.d. Move your existing acquis.d
+      # files into ./acquis.d first.
+      # - ./acquis.d:/etc/crowdsec/acquis.d:ro
     networks: [crowdsec]
 
   # The only component that talks to the Docker socket. It exposes three calls and denies
@@ -118,9 +122,20 @@ services:
       WAIT_FOR_NETWORK: "false"
       GEOIP_DATABASE_FILE: /var/lib/geoip/GeoLite2-Country.mmdb
       GEOIPUPDATE_FREQUENCY_HOURS: "24"
+      # Optional import of acquis.d files from a bundle (docs/bundles.md), off by default. These
+      # lines override dashboard.env. Enable only for a migration, with the dedicated mount below.
+      # CONFIG_IMPORT_ENABLED: "true"
+      # CONFIG_IMPORT_DIR: /var/lib/dashboard-acquis.d
     volumes:
+      # Read-only: never mount /etc/crowdsec (or the CrowdSec config volume) writable here.
       - crowdsec-config:/etc/crowdsec:ro
       - geoip-data:/var/lib/geoip
+      # Optional config import: the ONLY writable CrowdSec path, the same host directory that the
+      # crowdsec service mounts read-only at /etc/crowdsec/acquis.d. Create it owned by the dashboard
+      # user (uid/gid 10000, DOCKER_USER_UID/DOCKER_USER_GID) so it can write, and CrowdSec (root)
+      # can read the files it creates (mode 0640):
+      #   install -d -o 10000 -g 10000 -m 0750 acquis.d
+      # - ./acquis.d:/var/lib/dashboard-acquis.d
     read_only: true
     # /run must be exec and not world-writable for s6-overlay.
     tmpfs:
