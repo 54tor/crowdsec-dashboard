@@ -47,6 +47,7 @@ func BuildPlan(snapshots []Snapshot, rules Rules, now time.Time) Plan {
 		newlyGuarded := sourcesOverLimit(changes, rules.MaxChanges)
 		if len(newlyGuarded) == 0 {
 			blocked := blockedSources(guardedSources)
+			blockUnreadableAllowlists(classifiedSnapshots, blocked)
 			changes = dropBlockedTargets(changes, rules.MaxChanges, blocked)
 			return Plan{
 				Changes: sortedChanges(changes),
@@ -86,7 +87,7 @@ func planAllEngines(classifiedSnapshots []classifiedSnapshot, offers offerBook, 
 	var changes []Change
 	var skips []Skip
 	for _, targetSnapshot := range classifiedSnapshots {
-		if targetSnapshot.State != ReadComplete {
+		if targetSnapshot.State != ReadComplete || !targetSnapshot.Allowlist.Available() {
 			continue
 		}
 		engineChanges, engineSkips := planEngine(targetSnapshot, offers, guardedSources, rules)

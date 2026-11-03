@@ -1,6 +1,10 @@
 package enginesync
 
-import "slices"
+import (
+	"slices"
+
+	"crowdsec-dashboard/internal/allowguard"
+)
 
 const (
 	BlockedSourceGuard = "source_guard"
@@ -36,16 +40,27 @@ func dropBlockedTargets(changes []Change, maxChanges int, blocked map[string]str
 		changesPerEngine[change.Engine]++
 	}
 	for engineName, changeCount := range changesPerEngine {
-		if changeCount <= maxChanges {
-			continue
-		}
-		if existingReason, alreadyBlocked := blocked[engineName]; alreadyBlocked {
-			blocked[engineName] = existingReason + "," + BlockedTargetGuard
-		} else {
-			blocked[engineName] = BlockedTargetGuard
+		if changeCount > maxChanges {
+			addBlockReason(blocked, engineName, BlockedTargetGuard)
 		}
 	}
 	return slices.DeleteFunc(changes, func(change Change) bool {
 		return changesPerEngine[change.Engine] > maxChanges
 	})
+}
+
+func blockUnreadableAllowlists(classifiedSnapshots []classifiedSnapshot, blocked map[string]string) {
+	for _, snapshot := range classifiedSnapshots {
+		if !snapshot.Allowlist.Available() {
+			addBlockReason(blocked, snapshot.Engine, allowguard.ReasonAllowlistUnavailable)
+		}
+	}
+}
+
+func addBlockReason(blocked map[string]string, engineName string, reason string) {
+	if existingReason, alreadyBlocked := blocked[engineName]; alreadyBlocked {
+		blocked[engineName] = existingReason + "," + reason
+	} else {
+		blocked[engineName] = reason
+	}
 }

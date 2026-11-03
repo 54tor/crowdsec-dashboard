@@ -3,6 +3,8 @@ package enginesync
 import (
 	"strings"
 	"time"
+
+	"crowdsec-dashboard/internal/allowguard"
 )
 
 const (
@@ -33,6 +35,7 @@ type Snapshot struct {
 	State              ReadState
 	DashboardMachineID string
 	Bans               []Ban
+	Allowlist          allowguard.Guard
 }
 
 type classifiedSnapshot struct {

@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"slices"
 	"strings"
+
+	"crowdsec-dashboard/internal/allowguard"
 )
 
 func planEngine(targetSnapshot classifiedSnapshot, offers offerBook, guardedSources map[string]bool, rules Rules) ([]Change, []Skip) {
@@ -19,15 +21,19 @@ func planEngine(targetSnapshot classifiedSnapshot, offers offerBook, guardedSour
 		coverage.add(keptCopy.Target)
 		exactCopies[keptCopy.Target] = true
 	}
-	addChanges, skips := planAdds(targetSnapshot.Engine, offers, guardedSources, coverage, exactCopies)
+	addChanges, skips := planAdds(targetSnapshot.Engine, targetSnapshot.Allowlist, offers, guardedSources, coverage, exactCopies)
 	return append(copyChanges, addChanges...), skips
 }
 
-func planAdds(engineName string, offers offerBook, guardedSources map[string]bool, coverage coverageIndex, exactCopies map[Target]bool) ([]Change, []Skip) {
+func planAdds(engineName string, allowlist allowguard.Guard, offers offerBook, guardedSources map[string]bool, coverage coverageIndex, exactCopies map[Target]bool) ([]Change, []Skip) {
 	var changes []Change
 	var skips []Skip
 	for _, candidate := range offers.candidatesFor(engineName, guardedSources) {
 		if exactCopies[candidate] {
+			continue
+		}
+		if verdict := allowlist.Check(candidate.Prefix); !verdict.Allowed {
+			skips = append(skips, Skip{Engine: engineName, Target: candidate, Reason: verdict.Reason})
 			continue
 		}
 		if coverage.covers(candidate) {
@@ -54,7 +60,7 @@ func reconcileCopies(targetSnapshot classifiedSnapshot, offers offerBook, guarde
 		for _, duplicateCopy := range copyGroup[1:] {
 			changes = append(changes, removal(targetSnapshot.Engine, duplicateCopy))
 		}
-		change, keep := reconcileCopy(targetSnapshot.Engine, keeper, offers, rules)
+		change, keep := reconcileCopy(targetSnapshot.Engine, targetSnapshot.Allowlist, keeper, offers, rules)
 		if change != nil {
 			changes = append(changes, *change)
 		}
@@ -65,9 +71,10 @@ func reconcileCopies(targetSnapshot classifiedSnapshot, offers offerBook, guarde
 	return changes, keptCopies
 }
 
-func reconcileCopy(engineName string, existingCopy Ban, offers offerBook, rules Rules) (*Change, bool) {
+func reconcileCopy(engineName string, allowlist allowguard.Guard, existingCopy Ban, offers offerBook, rules Rules) (*Change, bool) {
 	sourceName := copySource(existingCopy)
-	if sourceName == engineName || !existingCopy.isActive() || targetRefusal(existingCopy.Target, rules) != "" {
+	isRefusedByTarget := targetRefusal(existingCopy.Target, rules) != "" || !allowlist.Check(existingCopy.Target.Prefix).Allowed
+	if sourceName == engineName || !existingCopy.isActive() || isRefusedByTarget {
 		return new(removal(engineName, existingCopy)), false
 	}
 	if len(rules.KnownEngines) > 0 && !rules.KnownEngines[sourceName] {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"crowdsec-dashboard/internal/allowguard"
 )
 
 // randomTargetPool mixes hosts, overlapping ranges, IPv6 and a private address so random
@@ -14,6 +16,12 @@ var randomTargetPool = []string{
 	"203.0.113.1", "203.0.113.2", "203.0.113.7", "203.0.113.7/32", "203.0.113.0/29", "203.0.113.0/24",
 	"198.51.100.1", "198.51.100.3", "198.51.100.0/30", "2001:db8::1", "2001:DB8::1", "2001:db8::/64",
 	"10.0.0.1",
+}
+
+// randomAllowlistPool overlaps the target pool as a host, a narrower range, a wider range and
+// IPv6, so allowlists refuse some copies, some ranges and leave narrower neighbours shareable.
+var randomAllowlistPool = []string{
+	"203.0.113.2", "203.0.113.0/30", "198.51.100.0/24", "2001:db8::1", "2001:db8::/64", "192.0.2.1",
 }
 
 var (
@@ -26,6 +34,7 @@ var (
 	propertyScenarioCount   = 300
 	maximumNativesPerEngine = 7
 	maximumCopiesPerEngine  = 4
+	maximumAllowlistEntries = 3
 )
 
 func pickRandom[Element any](generator *rand.Rand, choices []Element) Element {
@@ -38,6 +47,7 @@ func randomSnapshots(testContext *testing.T, generator *rand.Rand) []Snapshot {
 	snapshots := make([]Snapshot, 0, len(randomEngineNames))
 	for _, engineName := range randomEngineNames {
 		snapshot := snapshotWithState(engineName, pickRandom(generator, randomReadStates))
+		snapshot.Allowlist = randomAllowlist(generator)
 		for nativeIndex := generator.IntN(maximumNativesPerEngine); nativeIndex > 0; nativeIndex-- {
 			nextDecisionID++
 			ban := nativeBan(testContext, nextDecisionID, pickRandom(generator, randomTargetPool), pickRandom(generator, randomRemainings))
@@ -56,6 +66,19 @@ func randomSnapshots(testContext *testing.T, generator *rand.Rand) []Snapshot {
 		snapshots = append(snapshots, snapshot)
 	}
 	return snapshots
+}
+
+// randomAllowlist gives most engines a readable allowlist of zero to two entries and one engine
+// in eight an unreadable one, the fail-closed case.
+func randomAllowlist(generator *rand.Rand) allowguard.Guard {
+	if generator.IntN(8) == 0 {
+		return allowguard.Unavailable()
+	}
+	entryValues := make([]string, 0, maximumAllowlistEntries)
+	for entryIndex := generator.IntN(maximumAllowlistEntries); entryIndex > 0; entryIndex-- {
+		entryValues = append(entryValues, pickRandom(generator, randomAllowlistPool))
+	}
+	return allowlistOf(entryValues...)
 }
 
 func bansByID(snapshot Snapshot) map[int64]Ban {
@@ -93,6 +116,13 @@ func checkPlanInvariants(snapshots []Snapshot, plan Plan) error {
 			if snapshot.State != ReadComplete {
 				return fmt.Errorf("engine %s was not fully read but receives %+v", snapshot.Engine, change)
 			}
+			if !snapshot.Allowlist.Available() {
+				return fmt.Errorf("engine %s has unreadable allowlists but receives %+v", snapshot.Engine, change)
+			}
+			isWrite := change.Kind == ChangeAdd || change.Kind == ChangeReplace
+			if verdict := snapshot.Allowlist.Check(change.Target.Prefix); isWrite && !verdict.Allowed {
+				return fmt.Errorf("engine %s: %+v writes a target its guard refuses (%s)", snapshot.Engine, change, verdict.Reason)
+			}
 			if change.Kind == ChangeRemove || change.Kind == ChangeReplace {
 				removedBan, exists := existingBans[change.DecisionID]
 				if !exists || !isDashboardCopy(removedBan) {
@@ -111,11 +141,13 @@ func checkPlanInvariants(snapshots []Snapshot, plan Plan) error {
 }
 
 // checkLiveness proves the plan is not lazily empty: once applied, every shareable offer of a
-// complete, unguarded source is enforced on every other complete, unblocked engine, either by a
-// ban on that exact target or by an active wider ban.
+// complete, unguarded source is enforced on every other complete, unblocked engine whose guard
+// accepts the target, either by a ban on that exact target or by an active wider ban. A source
+// blocked only for its own allowlists still shares: its allowlist plays no part.
 func checkLiveness(originalSnapshots []Snapshot, appliedSnapshots []Snapshot, plan Plan, rules Rules) error {
 	for _, sourceSnapshot := range originalSnapshots {
-		if _, sourceBlocked := plan.Blocked[sourceSnapshot.Engine]; sourceBlocked || sourceSnapshot.State != ReadComplete {
+		sourceGuarded := strings.Contains(plan.Blocked[sourceSnapshot.Engine], BlockedSourceGuard)
+		if sourceGuarded || sourceSnapshot.State != ReadComplete {
 			continue
 		}
 		for _, offeredBan := range sourceSnapshot.Bans {
@@ -127,7 +159,8 @@ func checkLiveness(originalSnapshots []Snapshot, appliedSnapshots []Snapshot, pl
 			}
 			for _, appliedTarget := range appliedSnapshots {
 				_, targetBlocked := plan.Blocked[appliedTarget.Engine]
-				isEligibleTarget := appliedTarget.Engine != sourceSnapshot.Engine && appliedTarget.State == ReadComplete && !targetBlocked
+				acceptsTarget := appliedTarget.Allowlist.Check(offeredBan.Target.Prefix).Allowed
+				isEligibleTarget := appliedTarget.Engine != sourceSnapshot.Engine && appliedTarget.State == ReadComplete && !targetBlocked && acceptsTarget
 				if isEligibleTarget && !coveredByActiveBan(appliedTarget, map[int64]bool{}, offeredBan.Target) {
 					return fmt.Errorf("offer %s from %s is missing on %s", offeredBan.Target, sourceSnapshot.Engine, appliedTarget.Engine)
 				}

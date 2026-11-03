@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"crowdsec-dashboard/internal/allowguard"
 )
 
 func TestIncompleteSourceNeverTriggersRemovals(testContext *testing.T) {
@@ -103,11 +105,14 @@ func TestStableDataProducesEmptyPlanOnSecondRun(testContext *testing.T) {
 			nativeBan(testContext, 3, "198.51.100.0/24", 2*time.Hour),
 			nativeBan(testContext, 4, "198.51.100.9", time.Hour),
 		),
-		completeSnapshot("gamma", nativeBan(testContext, 5, "203.0.113.0/28", 4*time.Hour)),
+		withAllowlist(completeSnapshot("gamma", nativeBan(testContext, 5, "203.0.113.0/28", 4*time.Hour)), allowlistOf("198.51.100.9")),
 	}
 	firstPlan := BuildPlan(snapshots, rules, planTime)
 	if len(firstPlan.Changes) == 0 {
 		testContext.Fatal("the first plan must copy the bans")
+	}
+	if !hasSkip(firstPlan, "gamma", mustTarget(testContext, "Range", "198.51.100.0/24"), allowguard.ReasonAllowlisted) {
+		testContext.Errorf("gamma's allowlist must refuse the beta range, got %+v", firstPlan.Skipped)
 	}
 	requireStable(testContext, snapshots, rules)
 }
