@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { stubFetch } from '@/test/fetchStub'
-import { prepareEnglishApp, requestsTo } from '@/test/pageHarness'
+import { deferredResponse, prepareEnglishApp, requestsTo } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 import type { SyncPeer, SyncStatus } from '@/api/syncApi'
 
@@ -37,7 +37,10 @@ function syncRoutes(status: SyncStatus, session: { status: number; body: object 
 
 describe('sync page', () => {
   beforeEach(prepareEnglishApp)
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
 
   it('showsDryRunBanner', async () => {
     stubFetch(syncRoutes(makeStatus({ dry_run: true })))
@@ -80,7 +83,7 @@ describe('sync page', () => {
     expect(screen.queryByRole('button', { name: en.sync.syncNow })).not.toBeInTheDocument()
   })
 
-  it('guardedPeerRequiresRetypedName', async () => {
+  it('guardedPeersAreListedAndStayBlockedNotice', async () => {
     const fetchMock = stubFetch(
       syncRoutes(makeStatus({ peers: [makePeer({ status: 'blocked', blocked_reason: 'target_guard' })] }), ADMIN_SESSION, {
         [`POST ${SYNC_URL}/run`]: { status: 202, body: { status: 'started' } },
@@ -88,21 +91,12 @@ describe('sync page', () => {
     )
     const user = userEvent.setup()
     renderApp('/sync')
-    await user.click(await screen.findByRole('button', { name: en.sync.syncNow }))
+    const notice = (await screen.findByText(en.sync.guarded)).closest('[role="status"]') as HTMLElement
+    expect(within(notice).getByText('edge-1', { selector: 'bdi' })).toBeInTheDocument()
 
-    const dialog = await screen.findByRole('dialog', { name: en.sync.guardTitle })
-    const confirmButton = within(dialog).getByRole('button', { name: en.sync.confirmRun })
-    expect(confirmButton).toBeDisabled()
-    await user.type(within(dialog).getByLabelText(/edge-1/), 'edge-2')
-    expect(confirmButton).toBeDisabled()
-    await user.clear(within(dialog).getByLabelText(/edge-1/))
-    await user.type(within(dialog).getByLabelText(/edge-1/), 'edge-1')
-    expect(confirmButton).toBeEnabled()
-    expect(requestsTo(fetchMock, 'POST', `${SYNC_URL}/run`)).toHaveLength(0)
-
-    await user.click(confirmButton)
+    await user.click(screen.getByRole('button', { name: en.sync.syncNow }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await waitFor(() => expect(requestsTo(fetchMock, 'POST', `${SYNC_URL}/run`)).toHaveLength(1))
-    expect(JSON.parse(String(requestsTo(fetchMock, 'POST', `${SYNC_URL}/run`)[0].body))).toEqual({})
   })
 
   it('rendersPeerNamesAsText', async () => {
@@ -152,24 +146,92 @@ describe('sync page', () => {
     expect(requestsTo(fetchMock, 'GET', SYNC_URL).length).toBe(callsWhenFinished)
   })
 
-  it('keepsPollingAfterTheRunIsPostedUntilItFinishes', async () => {
+  it('keepsPollingAfterThePostThenStops', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     let isRunStarted = false
     let statusCallsSinceStart = 0
-    stubFetch({
+    const fetchMock = stubFetch({
       'GET /api/auth/me': ADMIN_SESSION,
       [`GET ${SYNC_URL}`]: () => {
         statusCallsSinceStart += isRunStarted ? 1 : 0
-        return { status: 200, body: makeStatus({ running: statusCallsSinceStart >= 2 && statusCallsSinceStart < 4 }) }
+        return { status: 200, body: makeStatus({ running: statusCallsSinceStart >= 1 && statusCallsSinceStart < 4 }) }
       },
       [`POST ${SYNC_URL}/run`]: () => {
         isRunStarted = true
         return { status: 202, body: { status: 'started' } }
       },
     })
-    const user = userEvent.setup()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderApp('/sync')
     await user.click(await screen.findByRole('button', { name: en.sync.syncNow }))
     await waitFor(() => expect(statusCallsSinceStart).toBeGreaterThanOrEqual(4))
+    await vi.advanceTimersByTimeAsync(1000)
+    const callsWhenFinished = requestsTo(fetchMock, 'GET', SYNC_URL).length
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(requestsTo(fetchMock, 'GET', SYNC_URL).length).toBe(callsWhenFinished)
+    vi.useRealTimers()
+  })
+
+  it('buttonStaysLockedUntilAPollAfterThePostReturns', async () => {
+    const heldPoll = deferredResponse()
+    let isRunStarted = false
+    const fetchMock = stubFetch({
+      'GET /api/auth/me': ADMIN_SESSION,
+      [`GET ${SYNC_URL}`]: { status: 200, body: makeStatus() },
+      [`POST ${SYNC_URL}/run`]: { status: 202, body: { status: 'started' } },
+    })
+    const defaultImplementation = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      if (init?.method === 'POST') {
+        isRunStarted = true
+      }
+      return isRunStarted && String(input) === SYNC_URL ? heldPoll.promise : defaultImplementation(input, init)
+    })
+    const user = userEvent.setup()
+    renderApp('/sync')
+    const button = await screen.findByRole('button', { name: en.sync.syncNow })
+    await user.click(button)
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', `${SYNC_URL}/run`)).toHaveLength(1))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(button).toBeDisabled()
+
+    heldPoll.settle(200, makeStatus())
+    await waitFor(() => expect(button).toBeEnabled())
+  })
+
+  it('doubleClickCannotPostTwice', async () => {
+    const fetchMock = stubFetch(syncRoutes(makeStatus(), ADMIN_SESSION, { [`POST ${SYNC_URL}/run`]: { status: 202, body: { status: 'started' } } }))
+    const user = userEvent.setup()
+    renderApp('/sync')
+    await user.dblClick(await screen.findByRole('button', { name: en.sync.syncNow }))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(requestsTo(fetchMock, 'POST', `${SYNC_URL}/run`)).toHaveLength(1)
+  })
+
+  it.each([
+    ['operation_running', en.errors.operation_running],
+    ['sync_disabled', en.errors.sync_disabled],
+  ])('failingPostShowsErrorAndDoesNotPoll (%s)', async (errorCode, expectedMessage) => {
+    const fetchMock = stubFetch(syncRoutes(makeStatus(), ADMIN_SESSION, { [`POST ${SYNC_URL}/run`]: { status: 409, body: { error: errorCode } } }))
+    const user = userEvent.setup()
+    renderApp('/sync')
+    await user.click(await screen.findByRole('button', { name: en.sync.syncNow }))
+    expect(await screen.findByText(expectedMessage)).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(requestsTo(fetchMock, 'GET', SYNC_URL).length).toBeLessThanOrEqual(2)
+    const callsAfterError = requestsTo(fetchMock, 'GET', SYNC_URL).length
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(requestsTo(fetchMock, 'GET', SYNC_URL).length).toBe(callsAfterError)
+  })
+
+  it('stopsPollingWhenThePageIsUnmounted', async () => {
+    const fetchMock = stubFetch(syncRoutes(makeStatus({ running: true })))
+    const { unmount } = renderApp('/sync')
+    await screen.findByRole('button', { name: en.sync.syncNow })
+    unmount()
+    const callsAtUnmount = requestsTo(fetchMock, 'GET', SYNC_URL).length
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(requestsTo(fetchMock, 'GET', SYNC_URL).length).toBe(callsAtUnmount)
   })
 
   it('translatesEveryServerErrorCode', () => {

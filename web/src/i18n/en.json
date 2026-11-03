@@ -592,9 +592,6 @@
     "allowlistUnavailable": "The allowlists of these engines are unreadable, the allowlist route is missing, or they hold more than 10,000 entries. Nothing is written on them.",
     "manageEngines": "Add or remove peers on the Engines page",
     "syncNow": "Sync now",
-    "confirmRun": "Run the synchronization",
-    "guardTitle": "Guarded peers",
-    "guardDescription": "The safety guard blocked these peers because too many changes are pending. They stay blocked during this run; the other peers are synchronized. Retype each name to confirm.",
     "peersCaption": "Peers",
     "planCaption": "Last plan (100 entries at most)",
     "noPeers": "No peer takes part in the synchronization.",
@@ -662,6 +659,10 @@
       "run_deadline": "Run exceeded its time limit",
       "run_panicked": "Run failed unexpectedly",
       "engine_backoff": "Skipped: engine in backoff after failures"
-    }
+    },
+    "guardedTitle": "Peers blocked by the safety guard",
+    "guarded": "Too many changes are pending for these peers. They stay blocked until the pending changes drop below the limit; the other peers are synchronized normally.",
+    "peersTableCaption": "Synchronization peers and their last result",
+    "planTableCaption": "Planned changes and skipped entries of the last run"
   }
 }

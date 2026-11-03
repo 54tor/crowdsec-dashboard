@@ -592,9 +592,6 @@
     "allowlistUnavailable": "Les listes d'autorisation de ces moteurs sont illisibles, la route des listes d'autorisation est absente, ou elles dépassent 10 000 entrées. Rien n'y est écrit.",
     "manageEngines": "Ajouter ou retirer des pairs dans la page Moteurs",
     "syncNow": "Synchroniser maintenant",
-    "confirmRun": "Lancer la synchronisation",
-    "guardTitle": "Pairs sous garde",
-    "guardDescription": "Le garde-fou a bloqué ces pairs car trop de changements sont en attente. Ils restent bloqués pendant cette exécution ; les autres pairs sont synchronisés. Retapez chaque nom pour confirmer.",
     "peersCaption": "Pairs",
     "planCaption": "Dernier plan (100 entrées au maximum)",
     "noPeers": "Aucun pair ne participe à la synchronisation.",
@@ -662,6 +659,10 @@
       "run_deadline": "Exécution au-delà de sa limite de temps",
       "run_panicked": "Échec inattendu de l'exécution",
       "engine_backoff": "Ignoré : moteur en attente après des échecs"
-    }
+    },
+    "guardedTitle": "Pairs bloqués par le garde-fou",
+    "guarded": "Trop de changements sont en attente pour ces pairs. Ils restent bloqués tant que les changements en attente ne repassent pas sous la limite ; les autres pairs sont synchronisés normalement.",
+    "peersTableCaption": "Pairs de synchronisation et leur dernier résultat",
+    "planTableCaption": "Changements prévus et entrées ignorées de la dernière exécution"
   }
 }

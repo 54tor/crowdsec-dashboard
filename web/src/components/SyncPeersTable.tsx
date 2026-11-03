@@ -32,5 +32,5 @@ export function SyncPeersTable({ peers }: { peers: SyncPeer[] }) {
     ],
     [t, i18n.language],
   )
-  return <DataTable caption={t('sync.peersCaption')} columns={columns} rows={peers} rowKey={(peer) => peer.name} />
+  return <DataTable caption={t('sync.peersTableCaption')} columns={columns} rows={peers} rowKey={(peer) => peer.name} />
 }

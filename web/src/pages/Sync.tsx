@@ -14,39 +14,53 @@ import { useCanWrite } from '@/hooks/useCanWrite'
 import { hasUnavailableAllowlist, isGuardedPeer } from '@/lib/syncCodes'
 
 function useSyncStatus() {
-  const [isAwaitingStart, setIsAwaitingStart] = useState(false)
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const isAwaitingStart = startedAt !== null
   const query = useQuery({
     queryKey: SYNC_QUERY_KEY,
     queryFn: getSyncStatus,
     refetchInterval: (currentQuery) => (currentQuery.state.data?.running || isAwaitingStart ? SYNC_POLL_INTERVAL_MILLISECONDS : false),
   })
-  const isRunning = query.data?.running === true
+  const { dataUpdatedAt } = query
 
   useEffect(() => {
-    if (isRunning) {
-      setIsAwaitingStart(false)
+    if (startedAt !== null && dataUpdatedAt > startedAt) {
+      setStartedAt(null)
     }
-  }, [isRunning])
+  }, [startedAt, dataUpdatedAt])
 
   useEffect(() => {
     if (!isAwaitingStart) {
       return undefined
     }
-    const stopWaiting = setTimeout(() => setIsAwaitingStart(false), SYNC_START_WAIT_MILLISECONDS)
+    const stopWaiting = setTimeout(() => setStartedAt(null), SYNC_START_WAIT_MILLISECONDS)
     return () => clearTimeout(stopWaiting)
   }, [isAwaitingStart])
 
-  return { ...query, awaitStart: () => setIsAwaitingStart(true) }
+  return { ...query, isAwaitingStart, awaitStart: () => setStartedAt(Date.now()) }
 }
 
 function SyncNotices({ status }: { status: SyncStatus }) {
   const { t } = useTranslation()
   const unavailablePeers = status.peers.filter(hasUnavailableAllowlist)
+  const guardedPeers = status.peers.filter(isGuardedPeer)
   return (
     <>
       {status.dry_run && <WarningNotice title={t('sync.dryRunTitle')}>{t('sync.dryRun')}</WarningNotice>}
       {!status.enabled && <InfoNotice>{t('sync.disabled')}</InfoNotice>}
       {status.running && <InfoNotice>{t('sync.running')}</InfoNotice>}
+      {guardedPeers.length > 0 && (
+        <WarningNotice title={t('sync.guardedTitle')}>
+          <p>{t('sync.guarded')}</p>
+          <ul className="list-disc pl-4">
+            {guardedPeers.map((peer) => (
+              <li key={peer.name}>
+                <UntrustedText value={peer.name} />
+              </li>
+            ))}
+          </ul>
+        </WarningNotice>
+      )}
       {unavailablePeers.length > 0 && (
         <WarningNotice title={t('sync.allowlistUnavailableTitle')}>
           <p>{t('sync.allowlistUnavailable')}</p>
@@ -66,7 +80,7 @@ function SyncNotices({ status }: { status: SyncStatus }) {
 export function Sync() {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
-  const { data, error, isPending, awaitStart } = useSyncStatus()
+  const { data, error, isPending, isAwaitingStart, awaitStart } = useSyncStatus()
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -82,7 +96,7 @@ export function Sync() {
       {data && (
         <>
           <SyncNotices status={data} />
-          {canWrite && <SyncNowButton disabled={data.running || !data.enabled} guardedPeerNames={data.peers.filter(isGuardedPeer).map((peer) => peer.name)} onStarted={awaitStart} />}
+          {canWrite && <SyncNowButton disabled={data.running || !data.enabled || isAwaitingStart} onStarted={awaitStart} />}
           <h2 className="text-base font-medium">{t('sync.peersCaption')}</h2>
           {data.peers.length === 0 ? <p>{t('sync.noPeers')}</p> : <SyncPeersTable peers={data.peers} />}
           <h2 className="text-base font-medium">{t('sync.planCaption')}</h2>

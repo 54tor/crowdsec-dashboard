@@ -19,7 +19,7 @@ export function SyncPlanTable({ entries }: { entries: SyncPlanEntry[] }) {
   )
   return (
     <DataTable
-      caption={t('sync.planCaption')}
+      caption={t('sync.planTableCaption')}
       columns={columns}
       rows={entries}
       rowKey={(entry) => `${entry.engine}|${entry.kind}|${entry.target}|${entry.source}|${entry.reason}`}
