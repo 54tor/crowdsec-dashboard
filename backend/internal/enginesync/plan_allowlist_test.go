@@ -1,6 +1,7 @@
 package enginesync
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -159,7 +160,7 @@ func TestPlanIgnoresSourceAllowlist(testContext *testing.T) {
 	if additions := changesOf(plan, "beta", ChangeAdd); len(plan.Changes) != 1 || len(additions) != 1 || additions[0].Source != "alpha" {
 		testContext.Errorf("only the target's allowlist counts, got %+v", plan.Changes)
 	}
-	unreadableSource := snapshots
+	unreadableSource := slices.Clone(snapshots)
 	unreadableSource[0].Allowlist = allowguard.Unavailable()
 	if additions := changesOf(BuildPlan(unreadableSource, rules, planTime), "beta", ChangeAdd); len(additions) != 1 {
 		testContext.Errorf("an unreadable source allowlist does not stop the source from sharing, got %+v", additions)
@@ -191,5 +192,86 @@ func TestAllowlistRemovalsCountTowardsMaxChanges(testContext *testing.T) {
 	}
 	if len(plan.Changes) != 0 {
 		testContext.Errorf("a tripped breaker drops the removals, got %+v", plan.Changes)
+	}
+}
+
+// buildPlanWithin fails the test instead of hanging it when BuildPlan never returns,
+// which is how a breaker loop that keeps re-guarding the same source shows up.
+func buildPlanWithin(testContext *testing.T, snapshots []Snapshot, rules Rules) Plan {
+	testContext.Helper()
+	planResult := make(chan Plan, 1)
+	go func() { planResult <- BuildPlan(snapshots, rules, planTime) }()
+	select {
+	case plan := <-planResult:
+		return plan
+	case <-time.After(5 * time.Second):
+		testContext.Fatal("BuildPlan did not terminate")
+		return Plan{}
+	}
+}
+
+func TestPlanRemovesAllowlistedCopyRatherThanReplacingIt(testContext *testing.T) {
+	rules := defaultRules("alpha", "beta")
+	snapshots := []Snapshot{
+		completeSnapshot("alpha", nativeBan(testContext, 1, "203.0.113.7", 4*time.Hour)),
+		withAllowlist(completeSnapshot("beta", copyBan(testContext, 21, "203.0.113.7", "alpha", time.Hour)), allowlistOf("203.0.113.7")),
+	}
+	plan := BuildPlan(snapshots, rules, planTime)
+	// Without the entry, the source outlasting the copy by three hours would replace it.
+	if len(plan.Changes) != 1 || plan.Changes[0].Kind != ChangeRemove || plan.Changes[0].DecisionID != 21 {
+		testContext.Errorf("an allowlisted copy is removed, never replaced, got %+v", plan.Changes)
+	}
+	requireStable(testContext, snapshots, rules)
+}
+
+func TestPlanRemovesAllowlistedCopyOfBreakerBlockedSource(testContext *testing.T) {
+	rules := defaultRules("alpha", "gamma")
+	rules.MaxChanges = 2
+	snapshots := []Snapshot{
+		completeSnapshot("alpha",
+			nativeBan(testContext, 1, "203.0.113.1", time.Hour),
+			nativeBan(testContext, 2, "198.51.100.2", time.Hour),
+			nativeBan(testContext, 3, "198.51.100.3", time.Hour),
+		),
+		withAllowlist(completeSnapshot("gamma", copyBan(testContext, 31, "203.0.113.1", "alpha", time.Hour)), allowlistOf("203.0.113.1")),
+	}
+	plan := buildPlanWithin(testContext, snapshots, rules)
+	// alpha would cause two adds and one removal on gamma, over the limit of two: the breaker trips.
+	if plan.Blocked["alpha"] != BlockedSourceGuard {
+		testContext.Fatalf("alpha must be guarded, got %+v", plan.Blocked)
+	}
+	// The removal is driven by gamma's allowlist and pushes nothing from alpha, so it still happens.
+	if len(plan.Changes) != 1 || plan.Changes[0].Engine != "gamma" || plan.Changes[0].Kind != ChangeRemove || plan.Changes[0].DecisionID != 31 {
+		testContext.Errorf("only the allowlisted copy is removed, got %+v", plan.Changes)
+	}
+}
+
+func TestPlanTerminatesWhenAllowlistRemovalsOfBlockedSourceExceedLimit(testContext *testing.T) {
+	rules := defaultRules("alpha", "beta", "gamma")
+	rules.MaxChanges = 1
+	alphaBans := []Ban{
+		nativeBan(testContext, 1, "203.0.113.1", time.Hour),
+		nativeBan(testContext, 2, "203.0.113.2", time.Hour),
+	}
+	snapshots := []Snapshot{
+		completeSnapshot("alpha", alphaBans...),
+		withAllowlist(completeSnapshot("beta",
+			copyBan(testContext, 21, "203.0.113.1", "alpha", time.Hour),
+			copyBan(testContext, 22, "203.0.113.2", "alpha", time.Hour),
+		), allowlistOf("203.0.113.0/24")),
+		withAllowlist(completeSnapshot("gamma",
+			copyBan(testContext, 31, "203.0.113.1", "alpha", time.Hour),
+		), allowlistOf("203.0.113.1")),
+	}
+	plan := buildPlanWithin(testContext, snapshots, rules)
+	if plan.Blocked["alpha"] != BlockedSourceGuard {
+		testContext.Fatalf("alpha must be guarded, got %+v", plan.Blocked)
+	}
+	// beta's two removals exceed its own limit of one: the target breaker drops them; gamma's one removal goes through.
+	if plan.Blocked["beta"] != BlockedTargetGuard {
+		testContext.Errorf("the allowlist removals still count in the target breaker, got %+v", plan.Blocked)
+	}
+	if len(plan.Changes) != 1 || plan.Changes[0].Engine != "gamma" || plan.Changes[0].DecisionID != 31 {
+		testContext.Errorf("only gamma's removal stays, got %+v", plan.Changes)
 	}
 }

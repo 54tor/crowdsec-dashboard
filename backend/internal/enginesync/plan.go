@@ -44,7 +44,7 @@ func BuildPlan(snapshots []Snapshot, rules Rules, now time.Time) Plan {
 	guardedSources := map[string]bool{}
 	for {
 		changes, coverageSkips := planAllEngines(classifiedSnapshots, offers, guardedSources, rules)
-		newlyGuarded := sourcesOverLimit(changes, rules.MaxChanges)
+		newlyGuarded := sourcesOverLimit(changes, rules.MaxChanges, guardedSources)
 		if len(newlyGuarded) == 0 {
 			blocked := blockedSources(guardedSources)
 			blockUnreadableAllowlists(classifiedSnapshots, blocked)

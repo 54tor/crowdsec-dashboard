@@ -35,6 +35,9 @@ var (
 	maximumNativesPerEngine = 7
 	maximumCopiesPerEngine  = 4
 	maximumAllowlistEntries = 3
+	// randomMaxChanges mostly never trips the breaker; the low limit trips it often enough to mix
+	// guarded sources and blocked targets with allowlists.
+	randomMaxChanges = []int{10000, 10000, 2}
 )
 
 func pickRandom[Element any](generator *rand.Rand, choices []Element) Element {
@@ -170,19 +173,55 @@ func checkLiveness(originalSnapshots []Snapshot, appliedSnapshots []Snapshot, pl
 	return nil
 }
 
+// checkNoAllowlistedCopyRemains proves the plan cleans up: once applied, no dashboard copy that
+// the target's guard refuses is left on a fully read engine whose own changes were not blocked,
+// whatever the state of the copy's source (breaker-guarded, incomplete, unknown).
+func checkNoAllowlistedCopyRemains(appliedSnapshots []Snapshot, plan Plan) error {
+	for _, appliedSnapshot := range appliedSnapshots {
+		blockReasons := plan.Blocked[appliedSnapshot.Engine]
+		targetBlocked := strings.Contains(blockReasons, BlockedTargetGuard) || strings.Contains(blockReasons, allowguard.ReasonAllowlistUnavailable)
+		if targetBlocked || appliedSnapshot.State != ReadComplete {
+			continue
+		}
+		for _, remainingBan := range appliedSnapshot.Bans {
+			if isDashboardCopy(remainingBan) && !appliedSnapshot.Allowlist.Check(remainingBan.Target.Prefix).Allowed {
+				return fmt.Errorf("engine %s still holds the allowlisted copy %+v", appliedSnapshot.Engine, remainingBan)
+			}
+		}
+	}
+	return nil
+}
+
+// breakerTripped reports a plan whose breaker held changes back: those changes are still due,
+// so the second run is legitimately not empty.
+func breakerTripped(plan Plan) bool {
+	for _, blockReasons := range plan.Blocked {
+		if strings.Contains(blockReasons, BlockedSourceGuard) || strings.Contains(blockReasons, BlockedTargetGuard) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRandomMeshesKeepPlanInvariants(testContext *testing.T) {
 	rules := defaultRules(randomEngineNames...)
-	rules.MaxChanges = 10000
 	generator := rand.New(rand.NewPCG(2026, 1031))
 	for scenarioNumber := 0; scenarioNumber < propertyScenarioCount; scenarioNumber++ {
+		rules.MaxChanges = pickRandom(generator, randomMaxChanges)
 		snapshots := randomSnapshots(testContext, generator)
 		firstPlan := BuildPlan(snapshots, rules, planTime)
 		if invariantError := checkPlanInvariants(snapshots, firstPlan); invariantError != nil {
 			testContext.Fatalf("scenario %d: %v\nsnapshots %+v", scenarioNumber, invariantError, snapshots)
 		}
 		appliedSnapshots := applyPlan(snapshots, firstPlan)
+		if cleanupError := checkNoAllowlistedCopyRemains(appliedSnapshots, firstPlan); cleanupError != nil {
+			testContext.Fatalf("scenario %d: %v\nfirst plan %+v\nsnapshots %+v", scenarioNumber, cleanupError, firstPlan.Changes, snapshots)
+		}
 		if livenessError := checkLiveness(snapshots, appliedSnapshots, firstPlan, rules); livenessError != nil {
 			testContext.Fatalf("scenario %d: %v\nfirst plan %+v\nsnapshots %+v", scenarioNumber, livenessError, firstPlan.Changes, snapshots)
+		}
+		if breakerTripped(firstPlan) {
+			continue
 		}
 		secondPlan := BuildPlan(appliedSnapshots, rules, planTime)
 		if len(secondPlan.Changes) != 0 {

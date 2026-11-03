@@ -53,7 +53,9 @@ func reconcileCopies(targetSnapshot classifiedSnapshot, offers offerBook, guarde
 	for _, copyGroup := range groupCopies(targetSnapshot.copies) {
 		sourceName := copySource(copyGroup[0])
 		if guardedSources[sourceName] {
-			keptCopies = append(keptCopies, activeCopies(copyGroup)...)
+			guardedChanges, guardedKept := reconcileGuardedCopies(targetSnapshot.Engine, targetSnapshot.Allowlist, copyGroup)
+			changes = append(changes, guardedChanges...)
+			keptCopies = append(keptCopies, guardedKept...)
 			continue
 		}
 		keeper := copyGroup[0]
@@ -91,6 +93,17 @@ func reconcileCopy(engineName string, allowlist allowguard.Guard, existingCopy B
 		return &Change{Engine: engineName, Kind: ChangeReplace, Target: existingCopy.Target, Source: sourceName, Remaining: sourceRemaining, DecisionID: existingCopy.ID}, true
 	}
 	return nil, true
+}
+
+func reconcileGuardedCopies(engineName string, allowlist allowguard.Guard, copyGroup []Ban) ([]Change, []Ban) {
+	if allowlist.Check(copyGroup[0].Target.Prefix).Allowed {
+		return nil, activeCopies(copyGroup)
+	}
+	changes := make([]Change, 0, len(copyGroup))
+	for _, refusedCopy := range copyGroup {
+		changes = append(changes, removal(engineName, refusedCopy))
+	}
+	return changes, nil
 }
 
 func activeCopies(copyGroup []Ban) []Ban {

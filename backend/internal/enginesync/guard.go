@@ -11,14 +11,14 @@ const (
 	BlockedTargetGuard = "target_guard"
 )
 
-func sourcesOverLimit(changes []Change, maxChanges int) []string {
+func sourcesOverLimit(changes []Change, maxChanges int, guardedSources map[string]bool) []string {
 	changesPerSource := map[string]int{}
 	for _, change := range changes {
 		changesPerSource[change.Source]++
 	}
 	var overLimit []string
 	for sourceName, changeCount := range changesPerSource {
-		if changeCount > maxChanges {
+		if changeCount > maxChanges && !guardedSources[sourceName] {
 			overLimit = append(overLimit, sourceName)
 		}
 	}
