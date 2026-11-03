@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { installCollection } from '@/api/writeApi'
+import { installHubItem, type HubItemKind } from '@/api/writeApi'
 import { FormField } from '@/components/FormField'
+import { HubKindSelect } from '@/components/HubKindSelect'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
 import { PendingLockDialog } from '@/components/PendingLockDialog'
@@ -10,10 +11,28 @@ import { usePendingReport } from '@/hooks/usePendingReport'
 import { useHubMutation } from '@/hooks/useHubMutation'
 import { validateHubName } from '@/lib/nameValidation'
 
+interface HubInstallRequest {
+  kind: HubItemKind
+  name: string
+}
+
+const installRequested = ({ kind, name }: HubInstallRequest) => installHubItem(kind, name)
+
+function AppSecHelp() {
+  const { t } = useTranslation()
+  return (
+    <div className="space-y-2 text-sm text-muted-foreground">
+      <p>{t('hub.appsecSuggestions')}</p>
+      <p>{t('hub.appsecActivationNote')}</p>
+    </div>
+  )
+}
+
 function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; onClose: () => void; reportPending: (isPending: boolean) => void }) {
   const { t } = useTranslation()
+  const [kind, setKind] = useState<HubItemKind>('collections')
   const [name, setName] = useState('')
-  const installation = useHubMutation(installCollection, onDone)
+  const installation = useHubMutation(installRequested, onDone)
   usePendingReport(installation.isPending, reportPending)
   const nameError = name === '' ? null : validateHubName(name)
   const isValid = name !== '' && !nameError
@@ -21,7 +40,7 @@ function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; o
   function submit(submitEvent: FormEvent) {
     submitEvent.preventDefault()
     if (isValid && !installation.isPending) {
-      installation.mutate(name)
+      installation.mutate({ kind, name })
     }
   }
 
@@ -31,13 +50,15 @@ function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; o
         <DialogTitle>{t('hub.installTitle')}</DialogTitle>
         <DialogDescription>{t('hub.installDescription')}</DialogDescription>
       </DialogHeader>
+      <HubKindSelect value={kind} disabled={installation.isPending} onChange={setKind} />
       <FormField
-        id="install-collection-name"
+        id="install-hub-item-name"
         label={t('hub.installName')}
         value={name}
         onChange={(changeEvent) => setName(changeEvent.target.value)}
         error={nameError && t(`errors.${nameError}`)}
       />
+      <AppSecHelp />
       {installation.error && <ErrorNotice error={installation.error} />}
       <DialogFooter>
         <Button type="button" variant="outline" disabled={installation.isPending} onClick={onClose}>
@@ -51,7 +72,7 @@ function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; o
   )
 }
 
-export function InstallCollectionDialog() {
+export function InstallHubItemDialog() {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   return (

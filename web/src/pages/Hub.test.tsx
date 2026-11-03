@@ -20,6 +20,24 @@ function hubRoutes(extraRoutes = {}) {
   }
 }
 
+const READ_ONLY_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'bob', account_role: 'read_only' } }
+const HOSTILE_DESCRIPTION = '<img src=x onerror=alert(1)>'
+
+// AppSec items come back from GET /api/hub with the cscli hub type names as `type`.
+function appSecRoutes(extraRoutes = {}) {
+  const hubItems = [
+    makeHubItem({ type: 'collections', name: 'crowdsecurity/linux' }),
+    makeHubItem({ type: 'appsec-rules', name: 'crowdsecurity/vpatch-env-access', description: HOSTILE_DESCRIPTION }),
+    makeHubItem({ type: 'appsec-configs', name: 'crowdsecurity/appsec-default' }),
+  ]
+  return hubRoutes({ 'GET /api/hub': { status: 200, body: hubItems }, ...extraRoutes })
+}
+
+async function openInstallDialog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: en.hub.install }))
+  return screen.findByRole('dialog', { name: en.hub.installTitle })
+}
+
 describe('hub page', () => {
   beforeEach(prepareEnglishApp)
   afterEach(() => vi.unstubAllGlobals())
@@ -243,6 +261,79 @@ describe('hub page', () => {
 
     await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/hub/collections/crowdsecurity/linux')).toHaveLength(1))
     expect(requestsTo(fetchMock, 'DELETE', '/api/hub/collections/crowdsecurity/linux')[0].body).toBe('{"confirm":"crowdsecurity/linux"}')
+    expect(await screen.findByText(en.hub.reloadRequired)).toBeInTheDocument()
+  })
+  it('offersRemovalOfAnAppSecRule', async () => {
+    const fetchMock = stubFetch(
+      appSecRoutes({ 'DELETE /api/hub/appsec-rules/crowdsecurity/vpatch-env-access': { status: 200, body: { status: 'removed' } } }),
+    )
+    const user = userEvent.setup()
+    const { container } = renderApp('/hub')
+
+    // The hostile description must stay a text node, never parsed as markup.
+    expect(await screen.findByText(HOSTILE_DESCRIPTION, { selector: 'td' })).toBeInTheDocument()
+    expect(container.querySelector('img')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove crowdsecurity/appsec-default' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove crowdsecurity/vpatch-env-access' }))
+    const removeDialog = await screen.findByRole('dialog')
+    await user.type(within(removeDialog).getByLabelText('Type crowdsecurity/vpatch-env-access to confirm'), 'crowdsecurity/vpatch-env-access')
+    await user.click(within(removeDialog).getByRole('button', { name: en.hub.remove }))
+
+    const removalPath = '/api/hub/appsec-rules/crowdsecurity/vpatch-env-access'
+    await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', removalPath)).toHaveLength(1))
+    expect(requestsTo(fetchMock, 'DELETE', removalPath)[0].body).toBe('{"confirm":"crowdsecurity/vpatch-env-access"}')
+    expect(await screen.findByText(en.hub.reloadRequired)).toBeInTheDocument()
+  })
+
+  it('installsAnAppSecConfigurationWithTheRightKind', async () => {
+    const fetchMock = stubFetch(appSecRoutes({ 'POST /api/hub/appsec-configs': { status: 200, body: { status: 'installed' } } }))
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    const dialog = await openInstallDialog(user)
+    await user.selectOptions(within(dialog).getByLabelText(en.hub.installKind), 'appsec-configs')
+    await user.type(within(dialog).getByLabelText(en.hub.installName), 'crowdsecurity/appsec-default')
+    await user.click(within(dialog).getByRole('button', { name: en.hub.installSubmit }))
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/hub/appsec-configs')).toHaveLength(1))
+    expect(JSON.parse(String(requestsTo(fetchMock, 'POST', '/api/hub/appsec-configs')[0].body))).toEqual({ name: 'crowdsecurity/appsec-default' })
+    expect(requestsTo(fetchMock, 'POST', '/api/hub/collections')).toHaveLength(0)
+  })
+
+  it('hidesActionsForReadOnly', async () => {
+    stubFetch(appSecRoutes({ 'GET /api/auth/me': READ_ONLY_SESSION }))
+    renderApp('/hub')
+
+    expect(await screen.findByText('crowdsecurity/vpatch-env-access', { selector: 'td' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: en.hub.install })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: en.hub.update })).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: /^Remove / })).toHaveLength(0)
+  })
+
+  it('showsAppSecActivationNote', async () => {
+    stubFetch(appSecRoutes())
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    const dialog = await openInstallDialog(user)
+    expect(within(dialog).getByText(en.hub.appsecSuggestions)).toBeInTheDocument()
+    expect(within(dialog).getByText(en.hub.appsecActivationNote)).toBeInTheDocument()
+    expect(en.hub.appsecActivationNote).toContain('docs/operations.md')
+    expect(en.hub.appsecSuggestions).toContain('crowdsecurity/appsec-virtual-patching')
+    expect(en.hub.appsecSuggestions).toContain('crowdsecurity/appsec-generic-rules')
+  })
+
+  it('marksReloadRequiredAfterInstall', async () => {
+    stubFetch(appSecRoutes({ 'POST /api/hub/appsec-rules': { status: 200, body: { status: 'installed' } } }))
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    const dialog = await openInstallDialog(user)
+    await user.selectOptions(within(dialog).getByLabelText(en.hub.installKind), 'appsec-rules')
+    await user.type(within(dialog).getByLabelText(en.hub.installName), 'crowdsecurity/vpatch-env-access')
+    await user.click(within(dialog).getByRole('button', { name: en.hub.installSubmit }))
+
     expect(await screen.findByText(en.hub.reloadRequired)).toBeInTheDocument()
   })
 })

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { HubItem } from '@/api/types'
-import { removeCollection } from '@/api/writeApi'
+import { isHubItemKind, removeHubItem } from '@/api/writeApi'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { useCanWrite } from '@/hooks/useCanWrite'
@@ -23,20 +23,25 @@ export function HubTable({ items }: { items: HubItem[] }) {
       ...(canWrite ? ([{
         key: 'actions',
         header: t('hub.columns.actions'),
-        cell: (hubItem) =>
-          hubItem.type === 'collections' && (
+        cell: (hubItem) => {
+          const kind = hubItem.type
+          if (!isHubItemKind(kind)) {
+            return null
+          }
+          return (
             <RowDeleteAction
               buttonLabel={t('hub.remove')}
               ariaLabel={t('hub.removeAria', { name: hubItem.name })}
               title={t('hub.removeTitle', { name: hubItem.name })}
               description={t('hub.removeDescription', { name: hubItem.name })}
               target={hubItem.name}
-              request={(confirm) => removeCollection(hubItem.name, confirm)}
+              request={(confirm) => removeHubItem(kind, hubItem.name, confirm)}
               invalidates={[HUB_QUERY_KEY]}
               onDeleted={markReloadRequired}
               onFailed={(failure) => isTimeoutError(failure) && markReloadRequired()}
             />
-          ),
+          )
+        },
       }] satisfies DataTableColumn<HubItem>[]) : []),
     ],
     [t, markReloadRequired, canWrite],

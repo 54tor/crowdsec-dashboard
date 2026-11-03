@@ -38,7 +38,12 @@ export const deleteMachine = (name: string, confirm: string) => deleteConfirmed(
 
 export const updateHub = () => sendJson<StatusResponse>('POST', '/api/hub/update')
 export const upgradeHub = () => sendJson<StatusResponse>('POST', '/api/hub/upgrade')
-export const installCollection = (name: string) => sendJson<StatusResponse>('POST', '/api/hub/collections', { name })
-export const removeCollection = async (name: string, confirm: string) => deleteConfirmed(`/api/hub/collections/${encodeSegments(name)}`, confirm)
+export const HUB_ITEM_KINDS = ['collections', 'appsec-rules', 'appsec-configs'] as const
+export type HubItemKind = (typeof HUB_ITEM_KINDS)[number]
+export const isHubItemKind = (type: string): type is HubItemKind => (HUB_ITEM_KINDS as readonly string[]).includes(type)
+export const installHubItem = (kind: HubItemKind, name: string) => sendJson<StatusResponse>('POST', `/api/hub/${kind}`, { name })
+export const removeHubItem = async (kind: HubItemKind, name: string, confirm: string) =>
+  deleteConfirmed(`/api/hub/${kind}/${encodeSegments(name)}`, confirm)
+export const removeCollection = (name: string, confirm: string) => removeHubItem('collections', name, confirm)
 
 export const reloadCrowdsec = () => sendJson<StatusResponse>('POST', '/api/crowdsec/reload')

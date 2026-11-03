@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { updateHub, upgradeHub } from '@/api/writeApi'
-import { InstallCollectionDialog } from '@/components/InstallCollectionDialog'
+import { InstallHubItemDialog } from '@/components/InstallHubItemDialog'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
 import { useHubMutation } from '@/hooks/useHubMutation'
@@ -31,7 +31,7 @@ export function HubToolbar() {
         <Button type="button" variant="outline" disabled={isBusy} onClick={() => upgrade.mutate()}>
           {labelOf(upgrade.isPending, t('hub.upgrade'))}
         </Button>
-        <InstallCollectionDialog />
+        <InstallHubItemDialog />
       </div>
       <p className="text-sm text-muted-foreground">{t('hub.slowNote')}</p>
       {failure && <ErrorNotice error={failure} />}
