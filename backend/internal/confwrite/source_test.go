@@ -2,15 +2,37 @@ package confwrite
 
 import (
 	"errors"
+	"maps"
+	"slices"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
+
+// richFileAcquisition is an ordinary acquisition file: comments, quoted strings, lists, a nested
+// labels mapping, an integer and booleans, all resolved implicitly.
+const richFileAcquisition = `# nginx access and error logs
+source: file
+filenames:
+  - /var/log/nginx/access.log
+  - '/var/log/nginx/error.log'
+force_inotify: true
+poll_without_inotify: false
+max_buffer_size: 65536
+mode: tail
+labels:
+  type: "nginx"
+  env: prod # inline comment
+`
 
 func TestOnlyFileJournalctlAndDockerSourcesAreAccepted(testContext *testing.T) {
 	acceptedContents := map[string]string{
-		"file":       "source: file\nfilenames: [/var/log/nginx/access.log]\nlabels: {type: nginx}\n",
-		"journalctl": "source: journalctl\njournalctl_filter: [_SYSTEMD_UNIT=ssh.service]\nlabels: {type: syslog}\n",
-		"docker":     "source: docker\ncontainer_name: [web]\nlabels: {type: nginx}\n",
-		"multi-doc":  "source: file\nfilenames: [/var/log/a.log]\nlabels: {type: syslog}\n---\nsource: docker\ncontainer_name: [web]\nlabels: {type: nginx}\n",
+		"file":        "source: file\nfilenames: [/var/log/nginx/access.log]\nlabels: {type: nginx}\n",
+		"journalctl":  "source: journalctl\njournalctl_filter: [_SYSTEMD_UNIT=ssh.service]\nlabels: {type: syslog}\n",
+		"docker":      "source: docker\ncontainer_name: [web]\nlabels: {type: nginx}\n",
+		"multi-doc":   "source: file\nfilenames: [/var/log/a.log]\nlabels: {type: syslog}\n---\nsource: docker\ncontainer_name: [web]\nlabels: {type: nginx}\n",
+		"rich file":   richFileAcquisition,
+		"rich docker": "source: docker\ncontainer_name:\n  - web\n  - \"api\"\ncheck_interval: 10s\nfollow_stdout: true\nfollow_stderr: false\nlabels:\n  type: nginx\n",
 	}
 	for caseName, content := range acceptedContents {
 		if validationError := ValidateContent([]byte(content)); validationError != nil {
@@ -41,10 +63,49 @@ func TestOnlyFileJournalctlAndDockerSourcesAreAccepted(testContext *testing.T) {
 		"merge-only source": "<<: {source: file}\nfilenames: [/var/log/a.log]\n",
 		"tagged merge key":  "source: file\n!!merge x: {transform: 'evt.Line.Raw'}\n",
 		"nested merge":      "source: file\nlabels:\n  <<: {type: syslog}\n",
+		// Structural rule: keys must be plain, untagged !!str scalars and no node may carry an
+		// explicit tag, so no tag can turn into a key CrowdSec would read differently.
+		"binary key":          "source: file\nfilenames: [/var/log/a.log]\n!!binary dHJhbnNmb3Jt: evt.Line.Raw\n",
+		"explicitly str key":  "source: file\n!!str filenames: [/var/log/a.log]\n",
+		"custom tag":          "source: file\nfilenames: !foo [/var/log/a.log]\n",
+		"sequence key":        "source: file\n? [transform]\n: evt.Line.Raw\n",
+		"mapping key":         "source: file\n? {transform: x}\n: y\n",
+		"integer key":         "source: file\n1: x\n",
+		"null key":            "source: file\n~: x\n",
+		"bool key":            "source: file\ntrue: x\n",
+		"tagged value":        "source: file\nfilenames: !!str /var/log/a.log\n",
+		"tagged nested value": "source: file\nfilenames: [/var/log/a.log]\nlabels: {type: !!str nginx}\n",
+		"tagged source value": "source: !!str file\nfilenames: [/var/log/a.log]\n",
 	}
 	for caseName, content := range refusedContents {
 		if validationError := ValidateContent([]byte(content)); !errors.Is(validationError, ErrForbiddenSource) {
 			testContext.Errorf("%s: expected ErrForbiddenSource, got %v", caseName, validationError)
+		}
+	}
+}
+
+// TestAcceptedKeysAreTheKeysAGenericDecoderSees decodes accepted files the way CrowdSec does
+// (yaml unmarshal of each document) and checks it sees exactly the keys the validator read:
+// no tag-driven key transformation remains once only plain untagged string keys pass.
+func TestAcceptedKeysAreTheKeysAGenericDecoderSees(testContext *testing.T) {
+	for _, content := range []string{richFileAcquisition, "source: journalctl\njournalctl_filter: [_SYSTEMD_UNIT=ssh.service]\n"} {
+		if validationError := ValidateContent([]byte(content)); validationError != nil {
+			testContext.Fatalf("expected accepted, got %v", validationError)
+		}
+		var document yaml.Node
+		var decoded map[string]any
+		if yaml.Unmarshal([]byte(content), &document) != nil || yaml.Unmarshal([]byte(content), &decoded) != nil {
+			testContext.Fatal("decode failed")
+		}
+		mapping := document.Content[0]
+		validatedKeys := []string{}
+		for keyIndex := 0; keyIndex < len(mapping.Content); keyIndex += 2 {
+			validatedKeys = append(validatedKeys, mapping.Content[keyIndex].Value)
+		}
+		decodedKeys := slices.Sorted(maps.Keys(decoded))
+		slices.Sort(validatedKeys)
+		if !slices.Equal(validatedKeys, decodedKeys) {
+			testContext.Errorf("validated %v, decoder sees %v", validatedKeys, decodedKeys)
 		}
 	}
 }

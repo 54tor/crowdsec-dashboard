@@ -14,7 +14,7 @@ const (
 	sourceKey    = "source"
 	transformKey = "transform"
 	mergeKey     = "<<"
-	mergeTag     = "!!merge"
+	stringTag    = "!!str"
 )
 
 var allowedSources = []string{"file", "journalctl", "docker"}
@@ -31,7 +31,7 @@ func validateYAML(content []byte) error {
 		if decodeError != nil || usesAnchorsOrAliases(&document) {
 			return ErrInvalidYAML
 		}
-		if usesMergeKeys(&document) || !declaresAllowedSource(&document) {
+		if usesForbiddenConstruct(&document) || !declaresAllowedSource(&document) {
 			return ErrForbiddenSource
 		}
 		documentCount++
@@ -76,14 +76,21 @@ func declaresAllowedSource(document *yaml.Node) bool {
 	return sourceCount == 1
 }
 
-func usesMergeKeys(node *yaml.Node) bool {
+func usesForbiddenConstruct(node *yaml.Node) bool {
+	if node.Style&yaml.TaggedStyle != 0 {
+		return true
+	}
 	if node.Kind == yaml.MappingNode {
 		for keyIndex := 0; keyIndex < len(node.Content); keyIndex += 2 {
-			keyNode := node.Content[keyIndex]
-			if keyNode.Value == mergeKey || keyNode.Tag == mergeTag {
+			if !isPlainStringKey(node.Content[keyIndex]) {
 				return true
 			}
 		}
 	}
-	return slices.ContainsFunc(node.Content, usesMergeKeys)
+	return slices.ContainsFunc(node.Content, usesForbiddenConstruct)
+}
+
+func isPlainStringKey(keyNode *yaml.Node) bool {
+	isUntaggedString := keyNode.Tag == stringTag && keyNode.Style&yaml.TaggedStyle == 0
+	return keyNode.Kind == yaml.ScalarNode && isUntaggedString && keyNode.Anchor == "" && keyNode.Value != mergeKey
 }
