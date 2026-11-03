@@ -166,8 +166,8 @@ func TestAlertsImportSkipsAllowlistedSources(testContext *testing.T) {
 	if !slices.Equal(plannedAlertValues(plan), []string{"203.0.113.200"}) {
 		testContext.Errorf("only the source outside the allowlist may be planned, got %v", plannedAlertValues(plan))
 	}
-	if plan.SkippedCounts[SectionAlerts]["allowlisted"] != 2 || skippedReason(plan, "ZZ") != ReasonInvalid {
-		testContext.Errorf("expected 2 allowlisted and a non-address source invalid, got %v", plan.SkippedCounts)
+	if plan.SkippedCounts[SectionAlerts]["allowlisted"] != 2 || skippedReason(plan, "ZZ") != ReasonUnsupportedScope {
+		testContext.Errorf("expected 2 allowlisted and a country source unsupported_scope, got %v", plan.SkippedCounts)
 	}
 	applyOrFail(testContext, fixture, plan)
 	if len(fixture.pushedAlerts) != 1 || fixture.pushedAlerts[0].Source.Value != "203.0.113.200" {
@@ -220,7 +220,7 @@ func TestAlertImportNeverPushesWhenAllowlistsRouteFails500(testContext *testing.
 		deps.Allowlists = client
 		deps.ReadLocalAlerts = client.ReadAlertsForArchive
 		deps.PushImportedAlert = client.PushImportedAlert
-		deps.ListAlerts = client.ListAlerts
+		deps.GetAlert = client.GetAlert
 		deps.DeleteDecision = client.DeleteDecision
 		plan, planError := PlanImport(context.Background(), deps, alertsBundle(importedAlertFrom("203.0.113.43", 0)), []string{SectionAlerts})
 		if planError != nil {
@@ -239,7 +239,7 @@ func TestAlertImportNeverPushesWhenAllowlistsRouteFails500(testContext *testing.
 
 func TestAlertImportAbortsAndCleansWhenDecisionAppears(testContext *testing.T) {
 	fixture := newImportFixture()
-	fixture.decisionOnPush = true
+	fixture.decisionOnPush = func(lapi.Alert) bool { return true }
 	plan := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.50", 0), importedAlertFrom("203.0.113.51", 0), importedAlertFrom("203.0.113.52", 0)), SectionAlerts)
 	report := applyOrFail(testContext, fixture, plan)
 	if len(fixture.pushedAlerts) != 1 {
@@ -258,16 +258,121 @@ func TestAlertImportAbortsAndCleansWhenDecisionAppears(testContext *testing.T) {
 	}
 }
 
-func TestAlertImportKeepsPreexistingDecisionsOnTheSameSource(testContext *testing.T) {
-	// A real ban on the same address under another alert is not a side effect of the import.
+func TestAlertImportNeverDeletesANativeAlertWithTheSameKey(testContext *testing.T) {
+	// A native alert with the very same (scenario, start_at, stop_at, value) and an active ban
+	// lands after the plan: only the decision attached to the pushed alert id may be deleted.
 	fixture := newImportFixture()
-	realAlert := importedAlertFrom("203.0.113.53", -time.Hour)
-	realAlert.Decisions = []lapi.Decision{{ID: 5, Origin: "crowdsec", Type: "ban", Duration: "2h0m0s"}}
-	fixture.localAlerts = []lapi.Alert{realAlert}
-	plan := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.53", 0)), SectionAlerts)
-	report := applyOrFail(testContext, fixture, plan)
-	if len(fixture.deletedDecisionIDs) != 0 || report.Sections[0].Status != StatusApplied {
-		testContext.Errorf("a decision of another alert must never be deleted, got %v %+v", fixture.deletedDecisionIDs, report.Sections[0])
+	fixture.decisionOnPush = func(lapi.Alert) bool { return true }
+	importedAlert := importedAlertFrom("203.0.113.53", 0)
+	plan := planOrFail(testContext, fixture, alertsBundle(importedAlert), SectionAlerts)
+	nativeAlert := lapi.SanitizeImportedAlert(importedAlert)
+	nativeAlert.ID, nativeAlert.MachineID = 5, "crowdsec-agent"
+	nativeAlert.Decisions = []lapi.Decision{{ID: 51, Origin: "crowdsec", Type: "ban", Duration: "2h0m0s"}}
+	fixture.localAlerts = append(fixture.localAlerts, nativeAlert)
+	applyOrFail(testContext, fixture, plan)
+	pushedDecisionID := fixture.localAlerts[1].Decisions[1].ID
+	if !slices.Equal(fixture.deletedDecisionIDs, []int64{pushedDecisionID}) {
+		testContext.Errorf("only the decision of the pushed alert id may be deleted, got %v", fixture.deletedDecisionIDs)
+	}
+}
+
+func TestAlertImportDeletesNothingWhenThePushCannotBeAttributed(testContext *testing.T) {
+	unverifiableCases := map[string]func(fixture *importFixture){
+		"foreign machine":     func(fixture *importFixture) { fixture.storedMachineID = "crowdsec-agent" },
+		"unparsable duration": func(fixture *importFixture) { fixture.profileDuration = "soon" },
+	}
+	for caseName, prepare := range unverifiableCases {
+		fixture := newImportFixture()
+		fixture.decisionOnPush = func(lapi.Alert) bool { return true }
+		prepare(fixture)
+		plan := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.54", 0), importedAlertFrom("203.0.113.55", 0)), SectionAlerts)
+		report := applyOrFail(testContext, fixture, plan)
+		if len(fixture.deletedDecisionIDs) != 0 || len(fixture.pushedAlerts) != 1 {
+			testContext.Errorf("%s: nothing may be deleted and nothing more pushed, got %v and %d pushes", caseName, fixture.deletedDecisionIDs, len(fixture.pushedAlerts))
+		}
+		if report.Sections[0].Status != StatusUnavailable || report.Sections[0].ErrorCode != ErrorCodeAlertImportUnverifiable {
+			testContext.Errorf("%s: expected section_unavailable %s, got %+v", caseName, ErrorCodeAlertImportUnverifiable, report.Sections[0])
+		}
+	}
+}
+
+func TestAlertImportReportsAFailedCleanup(testContext *testing.T) {
+	fixture := newImportFixture()
+	fixture.decisionOnPush = func(lapi.Alert) bool { return true }
+	fixture.deleteError = lapi.ErrDeleteRefused
+	plan := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.56", 0), importedAlertFrom("203.0.113.57", 0)), SectionAlerts)
+	alertsReport := applyOrFail(testContext, fixture, plan).Sections[0]
+	if alertsReport.Failed != 1 || alertsReport.ErrorCode != ErrorCodeAlertImportCleanupFailed || len(fixture.pushedAlerts) != 1 {
+		testContext.Errorf("a failed delete must be counted and coded, got %+v after %d pushes", alertsReport, len(fixture.pushedAlerts))
+	}
+	if !slices.Contains(alertsReport.Warnings, WarningSimulatedDecisionMayRemain) {
+		testContext.Errorf("the report must say a simulated decision may remain, got %v", alertsReport.Warnings)
+	}
+}
+
+func TestAlertImportStopsWhenTheVerificationReadFails(testContext *testing.T) {
+	fixture := newImportFixture()
+	fixture.getAlertError = lapi.ErrLAPIUnavailable
+	plan := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.58", 0), importedAlertFrom("203.0.113.59", 0)), SectionAlerts)
+	alertsReport := applyOrFail(testContext, fixture, plan).Sections[0]
+	if len(fixture.pushedAlerts) != 1 || alertsReport.Status == StatusApplied || len(fixture.deletedDecisionIDs) != 0 {
+		testContext.Errorf("an unreadable verification must stop the section, got %d pushes %+v", len(fixture.pushedAlerts), alertsReport)
+	}
+}
+
+func TestAlertImportVerifiesTheFirstPushOfEachScenario(testContext *testing.T) {
+	fixture := newImportFixture()
+	// Only the second scenario triggers a profile: its first push must be verified before the
+	// remaining alerts of the first scenario are pushed.
+	fixture.decisionOnPush = func(alert lapi.Alert) bool { return alert.Scenario == "crowdsecurity/http-probing" }
+	probing := importedAlertFrom("203.0.113.99", 0)
+	probing.Scenario = "crowdsecurity/http-probing"
+	plan := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.61", 0), importedAlertFrom("203.0.113.62", 0), importedAlertFrom("203.0.113.63", 0), probing), SectionAlerts)
+	alertsReport := applyOrFail(testContext, fixture, plan).Sections[0]
+	if len(fixture.pushedAlerts) != 2 || alertsReport.ErrorCode != ErrorCodeAlertImportSideEffect {
+		testContext.Errorf("expected the first of each scenario pushed then a stop, got %d pushes %+v", len(fixture.pushedAlerts), alertsReport)
+	}
+	manyScenarios := newImportFixture()
+	scenarioAlerts := []lapi.Alert{}
+	for scenarioIndex := range maxSideEffectVerifications + 2 {
+		scenarioAlert := importedAlertFrom(fmt.Sprintf("203.0.113.%d", 100+scenarioIndex), 0)
+		scenarioAlert.Scenario = fmt.Sprintf("example/scenario-%d", scenarioIndex)
+		scenarioAlerts = append(scenarioAlerts, scenarioAlert)
+	}
+	applyOrFail(testContext, manyScenarios, planOrFail(testContext, manyScenarios, alertsBundle(scenarioAlerts...), SectionAlerts))
+	if manyScenarios.getAlertCalls != maxSideEffectVerifications || len(manyScenarios.pushedAlerts) != len(scenarioAlerts) {
+		testContext.Errorf("verifications are capped at %d per apply, got %d for %d pushes", maxSideEffectVerifications, manyScenarios.getAlertCalls, len(manyScenarios.pushedAlerts))
+	}
+}
+
+func TestAlertImportHonoursConfigLocalOverride(testContext *testing.T) {
+	configDir := testContext.TempDir()
+	writeConfig := func(name, content string) {
+		if writeError := os.WriteFile(filepath.Join(configDir, name), []byte(content), 0o600); writeError != nil {
+			testContext.Fatal(writeError)
+		}
+	}
+	writeConfig("config.yaml", "db_config:\n  flush:\n    max_items: 1000\n")
+	// CrowdSec merges config.yaml.local over config.yaml: its lower value must win.
+	writeConfig("config.yaml.local", "db_config:\n  flush:\n    max_items: 20\n")
+	fixture := newImportFixture()
+	fixture.configDir = configDir
+	for alertIndex := range 16 {
+		fixture.localAlerts = append(fixture.localAlerts, importedAlertFrom(fmt.Sprintf("198.51.100.%d", alertIndex+1), 0))
+	}
+	overflowing := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0), importedAlertFrom("203.0.113.31", 0), importedAlertFrom("203.0.113.32", 0)), SectionAlerts)
+	if overflowing.UnavailableCodes[SectionAlerts] != ErrorCodeFlushLimit {
+		testContext.Errorf("the .local max_items must lower the threshold, got %+v", overflowing)
+	}
+	writeConfig("config.yaml.local", "db_config: [unterminated\n")
+	unreadable := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0)), SectionAlerts)
+	if unreadable.UnavailableCodes[SectionAlerts] != ErrorCodeFlushConfigUnreadable {
+		testContext.Errorf("an unparsable config.yaml.local must make the section unavailable, got %+v", unreadable)
+	}
+	writeConfig("config.yaml.local", "api:\n  server:\n    log_level: info\n")
+	unrelatedOverride := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0), importedAlertFrom("203.0.113.31", 0), importedAlertFrom("203.0.113.32", 0)), SectionAlerts)
+	if len(unrelatedOverride.Unavailable) != 0 {
+		testContext.Errorf("a .local without max_items keeps the config.yaml value, got %+v", unrelatedOverride)
 	}
 }
 
@@ -309,11 +414,13 @@ func TestAlertImportSkipsInvalidAndRecentAlerts(testContext *testing.T) {
 	// A stop_at this close to now would leave the 1 s marker decision active for a moment.
 	recent := importedAlertFrom("203.0.113.82", 0)
 	recent.StopAt = importTestTime.Add(-10 * time.Second).Format(time.RFC3339)
-	plan := planOrFail(testContext, fixture, alertsBundle(withoutScenario, badDate, recent, importedAlertFrom("203.0.113.83", 0)), SectionAlerts)
+	future := importedAlertFrom("203.0.113.84", 0)
+	future.StopAt = importTestTime.Add(time.Hour).Format(time.RFC3339)
+	plan := planOrFail(testContext, fixture, alertsBundle(withoutScenario, badDate, recent, importedAlertFrom("203.0.113.83", 0), future), SectionAlerts)
 	if !slices.Equal(plannedAlertValues(plan), []string{"203.0.113.83"}) {
 		testContext.Errorf("only the valid alert may be planned, got %v", plannedAlertValues(plan))
 	}
-	if skippedReason(plan, "203.0.113.80") != ReasonInvalid || skippedReason(plan, "203.0.113.81") != ReasonInvalid || skippedReason(plan, "203.0.113.82") != ReasonTooRecent {
+	if skippedReason(plan, "203.0.113.80") != ReasonInvalid || skippedReason(plan, "203.0.113.81") != ReasonInvalid || skippedReason(plan, "203.0.113.82") != ReasonTooRecent || skippedReason(plan, "203.0.113.84") != ReasonTooRecent {
 		testContext.Errorf("unexpected skip reasons %+v", plan.Skipped)
 	}
 }
@@ -343,36 +450,5 @@ func TestAlertImportDigestCoversThePlannedAlerts(testContext *testing.T) {
 	}
 	if changed := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.95", 0)), SectionAlerts); changed.Digest == firstPlan.Digest {
 		testContext.Errorf("a different set of alerts must change the digest")
-	}
-}
-
-func TestAlertImportHonoursConfigLocalOverride(testContext *testing.T) {
-	configDir := testContext.TempDir()
-	writeConfig := func(name, content string) {
-		if writeError := os.WriteFile(filepath.Join(configDir, name), []byte(content), 0o600); writeError != nil {
-			testContext.Fatal(writeError)
-		}
-	}
-	writeConfig("config.yaml", "db_config:\n  flush:\n    max_items: 1000\n")
-	// CrowdSec merges config.yaml.local over config.yaml: its lower value must win.
-	writeConfig("config.yaml.local", "db_config:\n  flush:\n    max_items: 20\n")
-	fixture := newImportFixture()
-	fixture.configDir = configDir
-	for alertIndex := range 16 {
-		fixture.localAlerts = append(fixture.localAlerts, importedAlertFrom(fmt.Sprintf("198.51.100.%d", alertIndex+1), 0))
-	}
-	overflowing := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0), importedAlertFrom("203.0.113.31", 0), importedAlertFrom("203.0.113.32", 0)), SectionAlerts)
-	if overflowing.UnavailableCodes[SectionAlerts] != ErrorCodeFlushLimit {
-		testContext.Errorf("the .local max_items must lower the threshold, got %+v", overflowing)
-	}
-	writeConfig("config.yaml.local", "db_config: [unterminated\n")
-	unreadable := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0)), SectionAlerts)
-	if unreadable.UnavailableCodes[SectionAlerts] != ErrorCodeFlushConfigUnreadable {
-		testContext.Errorf("an unparsable config.yaml.local must make the section unavailable, got %+v", unreadable)
-	}
-	writeConfig("config.yaml.local", "api:\n  server:\n    log_level: info\n")
-	unrelatedOverride := planOrFail(testContext, fixture, alertsBundle(importedAlertFrom("203.0.113.30", 0), importedAlertFrom("203.0.113.31", 0), importedAlertFrom("203.0.113.32", 0)), SectionAlerts)
-	if len(unrelatedOverride.Unavailable) != 0 {
-		testContext.Errorf("a .local without max_items keeps the config.yaml value, got %+v", unrelatedOverride)
 	}
 }

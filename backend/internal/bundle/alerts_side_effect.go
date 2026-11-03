@@ -3,17 +3,20 @@ package bundle
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"crowdsec-dashboard/internal/lapi"
 )
 
 const (
-	ErrorCodeAlertImportSideEffect = "alert_import_side_effect"
-	sideEffectAlertsLimit          = 100
-	importMarkerOrigin             = "cscli"
-	importMarkerMaxRemaining       = time.Second
+	ErrorCodeAlertImportSideEffect    = "alert_import_side_effect"
+	ErrorCodeAlertImportUnverifiable  = "alert_import_side_effect_unverifiable"
+	ErrorCodeAlertImportCleanupFailed = "alert_import_cleanup_failed"
+	WarningSimulatedDecisionMayRemain = "simulated_decision_may_remain"
+	maxSideEffectVerifications        = 10
+	importMarkerOrigin                = "cscli"
+	importMarkerMaxRemaining          = time.Second
+	cleanupTimeout                    = 15 * time.Second
 )
 
 type UnavailableError struct {
@@ -28,52 +31,61 @@ func (unavailableError *UnavailableError) Is(target error) bool {
 	return target == ErrSectionUnavailable
 }
 
-func ensureNoSideEffect(ctx context.Context, deps ImportDeps, alertAction AlertAction) error {
-	hasActiveDecision := true
-	filter := lapi.AlertFilter{Scenario: alertAction.Scenario, Limit: sideEffectAlertsLimit, HasActiveDecision: &hasActiveDecision}
-	if strings.EqualFold(alertAction.Scope, scopeRange) {
-		filter.Range = alertAction.Value
-	} else {
-		filter.IP = alertAction.Value
+func ensureNoSideEffect(ctx context.Context, deps ImportDeps, pushedAlertID int64) error {
+	readContext, cancelRead := context.WithTimeout(ctx, alertPushTimeout)
+	defer cancelRead()
+	storedAlert, readError := deps.GetAlert(readContext, pushedAlertID)
+	if readError != nil {
+		return readError
 	}
-	listContext, cancelList := context.WithTimeout(ctx, alertPushTimeout)
-	defer cancelList()
-	localAlerts, listError := deps.ListAlerts(listContext, filter)
-	if listError != nil {
-		return listError
+	if storedAlert.ID != pushedAlertID || storedAlert.MachineID != deps.LocalMachineID {
+		return &UnavailableError{Code: ErrorCodeAlertImportUnverifiable}
 	}
-	sideEffectDecisionIDs := activeDecisionsOfPushedAlert(localAlerts, keyOfAlert(alertAction.alert))
-	if len(sideEffectDecisionIDs) == 0 {
+	createdDecisionIDs, attributable := decisionsCreatedForPush(storedAlert)
+	if !attributable {
+		return &UnavailableError{Code: ErrorCodeAlertImportUnverifiable}
+	}
+	if len(createdDecisionIDs) == 0 {
 		return nil
 	}
-	failures := []error{&UnavailableError{Code: ErrorCodeAlertImportSideEffect}}
-	for _, decisionID := range sideEffectDecisionIDs {
-		failures = append(failures, deps.DeleteDecision(listContext, decisionID))
+	deleteFailures := deleteCreatedDecisions(ctx, deps, createdDecisionIDs)
+	if len(deleteFailures) > 0 {
+		return errors.Join(append([]error{&UnavailableError{Code: ErrorCodeAlertImportCleanupFailed}}, deleteFailures...)...)
 	}
-	return errors.Join(failures...)
+	return &UnavailableError{Code: ErrorCodeAlertImportSideEffect}
 }
 
-func activeDecisionsOfPushedAlert(localAlerts []lapi.Alert, pushedKey alertKey) []int64 {
-	decisionIDs := []int64{}
-	for _, localAlert := range localAlerts {
-		if keyOfAlert(lapi.SanitizeImportedAlert(localAlert)) != pushedKey {
-			continue
+func decisionsCreatedForPush(storedAlert lapi.Alert) ([]int64, bool) {
+	createdDecisionIDs := []int64{}
+	for _, decision := range storedAlert.Decisions {
+		remaining, parseError := time.ParseDuration(decision.Duration)
+		if parseError != nil {
+			return nil, false
 		}
-		for _, decision := range localAlert.Decisions {
-			if isActiveDecision(decision) && !isImportMarker(decision) {
-				decisionIDs = append(decisionIDs, decision.ID)
-			}
+		isMarker := decision.Origin == importMarkerOrigin && remaining <= importMarkerMaxRemaining
+		if remaining > 0 && !isMarker {
+			createdDecisionIDs = append(createdDecisionIDs, decision.ID)
 		}
 	}
-	return decisionIDs
+	return createdDecisionIDs, true
 }
 
-func isActiveDecision(decision lapi.Decision) bool {
-	remaining, parseError := time.ParseDuration(decision.Duration)
-	return parseError != nil || remaining > 0
+func deleteCreatedDecisions(ctx context.Context, deps ImportDeps, decisionIDs []int64) []error {
+	deleteFailures := []error{}
+	for _, decisionID := range decisionIDs {
+		deleteContext, cancelDelete := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		if deleteError := deps.DeleteDecision(deleteContext, decisionID); deleteError != nil {
+			deleteFailures = append(deleteFailures, deleteError)
+		}
+		cancelDelete()
+	}
+	return deleteFailures
 }
 
-func isImportMarker(decision lapi.Decision) bool {
-	remaining, parseError := time.ParseDuration(decision.Duration)
-	return parseError == nil && decision.Origin == importMarkerOrigin && remaining <= importMarkerMaxRemaining
+func (report *SectionReport) recordCleanupFailure(verificationError error) {
+	var unavailableError *UnavailableError
+	if errors.As(verificationError, &unavailableError) && unavailableError.Code == ErrorCodeAlertImportCleanupFailed {
+		report.Failed++
+		report.Warnings = append(report.Warnings, WarningSimulatedDecisionMayRemain)
+	}
 }

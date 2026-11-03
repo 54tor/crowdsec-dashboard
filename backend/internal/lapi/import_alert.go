@@ -2,7 +2,9 @@ package lapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -45,8 +47,39 @@ type importMarkerDecision struct {
 	Simulated bool   `json:"simulated"`
 }
 
-func (client *Client) PushImportedAlert(ctx context.Context, alert Alert) error {
-	return client.authorizedRequest(ctx, http.MethodPost, "/v1/alerts", nil, []importedAlertPayload{newImportedAlertPayload(SanitizeImportedAlert(alert))}, nil)
+var ErrPushedAlertIDUnreadable = errors.New("lapi: pushed alert id unreadable")
+
+func (client *Client) MachineID() string {
+	if client == nil {
+		return ""
+	}
+	return client.machineID
+}
+
+func (client *Client) PushImportedAlert(ctx context.Context, alert Alert) (int64, error) {
+	createdAlertIDs := []string{}
+	payload := []importedAlertPayload{newImportedAlertPayload(SanitizeImportedAlert(alert))}
+	if pushError := client.authorizedRequest(ctx, http.MethodPost, "/v1/alerts", nil, payload, &createdAlertIDs); pushError != nil {
+		return 0, pushError
+	}
+	if len(createdAlertIDs) != 1 {
+		return 0, ErrPushedAlertIDUnreadable
+	}
+	createdAlertID, parseError := strconv.ParseInt(createdAlertIDs[0], 10, 64)
+	if parseError != nil || createdAlertID <= 0 {
+		return 0, ErrPushedAlertIDUnreadable
+	}
+	return createdAlertID, nil
+}
+
+func canonicalScope(scope string) string {
+	switch strings.ToLower(scope) {
+	case "ip":
+		return "Ip"
+	case "range":
+		return "Range"
+	}
+	return scope
 }
 
 func newImportedAlertPayload(alert Alert) importedAlertPayload {
@@ -105,10 +138,11 @@ func sanitiseSource(source Source) Source {
 		ASName:   cleanField(source.ASName, maxImportedFieldLength),
 		ASNumber: cleanField(source.ASNumber, maxImportedFieldLength),
 	}
-	switch strings.ToLower(sanitised.Scope) {
-	case "ip":
+	sanitised.Scope = canonicalScope(sanitised.Scope)
+	switch sanitised.Scope {
+	case "Ip":
 		sanitised.IP = sanitised.Value
-	case "range":
+	case "Range":
 		sanitised.Range = sanitised.Value
 	}
 	return sanitised

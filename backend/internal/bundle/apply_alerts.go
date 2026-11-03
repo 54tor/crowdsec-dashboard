@@ -3,6 +3,7 @@ package bundle
 import (
 	"cmp"
 	"context"
+	"errors"
 	"net/netip"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 const (
 	ReasonInvalid                  = "invalid"
 	ReasonTooRecent                = "too_recent"
+	ReasonUnsupportedScope         = "unsupported_scope"
 	ErrorCodeAllowlistUnavailable  = allowguard.ReasonAllowlistUnavailable
 	ErrorCodeFlushLimit            = "flush_limit"
 	ErrorCodeFlushConfigUnreadable = "flush_config_unreadable"
@@ -69,7 +71,7 @@ type localAlertBudget struct {
 }
 
 func hasAlertDependencies(deps ImportDeps) bool {
-	return deps.Allowlists != nil && deps.ReadLocalAlerts != nil && deps.PushImportedAlert != nil && deps.ListAlerts != nil && deps.DeleteDecision != nil && deps.Now != nil
+	return deps.Allowlists != nil && deps.ReadLocalAlerts != nil && deps.PushImportedAlert != nil && deps.GetAlert != nil && deps.DeleteDecision != nil && deps.Now != nil && deps.LocalMachineID != ""
 }
 
 func newAlertPlanner(ctx context.Context, deps ImportDeps) (*alertPlanner, localAlertBudget, string) {
@@ -152,6 +154,10 @@ func datesRefusal(sanitisedAlert lapi.Alert, now time.Time) string {
 }
 
 func sourceVerdictReason(guard allowguard.Guard, source lapi.Source) string {
+	isAddressScope := strings.EqualFold(source.Scope, scopeIP) || strings.EqualFold(source.Scope, scopeRange)
+	if !isAddressScope {
+		return ReasonUnsupportedScope
+	}
 	verdict := guard.Check(sourcePrefix(source))
 	if verdict.Allowed {
 		return ""
@@ -191,30 +197,51 @@ func compareAlertActions(first, second AlertAction) int {
 
 func (alertsImport) Apply(ctx context.Context, deps ImportDeps, sectionPlan SectionPlan) (SectionReport, error) {
 	report := newSectionReport(sectionPlan)
-	sideEffectsChecked := false
-	for _, alertAction := range sectionPlan.Alerts {
+	verifiedScenarios := map[string]bool{}
+	for _, alertAction := range firstOfEachScenarioFirst(sectionPlan.Alerts) {
 		if reason := sourceVerdictReason(sectionPlan.allowlistGuard, alertAction.alert.Source); reason != "" {
 			report.skip(reason)
 			continue
 		}
-		if pushError := pushWithTimeout(ctx, deps, alertAction.alert); pushError != nil {
+		pushedAlertID, pushError := pushWithTimeout(ctx, deps, alertAction.alert)
+		if pushError != nil {
 			report.Failed++
 			return report, pushError
 		}
 		report.Applied++
-		if sideEffectsChecked {
+		mustVerify := !verifiedScenarios[alertAction.Scenario] && len(verifiedScenarios) < maxSideEffectVerifications
+		if !mustVerify {
 			continue
 		}
-		if sideEffectError := ensureNoSideEffect(ctx, deps, alertAction); sideEffectError != nil {
-			return report, sideEffectError
+		verifiedScenarios[alertAction.Scenario] = true
+		if verificationError := ensureNoSideEffect(ctx, deps, pushedAlertID); verificationError != nil {
+			report.recordCleanupFailure(verificationError)
+			return report, verificationError
 		}
-		sideEffectsChecked = true
 	}
 	return report, nil
 }
 
-func pushWithTimeout(ctx context.Context, deps ImportDeps, alert lapi.Alert) error {
+func firstOfEachScenarioFirst(alertActions []AlertAction) []AlertAction {
+	firstActions, remainingActions := []AlertAction{}, []AlertAction{}
+	seenScenarios := map[string]bool{}
+	for _, alertAction := range alertActions {
+		if seenScenarios[alertAction.Scenario] {
+			remainingActions = append(remainingActions, alertAction)
+			continue
+		}
+		seenScenarios[alertAction.Scenario] = true
+		firstActions = append(firstActions, alertAction)
+	}
+	return append(firstActions, remainingActions...)
+}
+
+func pushWithTimeout(ctx context.Context, deps ImportDeps, alert lapi.Alert) (int64, error) {
 	pushContext, cancelPush := context.WithTimeout(ctx, alertPushTimeout)
 	defer cancelPush()
-	return deps.PushImportedAlert(pushContext, alert)
+	pushedAlertID, pushError := deps.PushImportedAlert(pushContext, alert)
+	if errors.Is(pushError, lapi.ErrPushedAlertIDUnreadable) {
+		return 0, errors.Join(&UnavailableError{Code: ErrorCodeAlertImportUnverifiable}, pushError)
+	}
+	return pushedAlertID, pushError
 }

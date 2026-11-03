@@ -57,8 +57,14 @@ func exportedAlert() Alert {
 
 func TestAlertImportStripsDecisionsAndMarksSimulated(testContext *testing.T) {
 	client, pushedBatches := capturePushedAlerts(testContext)
-	if pushError := client.PushImportedAlert(context.Background(), exportedAlert()); pushError != nil {
+	lowerCaseScope := exportedAlert()
+	lowerCaseScope.Source.Scope = "ip"
+	pushedAlertID, pushError := client.PushImportedAlert(context.Background(), lowerCaseScope)
+	if pushError != nil {
 		testContext.Fatalf("unexpected push error %v", pushError)
+	}
+	if pushedAlertID != 1 {
+		testContext.Errorf("the id the LAPI answered must be returned for the side-effect check, got %d", pushedAlertID)
 	}
 	if len(*pushedBatches) != 1 || len((*pushedBatches)[0]) != 1 {
 		testContext.Fatalf("expected one batch holding one alert, got %v", *pushedBatches)
@@ -86,6 +92,9 @@ func TestAlertImportStripsDecisionsAndMarksSimulated(testContext *testing.T) {
 		if markerDecision[fieldName] != expectedValue {
 			testContext.Errorf("marker decision %s: expected %v, got %v", fieldName, expectedValue, markerDecision[fieldName])
 		}
+	}
+	if pushedAlert["source"].(map[string]any)["scope"] != "Ip" {
+		testContext.Errorf("the source scope must be canonical as the LAPI stores it, got %v", pushedAlert["source"])
 	}
 	// The marker expires one second after stop_at, which lies in the past: it never bans.
 	if pushedAlert["start_at"] != "2026-10-30T17:34:06Z" || pushedAlert["stop_at"] != "2026-10-30T17:35:06Z" {
@@ -142,5 +151,26 @@ func TestAlertFilterSendsRange(testContext *testing.T) {
 	query := alertQuery(AlertFilter{Range: "203.0.113.0/24", Scenario: "crowdsecurity/ssh-bf"})
 	if query.Get("range") != "203.0.113.0/24" || query.Get("scenario") != "crowdsecurity/ssh-bf" {
 		testContext.Errorf("the range filter must be sent, got %v", query)
+	}
+}
+
+func TestPushImportedAlertRefusesAnUnreadableAlertID(testContext *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v1/watchers/login" {
+			_ = json.NewEncoder(responseWriter).Encode(map[string]string{"token": "test-jwt"})
+			return
+		}
+		_, _ = responseWriter.Write([]byte(`["not-a-number"]`))
+	}))
+	testContext.Cleanup(server.Close)
+	client := NewClient(server.URL, "dashboard", "test-password", server.Client())
+	if _, pushError := client.PushImportedAlert(context.Background(), exportedAlert()); pushError == nil {
+		testContext.Errorf("an answer without a usable alert id must be an error: the push cannot be verified")
+	}
+}
+
+func TestClientExposesItsMachineID(testContext *testing.T) {
+	if machineID := NewClient("http://lapi.example.com", "dashboard", "test-password", nil).MachineID(); machineID != "dashboard" {
+		testContext.Errorf("expected the login account, got %q", machineID)
 	}
 }

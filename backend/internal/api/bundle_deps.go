@@ -31,9 +31,10 @@ func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner, confDi
 		Now:               time.Now,
 		ReadLocalAlerts:   localClient.ReadAlertsForArchive,
 		PushImportedAlert: localClient.PushImportedAlert,
-		ListAlerts:        localClient.ListAlerts,
+		GetAlert:          localClient.GetAlert,
 		DeleteDecision:    localClient.DeleteDecision,
 		ConfigDir:         confDir,
+		LocalMachineID:    localClient.MachineID(),
 	}
 }
 

@@ -52,22 +52,31 @@ type importFixture struct {
 	now              time.Time
 	// Alerts section: localAlerts is what the engine stores; a push is echoed into it with a new
 	// uuid, as the real LAPI does, so a replay sees its own previous push.
-	localAlerts        []lapi.Alert
-	localAlertsError   error
-	pushedAlerts       []lapi.Alert
-	pushError          error
-	decisionOnPush     bool
+	localAlerts      []lapi.Alert
+	localAlertsError error
+	pushedAlerts     []lapi.Alert
+	pushError        error
+	// decisionOnPush stands for a profile: when it answers true the LAPI attaches an active
+	// decision (of duration profileDuration) to the stored copy of the pushed alert.
+	decisionOnPush     func(alert lapi.Alert) bool
+	profileDuration    string
+	storedMachineID    string
+	getAlertError      error
+	getAlertCalls      int
+	deleteError        error
 	deletedDecisionIDs []int64
 	configDir          string
 }
 
 func newImportFixture() *importFixture {
 	return &importFixture{
-		installedItems: []HubItem{{Type: "collections", Name: "crowdsecurity/linux", Status: "enabled", Version: "0.4"}},
-		allowlists:     &fakeAllowlistReader{read: lapi.AllowlistRead{Allowlists: []lapi.Allowlist{}}},
-		shareRules:     enginesync.Rules{MaxChanges: 500, MinRemaining: 5 * time.Minute},
-		callerAddress:  "198.51.100.7",
-		now:            importTestTime,
+		installedItems:  []HubItem{{Type: "collections", Name: "crowdsecurity/linux", Status: "enabled", Version: "0.4"}},
+		allowlists:      &fakeAllowlistReader{read: lapi.AllowlistRead{Allowlists: []lapi.Allowlist{}}},
+		shareRules:      enginesync.Rules{MaxChanges: 500, MinRemaining: 5 * time.Minute},
+		callerAddress:   "198.51.100.7",
+		now:             importTestTime,
+		profileDuration: "3h59m0s",
+		storedMachineID: "dashboard",
 	}
 }
 
@@ -121,9 +130,10 @@ func (fixture *importFixture) deps() ImportDeps {
 		Now:               func() time.Time { return fixture.now },
 		ReadLocalAlerts:   fixture.readLocalAlerts,
 		PushImportedAlert: fixture.pushImportedAlert,
-		ListAlerts:        fixture.listAlerts,
+		GetAlert:          fixture.getAlert,
 		DeleteDecision:    fixture.deleteDecision,
 		ConfigDir:         fixture.configDir,
+		LocalMachineID:    "dashboard",
 	}
 }
 
@@ -139,35 +149,40 @@ func (fixture *importFixture) readLocalAlerts(_ context.Context, limit int, _ in
 	return lapi.ArchiveRead{Alerts: returnedAlerts, LimitReached: limitReached}, nil
 }
 
-func (fixture *importFixture) pushImportedAlert(_ context.Context, alert lapi.Alert) error {
+func (fixture *importFixture) pushImportedAlert(_ context.Context, alert lapi.Alert) (int64, error) {
 	if fixture.pushError != nil {
-		return fixture.pushError
+		return 0, fixture.pushError
 	}
 	fixture.pushedAlerts = append(fixture.pushedAlerts, alert)
 	storedAlert := alert
 	storedAlert.ID = int64(1000 + len(fixture.localAlerts))
 	storedAlert.UUID = fmt.Sprintf("regenerated-%d", len(fixture.pushedAlerts))
+	storedAlert.MachineID = fixture.storedMachineID
 	storedAlert.Decisions = []lapi.Decision{{ID: storedAlert.ID*10 + 1, Origin: "cscli", Type: "ban", Duration: "-23h0m0s"}}
-	if fixture.decisionOnPush {
-		// A profile that bans on any alert: the LAPI adds an active decision of its own.
-		storedAlert.Decisions = append(storedAlert.Decisions, lapi.Decision{ID: storedAlert.ID*10 + 2, Origin: "crowdsec", Type: "ban", Duration: "3h59m0s", Simulated: true})
+	if fixture.decisionOnPush != nil && fixture.decisionOnPush(alert) {
+		storedAlert.Decisions = append(storedAlert.Decisions, lapi.Decision{ID: storedAlert.ID*10 + 2, Origin: "crowdsec", Type: "ban", Duration: fixture.profileDuration, Simulated: true})
 	}
 	fixture.localAlerts = append(fixture.localAlerts, storedAlert)
-	return nil
+	return storedAlert.ID, nil
 }
 
-func (fixture *importFixture) listAlerts(_ context.Context, filter lapi.AlertFilter) ([]lapi.Alert, error) {
-	matchingAlerts := []lapi.Alert{}
+func (fixture *importFixture) getAlert(_ context.Context, alertID int64) (lapi.Alert, error) {
+	fixture.getAlertCalls++
+	if fixture.getAlertError != nil {
+		return lapi.Alert{}, fixture.getAlertError
+	}
 	for _, localAlert := range fixture.localAlerts {
-		sourceMatches := localAlert.Source.Value == filter.IP || localAlert.Source.Value == filter.Range
-		if localAlert.Scenario == filter.Scenario && sourceMatches {
-			matchingAlerts = append(matchingAlerts, localAlert)
+		if localAlert.ID == alertID {
+			return localAlert, nil
 		}
 	}
-	return matchingAlerts, nil
+	return lapi.Alert{}, lapi.ErrNotFound
 }
 
 func (fixture *importFixture) deleteDecision(_ context.Context, decisionID int64) error {
+	if fixture.deleteError != nil {
+		return fixture.deleteError
+	}
 	fixture.deletedDecisionIDs = append(fixture.deletedDecisionIDs, decisionID)
 	return nil
 }
@@ -239,6 +254,8 @@ func fakeLocalLAPIServer(testContext *testing.T, allowlistStatus int) (*lapi.Cli
 			_, _ = responseWriter.Write([]byte(`["1"]`))
 		case request.URL.Path == "/v1/alerts":
 			_, _ = responseWriter.Write([]byte("[]"))
+		case request.URL.Path == "/v1/alerts/1":
+			_, _ = responseWriter.Write([]byte(`{"id":1,"machine_id":"dashboard","decisions":[]}`))
 		default:
 			responseWriter.WriteHeader(http.StatusNotFound)
 		}
