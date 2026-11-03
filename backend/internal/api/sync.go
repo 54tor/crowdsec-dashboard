@@ -75,6 +75,7 @@ func (handlers syncHandlers) status(responseWriter http.ResponseWriter, request 
 	if runnerStatus.LastReport != nil {
 		view.Peers = reportPeerViews(*runnerStatus.LastReport, hostsByEngineName(engineList))
 		view.LastPlan = planEntryViews(runnerStatus.LastReport.Entries)
+		view.ErrorCode = runnerStatus.LastReport.ErrorCode
 	}
 	writeJSON(responseWriter, http.StatusOK, view)
 }
@@ -116,5 +117,9 @@ func SyncRunAuditTarget(report enginesync.Report) string {
 		removed += engineReport.Removed
 		skipped += totalSkipped(engineReport.Skipped)
 	}
-	return fmt.Sprintf("dry_run=%t engines=%d added=%d removed=%d skipped=%d", report.DryRun, len(report.PerEngine), added, removed, skipped)
+	counts := fmt.Sprintf("dry_run=%t engines=%d added=%d removed=%d skipped=%d", report.DryRun, len(report.PerEngine), added, removed, skipped)
+	if report.ErrorCode == "" {
+		return counts
+	}
+	return "err=" + report.ErrorCode + " " + counts
 }

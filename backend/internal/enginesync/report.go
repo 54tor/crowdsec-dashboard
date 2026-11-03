@@ -111,6 +111,9 @@ func (engineReport *EngineReport) countChange(kind ChangeKind) {
 func (report *Report) finish(finishedAt time.Time) Report {
 	report.FinishedAt = finishedAt
 	for _, engineReport := range report.PerEngine {
+		if engineReport.ErrorCode == "" {
+			engineReport.ErrorCode = report.ErrorCode
+		}
 		switch {
 		case engineReport.ErrorCode != "":
 			engineReport.Status = StatusFailed

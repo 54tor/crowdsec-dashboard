@@ -255,3 +255,23 @@ func TestSyncRoutesAreInRouteTable(testContext *testing.T) {
 		testContext.Error("POST /api/sync/run must not be exempted from the admin rule")
 	}
 }
+
+// The run-level code (canceled, run_deadline, run_panicked...) is exposed at the top of the status
+// so the page can explain a failed run even when no engine row was produced.
+func TestSyncStatusExposesTheRunLevelErrorCode(testContext *testing.T) {
+	failedReport := sampleSyncReport()
+	failedReport.ErrorCode = enginesync.ErrorCodeRunDeadline
+	fixture := newSyncFixture(testContext, true, enginesync.Status{LastReport: &failedReport}, nil)
+	response := fixture.request(http.MethodGet, "", fixture.environment.adminCookie, "")
+	if status := decodeSyncStatus(testContext, response); status.ErrorCode != enginesync.ErrorCodeRunDeadline {
+		testContext.Errorf("expected the run-level error_code, got %q in %s", status.ErrorCode, response.Body.String())
+	}
+}
+
+func TestSyncStatusRunLevelErrorCodeIsEmptyWithoutFailure(testContext *testing.T) {
+	fixture := newSyncFixture(testContext, true, enginesync.Status{}, nil)
+	response := fixture.request(http.MethodGet, "", fixture.environment.adminCookie, "")
+	if !strings.Contains(response.Body.String(), `"error_code":""`) {
+		testContext.Errorf("error_code must always be present, empty before any failed run, got %s", response.Body.String())
+	}
+}

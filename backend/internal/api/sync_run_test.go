@@ -256,3 +256,16 @@ func TestSyncRunStrictBody(testContext *testing.T) {
 		testContext.Errorf("an empty body must start a plain run, got %d %q", response.Code, response.Body.String())
 	}
 }
+
+// The run-level error code leads the target, dry_run right after it, so the 64-rune audit cut
+// drops the counters before either of them.
+func TestSyncRunAuditTargetPutsTheRunErrorFirst(testContext *testing.T) {
+	failedReport := enginesync.Report{ErrorCode: enginesync.ErrorCodeRunPanicked, PerEngine: map[string]*enginesync.EngineReport{}}
+	for engineIndex := range 12 {
+		failedReport.PerEngine["engine-"+strings.Repeat("x", engineIndex)] = &enginesync.EngineReport{Added: 99999, Removed: 99999, Skipped: map[string]int{"allowlisted": 99999}}
+	}
+	expectedPrefix := "err=run_panicked dry_run=false "
+	if target := SyncRunAuditTarget(failedReport); !strings.HasPrefix(target, expectedPrefix) {
+		testContext.Errorf("expected the target to start with %q, got %q", expectedPrefix, target)
+	}
+}

@@ -42,6 +42,7 @@ type syncStatusView struct {
 	DryRun          bool                `json:"dry_run"`
 	IntervalSeconds int64               `json:"interval_seconds"`
 	Running         bool                `json:"running"`
+	ErrorCode       string              `json:"error_code"`
 	Peers           []syncPeerView      `json:"peers"`
 	LastPlan        []syncPlanEntryView `json:"last_plan"`
 }
