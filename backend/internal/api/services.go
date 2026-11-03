@@ -6,6 +6,7 @@ import (
 	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/bundle"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
@@ -56,6 +57,7 @@ type Services struct {
 	SchemaVersion    SchemaVersionSource
 	Sync             SyncService
 	OperationLock    *oplock.Lock
+	BundleExport     bundle.ExportDeps
 	LifecycleContext context.Context
 }
 
@@ -72,6 +74,7 @@ func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) S
 		Machines:       cscliMachines{runner: runner},
 		Hub:            cscliHub{runner: runner},
 		Reloader:       cscliReloader{runner: runner},
+		BundleExport:   localBundleExportDeps(lapiClient, runner, confDir),
 	}
 }
 

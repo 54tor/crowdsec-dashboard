@@ -76,6 +76,14 @@ func List(dir string) ([]string, error) {
 }
 
 func Read(dir, name string) ([]byte, error) {
+	content, readError := ReadUnredacted(dir, name)
+	if readError != nil {
+		return nil, readError
+	}
+	return redactSecrets(content), nil
+}
+
+func ReadUnredacted(dir, name string) ([]byte, error) {
 	if !isAllowedName(name) {
 		return nil, ErrNotAllowed
 	}
@@ -103,5 +111,5 @@ func Read(dir, name string) ([]byte, error) {
 	if len(content) > maxFileBytes {
 		return nil, ErrTooLarge
 	}
-	return redactSecrets(content), nil
+	return content, nil
 }

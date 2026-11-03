@@ -17,6 +17,7 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, readRoutes(loadedConfig, services)...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
 	routes = append(routes, syncRoutes(loadedConfig, services)...)
+	routes = append(routes, bundleRoutes(loadedConfig, services)...)
 	return routes
 }
 
@@ -143,5 +144,12 @@ func syncRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	return []apiRoute{
 		{"GET /api/sync", accessAuthenticated, http.HandlerFunc(handlers.status)},
 		{"POST /api/sync/run", accessAdmin, http.HandlerFunc(handlers.run)},
+	}
+}
+
+func bundleRoutes(loadedConfig config.Config, services Services) []apiRoute {
+	handlers := bundleHandlers{deps: services.BundleExport, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	return []apiRoute{
+		{"POST /api/export", accessAdmin, longWrite(http.HandlerFunc(handlers.export))},
 	}
 }

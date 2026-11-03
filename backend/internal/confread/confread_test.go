@@ -207,3 +207,20 @@ func TestSymlinksInsideTheDirectoryAreNeitherServedNorListed(testContext *testin
 		testContext.Errorf("expected only config.yaml, got %v %v", listedNames, listError)
 	}
 }
+
+// ReadUnredacted serves the raw content for a secrets export, so it must keep every path guard of Read.
+func TestReadUnredactedKeepsSecretsAndThePathGuards(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "profiles.yaml", "api_key: raw-value\n")
+	writeConfFile(testContext, confDir, "local_api_credentials.yaml", "password: hunter2\n")
+
+	rawContent, readError := ReadUnredacted(confDir, "profiles.yaml")
+	if readError != nil || string(rawContent) != "api_key: raw-value\n" {
+		testContext.Errorf("expected the raw content, got %q (%v)", rawContent, readError)
+	}
+	for _, rejectedName := range []string{"local_api_credentials.yaml", "../profiles.yaml"} {
+		if content, rejectedError := ReadUnredacted(confDir, rejectedName); !errors.Is(rejectedError, ErrNotAllowed) || content != nil {
+			testContext.Errorf("%s: expected ErrNotAllowed, got %v", rejectedName, rejectedError)
+		}
+	}
+}

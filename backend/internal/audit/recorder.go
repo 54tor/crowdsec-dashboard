@@ -45,6 +45,7 @@ const (
 	ActionRetentionPurged          Action = "retention_purged"
 	ActionDecisionRemoved          Action = "decision_removed"
 	ActionSyncRun                  Action = "sync_run"
+	ActionBundleExported           Action = "bundle_exported"
 )
 
 const maximumTargetRunes = 64
