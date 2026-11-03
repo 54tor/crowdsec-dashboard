@@ -56,10 +56,7 @@ func canonicalEntryValue(rawValue string) string {
 	if parseError != nil {
 		return rawValue
 	}
-	if prefix.IsSingleIP() {
-		return prefix.Addr().String()
-	}
-	return prefix.String()
+	return netparse.CanonicalAllowlistValue(prefix)
 }
 
 func abbreviatedPair(leftName, rightName string, runeBudget int) string {

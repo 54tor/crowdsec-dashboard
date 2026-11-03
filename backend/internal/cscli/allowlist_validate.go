@@ -27,9 +27,9 @@ func validateAllowlistValue(value string) error {
 	if parseError != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidField, parseError)
 	}
-	canonicalValue := prefix.String()
-	if prefix.IsSingleIP() && !strings.Contains(value, "/") {
-		canonicalValue = prefix.Addr().String()
+	canonicalValue := netparse.CanonicalAllowlistValue(prefix)
+	if strings.Contains(value, "/") {
+		canonicalValue = prefix.String()
 	}
 	if value != canonicalValue {
 		return fmt.Errorf("%w: value is not in canonical form", ErrInvalidField)

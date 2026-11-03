@@ -13,4 +13,5 @@ var (
 	ErrConfirmationRequired = errors.New("allowlists: confirmation required")
 	ErrInvalid              = errors.New("allowlists: invalid input")
 	ErrWriteFailed          = errors.New("allowlists: write failed")
+	ErrEngineLookupFailed   = errors.New("allowlists: engine lookup failed")
 )

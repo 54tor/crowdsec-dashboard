@@ -8,6 +8,7 @@ import (
 
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/engines"
+	"crowdsec-dashboard/internal/netparse"
 )
 
 type cscliWriter struct {
@@ -27,7 +28,7 @@ func (writer *cscliWriter) Delete(ctx context.Context, allowlistName string) err
 }
 
 func (writer *cscliWriter) Add(ctx context.Context, allowlistName string, value netip.Prefix, expiration, description string) error {
-	fields := map[string]string{"name": allowlistName, "value": canonicalValue(value)}
+	fields := map[string]string{"name": allowlistName, "value": netparse.CanonicalAllowlistValue(value)}
 	if expiration != "" {
 		fields["expiration"] = expiration
 	}
@@ -38,7 +39,7 @@ func (writer *cscliWriter) Add(ctx context.Context, allowlistName string, value 
 }
 
 func (writer *cscliWriter) Remove(ctx context.Context, allowlistName string, value netip.Prefix) error {
-	return writer.execute(ctx, "allowlists_remove", map[string]string{"name": allowlistName, "value": canonicalValue(value)})
+	return writer.execute(ctx, "allowlists_remove", map[string]string{"name": allowlistName, "value": netparse.CanonicalAllowlistValue(value)})
 }
 
 func (writer *cscliWriter) execute(ctx context.Context, commandName string, fields map[string]string) error {

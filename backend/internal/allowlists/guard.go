@@ -8,13 +8,6 @@ import (
 	"crowdsec-dashboard/internal/netparse"
 )
 
-func canonicalValue(prefix netip.Prefix) string {
-	if prefix.IsSingleIP() {
-		return prefix.Addr().String()
-	}
-	return prefix.String()
-}
-
 func parseValue(rawValue string) (netip.Prefix, error) {
 	prefix, parseError := netparse.ParseAllowlistValue(rawValue)
 	if parseError != nil {
@@ -31,7 +24,7 @@ func validateNewEntry(entry EntryInput) (netip.Prefix, error) {
 	if !netparse.MeetsBanPrefixFloor(prefix) {
 		return netip.Prefix{}, ErrPrefixTooWide
 	}
-	isConfirmed := entry.Confirm == canonicalValue(prefix)
+	isConfirmed := entry.Confirm == netparse.CanonicalAllowlistValue(prefix)
 	if netparse.NeedsAllowlistConfirmation(prefix) && !isConfirmed {
 		return netip.Prefix{}, ErrConfirmationRequired
 	}

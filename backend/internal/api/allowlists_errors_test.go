@@ -33,6 +33,7 @@ func TestServiceErrorsMapToStableCodes(testContext *testing.T) {
 		{serviceError: lapi.ErrLAPIUnavailable, expectedStatus: http.StatusBadGateway, expectedCode: "engine_unreachable"},
 		{serviceError: lapi.ErrAuthFailed, expectedStatus: http.StatusBadGateway, expectedCode: "engine_auth_failed"},
 		{serviceError: fmt.Errorf("dial: %w", egress.ErrBlockedAddress), expectedStatus: http.StatusBadGateway, expectedCode: "engine_blocked_address"},
+		{serviceError: fmt.Errorf("%w: connection refused", allowlists.ErrEngineLookupFailed), expectedStatus: http.StatusServiceUnavailable, expectedCode: "database_unavailable"},
 		{serviceError: errors.New("unexpected"), expectedStatus: http.StatusBadGateway, expectedCode: "engine_unreachable"},
 	}
 	for _, errorCase := range errorCases {

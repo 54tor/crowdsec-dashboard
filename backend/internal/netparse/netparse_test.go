@@ -92,3 +92,18 @@ func TestNeedsAllowlistConfirmationAtFloors(testContext *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalAllowlistValueDropsSingleHostLength(testContext *testing.T) {
+	expectedByPrefix := map[string]string{
+		"203.0.113.7/32":  "203.0.113.7",
+		"2001:db8::1/128": "2001:db8::1",
+		"203.0.113.0/24":  "203.0.113.0/24",
+		"2001:db8::/48":   "2001:db8::/48",
+	}
+	for rawPrefix, expectedValue := range expectedByPrefix {
+		obtainedValue := CanonicalAllowlistValue(netip.MustParsePrefix(rawPrefix))
+		if obtainedValue != expectedValue {
+			testContext.Errorf("%s: expected %s, got %s", rawPrefix, expectedValue, obtainedValue)
+		}
+	}
+}

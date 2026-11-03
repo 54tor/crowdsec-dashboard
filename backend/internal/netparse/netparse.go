@@ -58,6 +58,13 @@ func ParseAllowlistValue(rawValue string) (netip.Prefix, error) {
 	return netip.PrefixFrom(address, address.BitLen()), nil
 }
 
+func CanonicalAllowlistValue(prefix netip.Prefix) string {
+	if prefix.IsSingleIP() {
+		return prefix.Addr().String()
+	}
+	return prefix.String()
+}
+
 func NeedsAllowlistConfirmation(prefix netip.Prefix) bool {
 	if prefix.Addr().Is4() {
 		return prefix.Bits() < minIPv4ConfirmPrefixBits

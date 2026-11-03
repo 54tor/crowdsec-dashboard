@@ -14,6 +14,7 @@ import (
 
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/netparse"
 )
 
 var referenceNow = time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
@@ -164,11 +165,11 @@ func (writer *recordingWriter) Delete(_ context.Context, allowlistName string) e
 
 func (writer *recordingWriter) Add(_ context.Context, allowlistName string, value netip.Prefix, expiration, description string) error {
 	call := "add " + allowlistName + " " + value.String() + " " + expiration + " " + description
-	return writer.finish(call, func() { writer.applyTo.addItem(allowlistName, canonicalValue(value)) })
+	return writer.finish(call, func() { writer.applyTo.addItem(allowlistName, netparse.CanonicalAllowlistValue(value)) })
 }
 
 func (writer *recordingWriter) Remove(_ context.Context, allowlistName string, value netip.Prefix) error {
-	return writer.finish("remove "+allowlistName+" "+value.String(), func() { writer.applyTo.removeItem(allowlistName, canonicalValue(value)) })
+	return writer.finish("remove "+allowlistName+" "+value.String(), func() { writer.applyTo.removeItem(allowlistName, netparse.CanonicalAllowlistValue(value)) })
 }
 
 type fixedWriters struct {

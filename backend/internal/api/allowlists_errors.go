@@ -16,6 +16,7 @@ type allowlistErrorCode struct {
 }
 
 var allowlistErrorCodes = []allowlistErrorCode{
+	{sentinel: allowlists.ErrEngineLookupFailed, status: http.StatusServiceUnavailable, code: "database_unavailable"},
 	{sentinel: engines.ErrEngineNotFound, status: http.StatusNotFound, code: "engine_not_found"},
 	{sentinel: allowlists.ErrAllowlistNotFound, status: http.StatusNotFound, code: "allowlist_not_found"},
 	{sentinel: allowlists.ErrEntryNotFound, status: http.StatusNotFound, code: "allowlist_entry_not_found"},

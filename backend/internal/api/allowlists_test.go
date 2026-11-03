@@ -34,9 +34,7 @@ func TestAllowlistMutationWithReadTokenIs403(testContext *testing.T) {
 
 		response := fixture.request(mutationCase.method, mutationCase.path, mutationCase.body, nil, readOnlyTokenSecret)
 
-		if response.Code != http.StatusForbidden {
-			testContext.Errorf("%s: expected 403 for a read token, got %d %q", mutationCase.name, response.Code, response.Body.String())
-		}
+		expectError(testContext, response, http.StatusForbidden, "forbidden")
 		expectNoServiceCallAndNoAudit(testContext, fixture, mutationCase.name)
 	}
 }

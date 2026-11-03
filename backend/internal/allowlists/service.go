@@ -2,6 +2,8 @@ package allowlists
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"crowdsec-dashboard/internal/engines"
@@ -37,8 +39,11 @@ func (service *Service) List(ctx context.Context, engineName string) (Listing, e
 
 func (service *Service) enabledEngine(ctx context.Context, engineName string) (engines.Engine, error) {
 	engine, lookupError := service.engineLookup.Get(ctx, engineName)
-	if lookupError != nil {
+	if errors.Is(lookupError, engines.ErrEngineNotFound) {
 		return engines.Engine{}, lookupError
+	}
+	if lookupError != nil {
+		return engines.Engine{}, fmt.Errorf("%w: %w", ErrEngineLookupFailed, lookupError)
 	}
 	if !engine.Enabled {
 		return engines.Engine{}, engines.ErrEngineNotFound

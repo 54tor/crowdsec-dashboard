@@ -2,6 +2,7 @@ package allowlists
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -366,5 +367,32 @@ func TestNewServiceDefaultsNilClockToNow(testContext *testing.T) {
 
 	if service.now == nil || time.Since(service.now()) > time.Minute {
 		testContext.Fatal("a nil clock must default to time.Now")
+	}
+}
+
+// failingEngineLookup stands for an engine repository whose database is down.
+type failingEngineLookup struct{ failure error }
+
+func (lookup failingEngineLookup) Get(_ context.Context, _ string) (engines.Engine, error) {
+	return engines.Engine{}, lookup.failure
+}
+
+func TestEngineLookupFailureIsWrappedAndNeverWrites(testContext *testing.T) {
+	databaseFailure := errors.New("database connection refused")
+	writer := &recordingWriter{}
+	service := NewService(failingEngineLookup{failure: databaseFailure}, fakeClients{}, LocalOnlyWriters(writer), func() time.Time { return referenceNow })
+
+	_, listError := service.List(context.Background(), "local")
+	_, addError := service.AddEntry(context.Background(), "local", "trusted", EntryInput{Value: "203.0.113.7"})
+
+	for _, obtainedError := range []error{listError, addError} {
+		requireErrorIs(testContext, obtainedError, ErrEngineLookupFailed)
+		requireErrorIs(testContext, obtainedError, databaseFailure)
+		if errors.Is(obtainedError, engines.ErrEngineNotFound) {
+			testContext.Errorf("a lookup failure must not read as engine not found: %v", obtainedError)
+		}
+	}
+	if len(writer.calls) != 0 {
+		testContext.Fatalf("a failed engine lookup must not write, got %v", writer.calls)
 	}
 }
