@@ -2,6 +2,7 @@ package engines
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -15,6 +16,9 @@ func (registry *Registry) Probe(ctx context.Context, name string) (string, error
 	engineClient := registry.localClient
 	if !probedEngine.IsLocal {
 		_, remoteClient, buildError := registry.buildRemoteHandle(ctx, probedEngine.ID)
+		if errors.Is(buildError, errUnusableEngine) {
+			return ErrorCodeSecretUnreadable, nil
+		}
 		if buildError != nil {
 			return "", buildError
 		}

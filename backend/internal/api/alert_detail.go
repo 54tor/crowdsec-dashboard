@@ -52,7 +52,7 @@ func (handlers archivedAlertHandlers) remove(responseWriter http.ResponseWriter,
 		writeArchiveError(responseWriter, "delete archived alert", deleteError)
 		return
 	}
-	recordAlertDeletion(request, handlers.recorder, handlers.trustedCIDRs, deletedAlert.Engine, deletedAlert.UpstreamID)
+	recordAlertDeletion(request, handlers.recorder, handlers.trustedCIDRs, archiveAuditTargetPrefix+deletedAlert.Engine, deletedAlert.UpstreamID)
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

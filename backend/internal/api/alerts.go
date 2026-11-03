@@ -15,7 +15,10 @@ import (
 	"crowdsec-dashboard/internal/engines"
 )
 
-const archivedCopyDeleteTimeout = 10 * time.Second
+const (
+	archivedCopyDeleteTimeout = 10 * time.Second
+	archiveAuditTargetPrefix  = "archive/"
+)
 
 type alertHandlers struct {
 	service       AlertService

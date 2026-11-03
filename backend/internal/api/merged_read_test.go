@@ -521,8 +521,8 @@ func TestRemoteArchivedAlertIsDeletedFromArchiveOnly(testContext *testing.T) {
 	if len(fixture.runner.argvCalls) != 0 {
 		testContext.Errorf("a remote alert never reaches the local cscli, got %v", fixture.runner.argvCalls)
 	}
-	if len(fixture.recorder.events) != 1 || fixture.recorder.events[0].action != "alert_deleted" || fixture.recorder.events[0].target != "edge-1/5" {
-		testContext.Errorf("expected one alert_deleted audit on edge-1/5, got %+v", fixture.recorder.events)
+	if len(fixture.recorder.events) != 1 || fixture.recorder.events[0].action != "alert_deleted" || fixture.recorder.events[0].target != "archive/edge-1/5" {
+		testContext.Errorf("an archive-only delete must audit apart from a live delete, expected archive/edge-1/5, got %+v", fixture.recorder.events)
 	}
 	expectError(testContext, fixture.send(http.MethodDelete, archivePath, `{"confirm":"`+rawArchiveID+`"}`), http.StatusNotFound, "not_found")
 }
