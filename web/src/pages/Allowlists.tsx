@@ -1,0 +1,91 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
+import { allowlistsQueryKey, listAllowlists } from '@/api/allowlistsApi'
+import type { AllowlistListing, AllowlistMutation } from '@/api/types'
+import { useAuth } from '@/auth/useAuth'
+import { AllowlistBanners } from '@/components/AllowlistBanners'
+import { AllowlistEngineSelect } from '@/components/AllowlistEngineSelect'
+import { AllowlistSection } from '@/components/AllowlistSection'
+import { CreateAllowlistDialog } from '@/components/CreateAllowlistDialog'
+import { ErrorNotice, WarningNotice } from '@/components/Notice'
+import { TableSkeleton } from '@/components/TableSkeleton'
+import { useCanWrite } from '@/hooks/useCanWrite'
+import { visibleNavItems } from '@/routes'
+
+const DEFAULT_ENGINE_NAME = 'local'
+const CONFIG_PATH = '/config'
+
+function ConfigPageNote() {
+  const { t } = useTranslation()
+  const { accountRole } = useAuth()
+  const canOpenConfig = visibleNavItems(accountRole).some((navItem) => navItem.path === CONFIG_PATH)
+  if (!canOpenConfig) {
+    return null
+  }
+  return (
+    <p className="text-sm text-muted-foreground">
+      {t('allowlists.configNote')}{' '}
+      <Link to={CONFIG_PATH} className="underline underline-offset-4">
+        {t('allowlists.configLink')}
+      </Link>
+    </p>
+  )
+}
+
+interface AllowlistListingViewProps {
+  listing: AllowlistListing
+  isWritable: boolean
+  onWritten: (mutation: AllowlistMutation) => void
+}
+
+function AllowlistListingView({ listing, isWritable, onWritten }: AllowlistListingViewProps) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <AllowlistBanners listing={listing} />
+      {isWritable && <CreateAllowlistDialog engineName={listing.engine} onWritten={onWritten} />}
+      {listing.allowlists.length === 0 && <p className="text-sm text-muted-foreground">{t('allowlists.empty')}</p>}
+      {listing.allowlists.map((allowlist) => (
+        <AllowlistSection key={`${listing.engine}/${allowlist.name}`} engineName={listing.engine} allowlist={allowlist} isWritable={isWritable} onWritten={onWritten} />
+      ))}
+    </>
+  )
+}
+
+export function Allowlists() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const canWrite = useCanWrite()
+  const [engineName, setEngineName] = useState(DEFAULT_ENGINE_NAME)
+  const [isRefreshFailed, setIsRefreshFailed] = useState(false)
+  const listingQuery = useQuery({ queryKey: allowlistsQueryKey(engineName), queryFn: () => listAllowlists(engineName) })
+
+  const handleWritten = useCallback(
+    (mutation: AllowlistMutation) => {
+      setIsRefreshFailed(!mutation.refreshed)
+      void queryClient.invalidateQueries({ queryKey: allowlistsQueryKey(engineName) })
+    },
+    [queryClient, engineName],
+  )
+
+  function selectEngine(selectedEngineName: string) {
+    setEngineName(selectedEngineName)
+    setIsRefreshFailed(false)
+  }
+
+  const listing = listingQuery.data
+  return (
+    <section className="space-y-4">
+      <h1 className="text-xl font-semibold">{t('allowlists.title')}</h1>
+      <p className="text-sm text-muted-foreground">{t('allowlists.intro')}</p>
+      <ConfigPageNote />
+      <AllowlistEngineSelect value={engineName} onChange={selectEngine} />
+      {isRefreshFailed && <WarningNotice>{t('allowlists.refreshFailed')}</WarningNotice>}
+      {listingQuery.error && <ErrorNotice error={listingQuery.error} />}
+      {listingQuery.isPending && <TableSkeleton />}
+      {listing && <AllowlistListingView listing={listing} isWritable={canWrite && listing.writable} onWritten={handleWritten} />}
+    </section>
+  )
+}

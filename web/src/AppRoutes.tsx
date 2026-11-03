@@ -10,6 +10,7 @@ import { Placeholder } from '@/pages/Placeholder'
 import { AccountSecurity } from '@/pages/AccountSecurity'
 import { Accounts } from '@/pages/Accounts'
 import { Alerts } from '@/pages/Alerts'
+import { Allowlists } from '@/pages/Allowlists'
 import { Bouncers } from '@/pages/Bouncers'
 import { Config } from '@/pages/Config'
 import { Decisions } from '@/pages/Decisions'
@@ -27,6 +28,7 @@ import { NAV_ITEMS, type NavItem } from '@/routes'
 const READ_PAGES: Record<string, ReactElement> = {
   '/alerts': <Alerts />,
   '/decisions': <Decisions />,
+  '/allowlists': <Allowlists />,
   '/health': <Health />,
   '/metrics': <Metrics />,
   '/config': <Config />,

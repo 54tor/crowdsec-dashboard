@@ -17,7 +17,8 @@
     "tokens": "API tokens",
     "accounts": "Accounts",
     "sync": "Sync",
-    "exportImport": "Export / Import"
+    "exportImport": "Export / Import",
+    "allowlists": "Allowlists"
   },
   "common": {
     "retry": "Retry",
@@ -170,7 +171,16 @@
     "import_timeout": "The import timed out. Run the preview again to see what was applied.",
     "operation_lock_unavailable": "The operation lock is unavailable. Try again later.",
     "bundle_file_too_large": "This file is larger than 8 MiB and was not sent.",
-    "bundle_file_invalid": "This file is not valid JSON and was not sent."
+    "bundle_file_invalid": "This file is not valid JSON and was not sent.",
+    "allowlist_not_found": "This allowlist does not exist on the engine.",
+    "allowlist_exists": "An allowlist with this name already exists on the engine.",
+    "allowlist_entry_exists": "This value is already in the allowlist.",
+    "allowlist_entry_not_found": "This value is not in the allowlist.",
+    "allowlist_console_managed": "This allowlist is managed by the CrowdSec console: change it from the console.",
+    "allowlist_engine_readonly": "The allowlists of this engine are read-only from the dashboard.",
+    "allowlist_prefix_too_wide": "This range is too wide: the narrowest accepted prefix is /8 for IPv4 and /32 for IPv6.",
+    "invalid_allowlist": "Invalid allowlist name, value, expiration or description.",
+    "allowlist_write_failed": "The engine did not apply the change: the allowlist is unchanged."
   },
   "filters": {
     "label": "Filters",
@@ -807,5 +817,57 @@
       "local_bans_incomplete": "The local bans could not be read completely",
       "dependency_missing": "A component this section needs is missing on the server"
     }
+  },
+  "allowlists": {
+    "title": "Allowlists",
+    "intro": "Engine allowlists: the engine ignores the listed addresses and ranges. Manual bans and synchronization refuse every allowlisted target.",
+    "configNote": "Parser whitelists of the local engine are shown read-only on the",
+    "configLink": "Config page",
+    "engine": "Engine",
+    "readOnly": "Read-only: the dashboard can only write the allowlists of the local engine, the LAPI of a remote engine does not allow writing them.",
+    "truncated": "More than 10,000 entries: manual bans and synchronization are refused on this engine as a precaution.",
+    "refreshFailed": "The change was written, but the allowlists could not be read again: reload the page to see the current state.",
+    "empty": "No allowlist on this engine.",
+    "noEntries": "No entry in this allowlist.",
+    "consoleManaged": "Managed by the console",
+    "expired": "Expired",
+    "noExpiry": "No expiry",
+    "caption": "Entries of allowlist {{name}}",
+    "columns": {
+      "value": "Value",
+      "description": "Comment",
+      "created": "Added",
+      "expires": "Expires",
+      "actions": "Actions"
+    },
+    "create": "Create an allowlist",
+    "createTitle": "Create an allowlist",
+    "createDescription": "The allowlist is created on the selected engine, empty.",
+    "createSubmit": "Create",
+    "name": "Name",
+    "nameHint": "Lowercase letters, digits, dot, dash and underscore; 32 characters at most.",
+    "nameInvalid": "Use lowercase letters, digits, dot, dash or underscore (32 characters at most).",
+    "description": "Description",
+    "delete": "Delete",
+    "deleteLabel": "Delete allowlist {{name}}",
+    "deleteTitle": "Delete this allowlist",
+    "deleteDescription": "The allowlist and all its entries are deleted from the engine.",
+    "addEntry": "Add an entry",
+    "addEntryLabel": "Add an entry to {{name}}",
+    "entryTitle": "Add an entry to {{name}}",
+    "entryDescription": "An IP address or a CIDR range that the engine will ignore.",
+    "value": "IP address or CIDR range",
+    "expiration": "Expiration",
+    "expirationHint": "Leave empty for no expiry, or a number followed by h or d (e.g. 12h, 7d).",
+    "expirationInvalid": "Use a number from 1 to 9999 followed by h or d (e.g. 12h, 7d).",
+    "presets": "Expiration presets",
+    "entryComment": "Comment",
+    "entrySubmit": "Add",
+    "wideRangeWarning": "Wide range: adding an entry immediately expires, on this engine, every existing decision covered by any of its allowlists, not just by this value.",
+    "wideRangeConfirm": "Type {{value}} to confirm",
+    "removeEntry": "Remove",
+    "removeEntryLabel": "Remove {{value}}",
+    "removeEntryTitle": "Remove this entry",
+    "removeEntryDescription": "The value is removed from allowlist {{name}}."
   }
 }

@@ -9,6 +9,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/alerts', labelKey: 'nav.alerts' },
   { path: '/decisions', labelKey: 'nav.decisions' },
+  { path: '/allowlists', labelKey: 'nav.allowlists' },
   { path: '/health', labelKey: 'nav.health' },
   { path: '/metrics', labelKey: 'nav.metrics' },
   { path: '/config', labelKey: 'nav.config', requiredRole: 'admin' },

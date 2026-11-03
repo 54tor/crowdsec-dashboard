@@ -17,7 +17,8 @@
     "tokens": "Jetons d'API",
     "accounts": "Comptes",
     "sync": "Synchro",
-    "exportImport": "Export / Import"
+    "exportImport": "Export / Import",
+    "allowlists": "Listes d'autorisation"
   },
   "common": {
     "retry": "Réessayer",
@@ -170,7 +171,16 @@
     "import_timeout": "L'import a expiré. Relancez l'aperçu pour voir ce qui a été appliqué.",
     "operation_lock_unavailable": "Le verrou d'opération est indisponible. Réessayez plus tard.",
     "bundle_file_too_large": "Ce fichier dépasse 8 Mio et n'a pas été envoyé.",
-    "bundle_file_invalid": "Ce fichier n'est pas un JSON valide et n'a pas été envoyé."
+    "bundle_file_invalid": "Ce fichier n'est pas un JSON valide et n'a pas été envoyé.",
+    "allowlist_not_found": "Cette liste d'autorisation n'existe pas sur le moteur.",
+    "allowlist_exists": "Une liste d'autorisation de ce nom existe déjà sur le moteur.",
+    "allowlist_entry_exists": "Cette valeur est déjà dans la liste d'autorisation.",
+    "allowlist_entry_not_found": "Cette valeur n'est pas dans la liste d'autorisation.",
+    "allowlist_console_managed": "Cette liste d'autorisation est gérée par la console CrowdSec : modifiez-la depuis la console.",
+    "allowlist_engine_readonly": "Les listes d'autorisation de ce moteur sont en lecture seule depuis le tableau de bord.",
+    "allowlist_prefix_too_wide": "Plage trop large : le préfixe le plus large accepté est /8 en IPv4 et /32 en IPv6.",
+    "invalid_allowlist": "Nom, valeur, expiration ou description de liste d'autorisation invalide.",
+    "allowlist_write_failed": "Le moteur n'a pas appliqué la modification : la liste d'autorisation est inchangée."
   },
   "filters": {
     "label": "Filtres",
@@ -807,5 +817,57 @@
       "local_bans_incomplete": "Les bannissements locaux n'ont pas pu être lus entièrement",
       "dependency_missing": "Un composant nécessaire à cette section manque sur le serveur"
     }
+  },
+  "allowlists": {
+    "title": "Listes d'autorisation",
+    "intro": "Listes d'autorisation des moteurs : le moteur ignore les adresses et plages listées. Le ban manuel et la synchronisation refusent toute cible en liste d'autorisation.",
+    "configNote": "Les whitelists de parseurs du moteur local sont affichées en lecture seule sur la",
+    "configLink": "page Configuration",
+    "engine": "Moteur",
+    "readOnly": "Lecture seule : le tableau de bord n'écrit que les listes d'autorisation du moteur local, la LAPI d'un moteur distant ne permet pas de les écrire.",
+    "truncated": "Plus de 10 000 entrées : ban manuel et synchronisation refusés sur ce moteur par sécurité.",
+    "refreshFailed": "La modification est écrite, mais les listes d'autorisation n'ont pas pu être relues : rechargez la page pour voir l'état actuel.",
+    "empty": "Aucune liste d'autorisation sur ce moteur.",
+    "noEntries": "Aucune entrée dans cette liste d'autorisation.",
+    "consoleManaged": "Gérée par la console",
+    "expired": "Expirée",
+    "noExpiry": "Sans expiration",
+    "caption": "Entrées de la liste d'autorisation {{name}}",
+    "columns": {
+      "value": "Valeur",
+      "description": "Commentaire",
+      "created": "Ajoutée",
+      "expires": "Expire",
+      "actions": "Actions"
+    },
+    "create": "Créer une liste d'autorisation",
+    "createTitle": "Créer une liste d'autorisation",
+    "createDescription": "La liste d'autorisation est créée vide sur le moteur choisi.",
+    "createSubmit": "Créer",
+    "name": "Nom",
+    "nameHint": "Minuscules, chiffres, point, tiret et tiret bas ; 32 caractères au plus.",
+    "nameInvalid": "Utilisez des minuscules, chiffres, point, tiret ou tiret bas (32 caractères au plus).",
+    "description": "Description",
+    "delete": "Supprimer",
+    "deleteLabel": "Supprimer la liste d'autorisation {{name}}",
+    "deleteTitle": "Supprimer cette liste d'autorisation",
+    "deleteDescription": "La liste d'autorisation et toutes ses entrées sont supprimées du moteur.",
+    "addEntry": "Ajouter une entrée",
+    "addEntryLabel": "Ajouter une entrée à {{name}}",
+    "entryTitle": "Ajouter une entrée à {{name}}",
+    "entryDescription": "Une adresse IP ou une plage CIDR que le moteur ignorera.",
+    "value": "Adresse IP ou plage CIDR",
+    "expiration": "Expiration",
+    "expirationHint": "Laissez vide pour ne jamais expirer, ou un nombre suivi de h ou d (ex. 12h, 7d).",
+    "expirationInvalid": "Utilisez un nombre de 1 à 9999 suivi de h ou d (ex. 12h, 7d).",
+    "presets": "Durées prédéfinies",
+    "entryComment": "Commentaire",
+    "entrySubmit": "Ajouter",
+    "wideRangeWarning": "Plage large : ajouter une entrée fait expirer aussitôt, sur ce moteur, toutes les décisions existantes couvertes par l'une de ses listes d'autorisation, pas seulement par cette valeur.",
+    "wideRangeConfirm": "Saisissez {{value}} pour confirmer",
+    "removeEntry": "Retirer",
+    "removeEntryLabel": "Retirer {{value}}",
+    "removeEntryTitle": "Retirer cette entrée",
+    "removeEntryDescription": "La valeur est retirée de la liste d'autorisation {{name}}."
   }
 }

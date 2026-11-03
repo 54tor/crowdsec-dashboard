@@ -229,3 +229,43 @@ export interface EngineInput {
   enabled?: boolean
   sync_enabled?: boolean
 }
+
+export interface AllowlistEntry {
+  value: string
+  description: string
+  created_at: string
+  expires_at: string | null
+  expired: boolean
+}
+
+export interface AllowlistView {
+  name: string
+  description: string
+  console_managed: boolean
+  created_at: string
+  updated_at: string
+  entries: AllowlistEntry[]
+}
+
+export interface AllowlistListing {
+  engine: string
+  writable: boolean
+  truncated: boolean
+  allowlists: AllowlistView[]
+}
+
+export interface AllowlistMutation extends AllowlistListing {
+  refreshed: boolean
+}
+
+export interface NewAllowlistInput {
+  name: string
+  description: string
+}
+
+export interface NewAllowlistEntryInput {
+  value: string
+  expiration?: string
+  description?: string
+  confirm?: string
+}
