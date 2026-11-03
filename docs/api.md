@@ -264,7 +264,7 @@ or to an older generation of the local LAPI (ids are reused after a reset):
 
 Only `live:true` rows of the `local` engine can be deleted this way. `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
 from the archive only (a remote engine is never contacted). Both alert routes (`DELETE /api/alerts/{id}` and `DELETE /api/alerts/archive/{archive_id}`) are audited `alert_deleted` with
-target `<engine>/<upstream id>`.
+target `<engine>/<upstream id>` for the live delete and `archive/<engine>/<upstream id>` for the archive-only delete.
 
 The manual ban checks the allowlists of the local engine just before the write, with the same
 filter as the sync and the bundle import ([security.md](security.md#allowlist-check-before-writes)):
@@ -294,7 +294,7 @@ the create, change and delete routes are admin and session only (403 `session_re
 token). Everything but the names answers 403 `forbidden` to a `read_only` account, before any read or
 write. Bodies are capped at 8 KiB and unknown fields are refused (400 `invalid_request`).
 No response, error or audit entry ever contains a machine password or proxy credential: the only
-trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted URL.
+trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted URL. A proxy URL needs an explicit port from 1 to 65535.
 
 | Method | Path | Body | Success response | Errors |
 |---|---|---|---|---|
@@ -303,7 +303,7 @@ trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted 
 | POST | `/api/engines` | `{name, lapi_url, machine_id, machine_password, proxy?{kind,url,username?,password?}, allow_insecure_http, public_addresses, enabled, sync_enabled}` | `201 engine` | 400 `invalid_engine`, `invalid_request`; 409 `engine_exists`, `engine_deleting` (same name or URL as an engine whose archive is still being deleted); 403; 503 |
 | PATCH | `/api/engines/{name}` | same fields, all optional; absent = unchanged; `"proxy": null` removes the proxy; `proxy.clear_credentials: true` drops the proxy credentials | `200 engine` | 400 `invalid_engine`, `engine_secret_required`, `invalid_request`; 404 `engine_not_found`; 409 `engine_exists`, `engine_local_readonly`; 403; 503 |
 | DELETE | `/api/engines/{name}` | `{"confirm":"<name>"}` | `202 {"status":"deleting"}`: the archive is deleted in the background | 400 `confirmation_required`; 404; 409 `engine_local_readonly`; 403; 503 |
-| POST | `/api/engines/{name}/test` | none | `200 {"status":"ok"}` | 502 `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`; 404; 403; 503 |
+| POST | `/api/engines/{name}/test` | none | `200 {"status":"ok"}` | 502 `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`, `engine_secret_unreadable` (the stored secret cannot be opened); 404; 403; 503 |
 
 `engine` is `{name, is_local, lapi_url, machine_id, proxy:{kind,url}|null, has_proxy_credentials,
 allow_insecure_http, public_addresses, enabled, sync_enabled, collection:{cursor,

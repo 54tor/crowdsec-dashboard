@@ -12,7 +12,7 @@ these files, which compose would otherwise expand.
 | `DATABASE_URL` | none, required | PostgreSQL connection URL, `postgres://` or `postgresql://`, for example `postgres://dashboard:<password>@postgres:5432/dashboard`. Percent-encode special characters of the password. The process refuses to start when it is empty, has another scheme, or the database is unreachable. The value is never logged. |
 | `SESSION_TTL` | `12h` | Lifetime of a session, a Go duration (`30m`, `12h`). Must be positive. Fixed lifetime from login, not extended by activity. |
 | `LISTEN_ADDR` | `:8080` | Address the HTTP server listens on. |
-| `LAPI_URL` | none | Base URL of the CrowdSec local API, for example `http://crowdsec:8080`. |
+| `LAPI_URL` | required | Base URL of the CrowdSec local API, for example `http://crowdsec:8080`. Startup refuses with `LAPI_URL is required` when it is empty; the value is never echoed in errors. |
 | `LAPI_MACHINE_ID` | none | Name of the LAPI machine account used for alerts and decisions. Also the account the dashboard refuses to delete. |
 | `LAPI_MACHINE_PASSWORD` | none | Password of that machine account. |
 | `CROWDSEC_CONTAINER` | none | Name of the CrowdSec container in which `cscli` commands are executed. Must match the name allowed in the socket-proxy rule. |

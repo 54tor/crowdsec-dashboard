@@ -304,7 +304,7 @@ of control characters and cut at 64 characters. Recorded actions:
 | `access_rule_added`, `access_rule_removed` | a rule changed | `ip:<cidr>` or `country:<code>` |
 | `engine_created`, `engine_updated`, `engine_deleted` | an engine was written | engine name, `old>new` after a rename |
 | `engine_tested` | a connection test of an existing engine, successful or not | engine name |
-| `alert_deleted` | a live local alert (with its archived copy) or an archived alert was deleted | `<engine>/<upstream alert id>` |
+| `alert_deleted` | a live local alert (with its archived copy) or an archived alert was deleted | `<engine>/<upstream alert id>`; `archive/<engine>/<upstream alert id>` for an archive-only delete |
 | `decision_removed` | a live decision was deleted (unban) | `decision:<id>` |
 | `allowlist_created`, `allowlist_deleted` | an allowlist of an engine was created or deleted | `<engine>/<allowlist>` |
 | `allowlist_entry_added`, `allowlist_entry_removed` | an allowlist entry was added or removed | `<value>@<engine>/<allowlist>`; the value comes first and is never cut |
@@ -444,7 +444,8 @@ Redaction is line based. A value is replaced by `[REDACTED]` when its key contai
 `dsn`, together with the indented block below it; URL userinfo (`://user:pw@`) and `Bearer <value>`
 are masked anywhere. Known gaps: a secret stored under a key with another name, or written in a
 comment or free text, is not detected. Do not rely on redaction for files you
-would not show an admin.
+would not show an admin. Engine credentials and the LAPI client also print as redacted when
+formatted or logged.
 
 ## Container image
 
