@@ -61,9 +61,17 @@ func (decisionsImport) Plan(ctx context.Context, deps ImportDeps, imported Bundl
 func longestFirst(decisions []Decision) []Decision {
 	sortedDecisions := slices.Clone(decisions)
 	slices.SortStableFunc(sortedDecisions, func(first, second Decision) int {
-		return cmp.Or(strings.Compare(first.Value, second.Value), second.Until.Compare(first.Until))
+		return cmp.Or(strings.Compare(canonicalValue(first), canonicalValue(second)), second.Until.Compare(first.Until))
 	})
 	return sortedDecisions
+}
+
+func canonicalValue(decision Decision) string {
+	target, targetError := enginesync.CanonicalTarget(decision.Scope, decision.Value)
+	if targetError != nil {
+		return decision.Value
+	}
+	return target.String()
 }
 
 func newDecisionPlanner(ctx context.Context, deps ImportDeps) (*decisionPlanner, string) {

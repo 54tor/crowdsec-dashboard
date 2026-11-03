@@ -136,10 +136,10 @@ own-address guard (`own_address`: the target is, or contains, the address of the
 import, as resolved for the login rate limiter), duplicates (`duplicate`: an active local ban, native
 or copy, or an earlier entry of the bundle, already covers the target with at least the same time
 left, give or take one minute), and the local allowlists (`allowlisted`). The bans are planned in
-the order of their value, and for the same value the one with the most time left first: a bundle
-that holds the same target twice plans the longer ban, and the other one is `duplicate`. The
-grouping is on the value as written: `203.0.113.5` and `203.0.113.5/32` are not grouped, but the
-coverage check above still applies between them in planning order.
+the order of their canonical target, and for the same target the one with the most time left
+first: a bundle that holds the same target twice plans the longer ban, and the other one is
+`duplicate`. Two spellings of one target are grouped (`203.0.113.5` and `203.0.113.5/32`,
+`2001:DB8::1` and `2001:db8::1`).
 
 The local state is read once per plan: the allowlists (fail closed: any error, any 404, more than
 10 000 entries makes the section unavailable, `allowlist_unavailable`), the local bans (an
