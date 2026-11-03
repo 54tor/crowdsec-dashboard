@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"strings"
+
+	"crowdsec-dashboard/internal/cscli"
 )
 
 const versionMismatchWarning = "version_mismatch:"
@@ -42,6 +44,10 @@ func installedCollectionVersions(items []HubItem) map[string]string {
 }
 
 func (sectionPlan *SectionPlan) planCollection(collection HubCollection, installedVersions map[string]string, plannedNames map[string]bool) {
+	if cscli.ValidateHubName(collection.Name) != nil {
+		sectionPlan.skip(SectionHub, collection.Name, ReasonInvalidName)
+		return
+	}
 	if plannedNames[collection.Name] {
 		sectionPlan.skip(SectionHub, collection.Name, ReasonDuplicate)
 		return

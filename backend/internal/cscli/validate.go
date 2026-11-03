@@ -61,3 +61,5 @@ func rejectUnsafeAddress(address netip.Addr) error {
 func ValidateTarget(value string) error { return validateTarget(value) }
 
 func ValidateDuration(value string) error { return validateDuration(value) }
+
+func ValidateHubName(value string) error { return validateHubName(value) }

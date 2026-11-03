@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/bundle"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/enginesync"
 	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/oplock"
@@ -321,5 +323,44 @@ func TestImportApplyIsAudited(testContext *testing.T) {
 	}
 	if strings.Contains(events[0].target, "203.0.113.5") {
 		testContext.Errorf("the audit target must never carry bundle content, got %q", events[0].target)
+	}
+}
+
+func TestImportPreviewTimesOutWithStableCodeAndReleasesTheLock(testContext *testing.T) {
+	operationLock := oplock.New()
+	engine := &importLocalEngine{allowlist: lapi.AllowlistRead{Allowlists: []lapi.Allowlist{}}}
+	deps := engine.deps(500)
+	// The hub read hangs until the preview deadline, like a stuck cscli.
+	deps.ReadHub = func(ctx context.Context) ([]bundle.HubItem, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	handlers := importHandlers{deps: deps, operationLock: operationLock, previewTimeout: 20 * time.Millisecond}
+	imported := bundle.Bundle{Format: bundle.Format, Version: bundle.Version, Sections: bundle.Sections{Hub: &bundle.HubSection{Collections: []bundle.HubCollection{{Name: "crowdsecurity/nginx"}}}}}
+	encodedBundle, _ := json.Marshal(imported)
+	body := `{"mode":"preview","sections":["hub"],"bundle":` + string(encodedBundle) + `}`
+	request := httptest.NewRequest(http.MethodPost, "https://dashboard.example.com/api/import", strings.NewReader(body))
+	recorder := httptest.NewRecorder()
+	handlers.importBundle(recorder, request)
+	assertErrorResponse(testContext, "slow preview", recorder, http.StatusGatewayTimeout, "import_timeout")
+	release, acquired := operationLock.TryAcquire("sync")
+	if !acquired {
+		testContext.Fatal("a timed out preview must release the lock")
+	}
+	release()
+}
+
+func TestImportSectionFailureUsesUpstreamCodes(testContext *testing.T) {
+	failuresByExpectedCode := map[string]error{
+		"cscli_timeout":    cscli.ErrTimeout,
+		"lapi_unavailable": lapi.ErrLAPIUnavailable,
+		"import_timeout":   context.DeadlineExceeded,
+		"canceled":         context.Canceled,
+		"apply_failed":     errors.New("unclassified failure"),
+	}
+	for expectedCode, failure := range failuresByExpectedCode {
+		if obtainedCode := sectionErrorCode(failure); obtainedCode != expectedCode {
+			testContext.Errorf("%v: expected %s, got %s", failure, expectedCode, obtainedCode)
+		}
 	}
 }

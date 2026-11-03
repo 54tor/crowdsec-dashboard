@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"time"
 
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/bundle"
+	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/oplock"
 )
 
@@ -21,6 +23,7 @@ const (
 	maxImportBodyBytes        = bundle.MaxBytes + importEnvelopeMarginBytes
 	importConfirmation        = "IMPORT"
 	importApplyTimeout        = 10 * time.Minute
+	importPreviewTimeout      = 45 * time.Second
 	importLockName            = "import"
 	importModePreview         = "preview"
 	importModeApply           = "apply"
@@ -40,10 +43,11 @@ type importApplyResponse struct {
 }
 
 type importHandlers struct {
-	deps          bundle.ImportDeps
-	operationLock *oplock.Lock
-	recorder      audit.Recorder
-	trustedCIDRs  []*net.IPNet
+	deps           bundle.ImportDeps
+	operationLock  *oplock.Lock
+	recorder       audit.Recorder
+	trustedCIDRs   []*net.IPNet
+	previewTimeout time.Duration
 }
 
 func (handlers importHandlers) importBundle(responseWriter http.ResponseWriter, request *http.Request) {
@@ -106,7 +110,9 @@ func (handlers importHandlers) requestDeps(request *http.Request) bundle.ImportD
 }
 
 func (handlers importHandlers) preview(responseWriter http.ResponseWriter, request *http.Request, deps bundle.ImportDeps, imported bundle.Bundle, sections []string) {
-	plan, planError := bundle.PlanImport(request.Context(), deps, imported, sections)
+	previewContext, cancelPreview := context.WithTimeout(request.Context(), handlers.previewTimeout)
+	defer cancelPreview()
+	plan, planError := bundle.PlanImport(previewContext, deps, imported, sections)
 	if planError != nil {
 		writeImportError(responseWriter, planError)
 		return
@@ -133,6 +139,11 @@ func (handlers importHandlers) apply(responseWriter http.ResponseWriter, request
 		writeImportError(responseWriter, applyError)
 		return
 	}
+	for sectionIndex, sectionReport := range report.Sections {
+		if sectionReport.Failure != nil {
+			report.Sections[sectionIndex].ErrorCode = sectionErrorCode(sectionReport.Failure)
+		}
+	}
 	handlers.record(request, report)
 	responseWriter.Header().Set("Cache-Control", "no-store")
 	writeJSON(responseWriter, http.StatusOK, importApplyResponse{Digest: plan.Digest, Report: report})
@@ -152,9 +163,32 @@ func writeImportError(responseWriter http.ResponseWriter, importError error) {
 		writeError(responseWriter, http.StatusUnprocessableEntity, "too_many_changes")
 	case errors.Is(importError, bundle.ErrSectionUnavailable):
 		writeError(responseWriter, http.StatusConflict, "section_unavailable")
+	case errors.Is(importError, context.DeadlineExceeded):
+		writeError(responseWriter, http.StatusGatewayTimeout, "import_timeout")
 	default:
 		writeUpstreamError(responseWriter, importError)
 	}
+}
+
+func sectionErrorCode(failure error) string {
+	switch {
+	case errors.Is(failure, context.DeadlineExceeded):
+		return "import_timeout"
+	case errors.Is(failure, context.Canceled):
+		return "canceled"
+	case isClassifiedUpstreamError(failure):
+		_, code := classifyUpstreamError(failure)
+		return code
+	}
+	return bundle.ErrorCodeApplyFailed
+}
+
+func isClassifiedUpstreamError(failure error) bool {
+	var statusError *lapi.StatusError
+	if errors.As(failure, &statusError) {
+		return true
+	}
+	return slices.ContainsFunc(loggableSentinels, func(sentinel error) bool { return errors.Is(failure, sentinel) })
 }
 
 func (handlers importHandlers) record(request *http.Request, report bundle.ApplyReport) {

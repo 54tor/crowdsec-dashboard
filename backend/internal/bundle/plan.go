@@ -19,6 +19,8 @@ const (
 	ReasonExpired          = "expired"
 	ReasonOwnAddress       = "own_address"
 	ReasonInvalidTarget    = "invalid_target"
+	ReasonInvalidName      = "invalid_name"
+	ReasonTooLong          = "too_long"
 	ReasonUnsupportedType  = "unsupported_type"
 )
 
@@ -98,6 +100,9 @@ func PlanImport(ctx context.Context, deps ImportDeps, imported Bundle, sections 
 		sectionPlan, planError := planSection(ctx, deps, imported, sectionName)
 		if planError != nil {
 			return ImportPlan{}, planError
+		}
+		if contextError := ctx.Err(); contextError != nil {
+			return ImportPlan{}, contextError
 		}
 		plan.add(sectionName, sectionPlan)
 	}

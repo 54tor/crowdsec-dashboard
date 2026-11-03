@@ -17,6 +17,7 @@ type SectionReport struct {
 	Failed         int            `json:"failed"`
 	SkippedReasons map[string]int `json:"skipped_reasons"`
 	ErrorCode      string         `json:"error_code,omitempty"`
+	Failure        error          `json:"-"`
 }
 
 type ApplyReport struct {
@@ -40,7 +41,7 @@ func Apply(ctx context.Context, deps ImportDeps, plan ImportPlan) (ApplyReport, 
 		sectionReport, applyError := registeredSections[sectionName].Apply(ctx, deps, sectionPlan)
 		sectionReport.Section, sectionReport.Status = sectionName, StatusApplied
 		if applyError != nil {
-			sectionReport.Status, sectionReport.ErrorCode = StatusFailed, ErrorCodeApplyFailed
+			sectionReport.Status, sectionReport.ErrorCode, sectionReport.Failure = StatusFailed, ErrorCodeApplyFailed, applyError
 			previousSectionFailed = true
 		}
 		report.Sections = append(report.Sections, sectionReport)
