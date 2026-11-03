@@ -41,7 +41,7 @@ export function UnavailableSections({ sections, codes }: { sections: readonly st
       <ul className="list-disc pl-4">
         {sections.map((sectionName) => (
           <li key={sectionName}>
-            {t(`bundle.sections.${sectionName}`)} : {translateBundleCode(t, 'problems', codes[sectionName] ?? 'section_unavailable')}
+            {t('bundle.sectionLine', { section: t(`bundle.sections.${sectionName}`), state: translateBundleCode(t, 'problems', codes[sectionName] ?? 'section_unavailable') })}
           </li>
         ))}
       </ul>

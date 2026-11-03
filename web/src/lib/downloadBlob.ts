@@ -3,6 +3,11 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   const downloadLink = document.createElement('a')
   downloadLink.href = objectUrl
   downloadLink.download = fileName
-  downloadLink.click()
-  URL.revokeObjectURL(objectUrl)
+  document.body.append(downloadLink)
+  try {
+    downloadLink.click()
+  } finally {
+    downloadLink.remove()
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+  }
 }

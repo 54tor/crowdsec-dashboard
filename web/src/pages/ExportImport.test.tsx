@@ -136,6 +136,29 @@ describe('export and import page', () => {
     expect(screen.getByText(en.bundle.warnings.simulated_decision_may_remain)).toBeInTheDocument()
   })
 
+  it('announcesTheResultWithEnglishPunctuation', async () => {
+    const report = { sections: [{ section: 'decisions', status: 'applied', applied: 1, skipped: 0, failed: 0, skipped_reasons: {} }] }
+    let callCount = 0
+    stubFetch(adminRoutes({ 'POST /api/import': () => ({ status: 200, body: ++callCount === 1 ? makePlan() : { digest: 'd', report } }) }))
+    const user = userEvent.setup()
+    renderApp(PAGE_PATH)
+    await uploadAndPreview(user)
+    await user.click(await screen.findByRole('button', { name: en.bundle.applyButton }))
+    const dialog = await typeInDialog(user, 'IMPORT')
+    await user.click(within(dialog).getByRole('button', { name: en.bundle.applyButton }))
+    const sectionLine = await screen.findByText('Decisions: Applied')
+    expect(sectionLine.closest('[role="status"]')).not.toBeNull()
+  })
+
+  it('unavailableDecisionsShowTheirReasonWithEnglishPunctuation', async () => {
+    const plan = makePlan({ unavailable: ['decisions'], unavailable_codes: { decisions: 'local_bans_incomplete' } })
+    stubFetch(adminRoutes({ 'POST /api/import': { status: 200, body: plan } }))
+    const user = userEvent.setup()
+    renderApp(PAGE_PATH)
+    await uploadAndPreview(user)
+    expect(await screen.findByText(`Decisions: ${en.bundle.problems.local_bans_incomplete}`)).toBeInTheDocument()
+  })
+
   it('doesNotAllowASecondSubmitWhileApplying', async () => {
     const fetchMock = stubFetch(adminRoutes({ 'POST /api/import': { status: 200, body: makePlan() } }))
     const user = userEvent.setup()

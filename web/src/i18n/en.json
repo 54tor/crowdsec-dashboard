@@ -737,6 +737,7 @@
       "unchanged": "unchanged"
     },
     "resultTitle": "Import result",
+    "sectionLine": "{{section}}: {{state}}",
     "resultCounts": "Applied: {{applied}}, skipped: {{skipped}}, failed: {{failed}}",
     "affectedFiles": "Affected files:",
     "status": {
@@ -799,7 +800,10 @@
       "not_found": "Not found",
       "invalid_request": "Invalid request",
       "cscli_timeout": "The cscli command timed out",
-      "cscli_failed": "The cscli command failed"
+      "cscli_failed": "The cscli command failed",
+      "engine_addresses_unknown": "Engine addresses could not be resolved",
+      "local_bans_incomplete": "The local bans could not be read completely",
+      "dependency_missing": "A component this section needs is missing on the server"
     }
   }
 }

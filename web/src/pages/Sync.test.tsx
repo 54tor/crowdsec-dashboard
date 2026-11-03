@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
@@ -257,6 +257,17 @@ describe('sync page', () => {
     expect(requestsTo(fetchMock, 'POST', `${SYNC_URL}/run`)).toHaveLength(1)
   })
 
+  it('twoClicksInTheSameTickPostOnce', async () => {
+    // fireEvent dispatches both clicks before React re-renders, so only a guard set inside the handler can stop the second one.
+    const fetchMock = stubFetch(syncRoutes(makeStatus(), ADMIN_SESSION, { [`POST ${SYNC_URL}/run`]: { status: 202, body: { status: 'started' } } }))
+    renderApp('/sync')
+    const button = await screen.findByRole('button', { name: en.sync.syncNow })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(requestsTo(fetchMock, 'POST', `${SYNC_URL}/run`)).toHaveLength(1)
+  })
+
   it.each([
     ['operation_running', en.errors.operation_running],
     ['sync_disabled', en.errors.sync_disabled],
@@ -289,6 +300,8 @@ describe('sync page', () => {
       'engine_failed', 'write_failed', 'run_deadline', 'run_panicked', 'engine_backoff',
       // Per-engine read and write failures reuse engines.ErrorCode (backend/internal/engines/errorcode.go).
       'engine_unreachable', 'engine_auth_failed', 'engine_blocked_address',
+      // A participating peer missing from the registry: its copies are kept on the other engines.
+      'engine_unavailable',
     ]
     serverErrorCodes.forEach((serverErrorCode) => {
       expect(en.sync.errorCodes).toHaveProperty(serverErrorCode)
@@ -298,5 +311,3 @@ describe('sync page', () => {
     expect(Object.keys(fr.sync.reasons).sort()).toEqual(Object.keys(en.sync.reasons).sort())
   })
 })
-      // A participating peer missing from the registry: its copies are kept on the other engines.
-      'engine_unavailable',

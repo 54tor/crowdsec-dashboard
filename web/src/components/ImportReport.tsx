@@ -10,7 +10,7 @@ function SectionResult({ sectionReport }: { sectionReport: SectionReport }) {
   return (
     <li className="space-y-1 rounded border p-2">
       <p className="font-medium">
-        {t(`bundle.sections.${sectionReport.section}`)} : {translateBundleCode(t, 'status', sectionReport.status)}
+        {t('bundle.sectionLine', { section: t(`bundle.sections.${sectionReport.section}`), state: translateBundleCode(t, 'status', sectionReport.status) })}
       </p>
       <p className="text-sm">{t('bundle.resultCounts', { applied: sectionReport.applied, skipped: sectionReport.skipped, failed: sectionReport.failed })}</p>
       {skippedReasons.length > 0 && (
@@ -43,7 +43,7 @@ function SectionResult({ sectionReport }: { sectionReport: SectionReport }) {
 export function ImportReport({ sections }: { sections: readonly SectionReport[] }) {
   const { t } = useTranslation()
   return (
-    <section className="space-y-2" aria-labelledby="import-report-heading">
+    <section role="status" className="space-y-2" aria-labelledby="import-report-heading">
       <h3 id="import-report-heading" className="text-base font-medium">
         {t('bundle.resultTitle')}
       </h3>

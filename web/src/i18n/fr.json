@@ -737,6 +737,7 @@
       "unchanged": "inchangé"
     },
     "resultTitle": "Résultat de l'import",
+    "sectionLine": "{{section}} : {{state}}",
     "resultCounts": "Appliqués : {{applied}}, ignorés : {{skipped}}, en échec : {{failed}}",
     "affectedFiles": "Fichiers concernés :",
     "status": {
@@ -799,7 +800,10 @@
       "not_found": "Introuvable",
       "invalid_request": "Requête invalide",
       "cscli_timeout": "La commande cscli a expiré",
-      "cscli_failed": "La commande cscli a échoué"
+      "cscli_failed": "La commande cscli a échoué",
+      "engine_addresses_unknown": "Les adresses des moteurs n'ont pas pu être résolues",
+      "local_bans_incomplete": "Les bannissements locaux n'ont pas pu être lus entièrement",
+      "dependency_missing": "Un composant nécessaire à cette section manque sur le serveur"
     }
   }
 }
