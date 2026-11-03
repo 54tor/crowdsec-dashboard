@@ -13,8 +13,8 @@ import (
 const maxFreeTextBytes = 256
 
 var (
-	allowlistNamePattern       = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,31}$`)
-	allowlistExpirationPattern = regexp.MustCompile(`^[0-9]{1,4}[hd]$`)
+	allowlistNamePattern       = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
+	allowlistExpirationPattern = regexp.MustCompile(`^[1-9][0-9]{0,3}[hd]$`)
 )
 
 var (

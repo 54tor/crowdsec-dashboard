@@ -16,6 +16,16 @@ func executeAllowlistCommand(t *testing.T, commandName string, fields map[string
 	return runner.receivedArgv, executionError
 }
 
+func assertRefused(t *testing.T, label string, argv []string, executionError error) {
+	t.Helper()
+	if !errors.Is(executionError, ErrInvalidField) {
+		t.Fatalf("%s must be refused, got %v", label, executionError)
+	}
+	if len(argv) != 0 {
+		t.Fatalf("%s: runner must never be invoked, got argv %v", label, argv)
+	}
+}
+
 func TestAllowlistsCreateBuildsFixedArgv(t *testing.T) {
 	argvObtenu, executionError := executeAllowlistCommand(t, "allowlists_create",
 		map[string]string{"name": "office", "description": "Office network"})
@@ -92,62 +102,108 @@ func TestAllowlistsRejectsControlFormatAndSeparatorCharacters(t *testing.T) {
 		strings.Repeat("a", 257), "bad\xffutf8",
 	}
 	for _, forbiddenText := range forbiddenTexts {
-		_, descriptionError := executeAllowlistCommand(t, "allowlists_create",
+		descriptionArgv, descriptionError := executeAllowlistCommand(t, "allowlists_create",
 			map[string]string{"name": "office", "description": forbiddenText})
-		_, commentError := executeAllowlistCommand(t, "allowlists_add",
+		commentArgv, commentError := executeAllowlistCommand(t, "allowlists_add",
 			map[string]string{"name": "office", "value": "192.0.2.7", "comment": forbiddenText})
 
-		if !errors.Is(descriptionError, ErrInvalidField) || !errors.Is(commentError, ErrInvalidField) {
-			t.Fatalf("%q must be refused, got %v / %v", forbiddenText, descriptionError, commentError)
-		}
+		assertRefused(t, "description "+forbiddenText, descriptionArgv, descriptionError)
+		assertRefused(t, "comment "+forbiddenText, commentArgv, commentError)
 	}
 }
 
 func TestAllowlistNameLongerThan32Refused(t *testing.T) {
 	_, acceptedError := executeAllowlistCommand(t, "allowlists_delete", map[string]string{"name": strings.Repeat("a", 32)})
-	_, refusedError := executeAllowlistCommand(t, "allowlists_delete", map[string]string{"name": strings.Repeat("a", 33)})
+	refusedArgv, refusedError := executeAllowlistCommand(t, "allowlists_delete", map[string]string{"name": strings.Repeat("a", 33)})
 
 	if acceptedError != nil {
 		t.Fatalf("32 characters must be accepted, got %v", acceptedError)
 	}
-	if !errors.Is(refusedError, ErrInvalidField) {
-		t.Fatalf("33 characters must be refused, got %v", refusedError)
+	assertRefused(t, "33 characters", refusedArgv, refusedError)
+}
+
+func TestAllowlistsRefuseInvalidNameCharset(t *testing.T) {
+	invalidNames := []string{
+		"../x", "-e", "-x", "Office", "a b", "a\nb", "a\x00b", "a\u202eb", "a\u200bb", "", strings.Repeat("a", 33),
+	}
+	commandFields := map[string]map[string]string{
+		"allowlists_create": {"description": "d"},
+		"allowlists_delete": {},
+		"allowlists_add":    {"value": "192.0.2.7"},
+		"allowlists_remove": {"value": "192.0.2.7"},
+	}
+	for commandName, otherFields := range commandFields {
+		for _, invalidName := range invalidNames {
+			fields := map[string]string{"name": invalidName}
+			for otherName, otherValue := range otherFields {
+				fields[otherName] = otherValue
+			}
+
+			argv, executionError := executeAllowlistCommand(t, commandName, fields)
+
+			assertRefused(t, commandName+" name "+invalidName, argv, executionError)
+		}
+	}
+}
+
+func TestAllowlistsRefuseInjectionInValue(t *testing.T) {
+	for _, injectedValue := range []string{"-1.2.3.4", "192.0.2.7\n", "a b"} {
+		addArgv, addError := executeAllowlistCommand(t, "allowlists_add",
+			map[string]string{"name": "office", "value": injectedValue})
+		removeArgv, removeError := executeAllowlistCommand(t, "allowlists_remove",
+			map[string]string{"name": "office", "value": injectedValue})
+
+		assertRefused(t, "add value "+injectedValue, addArgv, addError)
+		assertRefused(t, "remove value "+injectedValue, removeArgv, removeError)
+	}
+}
+
+func TestAllowlistsAcceptCanonicalValuesAndExpirations(t *testing.T) {
+	for _, canonicalValue := range []string{"192.0.2.7", "192.0.2.7/32", "192.0.2.0/24", "2001:db8::/32"} {
+		_, executionError := executeAllowlistCommand(t, "allowlists_add",
+			map[string]string{"name": "office", "value": canonicalValue})
+		if executionError != nil {
+			t.Fatalf("value %q must be accepted, got %v", canonicalValue, executionError)
+		}
+	}
+	for _, validExpiration := range []string{"1d", "9999h", "12h", "7d"} {
+		_, executionError := executeAllowlistCommand(t, "allowlists_add", map[string]string{
+			"name": "office", "value": "192.0.2.7", "expiration": validExpiration,
+		})
+		if executionError != nil {
+			t.Fatalf("expiration %q must be accepted, got %v", validExpiration, executionError)
+		}
 	}
 }
 
 func TestAllowlistsRejectsNonCanonicalValue(t *testing.T) {
 	nonCanonicalValues := []string{"192.0.2.7/24", "::ffff:192.0.2.1", "fe80::1%eth0", "2001:DB8::1", "not-an-ip", ""}
 	for _, nonCanonicalValue := range nonCanonicalValues {
-		_, addError := executeAllowlistCommand(t, "allowlists_add",
+		addArgv, addError := executeAllowlistCommand(t, "allowlists_add",
 			map[string]string{"name": "office", "value": nonCanonicalValue})
-		_, removeError := executeAllowlistCommand(t, "allowlists_remove",
+		removeArgv, removeError := executeAllowlistCommand(t, "allowlists_remove",
 			map[string]string{"name": "office", "value": nonCanonicalValue})
 
-		if !errors.Is(addError, ErrInvalidField) || !errors.Is(removeError, ErrInvalidField) {
-			t.Fatalf("%q must be refused, got %v / %v", nonCanonicalValue, addError, removeError)
-		}
+		assertRefused(t, "add "+nonCanonicalValue, addArgv, addError)
+		assertRefused(t, "remove "+nonCanonicalValue, removeArgv, removeError)
 	}
 }
 
 func TestAllowlistsRejectsBadExpiration(t *testing.T) {
-	for _, badExpiration := range []string{"0.5d", "7w", "99999d", "5m", "", "-1d"} {
-		_, executionError := executeAllowlistCommand(t, "allowlists_add", map[string]string{
+	for _, badExpiration := range []string{"0.5d", "7w", "99999d", "5m", "", "-1d", "0d", "0h", "00h"} {
+		argv, executionError := executeAllowlistCommand(t, "allowlists_add", map[string]string{
 			"name": "office", "value": "192.0.2.7", "expiration": badExpiration,
 		})
 
-		if !errors.Is(executionError, ErrInvalidField) {
-			t.Fatalf("%q must be refused, got %v", badExpiration, executionError)
-		}
+		assertRefused(t, "expiration "+badExpiration, argv, executionError)
 	}
 }
 
 func TestAllowlistsRejectUnknownFields(t *testing.T) {
-	_, executionError := executeAllowlistCommand(t, "allowlists_remove",
+	argv, executionError := executeAllowlistCommand(t, "allowlists_remove",
 		map[string]string{"name": "office", "value": "192.0.2.7", "comment": "x"})
 
-	if !errors.Is(executionError, ErrInvalidField) {
-		t.Fatalf("unknown field must be refused, got %v", executionError)
-	}
+	assertRefused(t, "unknown field", argv, executionError)
 }
 
 func TestAllowlistsNamesAreListed(t *testing.T) {

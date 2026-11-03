@@ -12,8 +12,8 @@ func optionalField(fields map[string]string, fieldName string, validate validato
 }
 
 func buildAllowlistsCreate(fields map[string]string) ([]string, error) {
-	if err := exactFields(fields, "name", "description"); err != nil {
-		return nil, err
+	if fieldsError := exactFields(fields, "name", "description"); fieldsError != nil {
+		return nil, fieldsError
 	}
 	name, nameError := validatedField(fields, "name", validateAllowlistName)
 	if nameError != nil {
@@ -31,8 +31,8 @@ func buildAllowlistsDelete(fields map[string]string) ([]string, error) {
 }
 
 func buildAllowlistsAdd(fields map[string]string) ([]string, error) {
-	if err := exactFields(fields, "name", "value", "expiration", "comment"); err != nil {
-		return nil, err
+	if fieldsError := exactFields(fields, "name", "value", "expiration", "comment"); fieldsError != nil {
+		return nil, fieldsError
 	}
 	name, nameError := validatedField(fields, "name", validateAllowlistName)
 	if nameError != nil {
@@ -61,8 +61,8 @@ func buildAllowlistsAdd(fields map[string]string) ([]string, error) {
 }
 
 func buildAllowlistsRemove(fields map[string]string) ([]string, error) {
-	if err := exactFields(fields, "name", "value"); err != nil {
-		return nil, err
+	if fieldsError := exactFields(fields, "name", "value"); fieldsError != nil {
+		return nil, fieldsError
 	}
 	name, nameError := validatedField(fields, "name", validateAllowlistName)
 	if nameError != nil {
