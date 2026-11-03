@@ -46,7 +46,7 @@ func PurgeOldBackups(rootDir string, now time.Time) error {
 	}
 	purgeErrors := []error{}
 	for _, entry := range entries {
-		if isExpiredBackup(entry, now) {
+		if isExpiredBackup(entry, now) && !hasJournal(root, path.Join(BackupDirName, entry.Name())) {
 			purgeErrors = append(purgeErrors, root.RemoveAll(path.Join(BackupDirName, entry.Name())))
 		}
 	}

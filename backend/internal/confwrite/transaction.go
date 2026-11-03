@@ -2,6 +2,7 @@ package confwrite
 
 import (
 	"bytes"
+	"errors"
 	"io/fs"
 	"os"
 	"path"
@@ -14,14 +15,14 @@ type pendingWrite struct {
 	name     string
 	content  []byte
 	mode     fs.FileMode
-	replaces bool
+	replaced fs.FileInfo
 	tempName string
 	renamed  bool
 }
 
 type transaction struct {
 	root      *os.Root
-	rename    renameFunc
+	hooks     fileSystemHooks
 	writes    []*pendingWrite
 	backupDir string
 }
@@ -38,9 +39,9 @@ func (writeTransaction *transaction) classify(changes []FileChange) (Result, err
 			result.Unchanged = append(result.Unchanged, change.Name)
 			continue
 		}
-		write := &pendingWrite{name: change.Name, content: change.Content, mode: newFileMode, replaces: current.Exists}
+		write := &pendingWrite{name: change.Name, content: change.Content, mode: newFileMode}
 		if current.Exists {
-			write.mode = current.mode
+			write.mode, write.replaced = current.info.Mode().Perm(), current.info
 			result.Updated = append(result.Updated, change.Name)
 		} else {
 			result.Created = append(result.Created, change.Name)
@@ -51,10 +52,8 @@ func (writeTransaction *transaction) classify(changes []FileChange) (Result, err
 }
 
 func (writeTransaction *transaction) stage() error {
-	if writeTransaction.replacesAny() {
-		if prepareError := writeTransaction.prepareBackupDir(); prepareError != nil {
-			return prepareError
-		}
+	if prepareError := writeTransaction.prepareBackupDir(); prepareError != nil {
+		return prepareError
 	}
 	for _, write := range writeTransaction.writes {
 		tempName, writeError := writeContentToTemp(writeTransaction.root, write.content, write.mode)
@@ -63,16 +62,10 @@ func (writeTransaction *transaction) stage() error {
 		}
 		write.tempName = tempName
 	}
-	return writeTransaction.backupReplacedFiles()
-}
-
-func (writeTransaction *transaction) replacesAny() bool {
-	for _, write := range writeTransaction.writes {
-		if write.replaces {
-			return true
-		}
+	if backupError := writeTransaction.backupReplacedFiles(); backupError != nil {
+		return backupError
 	}
-	return false
+	return writeJournal(writeTransaction.root, writeTransaction.backupDir, writeTransaction.journal(), writeTransaction.hooks.syncDirectory)
 }
 
 func (writeTransaction *transaction) prepareBackupDir() error {
@@ -88,28 +81,55 @@ func (writeTransaction *transaction) prepareBackupDir() error {
 }
 
 func (writeTransaction *transaction) backupReplacedFiles() error {
-	if writeTransaction.backupDir == "" {
-		return nil
-	}
 	for _, write := range writeTransaction.writes {
-		if !write.replaces {
+		if write.replaced == nil {
 			continue
 		}
-		if copyError := copyFile(writeTransaction.root, write.name, path.Join(writeTransaction.backupDir, write.name), write.mode); copyError != nil {
-			return copyError
+		backupName := path.Join(writeTransaction.backupDir, write.name)
+		if backupError := backupFile(writeTransaction.root, write.name, write.replaced, backupName); backupError != nil {
+			return backupError
 		}
 	}
-	return syncDirectory(writeTransaction.root, writeTransaction.backupDir)
+	return writeTransaction.hooks.syncDirectory(writeTransaction.root, writeTransaction.backupDir)
+}
+
+func (writeTransaction *transaction) journal() journal {
+	entry := journal{Created: []string{}, Replaced: []string{}}
+	for _, write := range writeTransaction.writes {
+		if write.replaced == nil {
+			entry.Created = append(entry.Created, write.name)
+		} else {
+			entry.Replaced = append(entry.Replaced, write.name)
+		}
+	}
+	return entry
 }
 
 func (writeTransaction *transaction) commit() error {
 	for _, write := range writeTransaction.writes {
-		if renameError := writeTransaction.rename(writeTransaction.root, write.tempName, write.name); renameError != nil {
+		if verifyError := writeTransaction.verifyTarget(write); verifyError != nil {
+			return verifyError
+		}
+		if renameError := writeTransaction.hooks.rename(writeTransaction.root, write.tempName, write.name); renameError != nil {
 			return renameError
 		}
 		write.renamed = true
 	}
-	return syncDirectory(writeTransaction.root, ".")
+	return writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")
+}
+
+func (writeTransaction *transaction) verifyTarget(write *pendingWrite) error {
+	observedInfo, lstatError := writeTransaction.root.Lstat(write.name)
+	if write.replaced == nil {
+		if errors.Is(lstatError, fs.ErrNotExist) {
+			return nil
+		}
+		return ErrConcurrentChange
+	}
+	if lstatError != nil || !isSameSnapshot(write.replaced, observedInfo) {
+		return ErrConcurrentChange
+	}
+	return nil
 }
 
 func (writeTransaction *transaction) discardTemps() {
@@ -120,45 +140,42 @@ func (writeTransaction *transaction) discardTemps() {
 	}
 }
 
+func (writeTransaction *transaction) abandonStage() {
+	writeTransaction.discardTemps()
+	if writeTransaction.backupDir != "" {
+		removeJournal(writeTransaction.root, writeTransaction.backupDir, writeTransaction.hooks.syncDirectory)
+	}
+}
+
 func (writeTransaction *transaction) rollback(result Result, cause error) (Result, error) {
 	writeTransaction.discardTemps()
 	affectedFiles := []string{}
 	for _, write := range writeTransaction.writes {
-		if !write.renamed {
-			continue
-		}
-		if undoError := writeTransaction.undo(write); undoError != nil {
+		if write.renamed && writeTransaction.undo(write) != nil {
 			affectedFiles = append(affectedFiles, write.name)
 		}
 	}
-	syncError := syncDirectory(writeTransaction.root, ".")
-	if len(affectedFiles) > 0 || syncError != nil {
+	writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")
+	if len(affectedFiles) > 0 {
 		return result, &InconsistentError{Files: affectedFiles}
 	}
+	removeJournal(writeTransaction.root, writeTransaction.backupDir, writeTransaction.hooks.syncDirectory)
 	result.RolledBack = true
 	return result, cause
 }
 
 func (writeTransaction *transaction) undo(write *pendingWrite) error {
-	if !write.replaces {
-		return writeTransaction.root.Remove(write.name)
+	if write.replaced == nil {
+		return removeIfPresent(writeTransaction.root, write.name)
 	}
-	tempName, copyError := writeTransaction.copyBackupToTemp(write)
-	if copyError != nil {
-		return copyError
-	}
-	if renameError := writeTransaction.root.Rename(tempName, write.name); renameError != nil {
-		writeTransaction.root.Remove(tempName)
-		return renameError
-	}
-	return nil
+	return restoreFromBackup(writeTransaction.root, writeTransaction.backupDir, write.name)
 }
 
-func (writeTransaction *transaction) copyBackupToTemp(write *pendingWrite) (string, error) {
-	backupFile, openError := writeTransaction.root.OpenFile(path.Join(writeTransaction.backupDir, write.name), readOnlyNoFollow, 0)
-	if openError != nil {
-		return "", openError
+func (writeTransaction *transaction) finish(result Result) (Result, error) {
+	removeError := removeJournal(writeTransaction.root, writeTransaction.backupDir, writeTransaction.hooks.syncDirectory)
+	if removeError == nil {
+		return result, nil
 	}
-	defer backupFile.Close()
-	return writeTempFile(writeTransaction.root, backupFile, write.mode)
+	writtenFiles := append(append([]string{}, result.Created...), result.Updated...)
+	return result, &InconsistentError{Files: writtenFiles}
 }

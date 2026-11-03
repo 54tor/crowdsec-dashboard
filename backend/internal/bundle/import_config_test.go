@@ -128,7 +128,7 @@ func TestNonAcquisFilesAreNeverImported(testContext *testing.T) {
 	if applyError != nil || report.Sections[0].Applied != 1 {
 		testContext.Fatalf("unexpected apply %+v %v", report, applyError)
 	}
-	if entries := importDirEntries(testContext, fixture.importDirectory); !slices.Equal(entries, []string{"nginx.yaml"}) {
+	if entries := importDirEntries(testContext, fixture.importDirectory); !slices.Equal(entries, []string{".dashboard-backup", "nginx.yaml"}) {
 		testContext.Errorf("only nginx.yaml may be written, got %v", entries)
 	}
 }

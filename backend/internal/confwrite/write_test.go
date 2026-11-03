@@ -375,8 +375,10 @@ func TestReplayIsIdempotentAndWritesNothing(testContext *testing.T) {
 	if configTestRuns != 0 {
 		testContext.Error("an unchanged replay must not run the config test")
 	}
-	if len(backupDirectories(testContext, importDirectory)) != 0 {
-		testContext.Error("an unchanged replay and a pure creation make no backup")
+	// A pure creation only leaves the (empty) backup directory that held its journal.
+	backedUpFiles, _ := filepath.Glob(filepath.Join(importDirectory, BackupDirName, "*", "*"))
+	if len(backupDirectories(testContext, importDirectory)) != 1 || len(backedUpFiles) != 0 {
+		testContext.Errorf("an unchanged replay and a pure creation back up nothing, got %v", backedUpFiles)
 	}
 	if after := directorySnapshot(testContext, importDirectory); !mapsEqual(before, after) {
 		testContext.Error("an unchanged replay must not write")
@@ -401,7 +403,9 @@ func TestCrashLeavesOldOrNewFileNeverPartial(testContext *testing.T) {
 		{Name: "b.yaml", Content: []byte(updatedAcquisition)},
 	}
 
-	result, applyError := applyWith(importDirectory, changes, passingConfigTest, failingSecondRename)
+	hooks := defaultHooks()
+	hooks.rename = failingSecondRename
+	result, applyError := applyWith(importDirectory, changes, passingConfigTest, hooks)
 
 	if applyError == nil || !result.RolledBack {
 		testContext.Fatalf("an interrupted rename sequence must roll back, got %+v %v", result, applyError)
