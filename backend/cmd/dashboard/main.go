@@ -107,6 +107,7 @@ func main() {
 	syncRunner, importRules := newSyncRunner(loadedConfig, engineRegistry, engineRepository, operationLock)
 	services.Sync = syncRunner
 	services.BundleImport.ShareRules = importRules
+	enableConfigImport(&services, loadedConfig, time.Now(), log.Printf)
 
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()

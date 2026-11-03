@@ -35,6 +35,9 @@ func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner, confDi
 		DeleteDecision:    localClient.DeleteDecision,
 		ConfigDir:         confDir,
 		LocalMachineID:    localClient.MachineID(),
+		TestConfig: func(ctx context.Context) error {
+			return cscli.ConfigTest(ctx, runner)
+		},
 	}
 }
 

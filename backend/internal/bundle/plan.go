@@ -37,6 +37,7 @@ var registeredSections = map[string]Section{
 	SectionHub:      hubImport{},
 	SectionDecision: decisionsImport{},
 	SectionAlerts:   alertsImport{},
+	SectionConfig:   configImport{},
 }
 
 type Section interface {
@@ -65,7 +66,15 @@ type AlertAction struct {
 	alert    lapi.Alert
 }
 
-type FileAction struct{}
+type FileAction struct {
+	Name           string `json:"name"`
+	Change         string `json:"change"`
+	SHA256         string `json:"sha256"`
+	PreviousSHA256 string `json:"previous_sha256,omitempty"`
+	Diff           string `json:"diff"`
+	DiffTruncated  bool   `json:"diff_truncated"`
+	content        []byte
+}
 
 type SkippedItem struct {
 	Section string `json:"section"`

@@ -22,6 +22,7 @@ type SectionReport struct {
 	SkippedReasons map[string]int `json:"skipped_reasons"`
 	ErrorCode      string         `json:"error_code,omitempty"`
 	Warnings       []string       `json:"warnings,omitempty"`
+	AffectedFiles  []string       `json:"affected_files,omitempty"`
 	Failure        error          `json:"-"`
 }
 

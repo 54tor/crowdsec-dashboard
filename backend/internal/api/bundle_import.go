@@ -175,6 +175,10 @@ func sectionErrorCode(failure error) string {
 	switch {
 	case errors.As(failure, &unavailableError):
 		return unavailableError.Code
+	case errors.Is(failure, bundle.ErrConfigInconsistent):
+		return bundle.ErrorCodeConfigInconsistent
+	case errors.Is(failure, bundle.ErrConfigTestFailed):
+		return bundle.ErrorCodeConfigTestFailed
 	case errors.Is(failure, context.DeadlineExceeded):
 		return "import_timeout"
 	case errors.Is(failure, context.Canceled):
@@ -210,6 +214,7 @@ func BundleImportAuditTarget(report bundle.ApplyReport) string {
 		skippedTotal += sectionReport.Skipped
 		failedTotal += sectionReport.Failed
 	}
-	return fmt.Sprintf("dry=false hub=%d decisions=%d alerts=%d skipped=%d failed=%d",
-		appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionDecision], appliedBySection[bundle.SectionAlerts], skippedTotal, failedTotal)
+	return fmt.Sprintf("dry=false hub=%d config=%d decisions=%d alerts=%d skipped=%d failed=%d",
+		appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionConfig], appliedBySection[bundle.SectionDecision],
+		appliedBySection[bundle.SectionAlerts], skippedTotal, failedTotal)
 }

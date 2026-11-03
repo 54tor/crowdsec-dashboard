@@ -359,15 +359,6 @@ func TestImportedDecisionsAreMarkedImportScenario(testContext *testing.T) {
 	}
 }
 
-func TestImportReportsUnregisteredSectionsUnavailable(testContext *testing.T) {
-	fixture := newImportFixture()
-	imported := Bundle{Format: Format, Version: Version, Sections: Sections{Config: &ConfigSection{Files: []ConfigFile{}}}}
-	plan := planOrFail(testContext, fixture, imported, SectionConfig)
-	if !slices.Equal(plan.Unavailable, []string{SectionConfig}) {
-		testContext.Errorf("config must be section_unavailable until registered, got %v", plan.Unavailable)
-	}
-}
-
 func TestImportRefusesInvalidSectionLists(testContext *testing.T) {
 	fixture := newImportFixture()
 	imported := decisionsBundle(banUntil("203.0.113.95", time.Hour))
