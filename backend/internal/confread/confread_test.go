@@ -255,13 +255,27 @@ func TestPostoverflowWhitelistIsListed(testContext *testing.T) {
 
 func TestPostoverflowNonWhitelistIsRefused(testContext *testing.T) {
 	confDir := testContext.TempDir()
-	writeConfFile(testContext, confDir, "postoverflows/s01-whitelist/rules.yaml", "name: example/rules\n")
-	refusedNames := []string{
+	refusedFiles := []string{
 		"postoverflows/s01-whitelist/rules.yaml",
+		"postoverflows/s01-whitelist/x-whitelist.txt",
+		"postoverflows/s01-whitelist/whitelist",
+		"postoverflows/s01-whitelist/sub/x-whitelist.yaml",
+		"postoverflows/x-whitelist.yaml",
+		"postoverflows/s01-whitelist/x-whitelist_credentials.yaml",
+	}
+	for _, refusedFile := range refusedFiles {
+		writeConfFile(testContext, confDir, refusedFile, "name: example/refused\n")
+	}
+	refusedDirectory := "postoverflows/s01-whitelist/dir-whitelist.yaml"
+	if mkdirError := os.MkdirAll(filepath.Join(confDir, refusedDirectory), 0o755); mkdirError != nil {
+		testContext.Fatal(mkdirError)
+	}
+	refusedNames := append(slices.Clone(refusedFiles),
+		refusedDirectory,
 		"postoverflows/s01-whitelist/../../config.yaml",
 		"postoverflows/../config.yaml",
 		"../postoverflows/s01-whitelist/my-whitelist.yaml",
-	}
+	)
 
 	for _, refusedName := range refusedNames {
 		obtainedContent, readError := Read(confDir, refusedName)
@@ -280,26 +294,36 @@ func TestPostoverflowNonWhitelistIsRefused(testContext *testing.T) {
 
 func TestHubSymlinkedWhitelistIsRefused(testContext *testing.T) {
 	confDir := testContext.TempDir()
-	hubDir := filepath.Join(confDir, "hub", "postoverflows", "s01-whitelist")
+	hubDirectory := filepath.Join(confDir, "hub", "postoverflows", "s01-whitelist")
 	writeConfFile(testContext, confDir, "hub/postoverflows/s01-whitelist/hub-whitelist.yaml", "name: example/hub\n")
-	linkDir := filepath.Join(confDir, "postoverflows", "s01-whitelist")
-	if mkdirError := os.MkdirAll(linkDir, 0o755); mkdirError != nil {
+	linkedFileDirectory := filepath.Join(confDir, "postoverflows", "s01-whitelist")
+	if mkdirError := os.MkdirAll(linkedFileDirectory, 0o755); mkdirError != nil {
 		testContext.Fatal(mkdirError)
 	}
-	linkPath := filepath.Join(linkDir, "hub-whitelist.yaml")
-	if symlinkError := os.Symlink(filepath.Join(hubDir, "hub-whitelist.yaml"), linkPath); symlinkError != nil {
+	fileSymlinkPath := filepath.Join(linkedFileDirectory, "hub-whitelist.yaml")
+	if symlinkError := os.Symlink(filepath.Join(hubDirectory, "hub-whitelist.yaml"), fileSymlinkPath); symlinkError != nil {
+		testContext.Fatal(symlinkError)
+	}
+	linkedDirectoryParent := filepath.Join(confDir, "postoverflows", "s02-whitelist")
+	if symlinkError := os.Symlink(hubDirectory, linkedDirectoryParent); symlinkError != nil {
 		testContext.Fatal(symlinkError)
 	}
 
-	obtainedContent, readError := Read(confDir, "postoverflows/s01-whitelist/hub-whitelist.yaml")
-	if readError == nil || obtainedContent != nil {
-		testContext.Errorf("symlinked whitelist must be refused, got %q", obtainedContent)
+	refusedNames := []string{
+		"postoverflows/s01-whitelist/hub-whitelist.yaml",
+		"postoverflows/s02-whitelist/hub-whitelist.yaml",
+	}
+	for _, refusedName := range refusedNames {
+		obtainedContent, readError := Read(confDir, refusedName)
+		if !errors.Is(readError, ErrNotAllowed) || obtainedContent != nil {
+			testContext.Errorf("%q: expected ErrNotAllowed, got %v", refusedName, readError)
+		}
 	}
 	obtainedNames, listError := List(confDir)
 	if listError != nil {
 		testContext.Fatal(listError)
 	}
 	if len(obtainedNames) != 0 {
-		testContext.Errorf("symlinked whitelist must not be listed, got %v", obtainedNames)
+		testContext.Errorf("symlinked whitelists must not be listed, got %v", obtainedNames)
 	}
 }
