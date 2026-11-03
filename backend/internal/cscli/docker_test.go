@@ -60,7 +60,12 @@ func (api *fakeDockerAPI) ExecAttach(ctx context.Context, _ string, options clie
 	return client.ExecAttachResult{HijackedResponse: client.NewHijackedResponse(clientSide, "application/vnd.docker.multiplexed-stream")}, nil
 }
 
-func (api *fakeDockerAPI) ExecInspect(_ context.Context, _ string, _ client.ExecInspectOptions) (client.ExecInspectResult, error) {
+// Like the real client, inspect fails once the context is done: otherwise a
+// server side closed first on cancel would look like a clean exit 0.
+func (api *fakeDockerAPI) ExecInspect(ctx context.Context, _ string, _ client.ExecInspectOptions) (client.ExecInspectResult, error) {
+	if ctx.Err() != nil {
+		return client.ExecInspectResult{}, ctx.Err()
+	}
 	api.inspectCalls++
 	if api.stayRunning || api.inspectCalls <= api.runningPolls {
 		return client.ExecInspectResult{Running: true}, nil
@@ -126,8 +131,8 @@ func TestDockerRunnerEnforcesTimeout(t *testing.T) {
 
 	_, err := runner.Run(context.Background(), []string{"cscli", "version"})
 
-	if err == nil {
-		t.Fatal("expected timeout error")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected a deadline exceeded error, got %v", err)
 	}
 }
 
