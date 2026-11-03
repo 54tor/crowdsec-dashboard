@@ -358,6 +358,27 @@ var requiredAllowlistRoutes = map[string]routeAccess{
 	"DELETE /api/engines/{name}/allowlists/{allowlist}/entries": accessAdmin,
 }
 
+var requiredHubRoutes = map[string]routeAccess{
+	"GET /api/hub":                     accessAuthenticated,
+	"POST /api/hub/update":             accessAdmin,
+	"POST /api/hub/upgrade":            accessAdmin,
+	"POST /api/hub/{kind}":             accessAdmin,
+	"DELETE /api/hub/{kind}/{name...}": accessAdmin,
+}
+
+func TestHubRoutesKeepTheirAccessClass(testContext *testing.T) {
+	foundAccessByPattern := map[string]routeAccess{}
+	for _, route := range routeTableForTest(newRouteAccessEnvironment(testContext)) {
+		foundAccessByPattern[route.Pattern] = route.Access
+	}
+	for pattern, expectedAccess := range requiredHubRoutes {
+		foundAccess, isPresent := foundAccessByPattern[pattern]
+		if !isPresent || foundAccess != expectedAccess {
+			testContext.Errorf("%s: expected access %d, found %d (present=%v)", pattern, expectedAccess, foundAccess, isPresent)
+		}
+	}
+}
+
 var publicRoutePattern = regexp.MustCompile(`^(POST /api/auth/(login|enroll|logout)(/.*)?|GET /api/healthz|GET /api/auth/status)$`)
 
 func TestSessionOnlyRoutesKeepTheirAccessClass(testContext *testing.T) {

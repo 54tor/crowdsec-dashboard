@@ -40,6 +40,15 @@ func TestExecuteDoesNotMapCallerCancellationToTimeout(testContext *testing.T) {
 	}
 }
 
+func TestAppSecHubCommandsUseHubMutationTimeout(testContext *testing.T) {
+	for _, commandName := range []string{"appsec_rules_install", "appsec_rules_remove", "appsec_configs_install", "appsec_configs_remove"} {
+		command, found := Lookup(commandName)
+		if !found || command.Timeout != HubMutationTimeout {
+			testContext.Errorf("%s: found=%v timeout=%v", commandName, found, command.Timeout)
+		}
+	}
+}
+
 func TestExecuteAppliesTheCommandTimeout(testContext *testing.T) {
 	testCases := map[string]time.Duration{
 		"version":             DefaultTimeout,

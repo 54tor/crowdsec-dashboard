@@ -295,6 +295,112 @@ func TestHubUpdateAndUpgradeRunFixedArgv(testContext *testing.T) {
 	}
 }
 
+func TestHubInstallRoutesByKind(testContext *testing.T) {
+	expectedCommandsByKind := map[string]string{
+		"collections":    "cscli collections install crowdsecurity/linux",
+		"appsec-rules":   "cscli appsec-rules install crowdsecurity/linux",
+		"appsec-configs": "cscli appsec-configs install crowdsecurity/linux",
+	}
+	for kind, expectedCommand := range expectedCommandsByKind {
+		fixture := newAdminFixture(testContext, nil, nil)
+
+		recorder := fixture.send(http.MethodPost, "/api/hub/"+kind, `{"name":"crowdsecurity/linux"}`, true)
+
+		if recorder.Code != http.StatusOK || len(fixture.runner.argvCalls) != 1 || strings.Join(fixture.runner.argvCalls[0], " ") != expectedCommand {
+			testContext.Errorf("%s: unexpected %d %v", kind, recorder.Code, fixture.runner.argvCalls)
+		}
+	}
+}
+
+func TestHubRemoveRoutesByKindAndRequiresRetypedName(testContext *testing.T) {
+	for _, kind := range []string{"collections", "appsec-rules", "appsec-configs"} {
+		fixture := newAdminFixture(testContext, nil, nil)
+		path := "/api/hub/" + kind + "/crowdsecurity/linux"
+
+		refused := fixture.send(http.MethodDelete, path, `{"confirm":"other"}`, true)
+		expectError(testContext, refused, http.StatusBadRequest, "confirmation_required")
+		if len(fixture.runner.argvCalls) != 0 {
+			testContext.Fatalf("%s: nothing may run without the retyped name, got %v", kind, fixture.runner.argvCalls)
+		}
+
+		accepted := fixture.send(http.MethodDelete, path, `{"confirm":"crowdsecurity/linux"}`, true)
+
+		expectedCommand := "cscli " + kind + " remove crowdsecurity/linux"
+		if accepted.Code != http.StatusOK || len(fixture.runner.argvCalls) != 1 || strings.Join(fixture.runner.argvCalls[0], " ") != expectedCommand {
+			testContext.Errorf("%s: unexpected %d %v", kind, accepted.Code, fixture.runner.argvCalls)
+		}
+	}
+}
+
+func TestHubUnknownKindReturns404(testContext *testing.T) {
+	fixture := newAdminFixture(testContext, nil, nil)
+
+	for _, unknownKind := range []string{"parsers", "..%2Fx", "x%2Fy"} {
+		installRecorder := fixture.send(http.MethodPost, "/api/hub/"+unknownKind, `{"name":"crowdsecurity/linux"}`, true)
+		removeRecorder := fixture.send(http.MethodDelete, "/api/hub/"+unknownKind+"/crowdsecurity/linux", `{"confirm":"crowdsecurity/linux"}`, true)
+
+		if installRecorder.Code != http.StatusNotFound || removeRecorder.Code != http.StatusNotFound {
+			testContext.Errorf("%s: expected 404 twice, got %d and %d", unknownKind, installRecorder.Code, removeRecorder.Code)
+		}
+	}
+	expectError(testContext, fixture.send(http.MethodPost, "/api/hub/parsers", `{"name":"crowdsecurity/linux"}`, true), http.StatusNotFound, "not_found")
+	if len(fixture.runner.argvCalls) != 0 {
+		testContext.Errorf("cscli must not run, got %v", fixture.runner.argvCalls)
+	}
+}
+
+func TestHubMutationsRequireAdmin(testContext *testing.T) {
+	fixture := newAdminFixture(testContext, nil, nil)
+
+	for _, kind := range []string{"collections", "appsec-rules", "appsec-configs"} {
+		installRecorder := fixture.send(http.MethodPost, "/api/hub/"+kind, `{"name":"crowdsecurity/linux"}`, false)
+		removeRecorder := fixture.send(http.MethodDelete, "/api/hub/"+kind+"/crowdsecurity/linux", `{"confirm":"crowdsecurity/linux"}`, false)
+
+		expectError(testContext, installRecorder, http.StatusUnauthorized, "unauthenticated")
+		expectError(testContext, removeRecorder, http.StatusUnauthorized, "unauthenticated")
+	}
+	if len(fixture.runner.argvCalls) != 0 {
+		testContext.Errorf("nothing may run, got %v", fixture.runner.argvCalls)
+	}
+}
+
+func TestHubUpdateAndUpgradeStillReachTheirHandlers(testContext *testing.T) {
+	fixture := newAdminFixture(testContext, nil, nil)
+
+	updateRecorder := fixture.send(http.MethodPost, "/api/hub/update", "", true)
+	upgradeRecorder := fixture.send(http.MethodPost, "/api/hub/upgrade", "", true)
+
+	if updateRecorder.Code != http.StatusOK || upgradeRecorder.Code != http.StatusOK {
+		testContext.Fatalf("unexpected %d %d", updateRecorder.Code, upgradeRecorder.Code)
+	}
+	if len(fixture.runner.argvCalls) != 2 || strings.Join(fixture.runner.argvCalls[0], " ") != "cscli hub update" || strings.Join(fixture.runner.argvCalls[1], " ") != "cscli hub upgrade" {
+		testContext.Errorf("unexpected calls %v", fixture.runner.argvCalls)
+	}
+}
+
+func TestNoDuplicateHubPatternInRouteTable(testContext *testing.T) {
+	seenPatterns := map[string]bool{}
+	for _, route := range routeTableForTest(newRouteAccessEnvironment(testContext)) {
+		if !strings.Contains(route.Pattern, "/api/hub") {
+			continue
+		}
+		if seenPatterns[route.Pattern] {
+			testContext.Errorf("duplicate hub pattern %s", route.Pattern)
+		}
+		seenPatterns[route.Pattern] = true
+	}
+	for _, requiredPattern := range []string{"POST /api/hub/{kind}", "DELETE /api/hub/{kind}/{name...}", "POST /api/hub/update", "POST /api/hub/upgrade"} {
+		if !seenPatterns[requiredPattern] {
+			testContext.Errorf("missing hub pattern %s", requiredPattern)
+		}
+	}
+	for _, removedPattern := range []string{"POST /api/hub/collections", "DELETE /api/hub/collections/{name...}"} {
+		if seenPatterns[removedPattern] {
+			testContext.Errorf("literal %s must be served by {kind}", removedPattern)
+		}
+	}
+}
+
 const hubListOutput = `{
  "collections": [{"name":"crowdsecurity/linux","local_version":"0.2","local_path":"/etc/crowdsec/collections/linux.yaml","description":"core linux","status":"enabled","utf8_status":"✔️  enabled","secret_extra":"hidden"}],
  "parsers": [{"name":"crowdsecurity/sshd-logs","local_version":"2.1","description":"ssh","status":"enabled"}],

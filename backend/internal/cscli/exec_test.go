@@ -34,6 +34,31 @@ func TestUnknownCommandIsRejected(t *testing.T) {
 	}
 }
 
+func TestAppSecHubCommandsBuildFixedArgv(testContext *testing.T) {
+	testCases := []struct {
+		commandName  string
+		expectedArgv []string
+	}{
+		{"appsec_rules_install", []string{"cscli", "appsec-rules", "install", "crowdsecurity/vpatch-env-access"}},
+		{"appsec_rules_remove", []string{"cscli", "appsec-rules", "remove", "crowdsecurity/vpatch-env-access"}},
+		{"appsec_configs_install", []string{"cscli", "appsec-configs", "install", "crowdsecurity/vpatch-env-access"}},
+		{"appsec_configs_remove", []string{"cscli", "appsec-configs", "remove", "crowdsecurity/vpatch-env-access"}},
+	}
+	for _, testCase := range testCases {
+		runner := &recordingRunner{}
+
+		_, executeError := Execute(context.Background(), runner, testCase.commandName, map[string]string{"name": "crowdsecurity/vpatch-env-access"})
+
+		if executeError != nil || !reflect.DeepEqual(runner.receivedArgv, testCase.expectedArgv) {
+			testContext.Errorf("%s: expected %v, got %v (%v)", testCase.commandName, testCase.expectedArgv, runner.receivedArgv, executeError)
+		}
+		_, refusedError := Execute(context.Background(), &recordingRunner{}, testCase.commandName, map[string]string{"name": "--force"})
+		if refusedError == nil {
+			testContext.Errorf("%s: a flag-like name must be refused", testCase.commandName)
+		}
+	}
+}
+
 func TestExecuteBuildsExpectedArgv(t *testing.T) {
 	testCases := []struct {
 		name         string

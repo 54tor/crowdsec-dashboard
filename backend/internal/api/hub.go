@@ -30,11 +30,16 @@ func (handlers hubHandlers) upgrade(responseWriter http.ResponseWriter, request 
 }
 
 func (handlers hubHandlers) install(responseWriter http.ResponseWriter, request *http.Request) {
+	kind := request.PathValue("kind")
+	if !isKnownHubKind(kind) {
+		writeError(responseWriter, http.StatusNotFound, "not_found")
+		return
+	}
 	name, decoded := decodeNamedRequest(responseWriter, request)
 	if !decoded {
 		return
 	}
-	if installError := handlers.service.Install(request.Context(), name); installError != nil {
+	if installError := handlers.service.Install(request.Context(), kind, name); installError != nil {
 		writeUpstreamError(responseWriter, installError)
 		return
 	}
@@ -42,12 +47,17 @@ func (handlers hubHandlers) install(responseWriter http.ResponseWriter, request 
 }
 
 func (handlers hubHandlers) remove(responseWriter http.ResponseWriter, request *http.Request) {
+	kind := request.PathValue("kind")
+	if !isKnownHubKind(kind) {
+		writeError(responseWriter, http.StatusNotFound, "not_found")
+		return
+	}
 	name := request.PathValue("name")
 	if requireConfirm(request, name) != nil {
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
-	if removeError := handlers.service.Remove(request.Context(), name); removeError != nil {
+	if removeError := handlers.service.Remove(request.Context(), kind, name); removeError != nil {
 		writeUpstreamError(responseWriter, removeError)
 		return
 	}

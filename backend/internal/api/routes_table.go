@@ -146,8 +146,8 @@ func crowdsecWriteRoutes(loadedConfig config.Config, services Services) []apiRou
 		{"DELETE /api/machines/{name}", accessAdmin, http.HandlerFunc(machines.remove)},
 		{"POST /api/hub/update", accessAdmin, longWrite(http.HandlerFunc(hub.update))},
 		{"POST /api/hub/upgrade", accessAdmin, longWrite(http.HandlerFunc(hub.upgrade))},
-		{"POST /api/hub/collections", accessAdmin, longWrite(http.HandlerFunc(hub.install))},
-		{"DELETE /api/hub/collections/{name...}", accessAdmin, longWrite(http.HandlerFunc(hub.remove))},
+		{"POST /api/hub/{kind}", accessAdmin, longWrite(http.HandlerFunc(hub.install))},
+		{"DELETE /api/hub/{kind}/{name...}", accessAdmin, longWrite(http.HandlerFunc(hub.remove))},
 		{"POST /api/crowdsec/reload", accessAdmin, http.HandlerFunc(reloadHandlers{service: services.Reloader}.reload)},
 	}
 }

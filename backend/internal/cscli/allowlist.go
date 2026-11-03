@@ -14,7 +14,7 @@ const (
 	HubMutationTimeout = 120 * time.Second
 )
 
-var hubMutationCommands = []string{"hub_update", "hub_upgrade", "collections_install", "collections_remove"}
+var hubMutationCommands = []string{"hub_update", "hub_upgrade", "collections_install", "collections_remove", "appsec_rules_install", "appsec_rules_remove", "appsec_configs_install", "appsec_configs_remove"}
 
 type Command struct {
 	Name    string
@@ -93,6 +93,10 @@ func buildCommands() map[string]Command {
 		{Name: "hub_upgrade", Build: fixed("cscli", "hub", "upgrade")},
 		{Name: "collections_install", Build: withName(validateHubName, []string{"cscli", "collections", "install"})},
 		{Name: "collections_remove", Build: withName(validateHubName, []string{"cscli", "collections", "remove"})},
+		{Name: "appsec_rules_install", Build: withName(validateHubName, []string{"cscli", "appsec-rules", "install"})},
+		{Name: "appsec_rules_remove", Build: withName(validateHubName, []string{"cscli", "appsec-rules", "remove"})},
+		{Name: "appsec_configs_install", Build: withName(validateHubName, []string{"cscli", "appsec-configs", "install"})},
+		{Name: "appsec_configs_remove", Build: withName(validateHubName, []string{"cscli", "appsec-configs", "remove"})},
 		{Name: "allowlists_create", Build: buildAllowlistsCreate},
 		{Name: "allowlists_delete", Build: buildAllowlistsDelete},
 		{Name: "allowlists_add", Build: buildAllowlistsAdd},

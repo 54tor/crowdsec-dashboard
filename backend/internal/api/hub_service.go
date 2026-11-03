@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,6 +13,8 @@ import (
 )
 
 const maxHubItems = 1000
+
+var ErrUnknownHubKind = errors.New("unknown hub kind")
 
 type HubItem struct {
 	Type         string `json:"type"`
@@ -32,8 +35,8 @@ type HubService interface {
 	List(ctx context.Context) ([]HubItem, error)
 	Update(ctx context.Context) error
 	Upgrade(ctx context.Context) error
-	Install(ctx context.Context, name string) error
-	Remove(ctx context.Context, name string) error
+	Install(ctx context.Context, kind, name string) error
+	Remove(ctx context.Context, kind, name string) error
 }
 
 type cscliHub struct{ runner cscli.Runner }
@@ -82,12 +85,33 @@ func (service cscliHub) Upgrade(ctx context.Context) error {
 	return executeError
 }
 
-func (service cscliHub) Install(ctx context.Context, name string) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "collections_install", map[string]string{"name": name})
+type hubKindCommands struct{ install, remove string }
+
+var hubKinds = map[string]hubKindCommands{
+	"collections":    {install: "collections_install", remove: "collections_remove"},
+	"appsec-rules":   {install: "appsec_rules_install", remove: "appsec_rules_remove"},
+	"appsec-configs": {install: "appsec_configs_install", remove: "appsec_configs_remove"},
+}
+
+func isKnownHubKind(kind string) bool {
+	_, isKnown := hubKinds[kind]
+	return isKnown
+}
+
+func (service cscliHub) Install(ctx context.Context, kind, name string) error {
+	kindCommands, isKnown := hubKinds[kind]
+	if !isKnown {
+		return ErrUnknownHubKind
+	}
+	_, executeError := cscli.Execute(ctx, service.runner, kindCommands.install, map[string]string{"name": name})
 	return executeError
 }
 
-func (service cscliHub) Remove(ctx context.Context, name string) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "collections_remove", map[string]string{"name": name})
+func (service cscliHub) Remove(ctx context.Context, kind, name string) error {
+	kindCommands, isKnown := hubKinds[kind]
+	if !isKnown {
+		return ErrUnknownHubKind
+	}
+	_, executeError := cscli.Execute(ctx, service.runner, kindCommands.remove, map[string]string{"name": name})
 	return executeError
 }
