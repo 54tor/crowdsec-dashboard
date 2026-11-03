@@ -12,15 +12,24 @@ import (
 	"crowdsec-dashboard/internal/lapi"
 )
 
-const importScenarioDateLayout = "2006-01-02"
+const (
+	importScenarioDateLayout = "2006-01-02"
+	maxImportedRemaining     = 9999 * time.Hour
+	readBackTolerance        = time.Minute
+)
 
 type decisionsImport struct{}
+
+type coveringBan struct {
+	prefix    netip.Prefix
+	remaining time.Duration
+}
 
 type decisionPlanner struct {
 	rules           enginesync.Rules
 	guard           allowguard.Guard
 	isCallerAddress func(target string) bool
-	coveredTargets  []netip.Prefix
+	coveringBans    []coveringBan
 	scenario        string
 	now             time.Time
 	sectionPlan     SectionPlan
@@ -67,21 +76,21 @@ func newDecisionPlanner(ctx context.Context, deps ImportDeps) (*decisionPlanner,
 		rules:           rules,
 		guard:           guard,
 		isCallerAddress: deps.IsCallerAddress,
-		coveredTargets:  localBanTargets(localBans),
+		coveringBans:    localCoveringBans(localBans),
 		scenario:        importedPrefix + now.UTC().Format(importScenarioDateLayout),
 		now:             now,
 	}, true
 }
 
-func localBanTargets(localBans []lapi.SyncDecision) []netip.Prefix {
-	targets := make([]netip.Prefix, 0, len(localBans))
+func localCoveringBans(localBans []lapi.SyncDecision) []coveringBan {
+	coveringBans := make([]coveringBan, 0, len(localBans))
 	for _, localBan := range localBans {
 		target, targetError := enginesync.CanonicalTarget(localBan.Scope, localBan.Value)
 		if targetError == nil {
-			targets = append(targets, target.Prefix)
+			coveringBans = append(coveringBans, coveringBan{prefix: target.Prefix, remaining: localBan.Remaining})
 		}
 	}
-	return targets
+	return coveringBans
 }
 
 func (planner *decisionPlanner) plan(decision Decision) {
@@ -94,7 +103,7 @@ func (planner *decisionPlanner) plan(decision Decision) {
 		planner.sectionPlan.skip(SectionDecision, target.String(), reason)
 		return
 	}
-	planner.coveredTargets = append(planner.coveredTargets, target.Prefix)
+	planner.coveringBans = append(planner.coveringBans, coveringBan{prefix: target.Prefix, remaining: decision.Until.Sub(planner.now)})
 	planner.sectionPlan.Decisions = append(planner.sectionPlan.Decisions, DecisionAction{
 		Scope:    target.Scope,
 		Value:    target.String(),
@@ -111,6 +120,9 @@ func (planner *decisionPlanner) refusal(decision Decision, target enginesync.Tar
 	if remaining <= 0 {
 		return ReasonExpired
 	}
+	if remaining > maxImportedRemaining {
+		return ReasonTooLong
+	}
 	ban := enginesync.Ban{Target: target, Remaining: remaining, Origin: decision.Origin}
 	if isShareable, reason := enginesync.IsShareable(ban, planner.rules); !isShareable {
 		return reason
@@ -118,7 +130,7 @@ func (planner *decisionPlanner) refusal(decision Decision, target enginesync.Tar
 	if planner.isCallerAddress(target.String()) {
 		return ReasonOwnAddress
 	}
-	if isCoveredByAny(planner.coveredTargets, target.Prefix) {
+	if isCoveredByLongerBan(planner.coveringBans, target.Prefix, remaining) {
 		return ReasonDuplicate
 	}
 	if verdict := planner.guard.Check(target.Prefix); !verdict.Allowed {
@@ -127,9 +139,11 @@ func (planner *decisionPlanner) refusal(decision Decision, target enginesync.Tar
 	return ""
 }
 
-func isCoveredByAny(coveringTargets []netip.Prefix, target netip.Prefix) bool {
-	return slices.ContainsFunc(coveringTargets, func(coveringTarget netip.Prefix) bool {
-		return coveringTarget.Bits() <= target.Bits() && coveringTarget.Contains(target.Addr())
+func isCoveredByLongerBan(coveringBans []coveringBan, target netip.Prefix, remaining time.Duration) bool {
+	return slices.ContainsFunc(coveringBans, func(candidate coveringBan) bool {
+		containsTarget := candidate.prefix.Bits() <= target.Bits() && candidate.prefix.Contains(target.Addr())
+		lastsAsLong := candidate.remaining+readBackTolerance >= remaining
+		return containsTarget && lastsAsLong
 	})
 }
 

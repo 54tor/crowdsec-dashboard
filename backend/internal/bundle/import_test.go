@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/allowguard"
 	"crowdsec-dashboard/internal/lapi"
 )
 
@@ -256,7 +258,11 @@ func TestImportNeverWritesWhenAllowlistsRouteFails500(testContext *testing.T) {
 		if planError != nil {
 			testContext.Fatalf("status %d: unexpected plan error %v", allowlistStatus, planError)
 		}
-		_, _ = Apply(context.Background(), deps, plan)
+		_, applyError := Apply(context.Background(), deps, plan)
+		isRefusedAsUnavailable := errors.Is(applyError, ErrSectionUnavailable)
+		if (allowlistStatus == http.StatusInternalServerError) != isRefusedAsUnavailable {
+			testContext.Errorf("allowlists answering %d: unexpected apply error %v", allowlistStatus, applyError)
+		}
 		if alertWrites.Load() != expectedWrites {
 			testContext.Errorf("allowlists answering %d: expected %d writes, got %d", allowlistStatus, expectedWrites, alertWrites.Load())
 		}
@@ -370,5 +376,88 @@ func TestImportRefusesInvalidSectionLists(testContext *testing.T) {
 		if _, planError := PlanImport(context.Background(), fixture.deps(), imported, invalidSections); !errors.Is(planError, ErrInvalidRequest) {
 			testContext.Errorf("%v: expected ErrInvalidRequest, got %v", invalidSections, planError)
 		}
+	}
+}
+
+func TestHubImportSkipsInvalidCollectionNames(testContext *testing.T) {
+	fixture := newImportFixture()
+	invalidNames := []string{"-force", "../x", "a/b/c", strings.Repeat("a", 65), ""}
+	collections := []HubCollection{{Name: "crowdsecurity/nginx"}}
+	for _, invalidName := range invalidNames {
+		collections = append(collections, HubCollection{Name: invalidName})
+	}
+	plan := planOrFail(testContext, fixture, hubBundle(collections...), SectionHub)
+	if len(plan.Hub) != 1 || plan.Hub[0].Name != "crowdsecurity/nginx" {
+		testContext.Errorf("only the valid name may be planned for install, got %+v", plan.Hub)
+	}
+	for _, invalidName := range invalidNames {
+		if reason := skippedReason(plan, invalidName); reason != ReasonInvalidName {
+			testContext.Errorf("%q: expected invalid_name, got %q", invalidName, reason)
+		}
+	}
+}
+
+func TestPlanStopsWhenTheContextExpires(testContext *testing.T) {
+	fixture := newImportFixture()
+	fixture.hubReadDelay = time.Minute
+	expiringContext, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, planError := PlanImport(expiringContext, fixture.deps(), hubBundle(HubCollection{Name: "crowdsecurity/nginx"}), []string{SectionHub})
+	if !errors.Is(planError, context.DeadlineExceeded) {
+		testContext.Errorf("an expired plan must report the deadline, got %v", planError)
+	}
+}
+
+func TestDecisionsImportKeepsLongerBanOverShorterCoveringOne(testContext *testing.T) {
+	fixture := newImportFixture()
+	fixture.localBans = []lapi.SyncDecision{
+		{Origin: "crowdsec", Scope: "Range", Value: "203.0.113.0/24", Remaining: 10 * time.Minute},
+		{Origin: "crowdsec", Scope: "Range", Value: "203.0.114.0/24", Remaining: 30 * 24 * time.Hour},
+	}
+	imported := decisionsBundle(banUntil("203.0.113.7", 7*24*time.Hour), banUntil("203.0.114.7", 7*24*time.Hour))
+	plan := planOrFail(testContext, fixture, imported, SectionDecision)
+	if !slices.Equal(plannedValues(plan), []string{"203.0.113.7"}) {
+		testContext.Errorf("a shorter covering ban must not suppress a longer import, got %v", plannedValues(plan))
+	}
+	if reason := skippedReason(plan, "203.0.114.7"); reason != ReasonDuplicate {
+		testContext.Errorf("a longer covering ban makes the import a duplicate, got %q", reason)
+	}
+}
+
+func TestDecisionsImportSkipsBansLongerThanTheManualMaximum(testContext *testing.T) {
+	fixture := newImportFixture()
+	plan := planOrFail(testContext, fixture, decisionsBundle(banUntil("203.0.113.8", 10000*time.Hour), banUntil("203.0.113.9", 9999*time.Hour)), SectionDecision)
+	if reason := skippedReason(plan, "203.0.113.8"); reason != ReasonTooLong {
+		testContext.Errorf("a ban beyond 9999h must be skipped too_long, got %q", reason)
+	}
+	if !slices.Equal(plannedValues(plan), []string{"203.0.113.9"}) {
+		testContext.Errorf("a ban at the maximum stays importable, got %v", plannedValues(plan))
+	}
+}
+
+func TestApplyRechecksTheAllowlistBeforeEachWrite(testContext *testing.T) {
+	// The recheck is a second line of defence on the same snapshot: here the plan carries a
+	// target that the plan's own guard refuses, as if the first check had been bypassed.
+	fixture := newImportFixture()
+	plan := planOrFail(testContext, fixture, decisionsBundle(banUntil("203.0.113.11", time.Hour)), SectionDecision)
+	sectionPlan := plan.sectionPlans[SectionDecision]
+	sectionPlan.allowlistGuard = allowguard.FromRead(allowlistOf("203.0.113.11"), nil, importTestTime)
+	plan.sectionPlans[SectionDecision] = sectionPlan
+	report, applyError := Apply(context.Background(), fixture.deps(), plan)
+	if applyError != nil {
+		testContext.Fatalf("unexpected apply error %v", applyError)
+	}
+	if len(fixture.addedDecisions) != 0 || report.Sections[0].SkippedReasons["allowlisted"] != 1 {
+		testContext.Errorf("the recheck must skip allowlisted with no write, got %v %+v", fixture.addedDecisions, report.Sections[0])
+	}
+}
+
+func TestApplyKeepsTheSectionFailureCause(testContext *testing.T) {
+	fixture := newImportFixture()
+	fixture.installError = errInstallFailed
+	plan := planOrFail(testContext, fixture, hubBundle(HubCollection{Name: "crowdsecurity/nginx"}), SectionHub)
+	report, _ := Apply(context.Background(), fixture.deps(), plan)
+	if !errors.Is(report.Sections[0].Failure, errInstallFailed) {
+		testContext.Errorf("the failing cause must be kept for the code mapping, got %v", report.Sections[0].Failure)
 	}
 }

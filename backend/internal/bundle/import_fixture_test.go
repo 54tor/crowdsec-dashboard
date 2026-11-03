@@ -39,6 +39,7 @@ type importFixture struct {
 	installedItems   []HubItem
 	installedNames   []string
 	installError     error
+	hubReadDelay     time.Duration
 	allowlists       *fakeAllowlistReader
 	localBans        []lapi.SyncDecision
 	localBansPartial bool
@@ -62,7 +63,14 @@ func newImportFixture() *importFixture {
 
 func (fixture *importFixture) deps() ImportDeps {
 	return ImportDeps{
-		ReadHub: func(context.Context) ([]HubItem, error) {
+		ReadHub: func(ctx context.Context) ([]HubItem, error) {
+			if fixture.hubReadDelay > 0 {
+				select {
+				case <-time.After(fixture.hubReadDelay):
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
 			return append([]HubItem(nil), fixture.installedItems...), nil
 		},
 		InstallCollection: func(_ context.Context, name string) error {
@@ -82,7 +90,11 @@ func (fixture *importFixture) deps() ImportDeps {
 				return fixture.addError
 			}
 			fixture.addedDecisions = append(fixture.addedDecisions, newDecision)
-			fixture.localBans = append(fixture.localBans, lapi.SyncDecision{Origin: "cscli", Scope: newDecision.Scope, Value: newDecision.Target, Scenario: newDecision.Scenario, Remaining: time.Hour})
+			// The LAPI reports the remaining time at read time: the decision is read back slightly
+			// shorter than written, which the replay must still recognise as a duplicate.
+			writtenDuration, _ := time.ParseDuration(newDecision.Duration)
+			readBackRemaining := writtenDuration - 700*time.Millisecond
+			fixture.localBans = append(fixture.localBans, lapi.SyncDecision{Origin: "cscli", Scope: newDecision.Scope, Value: newDecision.Target, Scenario: newDecision.Scenario, Remaining: readBackRemaining})
 			return nil
 		},
 		ShareRules: func(context.Context) (enginesync.Rules, bool) {
