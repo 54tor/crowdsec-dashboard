@@ -36,10 +36,12 @@ func (service *Service) confirmWrite(ctx context.Context, target writeTarget, ch
 	if refreshError != nil {
 		return MutationResult{Refreshed: false}, nil
 	}
-	canVerify := !refreshedRead.Truncated
-	if canVerify && !changeIsVisible(refreshedRead) {
+	listing := buildListing(target.engine.Name, true, refreshedRead, service.now())
+	if refreshedRead.Truncated {
+		return MutationResult{Listing: listing, Refreshed: false}, nil
+	}
+	if !changeIsVisible(refreshedRead) {
 		return MutationResult{}, ErrWriteFailed
 	}
-	listing := buildListing(target.engine.Name, true, refreshedRead, service.now())
 	return MutationResult{Listing: listing, Refreshed: true}, nil
 }

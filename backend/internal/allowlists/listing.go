@@ -12,7 +12,7 @@ func buildListing(engineName string, writable bool, read lapi.AllowlistRead, now
 	for _, allowlist := range read.Allowlists {
 		views = append(views, buildView(allowlist, now))
 	}
-	return Listing{Engine: engineName, Writable: writable, Supported: true, Truncated: read.Truncated, Allowlists: views}
+	return Listing{Engine: engineName, Writable: writable, Truncated: read.Truncated, Allowlists: views}
 }
 
 func buildView(allowlist lapi.Allowlist, now time.Time) View {

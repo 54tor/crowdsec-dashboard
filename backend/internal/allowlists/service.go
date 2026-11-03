@@ -16,6 +16,9 @@ type Service struct {
 }
 
 func NewService(engineLookup EngineLookup, clients ClientSource, writers WriterSource, now func() time.Time) *Service {
+	if now == nil {
+		now = time.Now
+	}
 	return &Service{engineLookup: engineLookup, clients: clients, writers: writers, now: now}
 }
 

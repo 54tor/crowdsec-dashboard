@@ -76,7 +76,8 @@ func (service *Service) RemoveEntry(ctx context.Context, engineName, allowlistNa
 	if valueError != nil {
 		return MutationResult{}, valueError
 	}
-	if !containsValue(allowlist, value) {
+	isProvenAbsent := !target.read.Truncated && !containsValue(allowlist, value)
+	if isProvenAbsent {
 		return MutationResult{}, ErrEntryNotFound
 	}
 	if writeError := target.writer.Remove(ctx, allowlistName, value); writeError != nil {

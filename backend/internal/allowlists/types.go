@@ -29,7 +29,6 @@ type View struct {
 type Listing struct {
 	Engine     string
 	Writable   bool
-	Supported  bool
 	Truncated  bool
 	Allowlists []View
 }

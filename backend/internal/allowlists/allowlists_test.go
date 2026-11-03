@@ -2,6 +2,7 @@ package allowlists
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"testing"
@@ -26,7 +27,7 @@ func TestListMarksEntriesWritableOnlyForLocal(testContext *testing.T) {
 	if !localListing.Writable || remoteListing.Writable {
 		testContext.Fatalf("expected local writable and remote read only, got %v %v", localListing.Writable, remoteListing.Writable)
 	}
-	if localListing.Engine != localEngineName || !localListing.Supported || len(localListing.Allowlists) != 1 {
+	if localListing.Engine != localEngineName || len(localListing.Allowlists) != 1 {
 		testContext.Fatalf("unexpected local listing: %+v", localListing)
 	}
 	if localListing.Allowlists[0].Entries[0].Value != "203.0.113.7" {
@@ -74,9 +75,6 @@ func TestForeign404IsNotUnsupported(testContext *testing.T) {
 	_, listError := fixture.service.List(context.Background(), localEngineName)
 
 	requireErrorIs(testContext, listError, lapi.ErrAllowlistsUnreadable)
-	if listError == ErrUnsupported {
-		testContext.Fatal("a 404 must never read as unsupported")
-	}
 }
 
 func TestUnsupportedEngineRefusesWrites(testContext *testing.T) {
@@ -318,5 +316,55 @@ func TestAddEntrySucceedsWhenRefreshFails(testContext *testing.T) {
 	}
 	if result.Refreshed || len(fixture.writer.calls) != 1 {
 		testContext.Fatalf("expected Refreshed=false after one write, got %+v %v", result, fixture.writer.calls)
+	}
+}
+
+// oversizedAllowlist holds two entries more than the LAPI client keeps, so
+// every read of it stays Truncated even after one removal, and the last entry
+// is always cut off.
+func oversizedAllowlist(lastValue string) lapi.Allowlist {
+	const entriesKeptByClient = 10000
+	items := make([]lapi.AllowlistItem, 0, entriesKeptByClient+2)
+	for entryIndex := range entriesKeptByClient + 1 {
+		filler := fmt.Sprintf("10.%d.%d.%d", entryIndex/65536, (entryIndex/256)%256, entryIndex%256)
+		items = append(items, permanentItem(filler))
+	}
+	items = append(items, permanentItem(lastValue))
+	return trustedAllowlist(items...)
+}
+
+func TestTruncatedReReadIsNotReportedVerified(testContext *testing.T) {
+	addFixture := newServiceFixture(testContext, oversizedAllowlist("198.51.100.9"))
+	removeFixture := newServiceFixture(testContext, oversizedAllowlist("203.0.113.7"))
+
+	addResult, addError := addFixture.service.AddEntry(context.Background(), localEngineName, "trusted", EntryInput{Value: "203.0.113.8"})
+	removeResult, removeError := removeFixture.service.RemoveEntry(context.Background(), localEngineName, "trusted", "10.0.0.1")
+
+	if addError != nil || removeError != nil {
+		testContext.Fatalf("an unverifiable write is not an error, got %v %v", addError, removeError)
+	}
+	if addResult.Refreshed || removeResult.Refreshed {
+		testContext.Fatalf("a truncated re-read must not be reported verified, got %v %v", addResult.Refreshed, removeResult.Refreshed)
+	}
+}
+
+func TestRemoveEntryOnTruncatedReadLetsCscliDecide(testContext *testing.T) {
+	fixture := newServiceFixture(testContext, oversizedAllowlist("203.0.113.7"))
+
+	result, removeError := fixture.service.RemoveEntry(context.Background(), localEngineName, "trusted", "203.0.113.7")
+
+	if removeError != nil {
+		testContext.Fatalf("a value hidden by truncation must not be refused as unknown, got %v", removeError)
+	}
+	if len(fixture.writer.calls) != 1 || result.Refreshed {
+		testContext.Fatalf("expected one cscli removal and an unverified result, got %v refreshed=%v", fixture.writer.calls, result.Refreshed)
+	}
+}
+
+func TestNewServiceDefaultsNilClockToNow(testContext *testing.T) {
+	service := NewService(fakeEngines{}, fakeClients{}, LocalOnlyWriters(&recordingWriter{}), nil)
+
+	if service.now == nil || time.Since(service.now()) > time.Minute {
+		testContext.Fatal("a nil clock must default to time.Now")
 	}
 }

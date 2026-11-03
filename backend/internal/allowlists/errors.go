@@ -11,7 +11,6 @@ var (
 	ErrEntryNotFound        = errors.New("allowlists: entry not found")
 	ErrPrefixTooWide        = errors.New("allowlists: prefix too wide")
 	ErrConfirmationRequired = errors.New("allowlists: confirmation required")
-	ErrUnsupported          = errors.New("allowlists: engine does not support allowlists")
 	ErrInvalid              = errors.New("allowlists: invalid input")
 	ErrWriteFailed          = errors.New("allowlists: write failed")
 )
