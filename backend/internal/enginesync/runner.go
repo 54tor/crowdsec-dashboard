@@ -24,6 +24,7 @@ const (
 	ErrorCodeRunDeadline            = "run_deadline"
 	ErrorCodeRunPanicked            = "run_panicked"
 	ErrorCodeEngineBackoff          = "engine_backoff"
+	ErrorCodeEngineUnavailable      = "engine_unavailable"
 )
 
 var (
@@ -70,9 +71,12 @@ func NewRunner(source EngineSource, rules RulesProvider, lock *oplock.Lock, read
 
 func ConfiguredRules(maxChanges int, extendThreshold time.Duration) RulesProvider {
 	return func(engineSet EngineSet) Rules {
-		knownEngines := make(map[string]bool, len(engineSet.Engines))
+		knownEngines := make(map[string]bool, len(engineSet.Engines)+len(engineSet.Unavailable))
 		for _, syncEngine := range engineSet.Engines {
 			knownEngines[syncEngine.Name] = true
+		}
+		for _, unavailableName := range engineSet.Unavailable {
+			knownEngines[unavailableName] = true
 		}
 		return Rules{
 			Exclusions:      engineSet.Exclude,
@@ -168,6 +172,7 @@ func (runner *Runner) execute(ctx context.Context, options RunOptions, report *R
 		return
 	}
 	targets, snapshots := runner.readEngines(ctx, engineSet.Engines, options.SkipEngines, report)
+	snapshots = append(snapshots, unavailableSnapshots(engineSet.Unavailable, report)...)
 	plan := buildRunPlan(snapshots, runner.rules(engineSet), options.ApplyEvenIfGuarded, runner.now())
 	report.recordPlan(plan.Plan, runner.dryRun)
 	plan.recordGuards(report)
@@ -201,6 +206,15 @@ func (runner *Runner) readEngines(ctx context.Context, syncEngines []SyncEngine,
 		targets[syncEngine.Name] = target
 	}
 	return targets, snapshots
+}
+
+func unavailableSnapshots(unavailableNames []string, report *Report) []Snapshot {
+	snapshots := make([]Snapshot, 0, len(unavailableNames))
+	for _, unavailableName := range unavailableNames {
+		report.engine(unavailableName).ErrorCode = ErrorCodeEngineUnavailable
+		snapshots = append(snapshots, skippedSnapshot(SyncEngine{Name: unavailableName}))
+	}
+	return snapshots
 }
 
 func skippedSnapshot(syncEngine SyncEngine) Snapshot {

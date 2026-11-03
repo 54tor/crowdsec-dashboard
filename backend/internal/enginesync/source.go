@@ -43,6 +43,7 @@ func (syncEngine SyncEngine) Format(state fmt.State, verb rune) {
 
 type EngineSet struct {
 	Engines        []SyncEngine
+	Unavailable    []string
 	AllEngineAddrs map[string][]netip.Addr
 	Exclude        []netip.Prefix
 	AddrsError     bool
@@ -82,7 +83,7 @@ func (source *TableSource) Load(ctx context.Context) EngineSet {
 	resolutionContext, cancelResolution := context.WithTimeout(ctx, source.resolutionBudget)
 	defer cancelResolution()
 	for _, handle := range source.registry.Handles() {
-		if !handle.Engine.IsLocal && !(handle.Engine.Enabled && handle.Engine.SyncEnabled) {
+		if !participates(handle.Engine) {
 			continue
 		}
 		addrs, addrsComplete := source.engineAddrs(resolutionContext, handle.Engine)
@@ -107,11 +108,18 @@ func (source *TableSource) Load(ctx context.Context) EngineSet {
 		if participating[listedEngine.Name] {
 			continue
 		}
+		if participates(listedEngine) {
+			engineSet.Unavailable = append(engineSet.Unavailable, listedEngine.Name)
+		}
 		addrs, addrsComplete := source.engineAddrs(resolutionContext, listedEngine)
 		engineSet.AddrsError = engineSet.AddrsError || (listedEngine.Enabled && !addrsComplete)
 		engineSet.AllEngineAddrs[listedEngine.Name] = addrs
 	}
 	return engineSet
+}
+
+func participates(engine engines.Engine) bool {
+	return engine.IsLocal || engine.Enabled && engine.SyncEnabled
 }
 
 func (source *TableSource) engineAddrs(ctx context.Context, engine engines.Engine) ([]netip.Addr, bool) {
