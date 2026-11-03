@@ -224,3 +224,82 @@ func TestReadUnredactedKeepsSecretsAndThePathGuards(testContext *testing.T) {
 		}
 	}
 }
+
+func TestPostoverflowWhitelistIsListed(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	listedNames := []string{
+		"postoverflows/s01-whitelist/my-whitelist.yaml",
+		"postoverflows/s01-whitelist/other-whitelist.yml",
+	}
+	for _, listedName := range listedNames {
+		writeConfFile(testContext, confDir, listedName, "name: example/whitelist\ndescription: \"x\"\npassword: hunter2\n")
+	}
+
+	obtainedNames, listError := List(confDir)
+	if listError != nil {
+		testContext.Fatal(listError)
+	}
+	if !slices.Equal(obtainedNames, listedNames) {
+		testContext.Fatalf("expected %v, got %v", listedNames, obtainedNames)
+	}
+	for _, listedName := range listedNames {
+		obtainedContent, readError := Read(confDir, listedName)
+		if readError != nil {
+			testContext.Fatalf("%s: %v", listedName, readError)
+		}
+		if strings.Contains(string(obtainedContent), "hunter2") {
+			testContext.Errorf("%s: secret value must be redacted", listedName)
+		}
+	}
+}
+
+func TestPostoverflowNonWhitelistIsRefused(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "postoverflows/s01-whitelist/rules.yaml", "name: example/rules\n")
+	refusedNames := []string{
+		"postoverflows/s01-whitelist/rules.yaml",
+		"postoverflows/s01-whitelist/../../config.yaml",
+		"postoverflows/../config.yaml",
+		"../postoverflows/s01-whitelist/my-whitelist.yaml",
+	}
+
+	for _, refusedName := range refusedNames {
+		obtainedContent, readError := Read(confDir, refusedName)
+		if !errors.Is(readError, ErrNotAllowed) || obtainedContent != nil {
+			testContext.Errorf("%q: expected ErrNotAllowed, got %v", refusedName, readError)
+		}
+	}
+	obtainedNames, listError := List(confDir)
+	if listError != nil {
+		testContext.Fatal(listError)
+	}
+	if len(obtainedNames) != 0 {
+		testContext.Errorf("expected nothing listed, got %v", obtainedNames)
+	}
+}
+
+func TestHubSymlinkedWhitelistIsRefused(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	hubDir := filepath.Join(confDir, "hub", "postoverflows", "s01-whitelist")
+	writeConfFile(testContext, confDir, "hub/postoverflows/s01-whitelist/hub-whitelist.yaml", "name: example/hub\n")
+	linkDir := filepath.Join(confDir, "postoverflows", "s01-whitelist")
+	if mkdirError := os.MkdirAll(linkDir, 0o755); mkdirError != nil {
+		testContext.Fatal(mkdirError)
+	}
+	linkPath := filepath.Join(linkDir, "hub-whitelist.yaml")
+	if symlinkError := os.Symlink(filepath.Join(hubDir, "hub-whitelist.yaml"), linkPath); symlinkError != nil {
+		testContext.Fatal(symlinkError)
+	}
+
+	obtainedContent, readError := Read(confDir, "postoverflows/s01-whitelist/hub-whitelist.yaml")
+	if readError == nil || obtainedContent != nil {
+		testContext.Errorf("symlinked whitelist must be refused, got %q", obtainedContent)
+	}
+	obtainedNames, listError := List(confDir)
+	if listError != nil {
+		testContext.Fatal(listError)
+	}
+	if len(obtainedNames) != 0 {
+		testContext.Errorf("symlinked whitelist must not be listed, got %v", obtainedNames)
+	}
+}

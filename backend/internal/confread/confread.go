@@ -29,6 +29,8 @@ var allowedPatterns = []string{
 	"acquis.d/*.yml",
 	"parsers/*/*whitelist*.yaml",
 	"parsers/*/*whitelist*.yml",
+	"postoverflows/*/*whitelist*.yaml",
+	"postoverflows/*/*whitelist*.yml",
 }
 
 func isAllowedName(name string) bool {
