@@ -104,8 +104,9 @@ func main() {
 	services.SchemaVersion = store.NewVersionReader(database)
 	operationLock := oplock.New()
 	services.OperationLock = operationLock
-	syncRunner := newSyncRunner(loadedConfig, engineRegistry, engineRepository, operationLock)
+	syncRunner, importRules := newSyncRunner(loadedConfig, engineRegistry, engineRepository, operationLock)
 	services.Sync = syncRunner
+	services.BundleImport.ShareRules = importRules
 
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stopSignals()

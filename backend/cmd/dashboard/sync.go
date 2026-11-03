@@ -18,10 +18,21 @@ const (
 	syncAuditTimeout = 5 * time.Second
 )
 
-func newSyncRunner(loadedConfig config.Config, registry *engines.Registry, repository *engines.Repository, operationLock *oplock.Lock) *enginesync.Runner {
+func newSyncRunner(loadedConfig config.Config, registry *engines.Registry, repository *engines.Repository, operationLock *oplock.Lock) (*enginesync.Runner, func(context.Context) (enginesync.Rules, bool)) {
 	source := enginesync.NewTableSource(registry, repository, loadedConfig.ShareExcludeCIDRs)
 	rules := enginesync.ConfiguredRules(loadedConfig.SyncMaxChanges, loadedConfig.SyncInterval)
-	return enginesync.NewRunner(source, rules, operationLock, loadedConfig.SyncReadLimit, loadedConfig.SyncDryRun, time.Now)
+	runner := enginesync.NewRunner(source, rules, operationLock, loadedConfig.SyncReadLimit, loadedConfig.SyncDryRun, time.Now)
+	return runner, importShareRules(source, rules)
+}
+
+func importShareRules(source enginesync.EngineSource, rules enginesync.RulesProvider) func(context.Context) (enginesync.Rules, bool) {
+	return func(ctx context.Context) (enginesync.Rules, bool) {
+		engineSet := source.Load(ctx)
+		if engineSet.AddrsError {
+			return enginesync.Rules{}, false
+		}
+		return rules(engineSet), true
+	}
 }
 
 func startSyncScheduler(ctx context.Context, loadedConfig config.Config, runner *enginesync.Runner, recorder audit.Recorder) *enginesync.Scheduler {

@@ -1,0 +1,178 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"time"
+
+	"crowdsec-dashboard/internal/audit"
+	"crowdsec-dashboard/internal/auth"
+	"crowdsec-dashboard/internal/bundle"
+	"crowdsec-dashboard/internal/oplock"
+)
+
+const (
+	importEnvelopeMarginBytes = 64 << 10
+	maxImportBodyBytes        = bundle.MaxBytes + importEnvelopeMarginBytes
+	importConfirmation        = "IMPORT"
+	importApplyTimeout        = 10 * time.Minute
+	importLockName            = "import"
+	importModePreview         = "preview"
+	importModeApply           = "apply"
+)
+
+type importRequestBody struct {
+	Mode     string          `json:"mode"`
+	Bundle   json.RawMessage `json:"bundle"`
+	Sections []string        `json:"sections"`
+	Confirm  string          `json:"confirm"`
+	Digest   string          `json:"digest"`
+}
+
+type importApplyResponse struct {
+	Digest string             `json:"digest"`
+	Report bundle.ApplyReport `json:"report"`
+}
+
+type importHandlers struct {
+	deps          bundle.ImportDeps
+	operationLock *oplock.Lock
+	recorder      audit.Recorder
+	trustedCIDRs  []*net.IPNet
+}
+
+func (handlers importHandlers) importBundle(responseWriter http.ResponseWriter, request *http.Request) {
+	payload, imported, decoded := decodeImportRequest(responseWriter, request)
+	if !decoded {
+		return
+	}
+	if payload.Mode == importModeApply && payload.Confirm != importConfirmation {
+		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
+		return
+	}
+	if handlers.operationLock == nil {
+		writeError(responseWriter, http.StatusServiceUnavailable, "operation_lock_unavailable")
+		return
+	}
+	release, acquired := handlers.operationLock.TryAcquire(importLockName)
+	if !acquired {
+		writeError(responseWriter, http.StatusConflict, "operation_running")
+		return
+	}
+	defer release()
+	deps := handlers.requestDeps(request)
+	if payload.Mode == importModePreview {
+		handlers.preview(responseWriter, request, deps, imported, payload.Sections)
+		return
+	}
+	handlers.apply(responseWriter, request, deps, imported, payload)
+}
+
+func decodeImportRequest(responseWriter http.ResponseWriter, request *http.Request) (importRequestBody, bundle.Bundle, bool) {
+	var payload importRequestBody
+	if decodeError := decodeSingleObject(http.MaxBytesReader(responseWriter, request.Body, maxImportBodyBytes), &payload); decodeError != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(decodeError, &maxBytesError) {
+			writeError(responseWriter, http.StatusRequestEntityTooLarge, "bundle_too_large")
+			return importRequestBody{}, bundle.Bundle{}, false
+		}
+		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return importRequestBody{}, bundle.Bundle{}, false
+	}
+	if payload.Mode != importModePreview && payload.Mode != importModeApply {
+		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+		return importRequestBody{}, bundle.Bundle{}, false
+	}
+	imported, bundleError := bundle.Decode(bytes.NewReader(payload.Bundle), bundle.MaxBytes)
+	if bundleError != nil {
+		writeImportError(responseWriter, bundleError)
+		return importRequestBody{}, bundle.Bundle{}, false
+	}
+	return payload, imported, true
+}
+
+func (handlers importHandlers) requestDeps(request *http.Request) bundle.ImportDeps {
+	deps := handlers.deps
+	clientAddress := auth.ClientIP(request, handlers.trustedCIDRs)
+	deps.IsCallerAddress = func(target string) bool {
+		return targetContainsClient(target, clientAddress)
+	}
+	return deps
+}
+
+func (handlers importHandlers) preview(responseWriter http.ResponseWriter, request *http.Request, deps bundle.ImportDeps, imported bundle.Bundle, sections []string) {
+	plan, planError := bundle.PlanImport(request.Context(), deps, imported, sections)
+	if planError != nil {
+		writeImportError(responseWriter, planError)
+		return
+	}
+	responseWriter.Header().Set("Cache-Control", "no-store")
+	writeJSON(responseWriter, http.StatusOK, plan)
+}
+
+func (handlers importHandlers) apply(responseWriter http.ResponseWriter, request *http.Request, deps bundle.ImportDeps, imported bundle.Bundle, payload importRequestBody) {
+	_ = http.NewResponseController(responseWriter).SetWriteDeadline(time.Now().Add(WriteDeadlineFor(importApplyTimeout)))
+	applyContext, cancelApply := context.WithTimeout(request.Context(), importApplyTimeout)
+	defer cancelApply()
+	plan, planError := bundle.PlanImport(applyContext, deps, imported, payload.Sections)
+	if planError != nil {
+		writeImportError(responseWriter, planError)
+		return
+	}
+	if payload.Digest == "" || payload.Digest != plan.Digest {
+		writeError(responseWriter, http.StatusConflict, "import_conflict")
+		return
+	}
+	report, applyError := bundle.Apply(applyContext, deps, plan)
+	if applyError != nil {
+		writeImportError(responseWriter, applyError)
+		return
+	}
+	handlers.record(request, report)
+	responseWriter.Header().Set("Cache-Control", "no-store")
+	writeJSON(responseWriter, http.StatusOK, importApplyResponse{Digest: plan.Digest, Report: report})
+}
+
+func writeImportError(responseWriter http.ResponseWriter, importError error) {
+	switch {
+	case errors.Is(importError, bundle.ErrInvalidRequest):
+		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
+	case errors.Is(importError, bundle.ErrInvalid):
+		writeError(responseWriter, http.StatusBadRequest, "bundle_invalid")
+	case errors.Is(importError, bundle.ErrVersion):
+		writeError(responseWriter, http.StatusBadRequest, "bundle_version")
+	case errors.Is(importError, bundle.ErrTooLarge):
+		writeError(responseWriter, http.StatusRequestEntityTooLarge, "bundle_too_large")
+	case errors.Is(importError, bundle.ErrTooManyChanges):
+		writeError(responseWriter, http.StatusUnprocessableEntity, "too_many_changes")
+	case errors.Is(importError, bundle.ErrSectionUnavailable):
+		writeError(responseWriter, http.StatusConflict, "section_unavailable")
+	default:
+		writeUpstreamError(responseWriter, importError)
+	}
+}
+
+func (handlers importHandlers) record(request *http.Request, report bundle.ApplyReport) {
+	identity, _ := auth.IdentityFromContext(request.Context())
+	auditContext, cancelAudit := context.WithTimeout(context.WithoutCancel(request.Context()), bundleAuditTimeout)
+	defer cancelAudit()
+	clientIP := auditClientIP(request, handlers.trustedCIDRs)
+	audit.RecordOrLog(auditContext, handlers.recorder, identity.AccountID, audit.ActionBundleImported, BundleImportAuditTarget(report), clientIP)
+}
+
+func BundleImportAuditTarget(report bundle.ApplyReport) string {
+	appliedBySection := map[string]int{}
+	skippedTotal, failedTotal := 0, 0
+	for _, sectionReport := range report.Sections {
+		appliedBySection[sectionReport.Section] = sectionReport.Applied
+		skippedTotal += sectionReport.Skipped
+		failedTotal += sectionReport.Failed
+	}
+	return fmt.Sprintf("dry=false hub=%d decisions=%d skipped=%d failed=%d",
+		appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionDecision], skippedTotal, failedTotal)
+}

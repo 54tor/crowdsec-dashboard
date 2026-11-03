@@ -20,6 +20,18 @@ func localBundleExportDeps(localClient *lapi.Client, runner cscli.Runner, confDi
 	}
 }
 
+func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner) bundle.ImportDeps {
+	hub := cscliHub{runner: runner}
+	return bundle.ImportDeps{
+		ReadHub:           hub.bundleHubItems,
+		InstallCollection: hub.Install,
+		Allowlists:        localClient,
+		ReadLocalBans:     localClient.ReadSyncBans,
+		AddDecision:       localClient.AddDecision,
+		Now:               time.Now,
+	}
+}
+
 func (service cscliHub) bundleHubItems(ctx context.Context) ([]bundle.HubItem, error) {
 	items, listError := service.List(ctx)
 	if listError != nil {

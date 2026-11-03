@@ -345,6 +345,7 @@ var requiredSyncRoutes = map[string]routeAccess{
 	"GET /api/sync":      accessAuthenticated,
 	"POST /api/sync/run": accessAdmin,
 	"POST /api/export":   accessAdmin,
+	"POST /api/import":   accessAdminSessionOnly,
 }
 
 var publicRoutePattern = regexp.MustCompile(`^(POST /api/auth/(login|enroll|logout)(/.*)?|GET /api/healthz|GET /api/auth/status)$`)

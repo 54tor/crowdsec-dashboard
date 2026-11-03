@@ -58,6 +58,7 @@ type Services struct {
 	Sync             SyncService
 	OperationLock    *oplock.Lock
 	BundleExport     bundle.ExportDeps
+	BundleImport     bundle.ImportDeps
 	LifecycleContext context.Context
 }
 
@@ -75,6 +76,7 @@ func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) S
 		Hub:            cscliHub{runner: runner},
 		Reloader:       cscliReloader{runner: runner},
 		BundleExport:   localBundleExportDeps(lapiClient, runner, confDir),
+		BundleImport:   localBundleImportDeps(lapiClient, runner),
 	}
 }
 

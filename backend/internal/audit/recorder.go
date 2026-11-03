@@ -46,6 +46,7 @@ const (
 	ActionDecisionRemoved          Action = "decision_removed"
 	ActionSyncRun                  Action = "sync_run"
 	ActionBundleExported           Action = "bundle_exported"
+	ActionBundleImported           Action = "bundle_imported"
 )
 
 const maximumTargetRunes = 64
