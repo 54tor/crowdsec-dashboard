@@ -47,9 +47,9 @@ export function Decisions() {
         header: t('decisions.columns.engine'),
         cell: (decision) => <EngineCell engineName={decision.engine} badgeLabel={decision.live ? undefined : t('decisions.archivedBadge')} />,
       },
-      { key: 'scope', header: t('decisions.columns.scope'), cell: (decision) => decision.scope },
-      { key: 'type', header: t('decisions.columns.type'), cell: (decision) => decision.type },
-      { key: 'origin', header: t('decisions.columns.origin'), cell: (decision) => decision.origin },
+      { key: 'scope', header: t('decisions.columns.scope'), cell: (decision) => <UntrustedText value={decision.scope} /> },
+      { key: 'type', header: t('decisions.columns.type'), cell: (decision) => <UntrustedText value={decision.type} /> },
+      { key: 'origin', header: t('decisions.columns.origin'), cell: (decision) => <UntrustedText value={decision.origin} /> },
       {
         key: 'scenario',
         header: t('decisions.columns.scenario'),
@@ -64,7 +64,7 @@ export function Decisions() {
         key: 'expires',
         header: t('decisions.columns.expires'),
         className: 'whitespace-nowrap',
-        cell: (decision) => (decision.until ? formatDateTime(decision.until, i18n.language) : decision.duration),
+        cell: (decision) => (decision.until ? formatDateTime(decision.until, i18n.language) : <UntrustedText value={decision.duration} />),
       },
       ...(canWrite ? ([{
         key: 'actions',
@@ -79,7 +79,7 @@ export function Decisions() {
               target={decision.value}
               confirmValue={String(decision.id)}
               request={(confirm) => deleteDecision(String(decision.id), decision.scope, decision.value, confirm)}
-              invalidates={[['decisions']]}
+              invalidates={[['decisions'], ['alerts']]}
             />
           ) : null,
       }] satisfies DataTableColumn<Decision>[]) : []),

@@ -33,6 +33,22 @@ describe('decisions page', () => {
     expect(await screen.findByText('The live part holds only the 100 most recent entries of the local LAPI; older entries are listed from the archive.')).toBeInTheDocument()
   })
 
+  // Scope, type, origin and duration come from the engine like the value and the
+  // scenario: each is isolated in its own <bdi> so a right-to-left override in one
+  // cell cannot reorder its neighbours.
+  it('isolatesEveryEngineSuppliedCellInItsOwnBdi', async () => {
+    const engineSuppliedDecision = makeDecision({ scope: 'Range', type: 'captcha', origin: 'cscli-import', duration: '71h58m', until: undefined })
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      [DECISIONS_URL]: { status: 200, body: makePage([engineSuppliedDecision]) },
+    })
+    renderApp('/decisions')
+
+    for (const engineSuppliedText of ['Range', 'captcha', 'cscli-import', '71h58m']) {
+      expect(await screen.findByText(engineSuppliedText, { selector: 'td bdi' })).toBeInTheDocument()
+    }
+  })
+
   it('rendersAttackerControlledValuesAsText', async () => {
     stubFetch({
       'GET /api/auth/me': SESSION_OK,

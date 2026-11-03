@@ -1,4 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Page } from '@/api/types'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
@@ -28,9 +29,19 @@ function ListErrorNotice({ error }: { error: unknown }) {
   return <ErrorNotice error={error} message={isInvalidRequestError(error) ? t('list.invalidRequest') : undefined} />
 }
 
+function useKeepPageInRange(page: number, lastExistingPage: number | undefined, onPageChange: (page: number) => void) {
+  useEffect(() => {
+    const isPageBeyondTheEnd = lastExistingPage !== undefined && page > lastExistingPage
+    if (isPageBeyondTheEnd) {
+      onPageChange(lastExistingPage)
+    }
+  }, [page, lastExistingPage, onPageChange])
+}
+
 export function PagedTableSection<Row>({ query, page, onPageChange, caption, columns, rowKey, isLiveWindowRead = true }: PagedTableSectionProps<Row>) {
   const { t } = useTranslation()
   const { data, error, isPending } = query
+  useKeepPageInRange(page, data ? totalPagesOf(data) : undefined, onPageChange)
   if (error && !data) {
     return <ListErrorNotice error={error} />
   }

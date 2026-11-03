@@ -92,6 +92,23 @@ describe('decision actions', () => {
     await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/decisions?page=1&per_page=20').length).toBeGreaterThan(1))
   })
 
+  // The Alerts page counts the decisions of each alert: its queries must be
+  // refreshed as well, or the count stays stale after an unban.
+  it('unbanAlsoRefreshesTheAlertsQueries', async () => {
+    stubFetch(decisionRoutes({ 'DELETE /api/decisions/10?scope=Ip&value=203.0.113.7': { status: 200, body: { status: 'deleted' } } }))
+    const user = userEvent.setup()
+    const { queryClient } = renderApp('/decisions')
+    const invalidationSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    await user.click(await screen.findByRole('button', { name: 'Unban 203.0.113.7' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Type 203.0.113.7 to confirm'), '203.0.113.7')
+    await user.click(within(dialog).getByRole('button', { name: en.decisions.unban }))
+
+    await waitFor(() => expect(invalidationSpy).toHaveBeenCalledWith({ queryKey: ['alerts'] }))
+    expect(invalidationSpy).toHaveBeenCalledWith({ queryKey: ['decisions'] })
+  })
+
   // Archived decisions and decisions of a remote engine may reuse the id of an
   // unrelated live local decision: only live local rows offer the unban.
   it('offersUnbanOnlyOnLiveLocalRows', async () => {

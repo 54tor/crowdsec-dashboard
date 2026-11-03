@@ -85,13 +85,25 @@ function hasOneProxyCredential(values: EngineFormValues): boolean {
   return (values.proxyUsername !== '') !== (values.proxyPassword !== '')
 }
 
+function isProxyPasswordChangeAlone(values: EngineFormValues, engine?: EngineView): boolean {
+  if (!engine?.has_proxy_credentials || values.proxyKind === '' || values.clearProxyCredentials) {
+    return false
+  }
+  const isPasswordAlone = values.proxyUsername === '' && values.proxyPassword !== ''
+  return isPasswordAlone && !hasProxyDestinationChanged(values, engine)
+}
+
+function hasUnpairedProxyCredential(values: EngineFormValues, engine?: EngineView): boolean {
+  return hasOneProxyCredential(values) && !isProxyPasswordChangeAlone(values, engine)
+}
+
 export function isFormSubmittable(values: EngineFormValues, engine?: EngineView): boolean {
   const required = requiredSecrets(values, engine)
   const hasRequiredFields = values.lapiUrl !== '' && values.machineId !== '' && (engine !== undefined || values.name !== '')
   const hasProxyFields = values.proxyKind === '' || values.proxyUrl !== ''
   const hasMachinePassword = !required.machinePassword || values.machinePassword !== ''
   const hasProxyCredentials = !required.proxyCredentials || hasBothProxyCredentials(values)
-  return hasRequiredFields && hasProxyFields && hasMachinePassword && hasProxyCredentials && !hasOneProxyCredential(values)
+  return hasRequiredFields && hasProxyFields && hasMachinePassword && hasProxyCredentials && !hasUnpairedProxyCredential(values, engine)
 }
 
 function buildProxy(values: EngineFormValues, engine?: EngineView): EngineProxyInput | null | undefined {
@@ -101,6 +113,8 @@ function buildProxy(values: EngineFormValues, engine?: EngineView): EngineProxyI
   const proxy: EngineProxyInput = { kind: values.proxyKind, url: values.proxyUrl }
   if (hasBothProxyCredentials(values)) {
     proxy.username = values.proxyUsername
+    proxy.password = values.proxyPassword
+  } else if (isProxyPasswordChangeAlone(values, engine)) {
     proxy.password = values.proxyPassword
   }
   if (engine && values.clearProxyCredentials) {
