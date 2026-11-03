@@ -34,9 +34,10 @@ func exportFixture(testContext *testing.T, bans []lapi.SyncDecision, alerts lapi
 		ReadAlerts: func(context.Context, int, int64, time.Duration) (lapi.ArchiveRead, error) {
 			return alerts, nil
 		},
-		EngineVersion: func(context.Context) (string, error) { return "v1.8.2", nil },
-		ConfigDir:     testContext.TempDir(),
-		Now:           func() time.Time { return exportTestReadTime },
+		EngineVersion:  func(context.Context) (string, error) { return "v1.8.2", nil },
+		LocalMachineID: "dashboard",
+		ConfigDir:      testContext.TempDir(),
+		Now:            func() time.Time { return exportTestReadTime },
 	}
 }
 
@@ -70,7 +71,7 @@ func TestExportExcludesSyncCopiesAndImportedDecisions(testContext *testing.T) {
 		{Origin: "crowdsec", Scope: "Ip", Value: "203.0.113.1", Scenario: "crowdsecurity/ssh-bf", Remaining: time.Hour},
 		{Origin: "cscli", Scope: "Range", Value: "198.51.100.0/24", Scenario: "manual ban", Remaining: time.Hour},
 		{Origin: "dashboard-sync", Scope: "Ip", Value: "203.0.113.2", Scenario: "sync/peer", Remaining: time.Hour},
-		{Origin: "crowdsec", Scope: "Ip", Value: "203.0.113.3", Scenario: "sync/peer", Remaining: time.Hour},
+		{Origin: "crowdsec", Scope: "Ip", Value: "203.0.113.3", Scenario: "sync/peer", MachineID: "dashboard", Remaining: time.Hour},
 		{Origin: "cscli", Scope: "Ip", Value: "203.0.113.4", Scenario: "import/2026-11-01", Remaining: time.Hour},
 		{Origin: "CAPI", Scope: "Ip", Value: "203.0.113.5", Scenario: "crowdsecurity/http-probing", Remaining: time.Hour},
 		{Origin: "lists", Scope: "Ip", Value: "203.0.113.6", Scenario: "firehol", Remaining: time.Hour},
@@ -106,18 +107,86 @@ func TestExportUsesInjectedClockForUntil(testContext *testing.T) {
 	}
 }
 
-func TestExportCapsDecisionsAndAlerts(testContext *testing.T) {
-	bans := make([]lapi.SyncDecision, 0, MaxDecisions+10)
-	for banIndex := range MaxDecisions + 10 {
+func TestExportOverCapIsTooLarge(testContext *testing.T) {
+	// Over the caps the export is refused as a whole: a truncated bundle would silently lose data.
+	bans := make([]lapi.SyncDecision, 0, MaxDecisions+1)
+	for banIndex := range MaxDecisions + 1 {
 		bans = append(bans, lapi.SyncDecision{Origin: "crowdsec", Scope: "Ip", Value: fmt.Sprintf("203.0.113.%d", banIndex%250), Remaining: time.Hour})
 	}
-	alerts := make([]lapi.Alert, MaxAlerts+5)
-	exported, exportError := Export(context.Background(), exportFixture(testContext, bans, lapi.ArchiveRead{Alerts: alerts}), ExportRequest{Sections: []string{SectionDecision, SectionAlerts}})
+	_, decisionsError := Export(context.Background(), exportFixture(testContext, bans, lapi.ArchiveRead{}), ExportRequest{Sections: []string{SectionDecision}})
+	if !errors.Is(decisionsError, ErrTooLarge) {
+		testContext.Errorf("more than %d decisions: expected ErrTooLarge, got %v", MaxDecisions, decisionsError)
+	}
+	alerts := lapi.ArchiveRead{Alerts: make([]lapi.Alert, MaxAlerts+1)}
+	_, alertsError := Export(context.Background(), exportFixture(testContext, nil, alerts), ExportRequest{Sections: []string{SectionAlerts}})
+	if !errors.Is(alertsError, ErrTooLarge) {
+		testContext.Errorf("more than %d alerts: expected ErrTooLarge, got %v", MaxAlerts, alertsError)
+	}
+}
+
+func TestExportIncompleteBanReadIsTooLarge(testContext *testing.T) {
+	deps := exportFixture(testContext, nil, lapi.ArchiveRead{})
+	deps.ReadBans = func(context.Context, int) ([]lapi.SyncDecision, bool, error) {
+		return []lapi.SyncDecision{{Origin: "crowdsec", Scope: "Ip", Value: "203.0.113.1", Remaining: time.Hour}}, false, nil
+	}
+	if _, exportError := Export(context.Background(), deps, ExportRequest{Sections: []string{SectionDecision}}); !errors.Is(exportError, ErrTooLarge) {
+		testContext.Errorf("an incomplete ban read must refuse the export, got %v", exportError)
+	}
+}
+
+func TestExportKeepsSyncScenarioOfForeignMachine(testContext *testing.T) {
+	bans := []lapi.SyncDecision{
+		{Origin: "crowdsec", Scope: "Ip", Value: "203.0.113.1", Scenario: "sync/peer", MachineID: "dashboard", Remaining: time.Hour},
+		{Origin: "crowdsec", Scope: "Ip", Value: "203.0.113.2", Scenario: "sync/peer", MachineID: "agent-2", Remaining: time.Hour},
+	}
+	expectedByLocalMachine := map[string][]string{
+		"dashboard": {"203.0.113.2"},
+		// Without a known machine id every sync/ scenario stays out of the bundle.
+		"": {},
+	}
+	for localMachineID, expectedValues := range expectedByLocalMachine {
+		deps := exportFixture(testContext, bans, lapi.ArchiveRead{})
+		deps.LocalMachineID = localMachineID
+		exported, exportError := Export(context.Background(), deps, ExportRequest{Sections: []string{SectionDecision}})
+		if exportError != nil {
+			testContext.Fatal(exportError)
+		}
+		exportedValues := []string{}
+		for _, exportedDecision := range exported.Sections.Decisions.Decisions {
+			exportedValues = append(exportedValues, exportedDecision.Value)
+		}
+		if !slices.Equal(exportedValues, expectedValues) {
+			testContext.Errorf("local machine %q: expected %v, got %v", localMachineID, expectedValues, exportedValues)
+		}
+	}
+}
+
+func TestExportCountsSkippedAlerts(testContext *testing.T) {
+	alerts := lapi.ArchiveRead{Alerts: []lapi.Alert{{UUID: "alert-1"}}, Skipped: 2}
+	exported, exportError := Export(context.Background(), exportFixture(testContext, nil, alerts), ExportRequest{Sections: []string{SectionAlerts}})
+	if exportError != nil || exported.Skipped.Alerts != 2 {
+		testContext.Errorf("undecodable alerts must be counted, got %+v (%v)", exported.Skipped, exportError)
+	}
+}
+
+func TestExportSkipsConfigFileGoneOrTurnedSymlinkAfterListing(testContext *testing.T) {
+	// The names are passed as if listed earlier; between listing and reading one file
+	// vanished and one became a symlink. Both are skipped and counted, never a failure.
+	configDir := testContext.TempDir()
+	writeConfigFile(testContext, configDir, "acquis.yaml", "source: file\n")
+	writeConfigFile(testContext, configDir, "profiles.yaml", "name: default\n")
+	if mkdirError := os.MkdirAll(filepath.Join(configDir, "acquis.d"), 0o755); mkdirError != nil {
+		testContext.Fatal(mkdirError)
+	}
+	if symlinkError := os.Symlink("../profiles.yaml", filepath.Join(configDir, "acquis.d", "late.yaml")); symlinkError != nil {
+		testContext.Fatal(symlinkError)
+	}
+	section, skippedFiles, exportError := exportListedConfig(configDir, []string{"acquis.d/gone.yaml", "acquis.d/late.yaml", "acquis.yaml"}, false)
 	if exportError != nil {
 		testContext.Fatal(exportError)
 	}
-	if len(exported.Sections.Decisions.Decisions) != MaxDecisions || len(exported.Sections.Alerts.Alerts) != MaxAlerts {
-		testContext.Errorf("expected caps %d/%d, got %d/%d", MaxDecisions, MaxAlerts, len(exported.Sections.Decisions.Decisions), len(exported.Sections.Alerts.Alerts))
+	if len(section.Files) != 1 || section.Files[0].Name != "acquis.yaml" || skippedFiles != 2 {
+		testContext.Errorf("expected acquis.yaml only and 2 skipped, got %+v skipped=%d", section.Files, skippedFiles)
 	}
 }
 

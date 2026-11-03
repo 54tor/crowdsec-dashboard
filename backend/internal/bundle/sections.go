@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"crowdsec-dashboard/internal/lapi"
 )
 
 const (
@@ -41,17 +43,20 @@ func isInstalledNonLocalCollection(item HubItem) bool {
 }
 
 func exportDecisions(ctx context.Context, deps ExportDeps, readTime time.Time) (*DecisionsSection, error) {
-	bans, _, readError := deps.ReadBans(ctx, MaxDecisions)
+	bans, complete, readError := deps.ReadBans(ctx, MaxDecisions)
 	if readError != nil {
 		return nil, readError
 	}
+	if !complete {
+		return nil, ErrTooLarge
+	}
 	decisions := []Decision{}
 	for _, ban := range bans {
-		if len(decisions) == MaxDecisions {
-			break
-		}
-		if !isExportableBan(ban.Origin, ban.Scenario, ban.Remaining) {
+		if !isExportableBan(ban, deps.LocalMachineID) {
 			continue
+		}
+		if len(decisions) == MaxDecisions {
+			return nil, ErrTooLarge
 		}
 		decisions = append(decisions, Decision{
 			Origin:   ban.Origin,
@@ -65,25 +70,35 @@ func exportDecisions(ctx context.Context, deps ExportDeps, readTime time.Time) (
 	return &DecisionsSection{Decisions: decisions}, nil
 }
 
-func isExportableBan(origin, scenario string, remaining time.Duration) bool {
-	isNativeOrigin := slices.Contains(exportedOrigins, origin)
-	isDashboardScenario := strings.HasPrefix(scenario, syncCopyPrefix) || strings.HasPrefix(scenario, importedPrefix)
-	return isNativeOrigin && !isDashboardScenario && remaining > 0
+func isExportableBan(ban lapi.SyncDecision, localMachineID string) bool {
+	isNativeOrigin := slices.Contains(exportedOrigins, ban.Origin)
+	isImported := strings.HasPrefix(ban.Scenario, importedPrefix)
+	return isNativeOrigin && !isImported && !isDashboardCopy(ban, localMachineID) && ban.Remaining > 0
 }
 
-func exportAlerts(ctx context.Context, deps ExportDeps, stripEvents bool) (*AlertsSection, error) {
+func isDashboardCopy(ban lapi.SyncDecision, localMachineID string) bool {
+	if !strings.HasPrefix(ban.Scenario, syncCopyPrefix) {
+		return false
+	}
+	return localMachineID == "" || ban.MachineID == localMachineID
+}
+
+func exportAlerts(ctx context.Context, deps ExportDeps, stripEvents bool) (*AlertsSection, int, error) {
 	read, readError := deps.ReadAlerts(ctx, MaxAlerts, MaxBytes, alertsReadTimeout)
 	if readError != nil {
-		return nil, readError
+		return nil, 0, readError
 	}
-	if read.Truncated {
-		return nil, ErrTooLarge
+	if read.Truncated || len(read.Alerts) > MaxAlerts {
+		return nil, 0, ErrTooLarge
 	}
-	alerts := read.Alerts[:min(len(read.Alerts), MaxAlerts)]
+	alerts := read.Alerts
+	if alerts == nil {
+		alerts = []lapi.Alert{}
+	}
 	if stripEvents {
 		for alertIndex := range alerts {
 			alerts[alertIndex].Events = nil
 		}
 	}
-	return &AlertsSection{Alerts: alerts}, nil
+	return &AlertsSection{Alerts: alerts}, read.Skipped, nil
 }

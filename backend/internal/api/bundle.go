@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/bundle"
+	"crowdsec-dashboard/internal/oplock"
 )
 
 const (
@@ -29,9 +31,10 @@ type exportRequestBody struct {
 }
 
 type bundleHandlers struct {
-	deps         bundle.ExportDeps
-	recorder     audit.Recorder
-	trustedCIDRs []*net.IPNet
+	deps          bundle.ExportDeps
+	operationLock *oplock.Lock
+	recorder      audit.Recorder
+	trustedCIDRs  []*net.IPNet
 }
 
 func (handlers bundleHandlers) export(responseWriter http.ResponseWriter, request *http.Request) {
@@ -49,6 +52,12 @@ func (handlers bundleHandlers) export(responseWriter http.ResponseWriter, reques
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
+	release, acquired := handlers.operationLock.TryAcquire("export")
+	if !acquired {
+		writeError(responseWriter, http.StatusConflict, "operation_running")
+		return
+	}
+	defer release()
 	exportRequest := bundle.ExportRequest{Sections: payload.Sections, IncludeSecrets: payload.IncludeSecrets, StripEvents: payload.StripEvents}
 	exported, exportError := bundle.Export(request.Context(), handlers.deps, exportRequest)
 	if exportError != nil {
@@ -60,8 +69,8 @@ func (handlers bundleHandlers) export(responseWriter http.ResponseWriter, reques
 		writeExportError(responseWriter, encodeError)
 		return
 	}
-	handlers.record(request, identity.AccountID, exportRequest)
-	writeBundleAttachment(responseWriter, exported.CreatedAt, encoded)
+	handlers.record(request, identity.AccountID, exportRequest.Sections, exported)
+	writeBundleAttachment(responseWriter, exported, encoded)
 }
 
 func writeExportError(responseWriter http.ResponseWriter, exportError error) {
@@ -75,23 +84,32 @@ func writeExportError(responseWriter http.ResponseWriter, exportError error) {
 	}
 }
 
-func (handlers bundleHandlers) record(request *http.Request, accountID int64, exportRequest bundle.ExportRequest) {
+func (handlers bundleHandlers) record(request *http.Request, accountID int64, sections []string, exported bundle.Bundle) {
 	auditContext, cancelAudit := context.WithTimeout(context.WithoutCancel(request.Context()), bundleAuditTimeout)
 	defer cancelAudit()
 	clientIP := auditClientIP(request, handlers.trustedCIDRs)
-	audit.RecordOrLog(auditContext, handlers.recorder, accountID, audit.ActionBundleExported, BundleExportAuditTarget(exportRequest), clientIP)
+	audit.RecordOrLog(auditContext, handlers.recorder, accountID, audit.ActionBundleExported, BundleExportAuditTarget(sections, exported), clientIP)
 }
 
-func BundleExportAuditTarget(exportRequest bundle.ExportRequest) string {
-	return fmt.Sprintf("secrets=%t sections=%s", exportRequest.IncludeSecrets, strings.Join(exportRequest.Sections, ","))
+func BundleExportAuditTarget(sections []string, exported bundle.Bundle) string {
+	targetParts := []string{fmt.Sprintf("secrets=%t", exported.ContainsSecrets)}
+	if exported.Skipped.Alerts > 0 {
+		targetParts = append(targetParts, fmt.Sprintf("skipped=%d", exported.Skipped.Alerts))
+	}
+	if exported.Skipped.Files > 0 {
+		targetParts = append(targetParts, fmt.Sprintf("skipped_files=%d", exported.Skipped.Files))
+	}
+	targetParts = append(targetParts, "sections="+strings.Join(sections, ","))
+	return strings.Join(targetParts, " ")
 }
 
-func writeBundleAttachment(responseWriter http.ResponseWriter, createdAt time.Time, encoded []byte) {
+func writeBundleAttachment(responseWriter http.ResponseWriter, exported bundle.Bundle, encoded []byte) {
 	headers := responseWriter.Header()
 	headers.Set("Content-Type", "application/json")
-	headers.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="crowdsec-bundle-%s.json"`, createdAt.UTC().Format(bundleFileDateStyle)))
+	headers.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="crowdsec-bundle-%s.json"`, exported.CreatedAt.UTC().Format(bundleFileDateStyle)))
 	headers.Set("Cache-Control", "no-store")
 	headers.Set("X-Content-Type-Options", "nosniff")
+	headers.Set("X-Bundle-Skipped-Alerts", strconv.Itoa(exported.Skipped.Alerts))
 	responseWriter.WriteHeader(http.StatusOK)
 	_, _ = responseWriter.Write(encoded)
 }

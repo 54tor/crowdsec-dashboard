@@ -28,12 +28,18 @@ var (
 )
 
 type Bundle struct {
-	Format          string    `json:"format"`
-	Version         int       `json:"version"`
-	CreatedAt       time.Time `json:"created_at"`
-	EngineVersion   string    `json:"engine_version"`
-	ContainsSecrets bool      `json:"contains_secrets"`
-	Sections        Sections  `json:"sections"`
+	Format          string     `json:"format"`
+	Version         int        `json:"version"`
+	CreatedAt       time.Time  `json:"created_at"`
+	EngineVersion   string     `json:"engine_version"`
+	ContainsSecrets bool       `json:"contains_secrets"`
+	Sections        Sections   `json:"sections"`
+	Skipped         SkipCounts `json:"-"`
+}
+
+type SkipCounts struct {
+	Alerts int
+	Files  int
 }
 
 type Sections struct {

@@ -50,13 +50,14 @@ func Export(ctx context.Context, deps ExportDeps, request ExportRequest) (Bundle
 		EngineVersion:   engineVersion,
 		ContainsSecrets: request.IncludeSecrets && request.includes(SectionConfig),
 	}
-	if sectionsError := exportSections(ctx, deps, request, readTime, &exported.Sections); sectionsError != nil {
+	if sectionsError := exportSections(ctx, deps, request, readTime, &exported); sectionsError != nil {
 		return Bundle{}, sectionsError
 	}
 	return exported, nil
 }
 
-func exportSections(ctx context.Context, deps ExportDeps, request ExportRequest, readTime time.Time, sections *Sections) error {
+func exportSections(ctx context.Context, deps ExportDeps, request ExportRequest, readTime time.Time, exported *Bundle) error {
+	sections := &exported.Sections
 	var sectionError error
 	if request.includes(SectionHub) {
 		sections.Hub, sectionError = exportHub(ctx, deps)
@@ -71,13 +72,13 @@ func exportSections(ctx context.Context, deps ExportDeps, request ExportRequest,
 		}
 	}
 	if request.includes(SectionAlerts) {
-		sections.Alerts, sectionError = exportAlerts(ctx, deps, request.StripEvents)
+		sections.Alerts, exported.Skipped.Alerts, sectionError = exportAlerts(ctx, deps, request.StripEvents)
 		if sectionError != nil {
 			return sectionError
 		}
 	}
 	if request.includes(SectionConfig) {
-		sections.Config, sectionError = exportConfig(deps.ConfigDir, request.IncludeSecrets)
+		sections.Config, exported.Skipped.Files, sectionError = exportConfig(deps.ConfigDir, request.IncludeSecrets)
 	}
 	return sectionError
 }

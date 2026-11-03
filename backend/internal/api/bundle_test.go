@@ -15,6 +15,7 @@ import (
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/oplock"
 )
 
 var exportTestTime = time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
@@ -26,6 +27,7 @@ type exportFixture struct {
 	handler     http.Handler
 	recorder    *lockedAuditRecorder
 	readCount   *atomic.Int32
+	lock        *oplock.Lock
 }
 
 func newExportFixture(testContext *testing.T, alerts lapi.ArchiveRead) exportFixture {
@@ -33,8 +35,10 @@ func newExportFixture(testContext *testing.T, alerts lapi.ArchiveRead) exportFix
 	environment := newRouteAccessEnvironment(testContext)
 	readCount := &atomic.Int32{}
 	recorder := &lockedAuditRecorder{}
+	operationLock := oplock.New()
 	services := environment.services()
 	services.Audit = recorder
+	services.OperationLock = operationLock
 	services.BundleExport = bundle.ExportDeps{
 		ReadHub: func(context.Context) ([]bundle.HubItem, error) {
 			readCount.Add(1)
@@ -57,6 +61,7 @@ func newExportFixture(testContext *testing.T, alerts lapi.ArchiveRead) exportFix
 		handler:     newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, services),
 		recorder:    recorder,
 		readCount:   readCount,
+		lock:        operationLock,
 	}
 }
 
@@ -240,6 +245,7 @@ func TestExportOnlyReadsFromTheLocalEngine(testContext *testing.T) {
 	services := NewServices(lapi.NewClient(localServer.URL, "dashboard", "test-password", nil), runner, testContext.TempDir())
 	environment := newRouteAccessEnvironment(testContext)
 	services.Sessions, services.Tokens, services.TokenGate = environment.sessions, environment.tokens, allowEveryTokenGate{}
+	services.OperationLock = oplock.New()
 	services.Engines = &fakeEngineService{engineList: []engines.Engine{{Name: "peer", LAPIURL: remoteServer.URL, Enabled: true, SyncEnabled: true}}}
 	handler := newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, services)
 	fixture := exportFixture{environment: environment, handler: handler, recorder: &lockedAuditRecorder{}}
@@ -253,5 +259,79 @@ func TestExportOnlyReadsFromTheLocalEngine(testContext *testing.T) {
 	}
 	if exported := decodeExportedBundle(testContext, response); exported.EngineVersion != "v1.8.2-3d369d64" || len(exported.Sections.Hub.Collections) == 0 {
 		testContext.Errorf("expected the local cscli hub and version, got %+v", exported)
+	}
+}
+
+func TestExportRefusedWhileOperationRunning(testContext *testing.T) {
+	fixture := newExportFixture(testContext, lapi.ArchiveRead{})
+	release, acquired := fixture.lock.TryAcquire("sync")
+	if !acquired {
+		testContext.Fatal("the fresh lock must be free")
+	}
+	defer release()
+	response := fixture.request(`{"sections":["hub","decisions","alerts"]}`, fixture.environment.adminCookie, "")
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "operation_running") {
+		testContext.Errorf("expected 409 operation_running, got %d %q", response.Code, response.Body.String())
+	}
+	if fixture.readCount.Load() != 0 {
+		testContext.Errorf("a refused export must not read the engine, got %d reads", fixture.readCount.Load())
+	}
+}
+
+func TestExportReleasesTheLockAfterSuccessAndError(testContext *testing.T) {
+	readsByOutcome := map[string]lapi.ArchiveRead{
+		"success": {Alerts: []lapi.Alert{}},
+		"error":   {Alerts: []lapi.Alert{}, Truncated: true},
+	}
+	for outcomeName, alertRead := range readsByOutcome {
+		fixture := newExportFixture(testContext, alertRead)
+		fixture.request(`{"sections":["alerts"]}`, fixture.environment.adminCookie, "")
+		release, acquired := fixture.lock.TryAcquire("sync")
+		if !acquired {
+			testContext.Errorf("%s: the export must release the operation lock", outcomeName)
+			continue
+		}
+		release()
+	}
+}
+
+func TestExportAuditUsesTheBundleSecretsFlag(testContext *testing.T) {
+	// Secrets requested without the config section: nothing secret is exported, the audit says so.
+	fixture := newExportFixture(testContext, lapi.ArchiveRead{})
+	response := fixture.request(`{"sections":["hub"],"include_secrets":true,"confirm_secrets":"SECRETS"}`, fixture.environment.adminCookie, "")
+	if response.Code != http.StatusOK {
+		testContext.Fatalf("expected 200, got %d", response.Code)
+	}
+	if events, _ := fixture.recorder.recorded(); len(events) != 1 || events[0].target != "secrets=false sections=hub" {
+		testContext.Errorf("expected the bundle's contains_secrets in the audit target, got %+v", events)
+	}
+}
+
+func TestExportReportsSkippedAlerts(testContext *testing.T) {
+	fixture := newExportFixture(testContext, lapi.ArchiveRead{Alerts: []lapi.Alert{{UUID: "alert-1"}}, Skipped: 3})
+	response := fixture.request(`{"sections":["alerts"]}`, fixture.environment.adminCookie, "")
+	if response.Code != http.StatusOK || response.Header().Get("X-Bundle-Skipped-Alerts") != "3" {
+		testContext.Errorf("expected 200 with X-Bundle-Skipped-Alerts 3, got %d %q", response.Code, response.Header().Get("X-Bundle-Skipped-Alerts"))
+	}
+	if events, _ := fixture.recorder.recorded(); len(events) != 1 || events[0].target != "secrets=false skipped=3 sections=alerts" {
+		testContext.Errorf("expected the skipped count in the audit target, got %+v", events)
+	}
+}
+
+func TestWriteBundleAttachmentSetsItsOwnHeaders(testContext *testing.T) {
+	// A bare recorder has no middleware: the handler itself must set every download header.
+	recorder := httptest.NewRecorder()
+	writeBundleAttachment(recorder, bundle.Bundle{CreatedAt: exportTestTime}, []byte("{}"))
+	expectedHeaders := map[string]string{
+		"Content-Disposition":     `attachment; filename="crowdsec-bundle-2026-11-03.json"`,
+		"Cache-Control":           "no-store",
+		"X-Content-Type-Options":  "nosniff",
+		"Content-Type":            "application/json",
+		"X-Bundle-Skipped-Alerts": "0",
+	}
+	for headerName, expectedValue := range expectedHeaders {
+		if obtainedValue := recorder.Header().Get(headerName); obtainedValue != expectedValue {
+			testContext.Errorf("%s: expected %q, got %q", headerName, expectedValue, obtainedValue)
+		}
 	}
 }

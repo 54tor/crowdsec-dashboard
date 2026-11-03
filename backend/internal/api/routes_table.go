@@ -148,7 +148,9 @@ func syncRoutes(loadedConfig config.Config, services Services) []apiRoute {
 }
 
 func bundleRoutes(loadedConfig config.Config, services Services) []apiRoute {
-	handlers := bundleHandlers{deps: services.BundleExport, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	deps := services.BundleExport
+	deps.LocalMachineID = loadedConfig.LAPIMachineID
+	handlers := bundleHandlers{deps: deps, operationLock: services.OperationLock, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	return []apiRoute{
 		{"POST /api/export", accessAdmin, longWrite(http.HandlerFunc(handlers.export))},
 	}

@@ -12,7 +12,7 @@ import (
 func localBundleExportDeps(localClient *lapi.Client, runner cscli.Runner, confDir string) bundle.ExportDeps {
 	return bundle.ExportDeps{
 		ReadHub:       cscliHub{runner: runner}.bundleHubItems,
-		ReadBans:      localClient.ReadSyncBans,
+		ReadBans:      localClient.ReadNativeBans,
 		ReadAlerts:    localClient.ReadAlertsForArchive,
 		EngineVersion: cscliPlatform{runner: runner}.Version,
 		ConfigDir:     confDir,
