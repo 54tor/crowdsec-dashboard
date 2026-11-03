@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/accessrule"
+	"crowdsec-dashboard/internal/allowlists"
 	"crowdsec-dashboard/internal/api"
 	"crowdsec-dashboard/internal/apitokens"
 	"crowdsec-dashboard/internal/archive"
@@ -73,11 +74,8 @@ func main() {
 	accountServices.geolocator = openGeolocator(loadedConfig.GeoIPDatabaseFile, time.Now, log.Printf)
 	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
 
-	services := api.NewServices(
-		localLAPIClient,
-		cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer),
-		loadedConfig.ConfDir,
-	)
+	cscliRunner := cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer)
+	services := api.NewServices(localLAPIClient, cscliRunner, loadedConfig.ConfDir)
 	auditRecorder := audit.NewPostgresRecorder(database)
 	services.Login = newLoginService(database, accountServices, sessionStore, webAuthn, auditRecorder)
 	services.Enrollment = accountServices.enrollment
@@ -100,6 +98,7 @@ func main() {
 	}, sessionStore, tokenRepository, newArchivePurgeAdapter(database, loadedConfig), auditRecorder)
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
+	services.Allowlists = allowlists.NewService(engineRepository, engineRegistry, allowlists.LocalOnlyWriters(allowlists.NewCscliWriter(cscliRunner)), time.Now)
 	services.CollectorStatus = engineCollector
 	services.SchemaVersion = store.NewVersionReader(database)
 	operationLock := oplock.New()

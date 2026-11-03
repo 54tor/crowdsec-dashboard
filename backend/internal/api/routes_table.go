@@ -14,6 +14,7 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, tokenRoutes(loadedConfig, services)...)
 	routes = append(routes, accountAdminRoutes(loadedConfig, services)...)
 	routes = append(routes, engineRoutes(loadedConfig, services)...)
+	routes = append(routes, allowlistRoutes(loadedConfig, services)...)
 	routes = append(routes, readRoutes(loadedConfig, services)...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
 	routes = append(routes, syncRoutes(loadedConfig, services)...)
@@ -93,6 +94,17 @@ func engineRoutes(loadedConfig config.Config, services Services) []apiRoute {
 		{"PATCH /api/engines/{name}", accessAdminSessionOnly, http.HandlerFunc(engines.update)},
 		{"DELETE /api/engines/{name}", accessAdminSessionOnly, http.HandlerFunc(engines.remove)},
 		{"POST /api/engines/{name}/test", accessAdmin, http.HandlerFunc(engines.test)},
+	}
+}
+
+func allowlistRoutes(loadedConfig config.Config, services Services) []apiRoute {
+	allowlistsHandlers := allowlistHandlers{service: services.Allowlists, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	return []apiRoute{
+		{"GET /api/engines/{name}/allowlists", accessAuthenticated, http.HandlerFunc(allowlistsHandlers.list)},
+		{"POST /api/engines/{name}/allowlists", accessAdmin, http.HandlerFunc(allowlistsHandlers.create)},
+		{"DELETE /api/engines/{name}/allowlists/{allowlist}", accessAdmin, http.HandlerFunc(allowlistsHandlers.remove)},
+		{"POST /api/engines/{name}/allowlists/{allowlist}/entries", accessAdmin, http.HandlerFunc(allowlistsHandlers.addEntry)},
+		{"DELETE /api/engines/{name}/allowlists/{allowlist}/entries", accessAdmin, http.HandlerFunc(allowlistsHandlers.removeEntry)},
 	}
 }
 

@@ -50,6 +50,7 @@ type Services struct {
 	Geolocator       geo.Geolocator
 	AccessRules      AccessRuleService
 	Engines          EngineService
+	Allowlists       AllowlistService
 	WebAuthn         *secondfactor.WebAuthn
 	TokenManager     TokenManager
 	AccountManager   AccountManager

@@ -47,9 +47,13 @@ const (
 	ActionSyncRun                  Action = "sync_run"
 	ActionBundleExported           Action = "bundle_exported"
 	ActionBundleImported           Action = "bundle_imported"
+	ActionAllowlistCreated         Action = "allowlist_created"
+	ActionAllowlistDeleted         Action = "allowlist_deleted"
+	ActionAllowlistEntryAdded      Action = "allowlist_entry_added"
+	ActionAllowlistEntryRemoved    Action = "allowlist_entry_removed"
 )
 
-const maximumTargetRunes = 64
+const MaximumTargetRunes = 64
 
 type Recorder interface {
 	Record(ctx context.Context, accountID int64, action Action, target, clientIP string) error
@@ -83,8 +87,8 @@ func sanitizeTarget(target string) string {
 		return character
 	}, strings.ToValidUTF8(target, ""))
 	runes := []rune(withoutControlCharacters)
-	if len(runes) > maximumTargetRunes {
-		runes = runes[:maximumTargetRunes]
+	if len(runes) > MaximumTargetRunes {
+		runes = runes[:MaximumTargetRunes]
 	}
 	return string(runes)
 }

@@ -348,6 +348,16 @@ var requiredSyncRoutes = map[string]routeAccess{
 	"POST /api/import":   accessAdminSessionOnly,
 }
 
+// requiredAllowlistRoutes pins the access class of every allowlist route; any new
+// /allowlists route must be added here (see TestEveryAllowlistMutationRouteIsAdminInRouteTable).
+var requiredAllowlistRoutes = map[string]routeAccess{
+	"GET /api/engines/{name}/allowlists":                        accessAuthenticated,
+	"POST /api/engines/{name}/allowlists":                       accessAdmin,
+	"DELETE /api/engines/{name}/allowlists/{allowlist}":         accessAdmin,
+	"POST /api/engines/{name}/allowlists/{allowlist}/entries":   accessAdmin,
+	"DELETE /api/engines/{name}/allowlists/{allowlist}/entries": accessAdmin,
+}
+
 var publicRoutePattern = regexp.MustCompile(`^(POST /api/auth/(login|enroll|logout)(/.*)?|GET /api/healthz|GET /api/auth/status)$`)
 
 func TestSessionOnlyRoutesKeepTheirAccessClass(testContext *testing.T) {
