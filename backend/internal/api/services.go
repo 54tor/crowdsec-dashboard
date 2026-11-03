@@ -76,7 +76,7 @@ func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) S
 		Hub:            cscliHub{runner: runner},
 		Reloader:       cscliReloader{runner: runner},
 		BundleExport:   localBundleExportDeps(lapiClient, runner, confDir),
-		BundleImport:   localBundleImportDeps(lapiClient, runner),
+		BundleImport:   localBundleImportDeps(lapiClient, runner, confDir),
 	}
 }
 

@@ -108,6 +108,7 @@ type AlertFilter struct {
 	Until             string
 	Scenario          string
 	IP                string
+	Range             string
 	Origin            string
 	HasActiveDecision *bool
 }

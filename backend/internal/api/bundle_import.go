@@ -171,7 +171,10 @@ func writeImportError(responseWriter http.ResponseWriter, importError error) {
 }
 
 func sectionErrorCode(failure error) string {
+	var unavailableError *bundle.UnavailableError
 	switch {
+	case errors.As(failure, &unavailableError):
+		return unavailableError.Code
 	case errors.Is(failure, context.DeadlineExceeded):
 		return "import_timeout"
 	case errors.Is(failure, context.Canceled):
@@ -207,6 +210,6 @@ func BundleImportAuditTarget(report bundle.ApplyReport) string {
 		skippedTotal += sectionReport.Skipped
 		failedTotal += sectionReport.Failed
 	}
-	return fmt.Sprintf("dry=false hub=%d decisions=%d skipped=%d failed=%d",
-		appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionDecision], skippedTotal, failedTotal)
+	return fmt.Sprintf("dry=false hub=%d decisions=%d alerts=%d skipped=%d failed=%d",
+		appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionDecision], appliedBySection[bundle.SectionAlerts], skippedTotal, failedTotal)
 }

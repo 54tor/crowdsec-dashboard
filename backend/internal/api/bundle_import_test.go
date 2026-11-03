@@ -317,7 +317,7 @@ func TestImportApplyIsAudited(testContext *testing.T) {
 	if len(events) != 1 {
 		testContext.Fatalf("expected one audit event, got %+v", events)
 	}
-	expectedTarget := "dry=false hub=0 decisions=1 skipped=1 failed=0"
+	expectedTarget := "dry=false hub=0 decisions=1 alerts=0 skipped=1 failed=0"
 	if events[0].action != audit.ActionBundleImported || events[0].target != expectedTarget || events[0].clientIP != "198.51.100.7" || actorAccountIDs[0] != adminAccountID {
 		testContext.Errorf("unexpected audit event %+v by %v", events[0], actorAccountIDs)
 	}
@@ -357,6 +357,8 @@ func TestImportSectionFailureUsesUpstreamCodes(testContext *testing.T) {
 		"import_timeout":   context.DeadlineExceeded,
 		"canceled":         context.Canceled,
 		"apply_failed":     errors.New("unclassified failure"),
+		// The alerts section stops with its own code and the joined cleanup errors.
+		bundle.ErrorCodeAlertImportSideEffect: errors.Join(&bundle.UnavailableError{Code: bundle.ErrorCodeAlertImportSideEffect}, lapi.ErrDeleteRefused),
 	}
 	for expectedCode, failure := range failuresByExpectedCode {
 		if obtainedCode := sectionErrorCode(failure); obtainedCode != expectedCode {

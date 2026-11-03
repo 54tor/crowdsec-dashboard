@@ -1,11 +1,15 @@
 package bundle
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 const (
 	StatusApplied        = "applied"
 	StatusFailed         = "failed"
 	StatusNotRun         = "not_run"
+	StatusUnavailable    = "section_unavailable"
 	ErrorCodeApplyFailed = "apply_failed"
 )
 
@@ -43,6 +47,10 @@ func Apply(ctx context.Context, deps ImportDeps, plan ImportPlan) (ApplyReport, 
 		if applyError != nil {
 			sectionReport.Status, sectionReport.ErrorCode, sectionReport.Failure = StatusFailed, ErrorCodeApplyFailed, applyError
 			previousSectionFailed = true
+		}
+		var unavailableError *UnavailableError
+		if errors.As(applyError, &unavailableError) {
+			sectionReport.Status, sectionReport.ErrorCode = StatusUnavailable, unavailableError.Code
 		}
 		report.Sections = append(report.Sections, sectionReport)
 	}

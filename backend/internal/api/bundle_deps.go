@@ -20,7 +20,7 @@ func localBundleExportDeps(localClient *lapi.Client, runner cscli.Runner, confDi
 	}
 }
 
-func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner) bundle.ImportDeps {
+func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner, confDir string) bundle.ImportDeps {
 	hub := cscliHub{runner: runner}
 	return bundle.ImportDeps{
 		ReadHub:           hub.bundleHubItems,
@@ -29,6 +29,11 @@ func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner) bundle
 		ReadLocalBans:     localClient.ReadSyncBans,
 		AddDecision:       localClient.AddDecision,
 		Now:               time.Now,
+		ReadLocalAlerts:   localClient.ReadAlertsForArchive,
+		PushImportedAlert: localClient.PushImportedAlert,
+		ListAlerts:        localClient.ListAlerts,
+		DeleteDecision:    localClient.DeleteDecision,
+		ConfigDir:         confDir,
 	}
 }
 

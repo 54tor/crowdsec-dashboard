@@ -361,10 +361,10 @@ func TestImportedDecisionsAreMarkedImportScenario(testContext *testing.T) {
 
 func TestImportReportsUnregisteredSectionsUnavailable(testContext *testing.T) {
 	fixture := newImportFixture()
-	imported := Bundle{Format: Format, Version: Version, Sections: Sections{Alerts: &AlertsSection{Alerts: []lapi.Alert{}}, Config: &ConfigSection{Files: []ConfigFile{}}}}
-	plan := planOrFail(testContext, fixture, imported, SectionAlerts, SectionConfig)
-	if !slices.Equal(plan.Unavailable, []string{SectionConfig, SectionAlerts}) {
-		testContext.Errorf("alerts and config must be section_unavailable until registered, got %v", plan.Unavailable)
+	imported := Bundle{Format: Format, Version: Version, Sections: Sections{Config: &ConfigSection{Files: []ConfigFile{}}}}
+	plan := planOrFail(testContext, fixture, imported, SectionConfig)
+	if !slices.Equal(plan.Unavailable, []string{SectionConfig}) {
+		testContext.Errorf("config must be section_unavailable until registered, got %v", plan.Unavailable)
 	}
 }
 

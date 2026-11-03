@@ -9,11 +9,13 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/allowguard"
+	"crowdsec-dashboard/internal/lapi"
 )
 
 const (
 	MaxImportedCollections = 20
 	MaxImportedDecisions   = 500
+	MaxImportedAlerts      = 500
 	ReasonAlreadyInstalled = "already_installed"
 	ReasonDuplicate        = "duplicate"
 	ReasonExpired          = "expired"
@@ -34,6 +36,7 @@ var applyOrder = []string{SectionHub, SectionConfig, SectionDecision, SectionAle
 var registeredSections = map[string]Section{
 	SectionHub:      hubImport{},
 	SectionDecision: decisionsImport{},
+	SectionAlerts:   alertsImport{},
 }
 
 type Section interface {
@@ -53,7 +56,14 @@ type DecisionAction struct {
 	Until    time.Time `json:"until"`
 }
 
-type AlertAction struct{}
+type AlertAction struct {
+	Scenario string `json:"scenario"`
+	StartAt  string `json:"start_at"`
+	StopAt   string `json:"stop_at"`
+	Scope    string `json:"scope"`
+	Value    string `json:"value"`
+	alert    lapi.Alert
+}
 
 type FileAction struct{}
 
@@ -64,28 +74,30 @@ type SkippedItem struct {
 }
 
 type SectionPlan struct {
-	Hub            []HubAction
-	Decisions      []DecisionAction
-	Alerts         []AlertAction
-	Config         []FileAction
-	Skipped        []SkippedItem
-	Warnings       []string
-	Unavailable    bool
-	allowlistGuard allowguard.Guard
+	Hub             []HubAction
+	Decisions       []DecisionAction
+	Alerts          []AlertAction
+	Config          []FileAction
+	Skipped         []SkippedItem
+	Warnings        []string
+	Unavailable     bool
+	UnavailableCode string
+	allowlistGuard  allowguard.Guard
 }
 
 type ImportPlan struct {
-	Sections      []string                  `json:"sections"`
-	Hub           []HubAction               `json:"hub"`
-	Decisions     []DecisionAction          `json:"decisions"`
-	Alerts        []AlertAction             `json:"alerts"`
-	Config        []FileAction              `json:"config"`
-	Skipped       []SkippedItem             `json:"skipped"`
-	SkippedCounts map[string]map[string]int `json:"skipped_counts"`
-	Warnings      []string                  `json:"warnings"`
-	Unavailable   []string                  `json:"unavailable"`
-	Digest        string                    `json:"digest"`
-	sectionPlans  map[string]SectionPlan
+	Sections         []string                  `json:"sections"`
+	Hub              []HubAction               `json:"hub"`
+	Decisions        []DecisionAction          `json:"decisions"`
+	Alerts           []AlertAction             `json:"alerts"`
+	Config           []FileAction              `json:"config"`
+	Skipped          []SkippedItem             `json:"skipped"`
+	SkippedCounts    map[string]map[string]int `json:"skipped_counts"`
+	Warnings         []string                  `json:"warnings"`
+	Unavailable      []string                  `json:"unavailable"`
+	UnavailableCodes map[string]string         `json:"unavailable_codes"`
+	Digest           string                    `json:"digest"`
+	sectionPlans     map[string]SectionPlan
 }
 
 func PlanImport(ctx context.Context, deps ImportDeps, imported Bundle, sections []string) (ImportPlan, error) {
@@ -93,6 +105,7 @@ func PlanImport(ctx context.Context, deps ImportDeps, imported Bundle, sections 
 		return ImportPlan{}, validationError
 	}
 	plan := newImportPlan()
+	deps.Allowlists = readAllowlistsOnce(deps.Allowlists)
 	for _, sectionName := range applyOrder {
 		if !slices.Contains(sections, sectionName) {
 			continue
@@ -114,15 +127,16 @@ func PlanImport(ctx context.Context, deps ImportDeps, imported Bundle, sections 
 
 func newImportPlan() ImportPlan {
 	return ImportPlan{
-		Sections:     []string{},
-		Hub:          []HubAction{},
-		Decisions:    []DecisionAction{},
-		Alerts:       []AlertAction{},
-		Config:       []FileAction{},
-		Skipped:      []SkippedItem{},
-		Warnings:     []string{},
-		Unavailable:  []string{},
-		sectionPlans: map[string]SectionPlan{},
+		Sections:         []string{},
+		Hub:              []HubAction{},
+		Decisions:        []DecisionAction{},
+		Alerts:           []AlertAction{},
+		Config:           []FileAction{},
+		Skipped:          []SkippedItem{},
+		Warnings:         []string{},
+		Unavailable:      []string{},
+		UnavailableCodes: map[string]string{},
+		sectionPlans:     map[string]SectionPlan{},
 	}
 }
 
@@ -164,10 +178,14 @@ func planSection(ctx context.Context, deps ImportDeps, imported Bundle, sectionN
 func (plan *ImportPlan) add(sectionName string, sectionPlan SectionPlan) {
 	slices.SortFunc(sectionPlan.Hub, func(first, second HubAction) int { return strings.Compare(first.Name, second.Name) })
 	slices.SortFunc(sectionPlan.Decisions, func(first, second DecisionAction) int { return strings.Compare(first.Value, second.Value) })
+	slices.SortFunc(sectionPlan.Alerts, compareAlertActions)
 	plan.Sections = append(plan.Sections, sectionName)
 	plan.sectionPlans[sectionName] = sectionPlan
 	if sectionPlan.Unavailable {
 		plan.Unavailable = append(plan.Unavailable, sectionName)
+		if sectionPlan.UnavailableCode != "" {
+			plan.UnavailableCodes[sectionName] = sectionPlan.UnavailableCode
+		}
 		return
 	}
 	plan.Hub = append(plan.Hub, sectionPlan.Hub...)

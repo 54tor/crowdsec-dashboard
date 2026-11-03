@@ -79,6 +79,7 @@ func alertQuery(filter AlertFilter) url.Values {
 	setIfNotEmpty(query, "until", filter.Until)
 	setIfNotEmpty(query, "scenario", filter.Scenario)
 	setIfNotEmpty(query, "ip", filter.IP)
+	setIfNotEmpty(query, "range", filter.Range)
 	setIfNotEmpty(query, "origin", filter.Origin)
 	if filter.HasActiveDecision != nil {
 		query.Set("has_active_decision", strconv.FormatBool(*filter.HasActiveDecision))

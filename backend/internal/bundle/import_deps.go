@@ -21,4 +21,9 @@ type ImportDeps struct {
 	ShareRules        func(ctx context.Context) (enginesync.Rules, bool)
 	IsCallerAddress   func(target string) bool
 	Now               func() time.Time
+	ReadLocalAlerts   func(ctx context.Context, limit int, maxBytes int64, timeout time.Duration) (lapi.ArchiveRead, error)
+	PushImportedAlert func(ctx context.Context, alert lapi.Alert) error
+	ListAlerts        func(ctx context.Context, filter lapi.AlertFilter) ([]lapi.Alert, error)
+	DeleteDecision    func(ctx context.Context, decisionID int64) error
+	ConfigDir         string
 }
