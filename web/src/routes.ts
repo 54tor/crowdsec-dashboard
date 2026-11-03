@@ -19,6 +19,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/sync', labelKey: 'nav.sync' },
   { path: '/tokens', labelKey: 'nav.tokens' },
   { path: '/accounts', labelKey: 'nav.accounts', requiredRole: 'admin' },
+  { path: '/export-import', labelKey: 'nav.exportImport', requiredRole: 'admin' },
 ]
 
 export function visibleNavItems(accountRole: AccountRole | null): readonly NavItem[] {

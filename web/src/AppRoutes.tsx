@@ -15,6 +15,7 @@ import { Config } from '@/pages/Config'
 import { Decisions } from '@/pages/Decisions'
 import { Health } from '@/pages/Health'
 import { RequireRole } from '@/auth/RequireRole'
+import { ExportImport } from '@/pages/ExportImport'
 import { Engines } from '@/pages/Engines'
 import { Hub } from '@/pages/Hub'
 import { Machines } from '@/pages/Machines'
@@ -36,6 +37,7 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/sync': <Sync />,
   '/tokens': <Tokens />,
   '/accounts': <Accounts />,
+  '/export-import': <ExportImport />,
 }
 
 function pageFor(navItem: NavItem): ReactElement {
