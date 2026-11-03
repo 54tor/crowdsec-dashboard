@@ -16,6 +16,10 @@ const (
 	importScenarioDateLayout = "2006-01-02"
 	maxImportedRemaining     = 9999 * time.Hour
 	readBackTolerance        = time.Minute
+
+	ErrorCodeEngineAddressesUnknown = enginesync.ErrorCodeEngineAddressesUnknown
+	ErrorCodeLocalBansIncomplete    = "local_bans_incomplete"
+	ErrorCodeDependencyMissing      = "dependency_missing"
 )
 
 type decisionsImport struct{}
@@ -39,9 +43,9 @@ func (decisionsImport) Plan(ctx context.Context, deps ImportDeps, imported Bundl
 	if len(imported.Sections.Decisions.Decisions) > MaxDecisions {
 		return SectionPlan{}, ErrTooLarge
 	}
-	planner, available := newDecisionPlanner(ctx, deps)
-	if !available {
-		return SectionPlan{Unavailable: true}, nil
+	planner, unavailableCode := newDecisionPlanner(ctx, deps)
+	if unavailableCode != "" {
+		return SectionPlan{Unavailable: true, UnavailableCode: unavailableCode}, nil
 	}
 	for _, decision := range imported.Sections.Decisions.Decisions {
 		planner.plan(decision)
@@ -53,24 +57,24 @@ func (decisionsImport) Plan(ctx context.Context, deps ImportDeps, imported Bundl
 	return planner.sectionPlan, nil
 }
 
-func newDecisionPlanner(ctx context.Context, deps ImportDeps) (*decisionPlanner, bool) {
+func newDecisionPlanner(ctx context.Context, deps ImportDeps) (*decisionPlanner, string) {
 	hasEveryDependency := deps.ShareRules != nil && deps.Allowlists != nil && deps.ReadLocalBans != nil && deps.AddDecision != nil && deps.IsCallerAddress != nil
 	if !hasEveryDependency {
-		return nil, false
+		return nil, ErrorCodeDependencyMissing
 	}
 	rules, rulesAvailable := deps.ShareRules(ctx)
 	if !rulesAvailable {
-		return nil, false
+		return nil, ErrorCodeEngineAddressesUnknown
 	}
 	now := deps.Now()
 	allowlistRead, allowlistError := deps.Allowlists.ListAllowlists(ctx)
 	guard := allowguard.FromRead(allowlistRead, allowlistError, now)
 	if !guard.Available() {
-		return nil, false
+		return nil, ErrorCodeAllowlistUnavailable
 	}
 	localBans, isComplete, bansError := deps.ReadLocalBans(ctx, MaxDecisions)
 	if bansError != nil || !isComplete {
-		return nil, false
+		return nil, ErrorCodeLocalBansIncomplete
 	}
 	return &decisionPlanner{
 		rules:           rules,
@@ -79,7 +83,7 @@ func newDecisionPlanner(ctx context.Context, deps ImportDeps) (*decisionPlanner,
 		coveringBans:    localCoveringBans(localBans),
 		scenario:        importedPrefix + now.UTC().Format(importScenarioDateLayout),
 		now:             now,
-	}, true
+	}, ""
 }
 
 func localCoveringBans(localBans []lapi.SyncDecision) []coveringBan {
