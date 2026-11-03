@@ -253,3 +253,21 @@ func TestDeleteDecisionMapsServerErrorToRefusal(testContext *testing.T) {
 		testContext.Error("a transport failure is not a refusal")
 	}
 }
+
+// The bundle export must never read the dashboard's own copies, so it asks for native origins only.
+func TestReadNativeBansReadsOnlyCrowdsecAndCscli(testContext *testing.T) {
+	fake, client := newSyncFakeLAPI(testContext, map[string]string{
+		"cscli": "[" + alertJSON(1, "agent-1", decisionJSON(10, "cscli", "ban", "Ip", "203.0.113.20", "1h0m0s", false)) + "]",
+	})
+	bans, complete, readError := client.ReadNativeBans(context.Background(), 5000)
+	if readError != nil || !complete || len(bans) != 1 || bans[0].Value != "203.0.113.20" {
+		testContext.Fatalf("unexpected read %+v complete=%v (%v)", bans, complete, readError)
+	}
+	var requestedOrigins []string
+	for _, query := range fake.receivedQuery {
+		requestedOrigins = append(requestedOrigins, query.Get("origin"))
+	}
+	if strings.Join(requestedOrigins, ",") != "crowdsec,cscli" {
+		testContext.Errorf("expected crowdsec and cscli only, got %v", requestedOrigins)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,18 +22,27 @@ const (
 )
 
 var (
-	syncOrigins         = []string{"crowdsec", "cscli", syncCopyOrigin}
+	nativeOrigins       = []string{"crowdsec", "cscli"}
+	syncOrigins         = append(slices.Clone(nativeOrigins), syncCopyOrigin)
 	errInvalidReadLimit = errors.New("lapi: sync read limit must be positive")
 	syncExchangeLimits  = exchangeLimits{timeout: defaultTimeout, maxBytes: maxSyncResponseBytes}
 )
 
 func (client *Client) ReadSyncBans(ctx context.Context, limit int) ([]SyncDecision, bool, error) {
+	return client.readBansOfOrigins(ctx, syncOrigins, limit)
+}
+
+func (client *Client) ReadNativeBans(ctx context.Context, limit int) ([]SyncDecision, bool, error) {
+	return client.readBansOfOrigins(ctx, nativeOrigins, limit)
+}
+
+func (client *Client) readBansOfOrigins(ctx context.Context, origins []string, limit int) ([]SyncDecision, bool, error) {
 	if limit <= 0 {
 		return nil, false, errInvalidReadLimit
 	}
 	bans := []SyncDecision{}
 	complete := true
-	for _, origin := range syncOrigins {
+	for _, origin := range origins {
 		originBans, originComplete, readError := client.readOriginBans(ctx, origin, limit)
 		if readError != nil {
 			return nil, false, readError
