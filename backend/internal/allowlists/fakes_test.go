@@ -32,6 +32,7 @@ type fakeLAPI struct {
 	mutex          sync.Mutex
 	allowlists     []lapi.Allowlist
 	failureStatus  int
+	rawBody        string
 	allowlistReads int
 }
 
@@ -48,7 +49,19 @@ func (fake *fakeLAPI) handle(responseWriter http.ResponseWriter, request *http.R
 		return
 	}
 	responseWriter.Header().Set("Content-Type", "application/json")
+	if fake.rawBody != "" {
+		responseWriter.Write([]byte(fake.rawBody))
+		return
+	}
 	json.NewEncoder(responseWriter).Encode(fake.allowlists)
+}
+
+// serveRawBody replaces the encoded state with a fixed body, for example one
+// larger than the client's 4 MiB cap.
+func (fake *fakeLAPI) serveRawBody(body string) {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	fake.rawBody = body
 }
 
 func (fake *fakeLAPI) setFailure(status int) {

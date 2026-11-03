@@ -42,6 +42,9 @@ func findAllowlist(read lapi.AllowlistRead, allowlistName string) (lapi.Allowlis
 
 func writableAllowlist(read lapi.AllowlistRead, allowlistName string) (lapi.Allowlist, error) {
 	foundAllowlist, found := findAllowlist(read, allowlistName)
+	if !found && read.Truncated {
+		return lapi.Allowlist{}, lapi.ErrAllowlistsUnreadable
+	}
 	if !found {
 		return lapi.Allowlist{}, ErrAllowlistNotFound
 	}

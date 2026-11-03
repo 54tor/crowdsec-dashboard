@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -359,6 +360,40 @@ func TestRemoveEntryOnTruncatedReadLetsCscliDecide(testContext *testing.T) {
 	}
 	if len(fixture.writer.calls) != 1 || result.Refreshed {
 		testContext.Fatalf("expected one cscli removal and an unverified result, got %v refreshed=%v", fixture.writer.calls, result.Refreshed)
+	}
+}
+
+// A read over 4 MiB lists nothing: the allowlist named by a write may well
+// exist, so the write is refused as unreadable, never as an unknown
+// allowlist, and cscli is not called.
+func TestWritesOnOversizedReadAreUnreadableNotNotFound(testContext *testing.T) {
+	oversizedBody := "[" + strings.Repeat(" ", 4<<20+10) + "]"
+	writesByName := map[string]func(service *Service) error{
+		"delete": func(service *Service) error {
+			_, writeError := service.Delete(context.Background(), localEngineName, "trusted")
+			return writeError
+		},
+		"add entry": func(service *Service) error {
+			_, writeError := service.AddEntry(context.Background(), localEngineName, "trusted", EntryInput{Value: "203.0.113.7"})
+			return writeError
+		},
+		"remove entry": func(service *Service) error {
+			_, writeError := service.RemoveEntry(context.Background(), localEngineName, "trusted", "203.0.113.7")
+			return writeError
+		},
+	}
+	for writeName, runWrite := range writesByName {
+		fixture := newServiceFixture(testContext, trustedAllowlist())
+		fixture.localLAPI.serveRawBody(oversizedBody)
+
+		writeError := runWrite(fixture.service)
+
+		if !errors.Is(writeError, lapi.ErrAllowlistsUnreadable) || errors.Is(writeError, ErrAllowlistNotFound) {
+			testContext.Errorf("%s: expected an unreadable refusal, got %v", writeName, writeError)
+		}
+		if len(fixture.writer.calls) != 0 {
+			testContext.Errorf("%s: cscli must not run, got %v", writeName, fixture.writer.calls)
+		}
 	}
 }
 
