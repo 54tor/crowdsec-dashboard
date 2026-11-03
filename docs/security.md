@@ -511,8 +511,10 @@ client per engine, never through `HTTP_PROXY` / `HTTPS_PROXY` of the environment
   `169.254.169.254`), unspecified, multicast and the reserved and documentation ranges
   (the built-in list of `code.dny.dev/ssrf`), plus three metadata endpoints that sit inside allowed
   ranges: `100.100.100.200` (Alibaba Cloud), `fd00:ec2::254` (AWS IPv6) and `168.63.129.16` (Azure wire server). A refusal is reported
-  as `engine_blocked_address`. A literal forbidden address in `lapi_url` or `proxy.url` is refused
-  when the engine is saved. IPv4-mapped IPv6 forms are unmapped before the check.
+  as `engine_blocked_address`. A forbidden address written as a canonical literal in `lapi_url` or `proxy.url` (for example
+  `127.0.0.1`) is also refused when the engine is saved. Other spellings of the same address (`127.1`,
+  `0x7f.0.0.1`) are not literals for the save-time check and are saved; the check made when connecting
+  still refuses them. IPv4-mapped IPv6 forms are unmapped before the check.
 - **Proxy as a trust boundary.** With a proxy (`socks5` or `http`), the check applies to the proxy
   address; the engine host name is resolved by the proxy (`socks5` behaves as `socks5h`), so the
   dashboard cannot check where the proxy connects. Choosing a proxy is choosing to trust it: only
@@ -717,7 +719,13 @@ read-write in the dashboard and read-only in CrowdSec as its `acquis.d`. Nothing
   - a security key used without PIN or biometric is accepted (user verification `preferred`), and a
     passkey with a counter stuck at 0 has no clone detection;
   - without a GeoLite2 database, country rules refuse everyone not matched by an IP rule;
-  - the audit log is not complete (see [Audit log](#audit-log)).
+  - the audit log is not complete (see [Audit log](#audit-log));
+  - an allowlist entry in IPv4-mapped form is read as IPv4 only from `::ffff:0:0/96` and narrower
+    (`::ffff:192.0.2.0/120` becomes `192.0.2.0/24`). A wider one (`::ffff:0:0/95`, `::/0`) stays an
+    IPv6 range and does not protect IPv4 addresses, which are always unmapped before matching. The
+    reverse holds for a target (a ban, a sync or import entry) such as `::/0` or `::ffff:0:0/80`: it
+    does not cover IPv4 addresses, so an IPv4 allowlist entry never matches it. The IPv6 ban floor
+    (/32) keeps such wide values out of manual bans.
 - The login rate limiter, the pending logins and the enrolment state are per process (one replica).
 - The manual ban checks the local allowlists just before writing, but an entry added by an
   external `cscli` between that read and the LAPI write is not seen

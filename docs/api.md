@@ -251,7 +251,9 @@ or to an older generation of the local LAPI (ids are reused after a reset):
   the local LAPI (`GET /v1/alerts/{id}`) first: 404 `not_found` when the LAPI has no such alert,
   409 `target_mismatch` when its uuid differs, and in both cases nothing is deleted or audited. It
   then deletes the alert with `cscli alerts delete` and its archived copy (same engine, id and uuid)
-  in the same request, so it does not come back from the archive. `archive_deleted:true` means no
+  in the same request, so it does not come back from the archive, unless a collection of that engine
+  was already running: it can archive the alert again after the delete (delete it from the archive
+  to remove that copy). `archive_deleted:true` means no
   archived copy is left (including when none existed); `false` means the LAPI copy is gone but the
   archive copy could not be removed (logged).
 - `DELETE /api/decisions/{id}` needs `scope` and `value`. The machine API has no route to read one

@@ -4,7 +4,7 @@
 
 | Area | Behaviour |
 |---|---|
-| Alerts | The 100 most recent alerts of the local LAPI are fetched live, followed by the archive (older local alerts and the alerts of remote engines). Filters (`scenario`, IP/CIDR, `since` such as `24h`, `7d`) are applied by the LAPI inside that cap and by the database on the archive, with different IP scopes (see `docs/api.md`). When the local LAPI is unreachable the archive is still served, flagged `live_status:"unavailable"` (a banner says so and the archive stays paged). Each row shows its engine and a "Live" or "Archived" badge; an engine selector (any role) narrows the list. Pages are counted from `total`; when capped, the total (live window plus up to 10 000 archived rows) is shown with a "+", and paging stops at that reachable range. Archived alerts open a details dialog with their events as plain text; events purged by retention leave an explicit empty state. Only live rows of the `local` engine offer Delete, which also deletes the archived copy. |
+| Alerts | The 100 most recent alerts of the local LAPI are fetched live, followed by the archive (older local alerts and the alerts of remote engines). Filters (`scenario`, IP/CIDR, `since` such as `24h`, `7d`) are applied by the LAPI inside that cap and by the database on the archive, with different IP scopes (see `docs/api.md`). When the local LAPI is unreachable the archive is still served, flagged `live_status:"unavailable"` (a banner says so and the archive stays paged). The chart above the list only covers the first 100 rows of the merged list (the live window and the newest archived rows), whatever the page or the total shown. Each row shows its engine and a "Live" or "Archived" badge; an engine selector (any role) narrows the list. Pages are counted from `total`; when capped, the total (live window plus up to 10 000 archived rows) is shown with a "+", and paging stops at that reachable range. Archived alerts open a details dialog with their events as plain text; events purged by retention leave an explicit empty state. Only live rows of the `local` engine offer Delete, which also deletes the archived copy. |
 | Decisions | Built from the alerts that still have an active decision (same 100-alert window), expired ones dropped, followed by archived decisions still active at collection time, badged "Archived, not active" (the "Show expired decisions" checkbox sends `include_expired=true` for the history). Decisions of the community blocklist (CAPI) are not listed: they are not attached to local alerts. A manual ban shows up as origin `cscli`, scenario `manual/dashboard`. |
 | Unban | Deletes one decision by id; the request must carry the `scope` and `value` query parameters. Before deleting, the dashboard looks the id up (among the active decisions of that value, then among the newest 100 alerts): an unknown id answers 404 `not_found`, an id whose scope or value differs answers 409 `target_mismatch`, and nothing is deleted. The archived copy remains, shown "Archived, not active". |
 | Hub whitelists | Parser and postoverflow whitelist files (`parsers/*/*whitelist*.yaml|yml`, `postoverflows/*/*whitelist*.yaml|yml`) are shown read-only on the Config page of the local engine. Those that the hub installs as symlinks are not listed there (symlinks are never followed); they stay visible as `parsers` and `postoverflows` items of the Hub page. Remote engines show none. |
@@ -343,7 +343,8 @@ cannot be stored (for example a meta value that is not a string, or a value the 
 is skipped and counted, and the next valid alert is still archived. Events are bounded per alert
 (see [security.md](security.md#engines-and-outbound-connections)); an alert whose events or meta
 were cut has `events_truncated:true` in its detail; this includes a meta key cut to a length that
-collides with an earlier key.
+collides with an earlier key. Decisions are bounded too (200 per alert); the ones cut are counted only in
+the log line `archive_decisions_dropped`, not in `/api/health` or the metrics.
 
 **History incomplete.** When the newest alerts read do not reach back to the cursor (more new
 alerts than the poll limit since the last collection), the collector reads the whole history
@@ -367,7 +368,10 @@ detects it (an id it already holds with another uuid, or a newest id below the c
 the received alerts is already archived), sets the cursor back to 0 and counts a `reset`; nothing
 is duplicated and the old alerts stay in the archive. Residual case: when every alert the engine
 still serves has already left the archive by retention and its newest alert was deleted, a reset
-is assumed wrongly and that window is archived once more (purged again by retention). Re-archiving after a reset gives the old alerts a new collection time, hence a fresh retention period. If an engine's database is reset while the dashboard is not running and its new ids exceed the old cursor, the reset goes undetected and the alerts in between are never archived: the gap is silent and not counted. Changing the
+is assumed wrongly and that window is archived once more (purged again by retention). The same
+happens when an administrator deleted archived alerts through the API: if none of the alerts the engine
+still serves is archived any more and its newest id is below the cursor, a reset is assumed and they are
+archived again. Re-archiving after a reset gives the old alerts a new collection time, hence a fresh retention period. If an engine's database is reset while the dashboard is not running and its new ids exceed the old cursor, the reset goes undetected and the alerts in between are never archived: the gap is silent and not counted. Changing the
 host, port or scheme of an engine's URL also resets its cursor, and the reset is counted in `resets`.
 
 **Dates.** An archived alert whose engine date (`created_at`) is missing, unparseable or in the future is dated by its collection time, so a skewed engine clock cannot pin its alerts at the top of the lists.
@@ -375,7 +379,10 @@ host, port or scheme of an engine's URL also resets its cursor, and the reset is
 **Retention.** Archived alerts, decisions and events are purged hourly by collection age
 ([configuration.md](configuration.md#environment-variables)). Decisions still active on the engine
 are never purged, and the alert that owns one is kept until that decision expires. Alerts purged from the archive are
-not collected again while the engine still serves them (they are below the cursor).
+not collected again while the engine still serves them (they are below the cursor). The hourly
+decisions step has no horizon of its own, unlike the event purge: each run looks again at every
+alert older than the decision retention, so with a decision retention shorter than the alert
+retention it costs one probe per such alert every hour (batched, and bounded by the 30-minute run).
 
 **Deleting an engine deletes its archive** (alerts, events and decisions), after the name is
 retyped. The request answers 202 `{"status":"deleting"}` without waiting for the archive deletion;
@@ -391,7 +398,10 @@ disable the engine instead.
 and its archived copy in the same request, so it does not come back from the archive.
 Unbanning a live local decision leaves its archived copy, shown "Archived, not active". Archived
 alerts of any engine can be deleted from the archive through the API only
-(`DELETE /api/alerts/archive/{archive_id}`); remote engines are never written to.
+(`DELETE /api/alerts/archive/{archive_id}`); remote engines are never written to. The "does not come
+back" guarantee has one gap: a collection of that engine already running when the delete is made can
+still store the alert from the answer it read earlier, and it is then archived again (delete the
+archived copy again).
 
 **Schema notes.** The archive tables (`engine`, `alert`, `event`, `decision`, migration 00003)
 deliberately keep two denormalisations: alert fields that CrowdSec repeats per alert (scenario,
