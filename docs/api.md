@@ -152,7 +152,8 @@ answers 403 `forbidden` to a `read_only` session and 403 `session_required` to a
 List routes take `page` (1 to 10000, default 1), `per_page` (default 50, capped at 100) and the
 filters `scenario` (`^[A-Za-z0-9][A-Za-z0-9._/:-]{0,127}$`), `ip` (IP or CIDR) and `since` (`<1-4
 digits>` then `s`, `m`, `h` or `d`). `/api/alerts` and `/api/decisions` also take `engine` (an
-engine name, `^[a-z0-9][a-z0-9-]{0,31}$`) and `/api/decisions` takes `include_expired` (`true` or
+engine name, `^[a-z0-9][a-z0-9-]{0,31}$`), `/api/alerts` takes `source_kind` (`log` or `appsec`,
+see [Alert origin](#alert-origin-log-or-appsec)) and `/api/decisions` takes `include_expired` (`true` or
 `false`). Invalid values answer 400 `invalid_request`. The page object is `{"items": [...], "page",
 "per_page", "window_size", "may_be_truncated", "total", "total_capped", "live_status"}`;
 `window_size` is the number of entries fetched from the local LAPI (at most 100),
@@ -196,9 +197,22 @@ ever holds active decisions). Lists never carry alert `events`.
   requests (new alert, or the collector archives in between), an item can repeat or be skipped at a
   page boundary.
 
+### Alert origin (log or AppSec)
+
+Every alert item carries `source_kind`: `appsec` when the alert comes from the AppSec component
+(WAF), `log` otherwise (log parsing, but also manual bans, sync copies and imported alerts).
+`source_kind=appsec` or `source_kind=log` keeps only the alerts of that origin, on the live window
+and on the archive alike. An alert is `appsec` when at least one of its events has the meta
+`service` equal to `appsec`, a `log_type` starting with `appsec-`, or both the keys `matched_zones`
+and `target_fqdn` (the per-rule alerts of CrowdSec 1.8 carry neither `service` nor `log_type`). The
+archive stores the kind when the alert is first archived (column `alert_source_kind`) and never
+recomputes it ([operations.md](operations.md#appsec-origin-of-archived-alerts)). Without an archive
+reader (not the case in production) the route serves the live window alone: the filter still
+applies but the items carry no `source_kind` field.
+
 | Method | Path | Access | Response | Errors |
 |---|---|---|---|---|
-| GET | `/api/alerts` | authenticated | page of alerts: `id, uuid, scenario_version, created_at, machine_id, scenario, message, events_count, start_at, stop_at, simulated, source{scope,value,ip,range,cn,as_name,as_number}, decisions[]` (always an array), `engine, archive_id, live` | 400, 503 `database_unavailable` |
+| GET | `/api/alerts` | authenticated | page of alerts: `id, uuid, scenario_version, created_at, machine_id, scenario, message, events_count, start_at, stop_at, simulated, source{scope,value,ip,range,cn,as_name,as_number}, decisions[]` (always an array), `engine, archive_id, live, source_kind` | 400, 503 `database_unavailable` |
 | GET | `/api/alerts/archive/{archive_id}` | authenticated | one archived alert: the list fields plus `events_truncated` and `events: [{timestamp, meta:{key: value}}]` exactly as stored (`[]` once events were purged by retention); attacker-controlled values are plain JSON strings, never HTML | 400 `invalid_request`, 404 `not_found`, 503 |
 | GET | `/api/decisions` | authenticated | page of decisions: `id, alert_id, origin, type, scope, value, duration, until, scenario, simulated, engine, live, archive_decision_id` (the archive row id of the decision, `null` for a live one not archived yet) | 400, 503 |
 | GET | `/api/health` | authenticated | `{"version", "database":"ok"\|"unavailable", "schema_version":<number or null>, "collector":[{engine_name,last_success_at,lag_seconds,errors_total,stale,history_incomplete}], "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}], "degraded":[...]}`; `self` is true only for the machine whose id equals `LAPI_MACHINE_ID` (always present, false otherwise); `degraded` lists sources that failed (`version`, `bouncers`, `machines`); `collector` has one entry per configured engine, `stale` being true after three `COLLECTOR_INTERVAL` without success or when none happened yet (`last_success_at` and `lag_seconds` null) ([operations.md](operations.md#health-and-metrics)) | none: failures are reported in `degraded` |
@@ -215,7 +229,7 @@ a `read_only` account or a `read` token gets 403 `forbidden`.
 
 | Method | Path | Access | Body | Success response | Errors |
 |---|---|---|---|---|---|
-| POST | `/api/decisions` | admin | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 502 |
+| POST | `/api/decisions` | admin | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` (not audited) | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 409 `target_allowlisted` (the target overlaps an active allowlist entry of the local engine); 503 `allowlist_unavailable` (the local allowlists could not be read: the ban is refused); 502 |
 | DELETE | `/api/decisions/{id}?scope=<scope>&value=<value>` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted"}`, audited `decision_removed` | 400 `confirmation_required`, `invalid_request`; 404 `not_found`; 409 `target_mismatch`; 502 |
 | DELETE | `/api/alerts/{id}?uuid=<uuid>` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted","archive_deleted":true}` | 400; 403 `forbidden`; 404 `not_found`; 409 `target_mismatch`; 502 `cscli_failed` |
 | DELETE | `/api/alerts/archive/{archive_id}` | admin | `{"confirm":"<archive_id>"}` | `200 {"status":"deleted"}` | 400 `invalid_request`, `confirmation_required`; 403; 404 `not_found`; 503 |
@@ -226,8 +240,8 @@ a `read_only` account or a `read` token gets 403 `forbidden`.
 | DELETE | `/api/machines/{name}` | admin | `{"confirm":"<name>"}` | `200 {"status":"deleted"}` | 400; 409 `self_account`; 502 |
 | POST | `/api/hub/update` | admin | none | `200 {"status":"updated"}` | 502; 504 |
 | POST | `/api/hub/upgrade` | admin | none | `200 {"status":"upgraded"}` | 502; 504 |
-| POST | `/api/hub/collections` | admin | `{"name"}` such as `crowdsecurity/linux` | `200 {"status":"installed"}` | 400; 502; 504 |
-| DELETE | `/api/hub/collections/{name...}` | admin | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400; 502; 504 |
+| POST | `/api/hub/{kind}` | admin | `{"name"}` such as `crowdsecurity/linux` | `200 {"status":"installed"}` | 400 `invalid_request`; 404 `not_found` (unknown kind); 502 `cscli_failed`; 504 `cscli_timeout` |
+| DELETE | `/api/hub/{kind}/{name...}` | admin | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400 `confirmation_required`, `invalid_request`; 404 `not_found` (unknown kind); 409 `hub_item_still_installed`; 502 `cscli_failed`; 504 `cscli_timeout` |
 | POST | `/api/crowdsec/reload` | admin | none | `200 {"status":"reload_requested"}` | 502; 504 |
 
 Both live deletions name the target they mean, because an `id` alone may belong to another engine
@@ -249,6 +263,21 @@ or to an older generation of the local LAPI (ids are reused after a reset):
 Only `live:true` rows of the `local` engine can be deleted this way. `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
 from the archive only (a remote engine is never contacted). Both alert routes (`DELETE /api/alerts/{id}` and `DELETE /api/alerts/archive/{archive_id}`) are audited `alert_deleted` with
 target `<engine>/<upstream id>`.
+
+The manual ban checks the allowlists of the local engine just before the write, with the same
+filter as the sync and the bundle import ([security.md](security.md#allowlist-check-before-writes)):
+there is no override, remove the entry first. The order is: body, target, duration, reason,
+`self_ban`, allowlists, then the LAPI write.
+
+Hub `{kind}` is `collections`, `appsec-rules` or `appsec-configs` (the commands `cscli collections`,
+`cscli appsec-rules`, `cscli appsec-configs` on the local engine); any other kind answers 404
+`not_found` before the body is read. `crowdsecurity/appsec-virtual-patching` and
+`crowdsecurity/appsec-generic-rules` are collections: installing them as `appsec-rules` or
+`appsec-configs` fails with 502 `cscli_failed`. A removal answers 409 `hub_item_still_installed`
+when the hub still lists the item as installed afterwards: `cscli` exits 0 without removing a rule
+or configuration that belongs to an installed collection; remove the collection instead (when the
+hub cannot be listed again, the removal is reported as done without that check). Hub
+installs and removals are not audited ([security.md](security.md#audit-log)).
 
 Machine names match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; bouncer names also allow `@` after the first character (bouncers registered over TLS are named `name@<address>`); hub names allow one `/`.
 The machine self-check runs before the confirmation check, so `self_account` wins over
@@ -311,6 +340,88 @@ out of the collection until it is fixed); never a raw error text.
   target. After each successful write the engine registry is reloaded; when that reload fails the
   write is kept, the failure is logged and the response carries `"warning":"registry_reload_failed"`
   (the previous engine set stays active until the next successful reload).
+
+## Allowlists
+
+CrowdSec allowlists (centralised allowlists, `cscli allowlists`) of each engine
+([security.md](security.md#allowlists-of-the-engines)). Reading is open to every role; the four
+writes are admin (an `admin` session or a `write` token of an `admin` account) and act on the
+**local** engine only: the LAPI has no route to write an allowlist, so the dashboard writes with
+`cscli` in the local CrowdSec container, and every remote engine is read-only (409
+`allowlist_engine_readonly`, nothing read or written). Bodies are capped at 2 KiB and unknown
+fields are refused (400 `invalid_request`).
+
+| Method | Path | Access | Body | Success response |
+|---|---|---|---|---|
+| GET | `/api/engines/{name}/allowlists` | authenticated | none | `200` listing |
+| POST | `/api/engines/{name}/allowlists` | admin | `{"name","description"}` | `201` mutation result |
+| DELETE | `/api/engines/{name}/allowlists/{allowlist}` | admin | `{"confirm":"<allowlist>"}` | `200` mutation result |
+| POST | `/api/engines/{name}/allowlists/{allowlist}/entries` | admin | `{"value","expiration","description","confirm"}` | `201` mutation result |
+| DELETE | `/api/engines/{name}/allowlists/{allowlist}/entries` | admin | `{"value","confirm":"<value>"}` | `200` mutation result |
+
+The listing is:
+
+```json
+{"engine": "local", "writable": true, "truncated": false,
+ "allowlists": [{"name": "trusted", "description": "Trusted partners", "console_managed": false,
+   "created_at": "2026-11-03T15:47:00Z", "updated_at": "2026-11-03T15:47:44Z",
+   "entries": [{"value": "203.0.113.7", "description": "partner gateway",
+     "created_at": "2026-11-03T15:47:44Z", "expires_at": null, "expired": false}]}]}
+```
+
+- `writable` is true for the local engine only. `truncated` is true when the LAPI answer was over
+  4 MiB (the listing is then empty) or held more than 10 000 entries in total (the entries beyond
+  are not shown); the page shows a banner, and the manual ban and the sync refuse every target on
+  that engine.
+- `expires_at` is null for an entry without expiry (CrowdSec stores it as
+  `0001-01-01T00:00:00.000Z`); `expired` is computed against the dashboard clock at the time of the
+  read. An expired entry is still listed (`expired:true`) and no longer protects its value.
+- A mutation result is the listing re-read after the write plus `refreshed`. `refreshed:false`
+  means the write was made (and audited) but the allowlists could not be read again, or the re-read
+  was truncated (the change is then not verified): the listing may be empty, read it again with
+  `GET`.
+
+Fields:
+
+- `name`: `^[a-z0-9][a-z0-9._-]{0,31}$`. `description` (required at creation, optional for an
+  entry): 1 to 256 bytes of UTF-8, not starting with `-`, without control, format (zero-width,
+  bidirectional) or line and paragraph separator characters. It is passed to `cscli` as a single
+  `--description=` or `--comment=` value.
+- `value`: an IP address or a CIDR range, IPv4 or IPv6, written in canonical form to the engine.
+  A range wider than IPv4 /8 or IPv6 /32 is refused (400 `allowlist_prefix_too_wide`, `0.0.0.0/0`
+  and `::/0` included, no confirmation can lift it). A range wider than IPv4 /24 or IPv6 /48 needs
+  `confirm` equal to the canonical range (400 `confirmation_required` otherwise). These floors are
+  constants, no setting changes them.
+- `expiration`: empty (no expiry) or 1 to 4 digits not starting with 0, then `h` or `d` (`12h`,
+  `7d`), passed as `cscli allowlists add --expiration=`.
+- Delete routes need `confirm` equal to the allowlist name, or to the `value` as sent.
+
+`cscli allowlists` exits 0 on a duplicate value, an invalid value or the removal of a missing value
+(only an unknown or duplicate allowlist name exits non-zero), so the dashboard checks the change
+itself: it reads the allowlists before the write (to refuse duplicates, unknown or
+console-managed allowlists) and again after it, and answers 502 `allowlist_write_failed` when the
+expected change is not visible. **Adding an entry makes CrowdSec delete at once every decision of
+that engine covered by any of its allowlists**, not only by the new value.
+
+| Code | HTTP | When |
+|---|---|---|
+| `invalid_request` | 400 | Body malformed, over 2 KiB, or with unknown fields |
+| `confirmation_required` | 400 | Delete without the retyped name or value, or a range wider than /24 (IPv4) or /48 (IPv6) without the retyped canonical range |
+| `invalid_allowlist` | 400 | Name, value, expiration or description refused |
+| `allowlist_prefix_too_wide` | 400 | Range wider than /8 (IPv4) or /32 (IPv6) |
+| `forbidden` | 403 | A write by a `read_only` account or a `read` token |
+| `engine_not_found` | 404 | Unknown or disabled engine |
+| `allowlist_not_found`, `allowlist_entry_not_found` | 404 | No such allowlist or value on the engine (also any write to an existing allowlist when the LAPI answer was over 4 MiB) |
+| `allowlist_exists`, `allowlist_entry_exists` | 409 | Name or value already present |
+| `allowlist_console_managed` | 409 | The allowlist is managed by the CrowdSec console: change it there |
+| `allowlist_engine_readonly` | 409 | Write on a remote engine |
+| `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address` | 502 | The allowlists could not be read: no answer, login refused, forbidden address. Any 404 on `/v1/allowlists` (a CrowdSec without allowlists, a wrong URL or a proxy) and an undecodable answer count as `engine_unreachable` |
+| `allowlist_write_failed` | 502 | `cscli` failed or timed out, or the re-read does not show the change; the output of `cscli` is never returned |
+| `database_unavailable` | 503 | The engine table could not be read |
+
+Each successful write is audited after the fact: `allowlist_created` and `allowlist_deleted` with
+target `<engine>/<allowlist>`, `allowlist_entry_added` and `allowlist_entry_removed` with target
+`<value>@<engine>/<allowlist>` (the value is never cut). A refused or failed write is not audited.
 
 ## Sync, export and import
 

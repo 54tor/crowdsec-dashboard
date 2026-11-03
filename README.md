@@ -2,7 +2,8 @@
 
 A small web dashboard for a self-hosted [CrowdSec](https://www.crowdsec.net/) Security Engine
 running in Docker. It reads alerts and decisions from the local API (LAPI) and manages bouncers,
-machines and hub collections by running a fixed set of `cscli` commands in the CrowdSec container.
+machines, hub collections, AppSec items and allowlists by running a fixed set of `cscli` commands
+in the CrowdSec container.
 It can also archive the alerts of remote engines, share bans between engines, and export or import
 the state of the local engine.
 
@@ -25,14 +26,15 @@ It is not:
 
 | Page | What you can do |
 |---|---|
-| Alerts | List the 100 most recent live alerts, then the archive of every engine, hourly timeline, filter by scenario, IP/CIDR and age, delete an alert |
-| Decisions | List active local decisions, filter, ban an IP or range (manual ban), unban |
+| Alerts | List the 100 most recent live alerts, then the archive of every engine, hourly timeline, filter by scenario, IP/CIDR, age and origin (logs or AppSec), AppSec summary as plain text, delete an alert |
+| Decisions | List active local decisions, filter, ban an IP or range (manual ban, refused when the target is in a local allowlist), unban |
+| Allowlists | Read the CrowdSec allowlists of every engine; create and delete allowlists and entries, with expiry and comment, on the local engine (administrators, [docs/operations.md](docs/operations.md#allowlists)) |
 | Health | CrowdSec version, bouncers and machines with last contact, stale and revoked status |
 | Metrics | Acquisition and parser counters from `cscli metrics` (needs Prometheus enabled in CrowdSec) |
-| Config | Read-only viewer of an allowlist of configuration files, secrets redacted |
+| Config | Read-only viewer of an allowlist of configuration files (parser and postoverflow whitelists included), secrets redacted |
 | Bouncers | Create (API key shown once), delete |
 | Machines | Create (password shown once), validate, delete |
-| Hub | List installed items, install or remove a collection, update and upgrade the hub, reload CrowdSec |
+| Hub | List installed items, install or remove a collection, an AppSec rule or an AppSec configuration ([docs/operations.md](docs/operations.md#appsec)), update and upgrade the hub, reload CrowdSec |
 | Engines | Register remote CrowdSec engines (administrators), archive their alerts, mark them as sync peers |
 | Sync | Share native bans between engines through their LAPI, with dry run, circuit breaker and allowlist filter ([docs/sync.md](docs/sync.md)) |
 | Export / Import | Download the hub collections, bans, alerts and configuration of the local engine as a bundle; preview and apply a bundle (administrators, [docs/bundles.md](docs/bundles.md)) |
@@ -65,8 +67,8 @@ Every destructive action asks you to retype the target, and the server checks it
                                          CrowdSec container  <-- `cscli ...` via docker exec
 ```
 
-- Reads of alerts and decisions go to the LAPI over HTTP with a dedicated machine account.
-- Bouncers, machines, hub, metrics, version and reload go through `docker exec` of an allowlisted
+- Reads of alerts, decisions and allowlists go to the LAPI over HTTP with a dedicated machine account.
+- Bouncers, machines, hub, allowlist writes, metrics, version and reload go through `docker exec` of an allowlisted
   `cscli` command (see [docs/security.md](docs/security.md)). The dashboard never mounts the Docker
   socket: it talks to a filtering proxy.
 - Configuration files are read from a read-only mount of the CrowdSec configuration volume.

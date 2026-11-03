@@ -62,7 +62,7 @@ version of the format gets a new `version` number.
   event, counted after `strip_events`), are skipped and counted in the `X-Bundle-Skipped-Alerts`
   response header (always present, `0` when none).
 - **config**: the files of the Config page allowlist (`acquis.yaml`, `acquis.d/*.yaml|yml`,
-  `profiles.yaml`, `parsers/*/*whitelist*.yaml|yml`), never `config.yaml` nor a file whose name
+  `profiles.yaml`, `parsers/*/*whitelist*.yaml|yml`, `postoverflows/*/*whitelist*.yaml|yml`), never `config.yaml` nor a file whose name
   contains `credential`, `secret`, `password`, `token`, `apikey`, `api_key`, `.key` or `.pem`. The
   content is **redacted** like the Config page (`"redacted": true`). A file that disappears or turns
   into a symlink during the export is skipped; a file over 256 KiB fails the export with

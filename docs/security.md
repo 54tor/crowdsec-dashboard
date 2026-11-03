@@ -41,8 +41,8 @@ the route table so that no write route can be added without one:
 | Access | Who | Routes |
 |---|---|---|
 | Public | nobody authenticated | `healthz`, `auth/status`, `auth/enroll...`, `auth/login...`, `auth/logout` |
-| Authenticated | any session, any token | `auth/me`, the list and detail reads (alerts, decisions, `alerts/archive/{id}`, hub, `metrics`), `health`, `prometheus/metrics`, `engines/names`, `GET /api/sync` |
-| Admin | `admin` session, or a `write` token of an `admin` account | `GET /api/engines`, `POST /api/engines/{name}/test`, configuration files, ban and unban, alert deletion (live and archive), bouncers, machines, hub changes, reload, `POST /api/sync/run`, `POST /api/export` (a secrets export needs a session) |
+| Authenticated | any session, any token | `auth/me`, the list and detail reads (alerts, decisions, `alerts/archive/{id}`, hub, `metrics`, engine allowlists), `health`, `prometheus/metrics`, `engines/names`, `GET /api/sync` |
+| Admin | `admin` session, or a `write` token of an `admin` account | `GET /api/engines`, `POST /api/engines/{name}/test`, configuration files, ban and unban, alert deletion (live and archive), bouncers, machines, hub changes, engine allowlist writes, reload, `POST /api/sync/run`, `POST /api/export` (a secrets export needs a session) |
 | Session only | a browser session, any role | `auth/logout-all`, the account's own allowlist rules, API token management |
 | Admin and session only | an `admin` session | account administration, engine create, change and delete, `POST /api/import` |
 
@@ -54,8 +54,11 @@ administrators only, since redaction is best effort ([Configuration files](#conf
 **A `write` token of an administrator can mint LAPI credentials.** Bouncer and machine creation,
 hub changes, reload, configuration files and engine reads are admin routes, not session-only: a
 stolen `write` token can create a bouncer key or a machine password. The routes that change who can
-sign in or where secrets go (accounts, tokens, allowlists, engine writes) need a session. Keep
-`write` tokens rare and short, and prefer `read` tokens.
+sign in or where secrets go (accounts, tokens, access allowlist rules, engine writes) need a
+session. Engine allowlist writes are admin routes too: a stolen `write` token of an administrator
+can add an allowlist entry on the local engine, which disarms its protection for that range
+([Allowlists of the engines](#allowlists-of-the-engines)). Keep `write` tokens rare and short, and
+prefer `read` tokens.
 
 ### API tokens
 
@@ -303,6 +306,8 @@ of control characters and cut at 64 characters. Recorded actions:
 | `engine_tested` | a connection test of an existing engine, successful or not | engine name |
 | `alert_deleted` | a live local alert (with its archived copy) or an archived alert was deleted | `<engine>/<upstream alert id>` |
 | `decision_removed` | a live decision was deleted (unban) | `decision:<id>` |
+| `allowlist_created`, `allowlist_deleted` | an allowlist of an engine was created or deleted | `<engine>/<allowlist>` |
+| `allowlist_entry_added`, `allowlist_entry_removed` | an allowlist entry was added or removed | `<value>@<engine>/<allowlist>`; the value comes first and is never cut |
 | `api_token_created`, `api_token_revoked` | a token was created or revoked | `api_token:<id>:<name>` |
 | `account_created`, `account_role_changed`, `account_second_factor_reset`, `account_sessions_revoked`, `account_unlocked`, `account_deleted` | an administrator acted on an account | `account:<name>`; at creation `account:<name>:<role>`; role change `account:<name>:<previous role>-><new role>` |
 | `secrets_rotated` | `dashboard rotate-secrets` finished a real run (no account) | number of rows rewritten |
@@ -313,7 +318,9 @@ of control characters and cut at 64 characters. Recorded actions:
 
 The client address is stored as plain text with an IPv4-mapped IPv6 address shown as IPv4 (empty when
 it cannot be parsed). Not audited: rate-limited requests, session creation and logout, bouncer,
-machine and hub changes, the use of an API token. The `login_failure`
+machine and hub changes (installs and removals of collections, AppSec rules and AppSec
+configurations included; whether to audit them is an open question), manual bans
+(`POST /api/decisions` writes no audit record, unlike the unban), the use of an API token. The `login_failure`
 target is whatever was typed in the account name field, so a password typed there by mistake is
 recorded: restrict who can read the table; the target is erased with the client address after
 `AUDIT_IP_RETENTION_DAYS`, and the row after `AUDIT_RETENTION_DAYS`
@@ -331,6 +338,7 @@ What the database holds about people, and for how long. Retention runs in one ho
 | Account name as typed at a failed login (may be an e-mail address, or a mistyped password) | `audit_event_target` of `login_failure` | `AUDIT_IP_RETENTION_DAYS` (30) | target erased, the event stays |
 | Other audit targets (account names, engine names, `decision:<id>`) and the action | `audit_event` | `AUDIT_RETENTION_DAYS` (365, at least 90) | row deleted |
 | Address or CIDR of an allowlist change | `audit_event_target` of `access_rule_added` and `access_rule_removed` | `AUDIT_RETENTION_DAYS` (365) | row deleted; **not** erased by the 30 days scrub, since it is the account's own configuration |
+| Address or CIDR of an engine allowlist entry | `audit_event_target` of `allowlist_entry_added` and `allowlist_entry_removed` | `AUDIT_RETENTION_DAYS` (365) | row deleted; not erased by the 30 days scrub. The entry itself lives in CrowdSec, not in the dashboard database |
 | Account name, role, creation date | `account` | while the account exists | deleted with the account; names remain in audit targets until their retention |
 | Allowlist rules (addresses, networks, countries of the operator) | `access_rule` | until removed or the account is deleted | deleted with the account |
 | Sessions (token hash, account, expiry; no address) | `session` | until expiry or revocation | pruned every hour |
@@ -385,19 +393,24 @@ HSTS is not sent: terminate TLS at the reverse proxy and set it there.
 
 ## Command allowlist: the security boundary
 
-The dashboard never builds a shell command. The API maps to 17 named commands, each a fixed argv:
+The dashboard never builds a shell command. The API maps to 25 named commands, each a fixed argv:
 
 | Area | Commands |
 |---|---|
 | Alerts | `cscli alerts delete --id <id>` |
 | Bouncers | `bouncers list -o json`, `bouncers add <name>`, `bouncers delete <name>` |
 | Machines | `machines list -o json`, `machines add <name> --auto -f /dev/stdout`, `machines validate <name>`, `machines delete <name>` |
-| Hub | `hub list -o json`, `hub update`, `hub upgrade`, `collections install <name>`, `collections remove <name>` |
+| Hub | `hub list -o json`, `hub update`, `hub upgrade`, `collections install <name>`, `collections remove <name>`, `appsec-rules install <name>`, `appsec-rules remove <name>`, `appsec-configs install <name>`, `appsec-configs remove <name>` |
+| Allowlists | `allowlists create <name> --description=<text>`, `allowlists delete <name>`, `allowlists add <name> <value> [--expiration=<duration>] [--comment=<text>]`, `allowlists remove <name> <value>` |
 | Other | `metrics -o json`, `version`, `kill -HUP 1` (reload), and `crowdsec -t` (configuration test of the [config import](#configuration-import), no argument) |
 
 Each variable field is validated before the exec: names `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`, hub names
 the same with one optional `vendor/item` slash, ids 1 to 10 digits, durations 1 to 4 digits plus
-`s|m|h|d`, targets a plain IP or CIDR of at most 43 characters (no zone, no IPv4-mapped form).
+`s|m|h|d`, targets a plain IP or CIDR of at most 43 characters (no zone, no IPv4-mapped form),
+allowlist names `^[a-z0-9][a-z0-9._-]{0,31}$`, allowlist values an IP or CIDR in canonical form,
+allowlist expirations `^[1-9][0-9]{0,3}[hd]$`, and free text (descriptions, comments) 1 to 256
+bytes of UTF-8, not starting with `-`, without control, format or separator characters, always
+passed as one `--flag=value` argument so it can never be read as a flag.
 Unknown commands and unexpected fields are refused. Output is capped (8 MiB of stdout) and every
 command has a timeout (30 s, 120 s for hub update, upgrade, install and remove). Error responses carry
 a stable code only, never command output.
@@ -407,7 +420,7 @@ so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 
 ## Destructive actions and one-time secrets
 
-- Deleting an alert, decision, bouncer, machine or hub collection requires a JSON body
+- Deleting an alert, decision, bouncer, machine, hub item, allowlist or allowlist entry requires a JSON body
   `{"confirm": "<same value as the path>"}`; otherwise 400 `confirmation_required`. The UI asks the
   user to retype the value (for an unban, the IP or range of the decision; the request still carries the decision id). Deleting the dashboard's own machine account answers 409 `self_account`.
 - `POST /api/decisions` refuses with 409 `self_ban` a ban whose target is, or whose range contains, the
@@ -422,7 +435,7 @@ so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 ## Configuration files
 
 Only administrators can read configuration files, and only an allowlist is readable: `config.yaml`, `acquis.yaml`, `profiles.yaml`, `acquis.d/*.yaml|yml`
-and `parsers/*/*whitelist*.yaml|yml`, each at most 256 KiB. Any file whose name contains
+`parsers/*/*whitelist*.yaml|yml` and `postoverflows/*/*whitelist*.yaml|yml`, each at most 256 KiB. Any file whose name contains
 `credentials` is refused, as is any path through a symlink. The mount is read-only; the only
 writable CrowdSec path is the optional, dedicated import directory ([Configuration import](#configuration-import)).
 
@@ -568,10 +581,52 @@ read at the start of the run or plan, and check again before each write; an unav
 means nothing is written to that engine. An entry added during a sync run is honoured at the next
 run (window: one run plus one interval).
 
-**The manual ban `POST /api/decisions` does NOT check allowlists yet**: it writes through
-`POST /v1/alerts`, and the LAPI stores a ban on an allowlisted IP and serves it to bouncers.
-Wrapping that write with the same filter is planned for the next release (lot 5). Until then, check
-the allowlists yourself before a manual ban.
+The manual ban `POST /api/decisions` goes through the same filter, on the allowlists of the local
+engine, read just before the write: a target that overlaps an active entry is refused with 409
+`target_allowlisted` (no override: remove the entry first), and unreadable allowlists refuse every
+ban with 503 `allowlist_unavailable`. The check is needed because the ban is written through
+`POST /v1/alerts` as an alert carrying its decision, and the LAPI skips its own allowlist check
+for such an alert: without the filter it would store a ban on an allowlisted IP and serve it to
+bouncers. Race window: an entry added by an external `cscli` between the allowlist read and the
+LAPI write is not seen by that ban (the same window as the sync); CrowdSec itself deletes the
+covered decisions when an entry is added with `cscli allowlists add`, so only an entry added by
+another path leaves the ban in place.
+
+### Allowlists of the engines
+
+The Allowlists page and its routes ([api.md](api.md#allowlists)) show the CrowdSec allowlists of
+every engine and change those of the local engine.
+
+- **An allowlist disarms protection.** An address or range in an active entry is never banned by
+  that engine's scenarios or AppSec, nor by the dashboard's manual ban, sync or import. Every
+  write is admin and audited. A value wider than IPv4 /8 or IPv6 /32 is refused outright
+  (`0.0.0.0/0` and `::/0` never pass), and one wider than IPv4 /24 or IPv6 /48 needs the canonical
+  range retyped; these floors are constants that no setting can relax.
+- **Adding an entry deletes decisions.** `cscli allowlists add` makes CrowdSec delete at once every
+  decision of that engine covered by **any** of its allowlists, not only by the new value. The
+  confirmation dialog of a wide range says so.
+- **AppSec is bypassed for allowlisted addresses**: requests from them are not inspected by the
+  AppSec rules of that engine.
+- **Local writes only.** The LAPI can read allowlists but has no route to write them, and
+  `cscli allowlists` must run on the host of the LAPI. The dashboard therefore writes with `cscli`
+  in the local CrowdSec container, through the [command allowlist](#command-allowlist-the-security-boundary)
+  (fixed argv, validated fields, free text as a single `--flag=value`). Remote engines are
+  read-only (`allowlist_engine_readonly`) until a remote execution channel (SSH and SFTP) is
+  designed. Console-managed allowlists are read-only too (`allowlist_console_managed`).
+- **Verification.** `cscli allowlists` exits 0 on a duplicate, invalid or missing value, so the
+  dashboard reads the allowlists from the LAPI before and after each write and reports
+  `allowlist_write_failed` when the change is not visible. The output of `cscli` and the LAPI
+  answer are never returned or logged, only a stable code.
+- Descriptions and comments are attacker-reachable text for any reader of the page: they are
+  rendered as plain text, like engine data.
+
+### AppSec data
+
+AppSec alerts and their events (rule names, messages, URIs, target hosts, matched zones) come from
+HTTP requests sent by attackers. They are stored and shown exactly like other engine data (see
+**Engine data is attacker data** above): plain text in `<bdi>` isolates, never HTML, a link or an
+attribute, under the unchanged content security policy. The AppSec summary of an alert only picks
+known meta keys out of the events; it adds no rendering path.
 
 ### Engine synchronisation
 
@@ -664,8 +719,12 @@ read-write in the dashboard and read-only in CrowdSec as its `acquis.d`. Nothing
   - without a GeoLite2 database, country rules refuse everyone not matched by an IP rule;
   - the audit log is not complete (see [Audit log](#audit-log)).
 - The login rate limiter, the pending logins and the enrolment state are per process (one replica).
-- The manual ban does not check the target engine's allowlists yet ([Allowlist check before
-  writes](#allowlist-check-before-writes)); the sync and the bundle import do.
+- The manual ban checks the local allowlists just before writing, but an entry added by an
+  external `cscli` between that read and the LAPI write is not seen
+  ([Allowlist check before writes](#allowlist-check-before-writes)); manual bans are not audited.
+- Allowlists are written on the local engine only; remote engines are read-only
+  ([Allowlists of the engines](#allowlists-of-the-engines)). Hub installs and removals, AppSec
+  included, are not audited.
 - Engine sync widens the blast radius of one compromised engine to every engine within the guards
   ([Engine synchronisation](#engine-synchronisation)); the config import, when enabled, gives the
   dashboard write access to CrowdSec's acquisition files ([Configuration import](#configuration-import)).

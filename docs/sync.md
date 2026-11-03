@@ -172,6 +172,12 @@ the allowlist banner.
 exist on an allowlisted address for at most one run plus one interval. CrowdSec itself also deletes
 the decisions that match an entry when you add it with `cscli allowlists add`.
 
+The allowlists of each engine are visible on the Allowlists page, and those of the local engine are
+managed there ([operations.md](operations.md#allowlists)); remote ones are changed with `cscli` on
+their host. An allowlist is respected on the engine that holds it only: to keep an address from
+being banned by the sync on every engine, allowlist it on each of them. The manual ban of the
+Decisions page uses the same filter on the local engine.
+
 ## Runs, backoff and the lock
 
 - **Scheduled runs** happen every `SYNC_INTERVAL` while `SYNC_ENABLED=true`, the first one after

@@ -7,9 +7,11 @@
 | Alerts | The 100 most recent alerts of the local LAPI are fetched live, followed by the archive (older local alerts and the alerts of remote engines). Filters (`scenario`, IP/CIDR, `since` such as `24h`, `7d`) are applied by the LAPI inside that cap and by the database on the archive, with different IP scopes (see `docs/api.md`). When the local LAPI is unreachable the archive is still served, flagged `live_status:"unavailable"` (a banner says so and the archive stays paged). Each row shows its engine and a "Live" or "Archived" badge; an engine selector (any role) narrows the list. Pages are counted from `total`; when capped, the total (live window plus up to 10 000 archived rows) is shown with a "+", and paging stops at that reachable range. Archived alerts open a details dialog with their events as plain text; events purged by retention leave an explicit empty state. Only live rows of the `local` engine offer Delete, which also deletes the archived copy. |
 | Decisions | Built from the alerts that still have an active decision (same 100-alert window), expired ones dropped, followed by archived decisions still active at collection time, badged "Archived, not active" (the "Show expired decisions" checkbox sends `include_expired=true` for the history). Decisions of the community blocklist (CAPI) are not listed: they are not attached to local alerts. A manual ban shows up as origin `cscli`, scenario `manual/dashboard`. |
 | Unban | Deletes one decision by id; the request must carry the `scope` and `value` query parameters. Before deleting, the dashboard looks the id up (among the active decisions of that value, then among the newest 100 alerts): an unknown id answers 404 `not_found`, an id whose scope or value differs answers 409 `target_mismatch`, and nothing is deleted. The archived copy remains, shown "Archived, not active". |
-| Hub whitelists | Whitelist files that the hub installs as symlinks are not listed in the Config page; symlinks are never followed. |
+| Hub whitelists | Parser and postoverflow whitelist files (`parsers/*/*whitelist*.yaml|yml`, `postoverflows/*/*whitelist*.yaml|yml`) are shown read-only on the Config page of the local engine. Those that the hub installs as symlinks are not listed there (symlinks are never followed); they stay visible as `parsers` and `postoverflows` items of the Hub page. Remote engines show none. |
 | Hub list | At most 1000 items are returned. |
-| Hub operations | `update`, `upgrade`, `install` and `remove` can take up to 120 s (others 30 s); the HTTP write deadline is extended to match. Other requests have a 60 s write deadline. |
+| Hub operations | `update`, `upgrade`, `install` and `remove` can take up to 120 s (others 30 s); the HTTP write deadline is extended to match. Other requests have a 60 s write deadline. Install and remove handle collections, AppSec rules and AppSec configurations of the local engine ([AppSec](#appsec)); they are not audited. |
+| Allowlists | The Allowlists page lists the CrowdSec allowlists of every engine (any role) and writes those of the local engine only (administrators): remote engines are read-only until a remote execution channel (SSH and SFTP) exists ([Allowlists](#allowlists)). Console-managed allowlists are shown read-only, but that case was only tested against simulated answers, never a real console. Over 4 MiB of allowlists on an engine, the page is empty and the writes on existing allowlists answer `allowlist_not_found`; over 10 000 entries, the entries beyond are not shown and writes are not verified (`refreshed:false`); in both cases the manual ban and the sync refuse every target there. The manual ban reads the local allowlists just before writing: an entry added by an external `cscli` in between is not seen. |
+| AppSec | AppSec alerts are badged and filtered by origin; the HTTP method and user agent of the request are not shown (they are in the alert-level meta, which the backend does not send). The per-rule AppSec alerts carry no decision: the ban is on the aggregate alert `crowdsecurity/appsec-vpatch` ([AppSec](#appsec)). |
 | Reload | "Reload CrowdSec" sends `SIGHUP` to process 1 of the CrowdSec container, so CrowdSec must be PID 1 (true for the official image). Hub changes need it to take effect; the banner "CrowdSec must be reloaded" appears on the Hub page after a change and is kept in the browser tab only, it disappears on a page reload. Counters of the Metrics page restart at zero after a reload. |
 | Metrics | Needs Prometheus enabled in CrowdSec, otherwise "Metrics are unavailable" ([configuration.md](configuration.md#prometheus-for-the-metrics-page)). Only the acquisition and parser tables are shown. |
 | Contact status | A bouncer or machine is "stale" after more than 5 minutes without contact. The dashboard's own machine account never sends a heartbeat: it is flagged "This dashboard" and shows no contact status. |
@@ -63,7 +65,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `config_unavailable` | 500 | `CROWDSEC_CONF_DIR` is missing or unreadable. Check the read-only mount. |
 | `lapi_unavailable` | 502 | LAPI unreachable, answered 5xx, or refused the machine login. Check `LAPI_URL`, the machine name and password, and that the machine is validated. |
 | `lapi_error` | 502 | The LAPI answered with an unexpected 4xx (including 403). Check the machine account. |
-| `cscli_failed` | 502 | The exec failed: Docker unreachable, CrowdSec container not running or misnamed, socket proxy denying the call, `cscli` exited non-zero (for example an unknown collection or machine), or output could not be parsed. Look at the socket proxy log first. |
+| `cscli_failed` | 502 | The exec failed: Docker unreachable, CrowdSec container not running or misnamed, socket proxy denying the call, `cscli` exited non-zero (for example an unknown collection or machine, or a collection such as `crowdsecurity/appsec-virtual-patching` installed with the type "AppSec rule"), or output could not be parsed. Look at the socket proxy log first. |
 | `forbidden` | 403 | The action needs the `admin` role: every write, bouncer and machine creation, hub change, engine and account management, and configuration files. A `read` API token is always refused on those routes. |
 | `session_required` | 403 | The route accepts a browser session only (token management, account administration, engine writes, allowlist rules, `logout-all`); an `Authorization: Bearer` call is refused even with a `write` token. |
 | `invalid_token` | 401 | The `Authorization: Bearer` value is not a valid API token: unknown, revoked, expired, or not starting with `csd_`. A Bearer header never falls back to the session cookie. |
@@ -80,7 +82,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `engine_exists`, `engine_not_found`, `invalid_engine` | 409, 404, 400 | Engine name or URL already used, unknown engine (an engine being deleted counts as unknown), or a field refused (name, URL scheme without `allow_insecure_http`, credentials or forbidden address in a URL, proxy kind). |
 | `engine_local_readonly` | 409 | The `local` engine comes from `LAPI_URL` and cannot be changed or deleted from the API. |
 | `engine_secret_required` | 400 | The destination changed: re-enter the machine password (and the proxy credentials) in the same request. |
-| `engine_unreachable` | 502 | No answer from the engine or its proxy, a timeout, an answer that is not a LAPI login, or an answer over the size limit. Check the URL, the port, the proxy and the network between the dashboard and the engine. |
+| `engine_unreachable` | 502 | No answer from the engine or its proxy, a timeout, an answer that is not a LAPI login, or an answer over the size limit. Check the URL, the port, the proxy and the network between the dashboard and the engine. On the Allowlists page it also means that `/v1/allowlists` answered 404 or something unreadable: a CrowdSec too old to have allowlists shows this code. |
 | `engine_auth_failed` | 502 | The engine refused the machine login: check the machine id and password with `cscli machines list` on that engine, and that the machine is validated. |
 | `engine_blocked_address` | 502 | The address (or the proxy address) resolved to a forbidden range ([security.md](security.md#engines-and-outbound-connections)). |
 | `engine_secret_unreadable` | engine status | The stored secret cannot be decrypted with the current secrets key (key changed or row restored from another installation): edit the engine and re-enter the secrets. The engine is left out of collection meanwhile. |
@@ -107,7 +109,16 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `config_changed_concurrently` | section | A file of the import directory changed during the apply: rolled back. Preview again. |
 | `flush_limit`, `flush_config_unreadable`, `local_alerts_unreadable` | section | Alerts import refused: the import would push CrowdSec over 90 % of `flush.max_items`, that setting cannot be read, or the local alerts cannot be counted ([bundles.md](bundles.md#alerts)). |
 | `alert_import_side_effect`, `alert_import_side_effect_unverifiable`, `alert_import_cleanup_failed` | section | An imported alert produced a decision (deleted), could not be verified, or its cleanup failed: check `cscli decisions list` for that address. |
-| `allowlist_unavailable` | engine status, section | The allowlists of the engine could not be read (error, any 404, more than 10 000 entries): nothing is written to it. |
+| `allowlist_unavailable` | 503, engine status, section | The allowlists of the engine could not be read (error, any 404, more than 10 000 entries or 4 MiB): nothing is written to it. A manual ban is refused (503); check the Allowlists page for the cause. |
+| `target_allowlisted` | 409 | Manual ban of an address or range that overlaps an active allowlist entry of the local engine. Remove the entry on the Allowlists page first if the ban is really wanted. |
+| `allowlist_not_found`, `allowlist_entry_not_found` | 404 | The allowlist or the value is not on the engine (reload the page). Also every write to an existing allowlist when the engine's allowlists answer is over 4 MiB ([Allowlists](#allowlists)). |
+| `allowlist_exists`, `allowlist_entry_exists` | 409 | The name or the value is already there. |
+| `allowlist_console_managed` | 409 | The allowlist is managed by the CrowdSec console: change it from the console. |
+| `allowlist_engine_readonly` | 409 | Allowlist write on a remote engine: only the local engine is writable ([Allowlists](#allowlists)). |
+| `allowlist_prefix_too_wide` | 400 | Allowlist range wider than IPv4 /8 or IPv6 /32: never accepted. |
+| `invalid_allowlist` | 400 | Allowlist name not `^[a-z0-9][a-z0-9._-]{0,31}$`, value not an IP or CIDR, expiration not like `12h` or `7d`, or description over 256 bytes, starting with `-` or holding control or invisible characters. |
+| `allowlist_write_failed` | 502 | `cscli allowlists` failed or timed out, or the change is not visible when the allowlists are read again (`cscli` exits 0 on duplicate, invalid or missing values). Check the CrowdSec container and `cscli allowlists inspect <name>`. |
+| `hub_item_still_installed` | 409 | A hub removal did not take effect: the item belongs to an installed collection (`cscli` exits 0 and keeps it). Remove the collection instead ([AppSec](#appsec)). |
 | `local_bans_incomplete`, `dependency_missing` | section | Decisions import unavailable: the local bans could not be read completely, or a component of the decisions import is not wired (report it). `engine_addresses_unknown` and `allowlist_unavailable` can also make that section unavailable ([bundles.md](bundles.md#codes)). |
 
 Quick checks:
@@ -150,6 +161,16 @@ after the database is healthy.
   `CONCURRENTLY`, inside the fixed 60 s start-up timeout (not configurable): on a very large archive
   that first start can time out and the dashboard then exits. The same start reseals the engine secrets that still use
   the former associated data ([Rotating the secrets key](#rotating-the-secrets-key)).
+- The AppSec release adds migration 00007 (`alert_source_kind`, [AppSec origin of archived
+  alerts](#appsec-origin-of-archived-alerts)). It runs in one transaction at the next start: it adds
+  the column, then **scans the whole `event` table** to classify the archived alerts, and holds an
+  `ACCESS EXCLUSIVE` lock on `alert` until it commits (every read of `alert` waits, not only the
+  writes). The dashboard serves nothing and collects nothing during that start. Back up first, apply
+  it with the dashboard as the only client of the database (no second replica, no SQL session or
+  report reading `alert`), then run `VACUUM ANALYZE alert;` once it is done, since the backfill
+  rewrites the classified rows. Like 00005, it runs inside the 60 s start-up timeout: on a very
+  large `event` table that start can time out, the transaction is rolled back and the dashboard
+  exits; the next start tries again.
 - If PostgreSQL goes down while the dashboard runs, `/api/healthz` answers 503 and login and
   authenticated routes answer 503 `database_unavailable`. Nobody is signed out: sessions are valid
   again once the database is back.
@@ -378,6 +399,104 @@ source scope and value, country, AS, decision type and origin) are stored as tex
 lookup tables, and `event_meta` and `engine_public_address_list` are JSONB documents. Upgrading to
 the release that adds the archive applies migration 00003 at the next start: back up the database
 first (see [PostgreSQL](#postgresql)).
+
+## Allowlists
+
+The Allowlists page shows, for the engine chosen in its selector, every CrowdSec allowlist with its
+entries (value, comment, date added, expiry; expired entries are badged and no longer protect
+anything). Every role can read it; administrators can create and delete allowlists and add or remove
+entries on the **local** engine. Semantics and routes: [api.md](api.md#allowlists), threat model:
+[security.md](security.md#allowlists-of-the-engines).
+
+- **Remote engines are read-only.** The LAPI can read allowlists but not write them, and
+  `cscli allowlists` must run on the LAPI host: the dashboard writes with `cscli` in the local
+  container only. For a remote engine, run `cscli allowlists ...` on its host; the page shows the
+  result at the next read. Writing remotely waits for the SSH and SFTP design.
+- **Wide ranges.** Wider than IPv4 /24 or IPv6 /48: the page asks you to retype the range. Wider
+  than IPv4 /8 or IPv6 /32: refused.
+- **Adding an entry deletes decisions.** CrowdSec deletes at once every decision of the engine
+  covered by any of its allowlists when an entry is added.
+- **Who honours them.** The engine itself (scenarios and AppSec), the manual ban of the dashboard
+  (local engine, 409 `target_allowlisted`), the sync and the bundle import (target engine). The sync
+  and import do not look at the allowlists of the source engine ([sync.md](sync.md#allowlists)).
+- **cscli exit codes.** `cscli allowlists add` and `remove` exit 0 on a duplicate, an invalid value
+  or a missing value; only an unknown or duplicate allowlist name fails. The dashboard therefore
+  verifies each write by reading the allowlists again (`allowlist_write_failed` when the change is
+  not there; a successful write whose re-read fails is kept and says "reload the page").
+- **Unreadable allowlists fail closed.** A CrowdSec too old to have allowlists, or any 404 on
+  `/v1/allowlists` (wrong URL, a proxy), shows as `engine_unreachable` on the page; the manual ban
+  and the sync then refuse every target on that engine.
+- **Parser and postoverflow whitelists** (`s01-whitelist`, `crowdsecurity/whitelists`) are
+  configuration files, not allowlists: they apply at parsing only, have no expiry and are not in
+  `/v1/allowlists`. The Config page shows the local ones read-only; the Allowlists page links to it.
+
+## AppSec
+
+The dashboard displays AppSec (WAF) alerts and installs or removes AppSec items of the local engine
+from the Hub page. It does not enable AppSec: that is CrowdSec configuration.
+
+**Enabling AppSec on the local engine**, in this order:
+
+1. On the Hub page, install the **collection** `crowdsecurity/appsec-generic-rules` first, then the
+   **collection** `crowdsecurity/appsec-virtual-patching` (both with the type "Collection": they are
+   collections, not AppSec rules or configurations). The default AppSec configuration
+   `crowdsecurity/appsec-default` loads the rules of both; without them the engine refuses to start.
+2. Add an acquisition file in the CrowdSec configuration, for example
+   `acquis.d/appsec.yaml`:
+
+   ```yaml
+   source: appsec
+   listen_addr: 0.0.0.0:7422
+   path: /
+   appsec_configs:
+     - crowdsecurity/appsec-default
+   labels:
+     type: appsec
+   ```
+
+   Restart the CrowdSec container to load it. Only `file`, `journalctl` and
+   `docker` sources can come from a bundle import, so this file is written by hand.
+3. Configure a remediation component that supports AppSec (it forwards each request to the AppSec
+   listener with its API key) and let it reach port 7422 of the CrowdSec container.
+
+> **Warning.** While the `appsec` acquisition is active, removing
+> `crowdsecurity/appsec-virtual-patching`, `crowdsecurity/appsec-generic-rules` or AppSec rules and
+> configurations it uses (Hub page or `cscli`) **stops the engine from booting at its next
+> restart**: CrowdSec exits with `no appsec-rules found`. Remove or change the acquisition file
+> first, or reinstall the items before restarting. The removal dialog of the Hub page recalls it
+> for collections, AppSec rules and AppSec configurations, but cannot know whether the acquisition
+> is active, so it does not block.
+
+**What the dashboard shows.** For two blocked requests, CrowdSec 1.8 produces one alert per matched
+rule (scenario = the rule name, for example `crowdsecurity/vpatch-env-access`, **no decision**) and
+one aggregate alert `crowdsecurity/appsec-vpatch` that carries the ban. The Alerts page badges them
+"AppSec" and its origin filter selects AppSec or logs; manual bans, sync copies and imported alerts
+count as logs. The alert detail shows an AppSec summary (rule, message, URI, target host, matched
+zones, log type, remediation component address, AppSec action) as plain text. The HTTP method and
+the user agent are not shown: CrowdSec puts them in the alert-level meta, which the dashboard does
+not read.
+
+**Hub removals.** Removing an AppSec rule or configuration that belongs to an installed collection
+does nothing (`cscli` exits 0 and keeps it): the dashboard checks the hub again and answers 409
+`hub_item_still_installed`. Remove the collection instead. Installs and removals are not audited.
+
+### AppSec origin of archived alerts
+
+The archive stores the origin of each alert in `alert.alert_source_kind` (`log` or `appsec`,
+migration 00007). An alert is `appsec` when at least one of its events has the meta `service` equal
+to `appsec`, a `log_type` starting with `appsec-`, or both the keys `matched_zones` and
+`target_fqdn`; otherwise `log`.
+
+- The kind is computed when the alert is first archived and is then frozen: the archive insert
+  ignores an alert it already holds, so a later change of the rule is never applied to it.
+- Migration 00007 classifies the alerts already archived from their stored events. Alerts whose
+  events were already purged by retention (`ARCHIVE_EVENT_RETENTION_DAYS`, 90 days by default), or
+  whose marker keys were cut by the event bounds of an earlier release, stay `log`. On meta with
+  duplicated keys the SQL of the migration and the collector can disagree; this only concerns that
+  one-time backfill.
+- **Schema note.** `alert_source_kind` is derived from the events, so storing it on `alert` breaks
+  the third normal form on purpose: events are kept 90 days and alerts 365 by default, and the
+  origin must outlive the events. It is indexed with the creation date for the filtered lists.
 
 ## Sync and bundles
 
