@@ -77,10 +77,14 @@ func isExportableBan(ban lapi.SyncDecision, localMachineID string) bool {
 }
 
 func isDashboardCopy(ban lapi.SyncDecision, localMachineID string) bool {
-	if !strings.HasPrefix(ban.Scenario, syncCopyPrefix) {
+	return isDashboardSyncScenario(ban.Scenario, ban.MachineID, localMachineID)
+}
+
+func isDashboardSyncScenario(scenario, machineID, localMachineID string) bool {
+	if !strings.HasPrefix(scenario, syncCopyPrefix) {
 		return false
 	}
-	return localMachineID == "" || ban.MachineID == localMachineID
+	return localMachineID == "" || machineID == localMachineID
 }
 
 func exportAlerts(ctx context.Context, deps ExportDeps, stripEvents bool) (*AlertsSection, int, error) {
@@ -91,9 +95,10 @@ func exportAlerts(ctx context.Context, deps ExportDeps, stripEvents bool) (*Aler
 	if read.Truncated || len(read.Alerts) > MaxAlerts {
 		return nil, 0, ErrTooLarge
 	}
-	alerts := read.Alerts
-	if alerts == nil {
-		alerts = []lapi.Alert{}
+	alerts := exportableAlerts(read.Alerts, deps.LocalMachineID)
+	readStoppedBeforeTheCapWasFilled := read.LimitReached && len(alerts) < MaxAlerts
+	if readStoppedBeforeTheCapWasFilled {
+		return nil, 0, ErrTooLarge
 	}
 	if stripEvents {
 		for alertIndex := range alerts {
@@ -101,4 +106,14 @@ func exportAlerts(ctx context.Context, deps ExportDeps, stripEvents bool) (*Aler
 		}
 	}
 	return &AlertsSection{Alerts: alerts}, read.Skipped, nil
+}
+
+func exportableAlerts(readAlerts []lapi.Alert, localMachineID string) []lapi.Alert {
+	alerts := []lapi.Alert{}
+	for _, readAlert := range readAlerts {
+		if !isDashboardSyncScenario(readAlert.Scenario, readAlert.MachineID, localMachineID) {
+			alerts = append(alerts, readAlert)
+		}
+	}
+	return alerts
 }

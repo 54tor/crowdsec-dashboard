@@ -204,6 +204,73 @@ func TestExportAlertsKeepEventsUnlessStripped(testContext *testing.T) {
 	}
 }
 
+func exportedAlertUUIDs(testContext *testing.T, deps ExportDeps) []string {
+	testContext.Helper()
+	exported, exportError := Export(context.Background(), deps, ExportRequest{Sections: []string{SectionAlerts}})
+	if exportError != nil {
+		testContext.Fatal(exportError)
+	}
+	exportedUUIDs := []string{}
+	for _, exportedAlert := range exported.Sections.Alerts.Alerts {
+		exportedUUIDs = append(exportedUUIDs, exportedAlert.UUID)
+	}
+	return exportedUUIDs
+}
+
+func TestExportExcludesSyncCopyAlerts(testContext *testing.T) {
+	// Same identification rule as the decisions: a sync/ scenario pushed by the local dashboard machine is a copy.
+	alerts := lapi.ArchiveRead{Alerts: []lapi.Alert{
+		{UUID: "native", Scenario: "crowdsecurity/ssh-bf", MachineID: "localhost"},
+		{UUID: "own-copy", Scenario: "sync/peer-a", MachineID: "dashboard"},
+		{UUID: "native-manual", Scenario: "manual ban", MachineID: "dashboard"},
+	}}
+	exportedUUIDs := exportedAlertUUIDs(testContext, exportFixture(testContext, nil, alerts))
+	expectedUUIDs := []string{"native", "native-manual"}
+	if !slices.Equal(exportedUUIDs, expectedUUIDs) {
+		testContext.Errorf("expected the dashboard's own sync alerts left out %v, got %v", expectedUUIDs, exportedUUIDs)
+	}
+}
+
+func TestExportKeepsSyncScenarioAlertOfForeignMachine(testContext *testing.T) {
+	alerts := lapi.ArchiveRead{Alerts: []lapi.Alert{{UUID: "foreign-sync", Scenario: "sync/peer-a", MachineID: "other-dashboard"}}}
+	exportedUUIDs := exportedAlertUUIDs(testContext, exportFixture(testContext, nil, alerts))
+	if !slices.Equal(exportedUUIDs, []string{"foreign-sync"}) {
+		testContext.Errorf("a sync/ alert pushed by a foreign machine is native and must be exported, got %v", exportedUUIDs)
+	}
+
+	// Without a known local machine id every sync/ alert counts as a copy (fail-safe, like the decisions).
+	depsWithoutLocalID := exportFixture(testContext, nil, alerts)
+	depsWithoutLocalID.LocalMachineID = ""
+	if exportedWithoutLocalID := exportedAlertUUIDs(testContext, depsWithoutLocalID); len(exportedWithoutLocalID) != 0 {
+		testContext.Errorf("an empty local machine id must exclude every sync/ alert, got %v", exportedWithoutLocalID)
+	}
+}
+
+func TestExportAlertReadLimitHitBeforeTheCapIsFilledIsTooLarge(testContext *testing.T) {
+	// The read stops at MaxAlerts; once copies are dropped, older native alerts may be missing: refuse, never truncate silently.
+	readAlerts := make([]lapi.Alert, MaxAlerts)
+	for alertIndex := range readAlerts {
+		readAlerts[alertIndex] = lapi.Alert{UUID: "alert", Scenario: "crowdsecurity/ssh-bf", MachineID: "localhost"}
+	}
+	readAlerts[0] = lapi.Alert{UUID: "own-copy", Scenario: "sync/peer-a", MachineID: "dashboard"}
+	deps := exportFixture(testContext, nil, lapi.ArchiveRead{Alerts: readAlerts, LimitReached: true})
+	_, exportError := Export(context.Background(), deps, ExportRequest{Sections: []string{SectionAlerts}})
+	if !errors.Is(exportError, ErrTooLarge) {
+		testContext.Errorf("a read limit hit before the cap is filled must refuse the export, got %v", exportError)
+	}
+}
+
+func TestExportAlertReadLimitHitWithTheCapFilledExportsTheNewest(testContext *testing.T) {
+	readAlerts := make([]lapi.Alert, MaxAlerts)
+	for alertIndex := range readAlerts {
+		readAlerts[alertIndex] = lapi.Alert{UUID: "alert", Scenario: "crowdsecurity/ssh-bf", MachineID: "localhost"}
+	}
+	deps := exportFixture(testContext, nil, lapi.ArchiveRead{Alerts: readAlerts, LimitReached: true})
+	if exportedUUIDs := exportedAlertUUIDs(testContext, deps); len(exportedUUIDs) != MaxAlerts {
+		testContext.Errorf("a full read of native alerts keeps the newest %d as before, got %d", MaxAlerts, len(exportedUUIDs))
+	}
+}
+
 func TestExportTruncatedAlertReadIsTooLarge(testContext *testing.T) {
 	_, exportError := Export(context.Background(), exportFixture(testContext, nil, lapi.ArchiveRead{Truncated: true}), ExportRequest{Sections: []string{SectionAlerts}})
 	if !errors.Is(exportError, ErrTooLarge) {
