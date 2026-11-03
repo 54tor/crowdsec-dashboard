@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/allowguard"
+	"crowdsec-dashboard/internal/lapi"
 )
 
 // randomTargetPool mixes hosts, overlapping ranges, IPv6 and a private address so random
@@ -57,7 +58,7 @@ func randomSnapshots(testContext *testing.T, generator *rand.Rand) []Snapshot {
 			ban.Origin = pickRandom(generator, randomOrigins)
 			ban.Simulated = generator.IntN(10) == 0
 			if generator.IntN(8) == 0 {
-				ban.Scenario = copyScenarioPrefix + "forged"
+				ban.Scenario = lapi.SyncScenarioPrefix + "forged"
 			}
 			snapshot.Bans = append(snapshot.Bans, ban)
 		}
@@ -93,7 +94,7 @@ func bansByID(snapshot Snapshot) map[int64]Ban {
 }
 
 func isDashboardCopy(ban Ban) bool {
-	return ban.MachineID == dashboardAccount && strings.HasPrefix(ban.Scenario, copyScenarioPrefix)
+	return ban.MachineID == dashboardAccount && strings.HasPrefix(ban.Scenario, lapi.SyncScenarioPrefix)
 }
 
 // coveredByActiveBan reports whether a ban that stays on the engine after the plan already covers the target.

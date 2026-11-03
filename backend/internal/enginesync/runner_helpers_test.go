@@ -97,7 +97,7 @@ func (fake *fakeEngineServer) addCopy(value string, sourceEngine string, duratio
 	fake.nextDecisionID++
 	fake.decisions = append(fake.decisions, storedDecision{
 		ID: fake.nextDecisionID, Origin: copyOrigin, Scope: scopeOf(value), Value: value,
-		Scenario: copyScenarioPrefix + sourceEngine, MachineID: runnerDashboardAccount, Duration: duration,
+		Scenario: lapi.SyncScenarioPrefix + sourceEngine, MachineID: runnerDashboardAccount, Duration: duration,
 	})
 }
 
@@ -354,7 +354,7 @@ func (engine *memoryEngine) AddCopy(ctx context.Context, change Change) error {
 	engine.nextDecisionID++
 	engine.bans = append(engine.bans, Ban{
 		ID: engine.nextDecisionID, Target: change.Target, Remaining: change.Remaining, Origin: copyOrigin,
-		Scenario: copyScenarioPrefix + change.Source, MachineID: runnerDashboardAccount,
+		Scenario: lapi.SyncScenarioPrefix + change.Source, MachineID: runnerDashboardAccount,
 	})
 	return nil
 }

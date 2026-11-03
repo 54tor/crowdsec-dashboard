@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"crowdsec-dashboard/internal/lapi"
 )
 
 // dashboardAccount is the machine account the dashboard uses on every simulated engine.
@@ -44,7 +46,7 @@ func copyBan(testContext *testing.T, decisionID int64, value string, sourceEngin
 		Target:    mustTarget(testContext, scopeOf(value), value),
 		Remaining: remaining,
 		Origin:    copyOrigin,
-		Scenario:  copyScenarioPrefix + sourceEngine,
+		Scenario:  lapi.SyncScenarioPrefix + sourceEngine,
 		MachineID: dashboardAccount,
 	}
 }
@@ -105,7 +107,7 @@ func applyPlan(snapshots []Snapshot, plan Plan) []Snapshot {
 					Target:    change.Target,
 					Remaining: change.Remaining,
 					Origin:    copyOrigin,
-					Scenario:  copyScenarioPrefix + change.Source,
+					Scenario:  lapi.SyncScenarioPrefix + change.Source,
 					MachineID: dashboardAccount,
 				})
 			}

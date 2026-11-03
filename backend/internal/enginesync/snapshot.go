@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/allowguard"
+	"crowdsec-dashboard/internal/lapi"
 )
 
 const (
-	copyScenarioPrefix = "sync/"
-	copyOrigin         = "dashboard-sync"
+	copyOrigin = "dashboard-sync"
 )
 
 type ReadState int
@@ -58,11 +58,11 @@ func classify(snapshot Snapshot) classifiedSnapshot {
 }
 
 func isCopyOf(ban Ban, dashboardMachineID string) bool {
-	return dashboardMachineID != "" && ban.MachineID == dashboardMachineID && strings.HasPrefix(ban.Scenario, copyScenarioPrefix)
+	return dashboardMachineID != "" && ban.MachineID == dashboardMachineID && strings.HasPrefix(ban.Scenario, lapi.SyncScenarioPrefix)
 }
 
 func copySource(existingCopy Ban) string {
-	return strings.TrimPrefix(existingCopy.Scenario, copyScenarioPrefix)
+	return strings.TrimPrefix(existingCopy.Scenario, lapi.SyncScenarioPrefix)
 }
 
 func (ban Ban) isActive() bool {

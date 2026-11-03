@@ -12,13 +12,14 @@ import (
 	"time"
 )
 
+const SyncScenarioPrefix = "sync/"
+
 const (
-	maxSyncResponseBytes   = 16 << 20
-	syncCopyScenarioPrefix = "sync/"
-	syncCopyOrigin         = "dashboard-sync"
-	banDecisionType        = "ban"
-	copyScopeIP            = "Ip"
-	copyScopeRange         = "Range"
+	maxSyncResponseBytes = 16 << 20
+	syncCopyOrigin       = "dashboard-sync"
+	banDecisionType      = "ban"
+	copyScopeIP          = "Ip"
+	copyScopeRange       = "Range"
 )
 
 var (
@@ -118,7 +119,7 @@ func (client *Client) AddCopy(ctx context.Context, newCopy NewCopy) error {
 	if newCopy.Source == "" || duration <= 0 || !isValidCopyTarget(newCopy.Scope, newCopy.Value) {
 		return ErrInvalidTarget
 	}
-	scenario := syncCopyScenarioPrefix + newCopy.Source
+	scenario := SyncScenarioPrefix + newCopy.Source
 	alert := singleDecisionAlert(alertDecision{
 		Scenario: scenario,
 		Message:  scenario,

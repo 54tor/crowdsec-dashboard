@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/engines"
+	"crowdsec-dashboard/internal/lapi"
 )
 
 // tableEngine is an engine row with a literal address, so the table source never resolves a name.
@@ -40,7 +41,7 @@ func copyOnMemoryEngine(testContext *testing.T, decisionID int64, value string, 
 	testContext.Helper()
 	return Ban{
 		ID: decisionID, Target: mustTarget(testContext, scopeOf(value), value), Remaining: time.Hour,
-		Origin: copyOrigin, Scenario: copyScenarioPrefix + sourceEngine, MachineID: runnerDashboardAccount,
+		Origin: copyOrigin, Scenario: lapi.SyncScenarioPrefix + sourceEngine, MachineID: runnerDashboardAccount,
 	}
 }
 

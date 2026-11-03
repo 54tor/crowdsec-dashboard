@@ -17,7 +17,6 @@ const (
 	alertsReadTimeout     = 30 * time.Second
 	alertsRawReadLimit    = 3 * MaxAlerts
 	alertsRawReadMaxBytes = 2 * MaxBytes
-	syncCopyPrefix        = "sync/"
 	importedPrefix        = "import/"
 )
 
@@ -83,7 +82,7 @@ func isDashboardCopy(ban lapi.SyncDecision, localMachineID string) bool {
 }
 
 func isDashboardSyncScenario(scenario, machineID, localMachineID string) bool {
-	if !strings.HasPrefix(scenario, syncCopyPrefix) {
+	if !strings.HasPrefix(scenario, lapi.SyncScenarioPrefix) {
 		return false
 	}
 	return localMachineID == "" || machineID == localMachineID
