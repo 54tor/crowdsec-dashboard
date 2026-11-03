@@ -11,15 +11,22 @@ import (
 )
 
 const (
-	syncLockName      = "sync"
-	minShareRemaining = 5 * time.Minute
+	syncLockName       = "sync"
+	minShareRemaining  = 5 * time.Minute
+	minExtendThreshold = time.Minute
+	runDeadline        = 10 * time.Minute
 
 	ErrorCodeEngineAddressesUnknown = "engine_addresses_unknown"
 	ErrorCodeGuardTripped           = "sync_guard_tripped"
 	ErrorCodeCanceled               = "canceled"
+	ErrorCodeRunDeadline            = "run_deadline"
+	ErrorCodeRunPanicked            = "run_panicked"
 )
 
-var ErrOperationRunning = errors.New("enginesync: operation running")
+var (
+	ErrOperationRunning = errors.New("enginesync: operation running")
+	ErrRunPanicked      = errors.New("enginesync: run panicked")
+)
 
 type EngineSource interface {
 	Load(ctx context.Context) EngineSet
@@ -32,22 +39,24 @@ type RunOptions struct {
 }
 
 type Runner struct {
-	source    EngineSource
-	rules     RulesProvider
-	lock      *oplock.Lock
-	dryRun    bool
-	now       func() time.Time
-	newEngine func(SyncEngine) Engine
-	status    statusTracker
+	source      EngineSource
+	rules       RulesProvider
+	lock        *oplock.Lock
+	dryRun      bool
+	now         func() time.Time
+	runDeadline time.Duration
+	newEngine   func(SyncEngine) Engine
+	status      statusTracker
 }
 
 func NewRunner(source EngineSource, rules RulesProvider, lock *oplock.Lock, readLimit int, dryRun bool, now func() time.Time) *Runner {
 	return &Runner{
-		source: source,
-		rules:  rules,
-		lock:   lock,
-		dryRun: dryRun,
-		now:    now,
+		source:      source,
+		rules:       rules,
+		lock:        lock,
+		dryRun:      dryRun,
+		now:         now,
+		runDeadline: runDeadline,
 		newEngine: func(syncEngine SyncEngine) Engine {
 			return NewLAPIEngine(syncEngine, readLimit, now)
 		},
@@ -66,7 +75,7 @@ func ConfiguredRules(maxChanges int, extendThreshold time.Duration) RulesProvide
 			KnownEngines:    knownEngines,
 			MaxChanges:      maxChanges,
 			MinRemaining:    minShareRemaining,
-			ExtendThreshold: extendThreshold,
+			ExtendThreshold: max(extendThreshold, minExtendThreshold),
 		}
 	}
 }
@@ -75,7 +84,7 @@ func (runner *Runner) Status() Status {
 	return runner.status.snapshot()
 }
 
-func (runner *Runner) Run(ctx context.Context, options RunOptions) (Report, error) {
+func (runner *Runner) Run(ctx context.Context, options RunOptions) (finishedReport Report, runError error) {
 	release, acquired := runner.lock.TryAcquire(syncLockName)
 	if !acquired {
 		return Report{}, ErrOperationRunning
@@ -83,13 +92,25 @@ func (runner *Runner) Run(ctx context.Context, options RunOptions) (Report, erro
 	defer release()
 	runner.status.start()
 	report := newReport(runner.now(), runner.dryRun)
-	runner.execute(ctx, options, &report)
-	if ctx.Err() != nil {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			report.ErrorCode = ErrorCodeRunPanicked
+			runError = ErrRunPanicked
+			slog.Error("sync_run_panicked", "error_code", ErrorCodeRunPanicked)
+		}
+		finishedReport = report.finish(runner.now())
+		runner.status.finish(finishedReport)
+	}()
+	runContext, cancelRun := context.WithTimeout(ctx, runner.runDeadline)
+	defer cancelRun()
+	runner.execute(runContext, options, &report)
+	switch {
+	case ctx.Err() != nil:
 		report.ErrorCode = ErrorCodeCanceled
+	case runContext.Err() != nil:
+		report.ErrorCode = ErrorCodeRunDeadline
 	}
-	finishedReport := report.finish(runner.now())
-	runner.status.finish(finishedReport)
-	return finishedReport, ctx.Err()
+	return report, ctx.Err()
 }
 
 func (runner *Runner) execute(ctx context.Context, options RunOptions, report *Report) {
@@ -106,7 +127,7 @@ func (runner *Runner) execute(ctx context.Context, options RunOptions, report *R
 	report.recordPlan(plan.Plan, runner.dryRun)
 	plan.recordGuards(report)
 	if !runner.dryRun {
-		applyChanges(ctx, plan.Changes, targets, report)
+		applyChanges(ctx, plan.Changes, targets, report, runner.now)
 	}
 }
 
@@ -116,6 +137,7 @@ func (runner *Runner) readEngines(ctx context.Context, syncEngines []SyncEngine,
 	for _, syncEngine := range syncEngines {
 		engine := runner.newEngine(syncEngine)
 		engineReport := report.engine(syncEngine.Name)
+		readAt := runner.now()
 		snapshot, readError := engine.Read(ctx)
 		if readError != nil {
 			engineReport.ErrorCode = engineErrorCode(ctx, readError)
@@ -124,14 +146,20 @@ func (runner *Runner) readEngines(ctx context.Context, syncEngines []SyncEngine,
 		}
 		snapshot.Engine = syncEngine.Name
 		snapshots = append(snapshots, snapshot)
-		targets[syncEngine.Name] = newApplyTarget(engine, snapshot)
+		target := newApplyTarget(engine, snapshot)
+		target.readAt = readAt
+		targets[syncEngine.Name] = target
 	}
 	return targets, snapshots
 }
 
 func engineErrorCode(ctx context.Context, engineError error) string {
-	if ctx.Err() != nil {
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return ErrorCodeRunDeadline
+	case ctx.Err() != nil:
 		return ErrorCodeCanceled
+	default:
+		return engines.ErrorCode(engineError)
 	}
-	return engines.ErrorCode(engineError)
 }

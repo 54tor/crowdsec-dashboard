@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -61,6 +62,15 @@ type fakeEngineServer struct {
 	deleted          []int64
 	requestCount     int
 	allowlistQueries int
+	// postStatus, when set, is answered to every POST /v1/alerts instead of storing the copy.
+	postStatus int
+	// hangOnPost makes POST /v1/alerts wait until the client gives up, like a dead peer.
+	hangOnPost bool
+	// deleteStatus, when set, is answered to every DELETE (the LAPI answers 500 for an unknown id).
+	deleteStatus int
+	// copyAging shortens the duration of the dashboard copies served back, as time would.
+	copyAging    time.Duration
+	postAttempts int
 }
 
 func newFakeEngineServer(testContext *testing.T) *fakeEngineServer {
@@ -78,6 +88,35 @@ func (fake *fakeEngineServer) addNative(value string, duration string) {
 		ID: fake.nextDecisionID, Origin: "crowdsec", Scope: scopeOf(value), Value: value,
 		Scenario: "crowdsecurity/ssh-bf", MachineID: "engine-agent", Duration: duration,
 	})
+}
+
+// addCopy stores a decision the dashboard pushed earlier from the given source engine.
+func (fake *fakeEngineServer) addCopy(value string, sourceEngine string, duration string) {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	fake.nextDecisionID++
+	fake.decisions = append(fake.decisions, storedDecision{
+		ID: fake.nextDecisionID, Origin: copyOrigin, Scope: scopeOf(value), Value: value,
+		Scenario: copyScenarioPrefix + sourceEngine, MachineID: runnerDashboardAccount, Duration: duration,
+	})
+}
+
+func (fake *fakeEngineServer) configure(change func(fake *fakeEngineServer)) {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	change(fake)
+}
+
+func (fake *fakeEngineServer) attemptedPosts() int {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	return fake.postAttempts
+}
+
+func (fake *fakeEngineServer) deletedIDs() []int64 {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	return append([]int64(nil), fake.deleted...)
 }
 
 func (fake *fakeEngineServer) allowlist(values ...string) {
@@ -126,6 +165,13 @@ func (fake *fakeEngineServer) requests() int {
 }
 
 func (fake *fakeEngineServer) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) {
+	if fake.shouldHang(request) {
+		// The lock is released while hanging so the test can still inspect the fake. The body is
+		// drained first: the server only notices the client giving up once the body is consumed.
+		_, _ = io.Copy(io.Discard, request.Body)
+		<-request.Context().Done()
+		return
+	}
 	fake.mutex.Lock()
 	defer fake.mutex.Unlock()
 	fake.requestCount++
@@ -147,6 +193,25 @@ func (fake *fakeEngineServer) ServeHTTP(responseWriter http.ResponseWriter, requ
 	}
 }
 
+func (fake *fakeEngineServer) shouldHang(request *http.Request) bool {
+	fake.mutex.Lock()
+	defer fake.mutex.Unlock()
+	isPost := request.Method == http.MethodPost && request.URL.Path == "/v1/alerts"
+	if isPost && fake.hangOnPost {
+		fake.postAttempts++
+		return true
+	}
+	return false
+}
+
+func (fake *fakeEngineServer) servedDuration(decision storedDecision) string {
+	if decision.Origin != copyOrigin || fake.copyAging == 0 {
+		return decision.Duration
+	}
+	storedDuration, _ := time.ParseDuration(decision.Duration)
+	return (storedDuration - fake.copyAging).String()
+}
+
 func (fake *fakeEngineServer) serveAlerts(responseWriter http.ResponseWriter, origin string) {
 	if fake.alertsStatus != http.StatusOK {
 		http.Error(responseWriter, "unavailable", fake.alertsStatus)
@@ -162,7 +227,7 @@ func (fake *fakeEngineServer) serveAlerts(responseWriter http.ResponseWriter, or
 			"source": map[string]string{"scope": decision.Scope, "value": decision.Value},
 			"decisions": []map[string]any{{
 				"id": decision.ID, "origin": decision.Origin, "type": "ban", "scope": decision.Scope,
-				"value": decision.Value, "duration": decision.Duration, "scenario": decision.Scenario,
+				"value": decision.Value, "duration": fake.servedDuration(decision), "scenario": decision.Scenario,
 			}},
 		})
 	}
@@ -170,6 +235,11 @@ func (fake *fakeEngineServer) serveAlerts(responseWriter http.ResponseWriter, or
 }
 
 func (fake *fakeEngineServer) storePostedCopy(responseWriter http.ResponseWriter, request *http.Request) {
+	fake.postAttempts++
+	if fake.postStatus != 0 {
+		http.Error(responseWriter, "refused", fake.postStatus)
+		return
+	}
 	var alerts []struct {
 		Decisions []map[string]string `json:"decisions"`
 	}
@@ -197,6 +267,10 @@ func (fake *fakeEngineServer) deleteDecision(responseWriter http.ResponseWriter,
 		return
 	}
 	fake.deleted = append(fake.deleted, decisionID)
+	if fake.deleteStatus != 0 {
+		http.Error(responseWriter, "unknown decision", fake.deleteStatus)
+		return
+	}
 	for decisionIndex, decision := range fake.decisions {
 		if decision.ID == decisionID {
 			fake.decisions = append(fake.decisions[:decisionIndex], fake.decisions[decisionIndex+1:]...)
@@ -255,11 +329,16 @@ type memoryEngine struct {
 	nextDecisionID int64
 	writes         int
 	onAddCopy      func()
+	// onRead runs at the start of Read: tests use it to move the clock or to panic.
+	onRead func()
 }
 
 func (engine *memoryEngine) Name() string { return engine.name }
 
 func (engine *memoryEngine) Read(context.Context) (Snapshot, error) {
+	if engine.onRead != nil {
+		engine.onRead()
+	}
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
 	return Snapshot{Engine: engine.name, State: ReadComplete, DashboardMachineID: runnerDashboardAccount, Bans: append([]Ban(nil), engine.bans...)}, nil

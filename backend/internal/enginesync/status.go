@@ -23,11 +23,17 @@ func (tracker *statusTracker) finish(report Report) {
 	tracker.mutex.Lock()
 	defer tracker.mutex.Unlock()
 	tracker.running = false
-	tracker.lastReport = &report
+	storedReport := report.clone()
+	tracker.lastReport = &storedReport
 }
 
 func (tracker *statusTracker) snapshot() Status {
 	tracker.mutex.Lock()
 	defer tracker.mutex.Unlock()
-	return Status{Running: tracker.running, LastReport: tracker.lastReport}
+	status := Status{Running: tracker.running}
+	if tracker.lastReport != nil {
+		reportCopy := tracker.lastReport.clone()
+		status.LastReport = &reportCopy
+	}
+	return status
 }

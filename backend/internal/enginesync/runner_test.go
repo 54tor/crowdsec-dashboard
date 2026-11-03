@@ -47,7 +47,7 @@ func TestApplyRefusesAllowlistedTargetEvenIfPlanned(testContext *testing.T) {
 		{Engine: "beta", Kind: ChangeAdd, Target: mustTarget(testContext, "Range", "203.0.113.0/28"), Source: "alpha", Remaining: time.Hour},
 	}
 	report := newReport(runnerTime, false)
-	applyChanges(context.Background(), plannedChanges, targets, &report)
+	applyChanges(context.Background(), plannedChanges, targets, &report, fixedNow)
 	if beta.writeCount() != 0 {
 		testContext.Errorf("an allowlisted target must never be written, got %d writes", beta.writeCount())
 	}
@@ -62,7 +62,7 @@ func TestApplyRefusesAddWhenGuardUnavailable(testContext *testing.T) {
 	targets := map[string]applyTarget{"beta": newApplyTarget(beta, snapshot)}
 	plannedChanges := []Change{{Engine: "beta", Kind: ChangeAdd, Target: mustTarget(testContext, "Ip", "198.51.100.7"), Source: "alpha", Remaining: time.Hour}}
 	report := newReport(runnerTime, false)
-	applyChanges(context.Background(), plannedChanges, targets, &report)
+	applyChanges(context.Background(), plannedChanges, targets, &report, fixedNow)
 	if beta.writeCount() != 0 || report.PerEngine["beta"].Skipped[allowguard.ReasonAllowlistUnavailable] != 1 {
 		testContext.Errorf("expected no write and one allowlist_unavailable skip, got %d %+v", beta.writeCount(), report.PerEngine["beta"])
 	}
@@ -82,7 +82,7 @@ func TestApplyNeverDeletesNativeBan(testContext *testing.T) {
 		{Engine: "beta", Kind: ChangeRemove, Target: native.Target, Source: "alpha", DecisionID: 404},
 	}
 	report := newReport(runnerTime, false)
-	applyChanges(context.Background(), plannedChanges, targets, &report)
+	applyChanges(context.Background(), plannedChanges, targets, &report, fixedNow)
 	if beta.writeCount() != 0 {
 		testContext.Errorf("a ban that is not a dashboard copy must never be deleted or replaced, got %d writes", beta.writeCount())
 	}
@@ -191,7 +191,7 @@ func TestRunDryRunWritesNothing(testContext *testing.T) {
 	if !report.DryRun || report.PerEngine["beta"].Added != 1 {
 		testContext.Errorf("dry run must still report the planned add, got %+v %+v", report, report.PerEngine["beta"])
 	}
-	if len(report.Entries) != 1 || report.Entries[0].Kind != string(ChangeAdd) || report.Entries[0].Target != "203.0.113.10" {
+	if len(report.Entries) != 1 || report.Entries[0].Kind != string(ChangeAdd) || report.Entries[0].Target != "203.0.113.10" || report.Entries[0].Outcome != OutcomePlanned {
 		testContext.Errorf("expected the planned add in the entries, got %+v", report.Entries)
 	}
 }

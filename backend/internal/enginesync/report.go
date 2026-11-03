@@ -1,13 +1,22 @@
 package enginesync
 
-import "time"
+import (
+	"maps"
+	"slices"
+	"time"
+)
 
 const (
 	StatusOK      = "ok"
 	StatusBlocked = "blocked"
 	StatusFailed  = "failed"
 
-	maxReportEntries = 100
+	OutcomePlanned = "planned"
+	OutcomeApplied = "applied"
+	OutcomeFailed  = "failed"
+
+	outcomeSkippedPrefix = "skipped_"
+	maxReportEntries     = 100
 )
 
 type EngineReport struct {
@@ -23,11 +32,12 @@ type EngineReport struct {
 }
 
 type PlanEntry struct {
-	Engine string
-	Kind   string
-	Target string
-	Source string
-	Reason string
+	Engine  string
+	Kind    string
+	Target  string
+	Source  string
+	Reason  string
+	Outcome string
 }
 
 type Report struct {
@@ -63,7 +73,7 @@ func (report *Report) recordPlan(plan Plan, countChanges bool) {
 		if countChanges {
 			report.engine(change.Engine).countChange(change.Kind)
 		}
-		report.addEntry(PlanEntry{Engine: change.Engine, Kind: string(change.Kind), Target: change.Target.String(), Source: change.Source})
+		report.addEntry(PlanEntry{Engine: change.Engine, Kind: string(change.Kind), Target: change.Target.String(), Source: change.Source, Outcome: OutcomePlanned})
 	}
 	for _, skip := range plan.Skipped {
 		report.addEntry(PlanEntry{Engine: skip.Engine, Target: skip.Target.String(), Reason: skip.Reason})
@@ -74,6 +84,17 @@ func (report *Report) addEntry(entry PlanEntry) {
 	if len(report.Entries) < maxReportEntries {
 		report.Entries = append(report.Entries, entry)
 	}
+}
+
+func (report *Report) setOutcome(changeIndex int, outcome string) {
+	if changeIndex < len(report.Entries) && report.Entries[changeIndex].Kind != "" {
+		report.Entries[changeIndex].Outcome = outcome
+	}
+}
+
+func (engineReport *EngineReport) skip(reason string) string {
+	engineReport.Skipped[reason]++
+	return outcomeSkippedPrefix + reason
 }
 
 func (engineReport *EngineReport) countChange(kind ChangeKind) {
@@ -100,4 +121,16 @@ func (report *Report) finish(finishedAt time.Time) Report {
 		}
 	}
 	return *report
+}
+
+func (report Report) clone() Report {
+	reportCopy := report
+	reportCopy.Entries = slices.Clone(report.Entries)
+	reportCopy.PerEngine = make(map[string]*EngineReport, len(report.PerEngine))
+	for engineName, engineReport := range report.PerEngine {
+		engineReportCopy := *engineReport
+		engineReportCopy.Skipped = maps.Clone(engineReport.Skipped)
+		reportCopy.PerEngine[engineName] = &engineReportCopy
+	}
+	return reportCopy
 }
