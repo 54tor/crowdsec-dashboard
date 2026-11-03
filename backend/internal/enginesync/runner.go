@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"crowdsec-dashboard/internal/allowguard"
@@ -50,6 +51,7 @@ type Runner struct {
 	runDeadline time.Duration
 	newEngine   func(SyncEngine) Engine
 	status      statusTracker
+	background  sync.WaitGroup
 }
 
 func NewRunner(source EngineSource, rules RulesProvider, lock *oplock.Lock, readLimit int, dryRun bool, now func() time.Time) *Runner {
@@ -102,14 +104,34 @@ func (runner *Runner) StartBackground(ctx context.Context, options RunOptions, o
 		return ErrOperationRunning
 	}
 	runner.status.start()
+	runner.background.Add(1)
 	go func() {
-		defer release()
-		report, runError := runner.runLocked(ctx, options)
+		defer runner.background.Done()
+		report, runError := runner.runAndRelease(ctx, options, release)
 		if onFinished != nil {
 			onFinished(report, runError)
 		}
 	}()
 	return nil
+}
+
+func (runner *Runner) runAndRelease(ctx context.Context, options RunOptions, release func()) (Report, error) {
+	defer release()
+	return runner.runLocked(ctx, options)
+}
+
+func (runner *Runner) WaitBackground(ctx context.Context) error {
+	finished := make(chan struct{})
+	go func() {
+		runner.background.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (runner *Runner) runLocked(ctx context.Context, options RunOptions) (finishedReport Report, runError error) {

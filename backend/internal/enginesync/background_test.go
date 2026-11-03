@@ -3,6 +3,7 @@ package enginesync
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -121,4 +122,61 @@ func assertLockFree(testContext *testing.T, operationLock *oplock.Lock) {
 		testContext.Fatal("the lock must be released once the run ends")
 	}
 	release()
+}
+
+func TestStartBackgroundReleasesTheLockBeforeTheCallback(testContext *testing.T) {
+	operationLock := oplock.New()
+	runner := NewRunner(staticSource{engineSet: engineSetOf()}, ConfiguredRules(500, 5*time.Minute), operationLock, 5000, true, fixedNow)
+	lockFreeInCallback := make(chan bool, 1)
+	startError := runner.StartBackground(context.Background(), RunOptions{}, func(Report, error) {
+		release, acquired := operationLock.TryAcquire("import")
+		if acquired {
+			release()
+		}
+		lockFreeInCallback <- acquired
+	})
+	if startError != nil {
+		testContext.Fatalf("StartBackground: %v", startError)
+	}
+	if !<-lockFreeInCallback {
+		testContext.Error("the lock must already be free when the completion callback (the audit) runs")
+	}
+}
+
+func TestWaitBackgroundReturnsAfterTheCompletionCallback(testContext *testing.T) {
+	source := newBlockingSource()
+	runner := NewRunner(source, ConfiguredRules(500, 5*time.Minute), oplock.New(), 5000, true, fixedNow)
+	lifecycleContext, shutdown := context.WithCancel(context.Background())
+	var callbackDone atomic.Bool
+	startError := runner.StartBackground(lifecycleContext, RunOptions{}, func(Report, error) {
+		// A slow audit write: WaitBackground must still wait for it.
+		time.Sleep(50 * time.Millisecond)
+		callbackDone.Store(true)
+	})
+	if startError != nil {
+		testContext.Fatalf("StartBackground: %v", startError)
+	}
+	<-source.loadStarted
+	shutdown()
+	waitContext, cancelWait := context.WithTimeout(context.Background(), schedulerWaitLimit)
+	defer cancelWait()
+	if waitError := runner.WaitBackground(waitContext); waitError != nil {
+		testContext.Fatalf("WaitBackground: %v", waitError)
+	}
+	if !callbackDone.Load() {
+		testContext.Error("WaitBackground returned before the completion callback finished")
+	}
+}
+
+func TestWaitBackgroundReturnsPromptlyWhenIdle(testContext *testing.T) {
+	runner := NewRunner(staticSource{engineSet: engineSetOf()}, ConfiguredRules(500, 5*time.Minute), oplock.New(), 5000, true, fixedNow)
+	waitContext, cancelWait := context.WithTimeout(context.Background(), schedulerWaitLimit)
+	defer cancelWait()
+	startedWaiting := time.Now()
+	if waitError := runner.WaitBackground(waitContext); waitError != nil {
+		testContext.Fatalf("WaitBackground: %v", waitError)
+	}
+	if waited := time.Since(startedWaiting); waited > 100*time.Millisecond {
+		testContext.Errorf("with no run in flight WaitBackground must return at once, waited %s", waited)
+	}
 }

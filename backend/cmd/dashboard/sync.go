@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"crowdsec-dashboard/internal/api"
@@ -61,6 +62,14 @@ func scheduledRunIsWorthAuditing(report enginesync.Report) bool {
 		}
 	}
 	return false
+}
+
+func waitForManualSync(runner *enginesync.Runner, timeout time.Duration) {
+	waitContext, cancelWait := context.WithTimeout(context.Background(), timeout)
+	defer cancelWait()
+	if waitError := runner.WaitBackground(waitContext); waitError != nil {
+		log.Printf("sync: manual run still in flight at shutdown: %v", waitError)
+	}
 }
 
 func syncBackoff(interval time.Duration) func(attempt int) time.Duration {

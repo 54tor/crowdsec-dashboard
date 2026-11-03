@@ -62,18 +62,20 @@ func newRealRunnerFixture(testContext *testing.T, source enginesync.EngineSource
 	}
 }
 
+// waitForFinishedRun waits for the background goroutine itself (run, lock release and audit
+// callback), so every assertion made afterwards is deterministic.
 func (fixture realRunnerFixture) waitForFinishedRun(testContext *testing.T) enginesync.Report {
 	testContext.Helper()
-	deadline := time.Now().Add(syncRunWaitLimit)
-	for time.Now().Before(deadline) {
-		status := fixture.runner.Status()
-		if !status.Running && status.LastReport != nil {
-			return *status.LastReport
-		}
-		time.Sleep(time.Millisecond)
+	waitContext, cancelWait := context.WithTimeout(context.Background(), syncRunWaitLimit)
+	defer cancelWait()
+	if waitError := fixture.runner.WaitBackground(waitContext); waitError != nil {
+		testContext.Fatalf("the background run never finished: %v", waitError)
 	}
-	testContext.Fatal("the background run never finished")
-	return enginesync.Report{}
+	status := fixture.runner.Status()
+	if status.Running || status.LastReport == nil {
+		testContext.Fatalf("a finished run must leave a final report, got %+v", status)
+	}
+	return *status.LastReport
 }
 
 func (fixture realRunnerFixture) assertLockFree(testContext *testing.T) {
@@ -83,19 +85,6 @@ func (fixture realRunnerFixture) assertLockFree(testContext *testing.T) {
 		testContext.Fatal("the operation lock must be released once the run ends")
 	}
 	release()
-}
-
-func waitForAuditEvents(testContext *testing.T, recorder *lockedAuditRecorder, expectedCount int) []recordedAuditEvent {
-	testContext.Helper()
-	deadline := time.Now().Add(syncRunWaitLimit)
-	for time.Now().Before(deadline) {
-		if events, _ := recorder.recorded(); len(events) >= expectedCount {
-			return events
-		}
-		time.Sleep(time.Millisecond)
-	}
-	testContext.Fatalf("expected %d audit events", expectedCount)
-	return nil
 }
 
 func TestSyncRunAnswers202BeforeTheRunFinishes(testContext *testing.T) {
@@ -123,7 +112,7 @@ func TestSyncRunAnswers202BeforeTheRunFinishes(testContext *testing.T) {
 	if status.Running {
 		testContext.Error("the status must stop saying running once the run ended")
 	}
-	if events := waitForAuditEvents(testContext, fixture.recorder, 1); len(events) != 1 || events[0].action != audit.ActionSyncRun {
+	if events, _ := fixture.recorder.recorded(); len(events) != 1 || events[0].action != audit.ActionSyncRun {
 		testContext.Errorf("expected exactly one sync_run audit event, got %+v", events)
 	}
 	fixture.assertLockFree(testContext)
@@ -141,8 +130,11 @@ func TestSyncRunShutdownCancelsTheRunAndReleasesTheLock(testContext *testing.T) 
 		testContext.Errorf("a shutdown must end the run canceled, got %q", finalReport.ErrorCode)
 	}
 	fixture.assertLockFree(testContext)
-	// The audit write runs on its own short context, so the shutdown does not lose it.
-	waitForAuditEvents(testContext, fixture.recorder, 1)
+	// main waits for the background run before closing the database: the audit row must
+	// already be written when WaitBackground returns, despite the shutdown cancel.
+	if events, _ := fixture.recorder.recorded(); len(events) != 1 {
+		testContext.Errorf("the audit row must be written before WaitBackground returns, got %+v", events)
+	}
 }
 
 func TestSyncRunPanicReleasesTheLock(testContext *testing.T) {

@@ -161,6 +161,7 @@ func main() {
 	if syncScheduler != nil {
 		syncScheduler.Stop()
 	}
+	waitForManualSync(syncRunner, shutdownTimeout)
 }
 
 func runRotateSecretsCommand(loadedConfig config.Config) {
