@@ -7,9 +7,11 @@ import (
 )
 
 const (
-	ipv4MappedPrefixBits = 96
-	minIPv4BanPrefixBits = 8
-	minIPv6BanPrefixBits = 32
+	ipv4MappedPrefixBits     = 96
+	minIPv4BanPrefixBits     = 8
+	minIPv6BanPrefixBits     = 32
+	minIPv4ConfirmPrefixBits = 24
+	minIPv6ConfirmPrefixBits = 48
 )
 
 func ParseAddr(rawAddress string) (netip.Addr, error) {
@@ -54,4 +56,11 @@ func ParseAllowlistValue(rawValue string) (netip.Prefix, error) {
 		return netip.Prefix{}, addressError
 	}
 	return netip.PrefixFrom(address, address.BitLen()), nil
+}
+
+func NeedsAllowlistConfirmation(prefix netip.Prefix) bool {
+	if prefix.Addr().Is4() {
+		return prefix.Bits() < minIPv4ConfirmPrefixBits
+	}
+	return prefix.Bits() < minIPv6ConfirmPrefixBits
 }

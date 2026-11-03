@@ -76,3 +76,19 @@ func TestParseAllowlistValueCanonicalises(testContext *testing.T) {
 		}
 	}
 }
+
+func TestNeedsAllowlistConfirmationAtFloors(testContext *testing.T) {
+	expectations := map[string]bool{
+		"198.51.100.0/24": false,
+		"198.51.100.0/23": true,
+		"2001:db8::/48":   false,
+		"2001:db8::/47":   true,
+		"203.0.113.7/32":  false,
+	}
+	for rawPrefix, expectedConfirmation := range expectations {
+		obtainedConfirmation := NeedsAllowlistConfirmation(netip.MustParsePrefix(rawPrefix))
+		if obtainedConfirmation != expectedConfirmation {
+			testContext.Errorf("%s: expected %v, got %v", rawPrefix, expectedConfirmation, obtainedConfirmation)
+		}
+	}
+}
