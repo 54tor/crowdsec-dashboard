@@ -61,7 +61,7 @@ func TestDecodeRejectsDeepNesting(testContext *testing.T) {
 	// it must refuse one level above the limit and a zip-bomb style depth without recursing.
 	for _, nestingDepth := range []int{MaxDepth + 1, 100000} {
 		nestedArrays := strings.Repeat("[", nestingDepth) + strings.Repeat("]", nestingDepth)
-		if isWithinDepth([]byte(nestedArrays), MaxDepth) {
+		if checkStructure([]byte(nestedArrays)) == nil {
 			testContext.Errorf("depth %d: the depth scan must refuse it", nestingDepth)
 		}
 		body := minimalBundleHeader + `"sections":{},"padding":` + nestedArrays + `}`
@@ -69,7 +69,7 @@ func TestDecodeRejectsDeepNesting(testContext *testing.T) {
 			testContext.Errorf("depth %d: expected ErrInvalid, got %v", nestingDepth, decodeError)
 		}
 	}
-	if !isWithinDepth([]byte(strings.Repeat("[", MaxDepth)+strings.Repeat("]", MaxDepth)), MaxDepth) {
+	if checkStructure([]byte(strings.Repeat("[", MaxDepth)+strings.Repeat("]", MaxDepth))) != nil {
 		testContext.Error("a document exactly at the depth limit must pass the depth scan")
 	}
 }

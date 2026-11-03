@@ -51,6 +51,11 @@ type importHandlers struct {
 }
 
 func (handlers importHandlers) importBundle(responseWriter http.ResponseWriter, request *http.Request) {
+	release, acquired := acquireOperationLock(responseWriter, handlers.operationLock, importLockName)
+	if !acquired {
+		return
+	}
+	defer release()
 	payload, imported, decoded := decodeImportRequest(responseWriter, request)
 	if !decoded {
 		return
@@ -59,22 +64,25 @@ func (handlers importHandlers) importBundle(responseWriter http.ResponseWriter, 
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
-	if handlers.operationLock == nil {
-		writeError(responseWriter, http.StatusServiceUnavailable, "operation_lock_unavailable")
-		return
-	}
-	release, acquired := handlers.operationLock.TryAcquire(importLockName)
-	if !acquired {
-		writeError(responseWriter, http.StatusConflict, "operation_running")
-		return
-	}
-	defer release()
 	deps := handlers.requestDeps(request)
 	if payload.Mode == importModePreview {
 		handlers.preview(responseWriter, request, deps, imported, payload.Sections)
 		return
 	}
 	handlers.apply(responseWriter, request, deps, imported, payload)
+}
+
+func acquireOperationLock(responseWriter http.ResponseWriter, operationLock *oplock.Lock, operationName string) (func(), bool) {
+	if operationLock == nil {
+		writeError(responseWriter, http.StatusServiceUnavailable, "operation_lock_unavailable")
+		return nil, false
+	}
+	release, acquired := operationLock.TryAcquire(operationName)
+	if !acquired {
+		writeError(responseWriter, http.StatusConflict, "operation_running")
+		return nil, false
+	}
+	return release, true
 }
 
 func decodeImportRequest(responseWriter http.ResponseWriter, request *http.Request) (importRequestBody, bundle.Bundle, bool) {

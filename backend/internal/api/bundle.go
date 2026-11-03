@@ -52,9 +52,8 @@ func (handlers bundleHandlers) export(responseWriter http.ResponseWriter, reques
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
-	release, acquired := handlers.operationLock.TryAcquire("export")
+	release, acquired := acquireOperationLock(responseWriter, handlers.operationLock, "export")
 	if !acquired {
-		writeError(responseWriter, http.StatusConflict, "operation_running")
 		return
 	}
 	defer release()

@@ -20,8 +20,8 @@ func Decode(reader io.Reader, maxBytes int64) (Bundle, error) {
 	if int64(len(content)) > maxBytes {
 		return Bundle{}, ErrTooLarge
 	}
-	if !isWithinDepth(content, MaxDepth) {
-		return Bundle{}, ErrInvalid
+	if structureError := checkStructure(content); structureError != nil {
+		return Bundle{}, structureError
 	}
 	var header bundleHeader
 	if headerError := json.Unmarshal(content, &header); headerError != nil || header.Format != Format {
@@ -44,30 +44,4 @@ func decodeStrict(content []byte) (Bundle, error) {
 		return Bundle{}, ErrInvalid
 	}
 	return decoded, nil
-}
-
-func isWithinDepth(content []byte, maxDepth int) bool {
-	decoder := json.NewDecoder(bytes.NewReader(content))
-	depth := 0
-	for {
-		token, tokenError := decoder.Token()
-		if errors.Is(tokenError, io.EOF) {
-			return depth == 0
-		}
-		if tokenError != nil {
-			return false
-		}
-		delimiter, isDelimiter := token.(json.Delim)
-		if !isDelimiter {
-			continue
-		}
-		if delimiter == '{' || delimiter == '[' {
-			depth++
-		} else {
-			depth--
-		}
-		if depth > maxDepth {
-			return false
-		}
-	}
 }
