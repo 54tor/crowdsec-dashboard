@@ -130,6 +130,7 @@ type NewDecision struct {
 	Type     string
 	Duration string
 	Reason   string
+	Scenario string
 }
 
 type SyncDecision struct {

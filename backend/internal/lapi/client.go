@@ -148,8 +148,12 @@ func (client *Client) AddDecision(ctx context.Context, newDecision NewDecision) 
 	if !isValidTarget(newDecision.Target) {
 		return ErrInvalidTarget
 	}
+	scenario := newDecision.Scenario
+	if scenario == "" {
+		scenario = manualScenario
+	}
 	alert := singleDecisionAlert(alertDecision{
-		Scenario: manualScenario,
+		Scenario: scenario,
 		Message:  newDecision.Reason,
 		Origin:   manualOrigin,
 		Type:     newDecision.Type,
