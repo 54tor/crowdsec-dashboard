@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"cmp"
 	"context"
 	"net/netip"
 	"slices"
@@ -47,7 +48,7 @@ func (decisionsImport) Plan(ctx context.Context, deps ImportDeps, imported Bundl
 	if unavailableCode != "" {
 		return SectionPlan{Unavailable: true, UnavailableCode: unavailableCode}, nil
 	}
-	for _, decision := range imported.Sections.Decisions.Decisions {
+	for _, decision := range longestFirst(imported.Sections.Decisions.Decisions) {
 		planner.plan(decision)
 	}
 	if len(planner.sectionPlan.Decisions) > min(MaxImportedDecisions, planner.rules.MaxChanges) {
@@ -55,6 +56,14 @@ func (decisionsImport) Plan(ctx context.Context, deps ImportDeps, imported Bundl
 	}
 	planner.sectionPlan.allowlistGuard = planner.guard
 	return planner.sectionPlan, nil
+}
+
+func longestFirst(decisions []Decision) []Decision {
+	sortedDecisions := slices.Clone(decisions)
+	slices.SortStableFunc(sortedDecisions, func(first, second Decision) int {
+		return cmp.Or(strings.Compare(first.Value, second.Value), second.Until.Compare(first.Until))
+	})
+	return sortedDecisions
 }
 
 func newDecisionPlanner(ctx context.Context, deps ImportDeps) (*decisionPlanner, string) {

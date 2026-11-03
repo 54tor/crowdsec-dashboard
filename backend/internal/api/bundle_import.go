@@ -226,7 +226,7 @@ func BundleImportAuditTarget(report bundle.ApplyReport) string {
 		skippedTotal += sectionReport.Skipped
 		failedTotal += sectionReport.Failed
 	}
-	return fmt.Sprintf("dry=false hub=%d config=%d decisions=%d alerts=%d skipped=%d failed=%d",
-		appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionConfig], appliedBySection[bundle.SectionDecision],
-		appliedBySection[bundle.SectionAlerts], skippedTotal, failedTotal)
+	return fmt.Sprintf("failed=%d hub=%d decisions=%d alerts=%d config=%d skipped=%d",
+		failedTotal, appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionDecision],
+		appliedBySection[bundle.SectionAlerts], appliedBySection[bundle.SectionConfig], skippedTotal)
 }
