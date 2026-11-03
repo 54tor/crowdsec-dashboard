@@ -38,45 +38,66 @@ type EngineSet struct {
 	Engines        []SyncEngine
 	AllEngineAddrs map[string][]netip.Addr
 	Exclude        []netip.Prefix
+	AddrsError     bool
 }
 
 type EngineRegistry interface {
 	Handles() []engines.Handle
 }
 
-type TableSource struct {
-	registry    EngineRegistry
-	exclude     []netip.Prefix
-	resolveHost func(ctx context.Context, host string) []netip.Addr
+type AllEngineLister interface {
+	List(ctx context.Context) ([]engines.Engine, error)
 }
 
-func NewTableSource(registry EngineRegistry, exclude []netip.Prefix) *TableSource {
-	return &TableSource{registry: registry, exclude: exclude, resolveHost: lookupHost}
+type TableSource struct {
+	registry    EngineRegistry
+	lister      AllEngineLister
+	exclude     []netip.Prefix
+	resolveHost func(ctx context.Context, host string) ([]netip.Addr, error)
+}
+
+func NewTableSource(registry EngineRegistry, lister AllEngineLister, exclude []netip.Prefix) *TableSource {
+	return &TableSource{registry: registry, lister: lister, exclude: exclude, resolveHost: lookupHost}
 }
 
 func (source *TableSource) Load(ctx context.Context) EngineSet {
 	engineSet := EngineSet{AllEngineAddrs: map[string][]netip.Addr{}, Exclude: source.exclude}
+	participating := map[string]bool{}
 	for _, handle := range source.registry.Handles() {
 		if !handle.Engine.IsLocal && !(handle.Engine.Enabled && handle.Engine.SyncEnabled) {
 			continue
 		}
-		syncEngine := SyncEngine{
+		addrs, addrsComplete := source.engineAddrs(ctx, handle.Engine)
+		engineSet.AddrsError = engineSet.AddrsError || !addrsComplete
+		participating[handle.Engine.Name] = true
+		engineSet.Engines = append(engineSet.Engines, SyncEngine{
 			Name:        handle.Engine.Name,
 			IsLocal:     handle.Engine.IsLocal,
 			MachineID:   handle.Engine.MachineID,
 			LAPIURL:     handle.Engine.LAPIURL,
-			PublicAddrs: source.engineAddrs(ctx, handle.Engine),
+			PublicAddrs: addrs,
 			Client:      handle.Client,
+		})
+		engineSet.AllEngineAddrs[handle.Engine.Name] = addrs
+	}
+	listed, listError := source.lister.List(ctx)
+	if listError != nil {
+		engineSet.AddrsError = true
+		return engineSet
+	}
+	for _, listedEngine := range listed {
+		if participating[listedEngine.Name] {
+			continue
 		}
-		engineSet.Engines = append(engineSet.Engines, syncEngine)
-		engineSet.AllEngineAddrs[syncEngine.Name] = syncEngine.PublicAddrs
+		addrs, _ := source.engineAddrs(ctx, listedEngine)
+		engineSet.AllEngineAddrs[listedEngine.Name] = addrs
 	}
 	return engineSet
 }
 
-func (source *TableSource) engineAddrs(ctx context.Context, engine engines.Engine) []netip.Addr {
-	addrs := source.resolveHost(ctx, hostname(engine.LAPIURL))
-	return append(addrs, engine.PublicAddresses...)
+func (source *TableSource) engineAddrs(ctx context.Context, engine engines.Engine) ([]netip.Addr, bool) {
+	addrs, resolveError := source.resolveHost(ctx, hostname(engine.LAPIURL))
+	return append(addrs, engine.PublicAddresses...), resolveError == nil
 }
 
 func hostname(rawURL string) string {
@@ -87,19 +108,19 @@ func hostname(rawURL string) string {
 	return parsedURL.Hostname()
 }
 
-func lookupHost(ctx context.Context, host string) []netip.Addr {
+func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
 	if host == "" {
-		return nil
+		return nil, nil
 	}
 	if literal, parseError := netip.ParseAddr(host); parseError == nil {
-		return []netip.Addr{literal.Unmap()}
+		return []netip.Addr{literal.Unmap()}, nil
 	}
 	resolved, lookupError := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 	if lookupError != nil {
-		return nil
+		return nil, lookupError
 	}
 	for addrIndex := range resolved {
 		resolved[addrIndex] = resolved[addrIndex].Unmap()
 	}
-	return resolved
+	return resolved, nil
 }
