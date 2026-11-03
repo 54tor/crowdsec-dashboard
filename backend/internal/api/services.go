@@ -19,6 +19,10 @@ type DecisionService interface {
 	Delete(ctx context.Context, decisionID int64) error
 }
 
+type AllowlistReader interface {
+	ListAllowlists(ctx context.Context) (lapi.AllowlistRead, error)
+}
+
 type AlertService interface {
 	Delete(ctx context.Context, alertID string) error
 }
@@ -28,56 +32,58 @@ type AlertLookup interface {
 }
 
 type Services struct {
-	Sessions         auth.SessionStore
-	Tokens           auth.TokenStore
-	TokenGate        auth.TokenGate
-	Login            LoginService
-	Enrollment       EnrollmentService
-	Database         Pinger
-	Decisions        DecisionService
-	Alerts           AlertService
-	AlertReader      AlertLister
-	DecisionReader   DecisionLister
-	AlertLookup      AlertLookup
-	Archive          *archive.Reader
-	Platform         Platform
-	ConfigFiles      ConfigFiles
-	Bouncers         BouncerService
-	Machines         MachineService
-	Hub              HubService
-	Reloader         Reloader
-	Audit            audit.Recorder
-	Geolocator       geo.Geolocator
-	AccessRules      AccessRuleService
-	Engines          EngineService
-	Allowlists       AllowlistService
-	WebAuthn         *secondfactor.WebAuthn
-	TokenManager     TokenManager
-	AccountManager   AccountManager
-	CollectorStatus  CollectorStatusSource
-	SchemaVersion    SchemaVersionSource
-	Sync             SyncService
-	OperationLock    *oplock.Lock
-	BundleExport     bundle.ExportDeps
-	BundleImport     bundle.ImportDeps
-	LifecycleContext context.Context
+	Sessions           auth.SessionStore
+	Tokens             auth.TokenStore
+	TokenGate          auth.TokenGate
+	Login              LoginService
+	Enrollment         EnrollmentService
+	Database           Pinger
+	Decisions          DecisionService
+	DecisionAllowlists AllowlistReader
+	Alerts             AlertService
+	AlertReader        AlertLister
+	DecisionReader     DecisionLister
+	AlertLookup        AlertLookup
+	Archive            *archive.Reader
+	Platform           Platform
+	ConfigFiles        ConfigFiles
+	Bouncers           BouncerService
+	Machines           MachineService
+	Hub                HubService
+	Reloader           Reloader
+	Audit              audit.Recorder
+	Geolocator         geo.Geolocator
+	AccessRules        AccessRuleService
+	Engines            EngineService
+	Allowlists         AllowlistService
+	WebAuthn           *secondfactor.WebAuthn
+	TokenManager       TokenManager
+	AccountManager     AccountManager
+	CollectorStatus    CollectorStatusSource
+	SchemaVersion      SchemaVersionSource
+	Sync               SyncService
+	OperationLock      *oplock.Lock
+	BundleExport       bundle.ExportDeps
+	BundleImport       bundle.ImportDeps
+	LifecycleContext   context.Context
 }
 
 func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {
 	return Services{
-		Decisions:      lapiDecisions{client: lapiClient},
-		Alerts:         cscliAlerts{runner: runner},
-		AlertReader:    lapiClient,
-		DecisionReader: lapiClient,
-		AlertLookup:    lapiClient,
-		Platform:       cscliPlatform{runner: runner},
-		ConfigFiles:    dirConfigFiles{dir: confDir},
-		Bouncers:       cscliBouncers{runner: runner},
-		Machines:       cscliMachines{runner: runner},
-		Hub:            cscliHub{runner: runner},
-		Reloader:       cscliReloader{runner: runner},
-		BundleExport:   localBundleExportDeps(lapiClient, runner, confDir),
-		BundleImport:   localBundleImportDeps(lapiClient, runner, confDir),
+		Decisions:          lapiDecisions{client: lapiClient},
+		DecisionAllowlists: lapiClient,
+		Alerts:             cscliAlerts{runner: runner},
+		AlertReader:        lapiClient,
+		DecisionReader:     lapiClient,
+		AlertLookup:        lapiClient,
+		Platform:           cscliPlatform{runner: runner},
+		ConfigFiles:        dirConfigFiles{dir: confDir},
+		Bouncers:           cscliBouncers{runner: runner},
+		Machines:           cscliMachines{runner: runner},
+		Hub:                cscliHub{runner: runner},
+		Reloader:           cscliReloader{runner: runner},
+		BundleExport:       localBundleExportDeps(lapiClient, runner, confDir),
+		BundleImport:       localBundleImportDeps(lapiClient, runner, confDir),
 	}
 }
 

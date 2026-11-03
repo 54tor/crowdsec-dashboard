@@ -13,21 +13,24 @@ import (
 )
 
 type selfBanFixture struct {
-	handler   http.Handler
-	cookie    *http.Cookie
-	decisions *fakeDecisions
+	handler    http.Handler
+	cookie     *http.Cookie
+	decisions  *fakeDecisions
+	allowlists *fakeAllowlistReader
 }
 
 func newSelfBanFixture(testContext *testing.T, trustedProxyCIDRs []*net.IPNet) selfBanFixture {
 	testContext.Helper()
 	decisions := &fakeDecisions{}
+	allowlists := &fakeAllowlistReader{read: allowlistReadWith()}
 	sessions := authtest.NewSessionStore(time.Hour, time.Now)
 	handler := newHandler(config.Config{SessionTTL: time.Hour, TrustedProxyCIDRs: trustedProxyCIDRs}, http.NotFoundHandler(), 0, Services{
-		Decisions: decisions,
-		Sessions:  sessions,
+		Decisions:          decisions,
+		DecisionAllowlists: allowlists,
+		Sessions:           sessions,
 	})
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
-	return selfBanFixture{handler: handler, cookie: cookie, decisions: decisions}
+	return selfBanFixture{handler: handler, cookie: cookie, decisions: decisions, allowlists: allowlists}
 }
 
 func (fixture selfBanFixture) ban(remoteAddress string, forwardedFor string, target string) *httptest.ResponseRecorder {
@@ -134,4 +137,15 @@ func TestValidationPrecedesTheSelfBanGuard(testContext *testing.T) {
 	recorder := httptest.NewRecorder()
 	fixture.handler.ServeHTTP(recorder, request)
 	expectError(testContext, recorder, http.StatusBadRequest, "invalid_duration")
+}
+
+func TestSelfBanGuardStillRunsFirst(testContext *testing.T) {
+	fixture := newSelfBanFixture(testContext, nil)
+	fixture.allowlists.read = allowlistReadWith(permanentAllowlistEntry("198.51.100.7"))
+
+	expectError(testContext, fixture.ban("198.51.100.7:5555", "", "198.51.100.7"), http.StatusConflict, "self_ban")
+
+	if fixture.allowlists.readCount != 0 || len(fixture.decisions.added) != 0 {
+		testContext.Errorf("the self-ban guard must answer before any read or write, got reads=%d adds=%+v", fixture.allowlists.readCount, fixture.decisions.added)
+	}
 }

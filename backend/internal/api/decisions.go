@@ -8,9 +8,11 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"crowdsec-dashboard/internal/allowguard"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/cscli"
@@ -28,6 +30,8 @@ type decisionHandlers struct {
 	lister       DecisionLister
 	recorder     audit.Recorder
 	trustedCIDRs []*net.IPNet
+	allowlists   AllowlistReader
+	now          func() time.Time
 }
 
 type banRequest struct {
@@ -99,12 +103,39 @@ func (handlers decisionHandlers) add(responseWriter http.ResponseWriter, request
 		writeError(responseWriter, http.StatusConflict, "self_ban")
 		return
 	}
+	if refusalStatus, refusalCode, refused := handlers.allowlistRefusal(request.Context(), ban.IP); refused {
+		writeError(responseWriter, refusalStatus, refusalCode)
+		return
+	}
 	newDecision := lapi.NewDecision{Target: ban.IP, Scope: scope, Type: "ban", Duration: ban.Duration, Reason: ban.Reason}
 	if addError := handlers.service.Add(request.Context(), newDecision); addError != nil {
 		writeUpstreamError(responseWriter, addError)
 		return
 	}
 	writeJSON(responseWriter, http.StatusCreated, map[string]string{"status": "created"})
+}
+
+func (handlers decisionHandlers) allowlistRefusal(ctx context.Context, target string) (int, string, bool) {
+	verdict := handlers.allowlistVerdict(ctx, target)
+	switch {
+	case verdict.Allowed:
+		return 0, "", false
+	case verdict.Reason == allowguard.ReasonAllowlisted:
+		return http.StatusConflict, "target_allowlisted", true
+	case verdict.Reason == allowguard.ReasonInvalidTarget:
+		return http.StatusBadRequest, "invalid_target", true
+	default:
+		return http.StatusServiceUnavailable, "allowlist_unavailable", true
+	}
+}
+
+func (handlers decisionHandlers) allowlistVerdict(ctx context.Context, target string) allowguard.Verdict {
+	if handlers.allowlists == nil || handlers.now == nil {
+		return allowguard.Verdict{Reason: allowguard.ReasonAllowlistUnavailable}
+	}
+	targetPrefix, _ := netparse.ParseAllowlistValue(target)
+	allowlistRead, readError := handlers.allowlists.ListAllowlists(ctx)
+	return allowguard.FromRead(allowlistRead, readError, handlers.now()).Check(targetPrefix)
 }
 
 func (handlers decisionHandlers) remove(responseWriter http.ResponseWriter, request *http.Request) {

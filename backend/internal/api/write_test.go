@@ -41,11 +41,12 @@ func (runner *recordingRunner) Run(_ context.Context, argv []string) ([]byte, er
 }
 
 type writeFixture struct {
-	handler   http.Handler
-	cookie    *http.Cookie
-	decisions *fakeDecisions
-	runner    *recordingRunner
-	audit     *fakeAuditRecorder
+	handler    http.Handler
+	cookie     *http.Cookie
+	decisions  *fakeDecisions
+	runner     *recordingRunner
+	audit      *fakeAuditRecorder
+	allowlists *fakeAllowlistReader
 }
 
 // writeFixtureAlertIDs and writeFixtureDecisionIDs exist on the fake local LAPI:
@@ -58,6 +59,14 @@ var (
 
 func newWriteFixture(testContext *testing.T) writeFixture {
 	testContext.Helper()
+	allowlists := &fakeAllowlistReader{read: allowlistReadWith()}
+	fixture := newWriteFixtureWithReader(testContext, allowlists)
+	fixture.allowlists = allowlists
+	return fixture
+}
+
+func newWriteFixtureWithReader(testContext *testing.T, allowlistReader AllowlistReader) writeFixture {
+	testContext.Helper()
 	decisions := &fakeDecisions{}
 	runner := &recordingRunner{}
 	alertLookup := &fakeAlertLookup{alertsByID: map[int64]lapi.Alert{}}
@@ -69,7 +78,7 @@ func newWriteFixture(testContext *testing.T) writeFixture {
 		decisionLister.decisions = append(decisionLister.decisions, lapi.Decision{ID: decisionID, Scope: "Ip", Value: fmt.Sprintf("203.0.113.%d", decisionID)})
 	}
 	auditRecorder := &fakeAuditRecorder{}
-	services := Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}, AlertLookup: alertLookup, DecisionReader: decisionLister, Audit: auditRecorder}
+	services := Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}, AlertLookup: alertLookup, DecisionReader: decisionLister, Audit: auditRecorder, DecisionAllowlists: allowlistReader}
 	handler, sessions := newTestHandlerAndSessions(testContext, services, "")
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return writeFixture{handler: handler, cookie: cookie, decisions: decisions, runner: runner, audit: auditRecorder}
