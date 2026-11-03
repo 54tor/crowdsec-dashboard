@@ -15,7 +15,7 @@ const (
 	syncLockName       = "sync"
 	minShareRemaining  = 5 * time.Minute
 	minExtendThreshold = time.Minute
-	RunDeadline        = 10 * time.Minute
+	runDeadline        = 10 * time.Minute
 
 	ErrorCodeEngineAddressesUnknown = "engine_addresses_unknown"
 	ErrorCodeGuardTripped           = "sync_guard_tripped"
@@ -59,7 +59,7 @@ func NewRunner(source EngineSource, rules RulesProvider, lock *oplock.Lock, read
 		lock:        lock,
 		dryRun:      dryRun,
 		now:         now,
-		runDeadline: RunDeadline,
+		runDeadline: runDeadline,
 		newEngine: func(syncEngine SyncEngine) Engine {
 			return NewLAPIEngine(syncEngine, readLimit, now)
 		},
@@ -87,12 +87,32 @@ func (runner *Runner) Status() Status {
 	return runner.status.snapshot()
 }
 
-func (runner *Runner) Run(ctx context.Context, options RunOptions) (finishedReport Report, runError error) {
+func (runner *Runner) Run(ctx context.Context, options RunOptions) (Report, error) {
 	release, acquired := runner.lock.TryAcquire(syncLockName)
 	if !acquired {
 		return Report{}, ErrOperationRunning
 	}
 	defer release()
+	return runner.runLocked(ctx, options)
+}
+
+func (runner *Runner) StartBackground(ctx context.Context, options RunOptions, onFinished func(Report, error)) error {
+	release, acquired := runner.lock.TryAcquire(syncLockName)
+	if !acquired {
+		return ErrOperationRunning
+	}
+	runner.status.start()
+	go func() {
+		defer release()
+		report, runError := runner.runLocked(ctx, options)
+		if onFinished != nil {
+			onFinished(report, runError)
+		}
+	}()
+	return nil
+}
+
+func (runner *Runner) runLocked(ctx context.Context, options RunOptions) (finishedReport Report, runError error) {
 	runner.status.start()
 	report := newReport(runner.now(), runner.dryRun)
 	defer func() {

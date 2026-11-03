@@ -29,12 +29,37 @@ func startSyncScheduler(ctx context.Context, loadedConfig config.Config, runner 
 	}
 	scheduler := enginesync.NewScheduler(runner, loadedConfig.SyncInterval, syncBackoff(loadedConfig.SyncInterval))
 	scheduler.AfterRun = func(report enginesync.Report) {
-		auditContext, cancelAudit := context.WithTimeout(context.Background(), syncAuditTimeout)
-		defer cancelAudit()
-		audit.RecordOrLog(auditContext, recorder, 0, audit.ActionSyncRun, api.SyncRunAuditTarget(report), "")
+		auditScheduledRun(recorder, report)
 	}
 	scheduler.Start(ctx)
 	return scheduler
+}
+
+func auditScheduledRun(recorder audit.Recorder, report enginesync.Report) {
+	if !scheduledRunIsWorthAuditing(report) {
+		return
+	}
+	auditContext, cancelAudit := context.WithTimeout(context.Background(), syncAuditTimeout)
+	defer cancelAudit()
+	audit.RecordOrLog(auditContext, recorder, 0, audit.ActionSyncRun, api.SyncRunAuditTarget(report), "")
+}
+
+func scheduledRunIsWorthAuditing(report enginesync.Report) bool {
+	if report.ErrorCode != "" {
+		return true
+	}
+	for _, engineReport := range report.PerEngine {
+		changeCount := engineReport.Added + engineReport.Removed + engineReport.Replaced + engineReport.Failed
+		if engineReport.ErrorCode != "" || changeCount > 0 {
+			return true
+		}
+	}
+	for _, entry := range report.Entries {
+		if entry.Kind != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func syncBackoff(interval time.Duration) func(attempt int) time.Duration {

@@ -46,12 +46,6 @@ type syncStatusView struct {
 	LastPlan        []syncPlanEntryView `json:"last_plan"`
 }
 
-type syncRunView struct {
-	DryRun    bool           `json:"dry_run"`
-	ErrorCode string         `json:"error_code"`
-	Peers     []syncPeerView `json:"peers"`
-}
-
 func hostsByEngineName(engineList []engines.Engine) map[string]string {
 	hosts := make(map[string]string, len(engineList))
 	for _, listedEngine := range engineList {

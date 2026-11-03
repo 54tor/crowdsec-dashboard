@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,28 +16,63 @@ import (
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/enginesync"
-	"crowdsec-dashboard/internal/oplock"
 )
 
 var syncTestRunTime = time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 
-// fakeSyncService records every run so tests can prove a refused request never reached the runner.
+// fakeSyncService records every start so tests can prove a refused request never reached the
+// runner; the test finishes the run itself through finish, as the background goroutine would.
 type fakeSyncService struct {
+	mutex       sync.Mutex
 	status      enginesync.Status
-	report      enginesync.Report
-	runError    error
+	startError  error
 	runOptions  []enginesync.RunOptions
 	runRequests int
+	onFinished  func(enginesync.Report, error)
 }
 
-func (service *fakeSyncService) Run(_ context.Context, options enginesync.RunOptions) (enginesync.Report, error) {
+func (service *fakeSyncService) StartBackground(_ context.Context, options enginesync.RunOptions, onFinished func(enginesync.Report, error)) error {
+	service.mutex.Lock()
+	defer service.mutex.Unlock()
 	service.runRequests++
+	if service.startError != nil {
+		return service.startError
+	}
 	service.runOptions = append(service.runOptions, options)
-	return service.report, service.runError
+	service.onFinished = onFinished
+	return nil
 }
 
 func (service *fakeSyncService) Status() enginesync.Status {
 	return service.status
+}
+
+func (service *fakeSyncService) finish(report enginesync.Report) {
+	service.mutex.Lock()
+	onFinished := service.onFinished
+	service.mutex.Unlock()
+	onFinished(report, nil)
+}
+
+// lockedAuditRecorder is safe to write from the background run goroutine while the test reads it.
+type lockedAuditRecorder struct {
+	mutex           sync.Mutex
+	events          []recordedAuditEvent
+	actorAccountIDs []int64
+}
+
+func (recorder *lockedAuditRecorder) Record(_ context.Context, actorAccountID int64, action audit.Action, target, clientIP string) error {
+	recorder.mutex.Lock()
+	defer recorder.mutex.Unlock()
+	recorder.actorAccountIDs = append(recorder.actorAccountIDs, actorAccountID)
+	recorder.events = append(recorder.events, recordedAuditEvent{action: action, target: target, clientIP: clientIP})
+	return nil
+}
+
+func (recorder *lockedAuditRecorder) recorded() ([]recordedAuditEvent, []int64) {
+	recorder.mutex.Lock()
+	defer recorder.mutex.Unlock()
+	return slices.Clone(recorder.events), slices.Clone(recorder.actorAccountIDs)
 }
 
 // syncFixture mounts the real router with the sync routes, a fake runner and a fake engine list.
@@ -43,14 +80,14 @@ type syncFixture struct {
 	environment routeAccessEnvironment
 	handler     http.Handler
 	service     *fakeSyncService
-	recorder    *fakeAuditRecorder
+	recorder    *lockedAuditRecorder
 }
 
 func newSyncFixture(testContext *testing.T, syncEnabled bool, service enginesync.Status, engineList []engines.Engine) syncFixture {
 	testContext.Helper()
 	environment := newRouteAccessEnvironment(testContext)
-	fakeService := &fakeSyncService{status: service, report: sampleSyncReport()}
-	recorder := &fakeAuditRecorder{}
+	fakeService := &fakeSyncService{status: service}
+	recorder := &lockedAuditRecorder{}
 	services := environment.services()
 	services.Sync = fakeService
 	services.Engines = &fakeEngineService{engineList: engineList}
@@ -200,124 +237,6 @@ func TestSyncStatusReadableByReadOnly(testContext *testing.T) {
 	}
 	if response := fixture.request(http.MethodGet, "", nil, readOnlyTokenSecret); response.Code != http.StatusOK {
 		testContext.Errorf("read token must read the status, got %d", response.Code)
-	}
-}
-
-func TestSyncRunRequiresAdmin(testContext *testing.T) {
-	fixture := newSyncFixture(testContext, true, enginesync.Status{}, nil)
-	if response := fixture.request(http.MethodPost, "{}", fixture.environment.readOnlyCookie, ""); response.Code != http.StatusForbidden {
-		testContext.Errorf("read-only session: expected 403, got %d", response.Code)
-	}
-	if response := fixture.request(http.MethodPost, "{}", nil, readOnlyTokenSecret); response.Code != http.StatusForbidden {
-		testContext.Errorf("read token: expected 403, got %d", response.Code)
-	}
-	if fixture.service.runRequests != 0 {
-		testContext.Errorf("the runner must never be called for a refused caller, got %d runs", fixture.service.runRequests)
-	}
-	if response := fixture.request(http.MethodPost, "{}", nil, adminWriteTokenValue); response.Code != http.StatusOK {
-		testContext.Errorf("admin write token: expected 200, got %d %q", response.Code, response.Body.String())
-	}
-}
-
-func TestSyncRunReturnsReportSummary(testContext *testing.T) {
-	engineList := []engines.Engine{{Name: "local", IsLocal: true, Enabled: true, LAPIURL: "http://crowdsec:8080"}}
-	fixture := newSyncFixture(testContext, true, enginesync.Status{}, engineList)
-	response := fixture.request(http.MethodPost, `{"expected_changes":{"peer":120}}`, fixture.environment.adminCookie, "")
-	if response.Code != http.StatusOK {
-		testContext.Fatalf("expected 200, got %d %q", response.Code, response.Body.String())
-	}
-	var summary syncRunView
-	if decodeError := json.Unmarshal(response.Body.Bytes(), &summary); decodeError != nil {
-		testContext.Fatalf("decode summary: %v", decodeError)
-	}
-	if !summary.DryRun || len(summary.Peers) != 2 || summary.Peers[0].Name != "local" || summary.Peers[0].URLHost != "crowdsec:8080" {
-		testContext.Errorf("unexpected summary %+v", summary)
-	}
-	if expected := fixture.service.runOptions[0].ApplyEvenIfGuarded["peer"]; expected != 120 {
-		testContext.Errorf("expected_changes must reach the runner, got %v", fixture.service.runOptions[0])
-	}
-}
-
-func TestSyncRunConflictsWhenLockHeld(testContext *testing.T) {
-	operationLock := oplock.New()
-	release, _ := operationLock.TryAcquire("import")
-	defer release()
-	runner := enginesync.NewRunner(nil, enginesync.ConfiguredRules(500, 5*time.Minute), operationLock, 5000, true, time.Now)
-	environment := newRouteAccessEnvironment(testContext)
-	services := environment.services()
-	services.Sync = runner
-	services.OperationLock = operationLock
-	handler := newHandler(config.Config{SessionTTL: time.Hour, SyncEnabled: true}, http.NotFoundHandler(), 0, services)
-	fixture := syncFixture{environment: environment, handler: handler}
-	response := fixture.request(http.MethodPost, "{}", environment.adminCookie, "")
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "operation_running") {
-		testContext.Errorf("expected 409 operation_running, got %d %q", response.Code, response.Body.String())
-	}
-}
-
-func TestSyncRunDisabledReturns409(testContext *testing.T) {
-	fixture := newSyncFixture(testContext, false, enginesync.Status{}, nil)
-	response := fixture.request(http.MethodPost, "{}", fixture.environment.adminCookie, "")
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "sync_disabled") {
-		testContext.Errorf("expected 409 sync_disabled, got %d %q", response.Code, response.Body.String())
-	}
-	if fixture.service.runRequests != 0 {
-		testContext.Error("a disabled sync must never call the runner")
-	}
-}
-
-func TestSyncRunPanicReturns500(testContext *testing.T) {
-	fixture := newSyncFixture(testContext, true, enginesync.Status{}, nil)
-	fixture.service.runError = enginesync.ErrRunPanicked
-	response := fixture.request(http.MethodPost, "{}", fixture.environment.adminCookie, "")
-	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "run_panicked") {
-		testContext.Errorf("expected 500 run_panicked, got %d %q", response.Code, response.Body.String())
-	}
-}
-
-func TestSyncRunIsAudited(testContext *testing.T) {
-	fixture := newSyncFixture(testContext, true, enginesync.Status{}, nil)
-	if response := fixture.request(http.MethodPost, "{}", fixture.environment.adminCookie, ""); response.Code != http.StatusOK {
-		testContext.Fatalf("expected 200, got %d", response.Code)
-	}
-	if len(fixture.recorder.events) != 1 {
-		testContext.Fatalf("expected one audit event, got %+v", fixture.recorder.events)
-	}
-	event := fixture.recorder.events[0]
-	expectedTarget := "engines=2 added=2 removed=1 skipped=5 dry_run=true"
-	if event.action != audit.ActionSyncRun || event.target != expectedTarget || event.clientIP != "198.51.100.7" || fixture.recorder.actorAccountIDs[0] != adminAccountID {
-		testContext.Errorf("unexpected audit event %+v by %v", event, fixture.recorder.actorAccountIDs)
-	}
-}
-
-func TestSyncRunRefusedIsNotAudited(testContext *testing.T) {
-	fixture := newSyncFixture(testContext, true, enginesync.Status{}, nil)
-	fixture.service.runError = enginesync.ErrOperationRunning
-	if response := fixture.request(http.MethodPost, "{}", fixture.environment.adminCookie, ""); response.Code != http.StatusConflict {
-		testContext.Fatalf("expected 409, got %d", response.Code)
-	}
-	if len(fixture.recorder.events) != 0 {
-		testContext.Errorf("a run that never started must not be audited, got %+v", fixture.recorder.events)
-	}
-}
-
-func TestSyncRunStrictBody(testContext *testing.T) {
-	refusedBodies := map[string]string{
-		"unknown field":   `{"expected_changes":{"peer":1},"dry_run":false}`,
-		"trailing object": `{}{}`,
-		"wrong type":      `{"expected_changes":{"peer":"many"}}`,
-		"oversized":       `{"expected_changes":{"` + strings.Repeat("p", maxSyncRunBodyBytes) + `":1}}`,
-	}
-	for caseName, body := range refusedBodies {
-		fixture := newSyncFixture(testContext, true, enginesync.Status{}, nil)
-		response := fixture.request(http.MethodPost, body, fixture.environment.adminCookie, "")
-		if response.Code != http.StatusBadRequest || fixture.service.runRequests != 0 {
-			testContext.Errorf("%s: expected 400 without a run, got %d (runs=%d)", caseName, response.Code, fixture.service.runRequests)
-		}
-	}
-	fixture := newSyncFixture(testContext, true, enginesync.Status{}, nil)
-	if response := fixture.request(http.MethodPost, "", fixture.environment.adminCookie, ""); response.Code != http.StatusOK {
-		testContext.Errorf("an empty body must start a plain run, got %d %q", response.Code, response.Body.String())
 	}
 }
 

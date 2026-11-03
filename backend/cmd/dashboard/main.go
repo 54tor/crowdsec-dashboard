@@ -107,6 +107,10 @@ func main() {
 	syncRunner := newSyncRunner(loadedConfig, engineRegistry, engineRepository, operationLock)
 	services.Sync = syncRunner
 
+	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopSignals()
+	services.LifecycleContext = signalContext
+
 	server := &http.Server{
 		Addr:              loadedConfig.ListenAddr,
 		Handler:           api.NewHandler(loadedConfig, webui.Handler(), services),
@@ -115,9 +119,6 @@ func main() {
 		WriteTimeout:      api.DefaultWriteTimeout,
 		IdleTimeout:       idleTimeout,
 	}
-
-	signalContext, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stopSignals()
 
 	collectorDone := make(chan struct{})
 	go func() {

@@ -5,7 +5,6 @@ import (
 
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
-	"crowdsec-dashboard/internal/enginesync"
 )
 
 func apiRoutes(loadedConfig config.Config, services Services, authenticationHandlers *authHandlers) []apiRoute {
@@ -143,6 +142,6 @@ func syncRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	handlers := newSyncHandlers(loadedConfig, services)
 	return []apiRoute{
 		{"GET /api/sync", accessAuthenticated, http.HandlerFunc(handlers.status)},
-		{"POST /api/sync/run", accessAdmin, extendWriteDeadline(enginesync.RunDeadline)(http.HandlerFunc(handlers.run))},
+		{"POST /api/sync/run", accessAdmin, http.HandlerFunc(handlers.run)},
 	}
 }

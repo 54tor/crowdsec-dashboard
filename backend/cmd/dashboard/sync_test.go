@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/enginesync"
 	"crowdsec-dashboard/internal/oplock"
@@ -38,6 +39,47 @@ func TestSyncBackoffDoublesUpToOneHour(testContext *testing.T) {
 	for attempt, expectedDelay := range expectedDelays {
 		if obtainedDelay := backoff(attempt); obtainedDelay != expectedDelay {
 			testContext.Errorf("attempt %d: expected %s, got %s", attempt, expectedDelay, obtainedDelay)
+		}
+	}
+}
+
+// countingAuditRecorder counts the scheduled-run audit rows and keeps the last target.
+type countingAuditRecorder struct {
+	recordCount int
+	lastTarget  string
+	lastAccount int64
+}
+
+func (recorder *countingAuditRecorder) Record(_ context.Context, accountID int64, _ audit.Action, target, _ string) error {
+	recorder.recordCount++
+	recorder.lastTarget = target
+	recorder.lastAccount = accountID
+	return nil
+}
+
+func TestScheduledNoOpRunIsNotAudited(testContext *testing.T) {
+	recorder := &countingAuditRecorder{}
+	noOpReport := enginesync.Report{PerEngine: map[string]*enginesync.EngineReport{
+		"local": {Status: enginesync.StatusOK, Skipped: map[string]int{"allowlisted": 4}},
+		"peer":  {Status: enginesync.StatusBlocked, BlockedReason: "target_guard", Skipped: map[string]int{}},
+	}}
+	auditScheduledRun(recorder, noOpReport)
+	if recorder.recordCount != 0 {
+		testContext.Errorf("a scheduled run with no change and no error must write no audit row, got %d", recorder.recordCount)
+	}
+}
+
+func TestScheduledRunWithChangesOrErrorsIsAudited(testContext *testing.T) {
+	auditedReports := map[string]enginesync.Report{
+		"planned or applied change": {PerEngine: map[string]*enginesync.EngineReport{"peer": {Added: 1}}},
+		"engine error":              {PerEngine: map[string]*enginesync.EngineReport{"peer": {ErrorCode: "engine_unreachable"}}},
+		"run-level error":           {ErrorCode: enginesync.ErrorCodeEngineAddressesUnknown, PerEngine: map[string]*enginesync.EngineReport{}},
+	}
+	for caseName, report := range auditedReports {
+		recorder := &countingAuditRecorder{}
+		auditScheduledRun(recorder, report)
+		if recorder.recordCount != 1 || recorder.lastAccount != 0 {
+			testContext.Errorf("%s: expected one audit row by account 0, got %d rows by %d", caseName, recorder.recordCount, recorder.lastAccount)
 		}
 	}
 }
