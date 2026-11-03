@@ -286,6 +286,39 @@ describe('hub page', () => {
     expect(await screen.findByText(en.hub.reloadRequired)).toBeInTheDocument()
   })
 
+  // Every removable kind can carry AppSec rules (a collection may bundle
+  // them): the dialog warns before the retyped name unlocks the removal.
+  it('warnsAboutTheAppSecAcquisitionBeforeEveryRemoval', async () => {
+    stubFetch(appSecRoutes())
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    for (const itemName of ['crowdsecurity/linux', 'crowdsecurity/vpatch-env-access', 'crowdsecurity/appsec-default']) {
+      await user.click(await screen.findByRole('button', { name: `Remove ${itemName}` }))
+      const removeDialog = await screen.findByRole('dialog')
+      expect(within(removeDialog).getByText(en.hub.removeAppSecWarning, { exact: false })).toBeInTheDocument()
+      const submitButton = within(removeDialog).getByRole('button', { name: en.hub.remove })
+      expect(submitButton).toBeDisabled()
+      await user.type(within(removeDialog).getByLabelText(`Type ${itemName} to confirm`), itemName)
+      expect(submitButton).toBeEnabled()
+      await user.click(within(removeDialog).getByRole('button', { name: en.dialog.cancel }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    }
+  })
+
+  it('translatesARemovalThatDidNotTakeEffect', async () => {
+    stubFetch(appSecRoutes({ 'DELETE /api/hub/appsec-rules/crowdsecurity/vpatch-env-access': { status: 409, body: { error: 'hub_item_still_installed' } } }))
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    await user.click(await screen.findByRole('button', { name: 'Remove crowdsecurity/vpatch-env-access' }))
+    const removeDialog = await screen.findByRole('dialog')
+    await user.type(within(removeDialog).getByLabelText('Type crowdsecurity/vpatch-env-access to confirm'), 'crowdsecurity/vpatch-env-access')
+    await user.click(within(removeDialog).getByRole('button', { name: en.hub.remove }))
+
+    expect(await within(removeDialog).findByText(en.errors.hub_item_still_installed)).toBeInTheDocument()
+  })
+
   it('installsAnAppSecConfigurationWithTheRightKind', async () => {
     const fetchMock = stubFetch(appSecRoutes({ 'POST /api/hub/appsec-configs': { status: 200, body: { status: 'installed' } } }))
     const user = userEvent.setup()

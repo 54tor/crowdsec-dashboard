@@ -17,6 +17,12 @@ const APPSEC_EVENT_KEYS = [
 
 type AppSecEventKey = (typeof APPSEC_EVENT_KEYS)[number]
 
+type AppSecLabelKey = Exclude<AppSecEventKey, 'target_fqdn'>
+
+function labelKeyOf(appSecKey: AppSecEventKey): AppSecLabelKey {
+  return appSecKey === 'target_fqdn' ? 'target_host' : appSecKey
+}
+
 function presentAppSecKeys(meta: Record<string, string>): AppSecEventKey[] {
   return APPSEC_EVENT_KEYS.filter((appSecKey) => Object.hasOwn(meta, appSecKey))
 }
@@ -27,7 +33,7 @@ function AppSecEventFields({ meta, presentKeys }: { meta: Record<string, string>
     <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-3 gap-y-1 rounded-lg border p-3 text-sm">
       {presentKeys.map((appSecKey) => (
         <div key={appSecKey} className="contents">
-          <dt className="font-medium">{t(`appsec.fields.${appSecKey}`)}</dt>
+          <dt className="font-medium">{t(`appsec.fields.${labelKeyOf(appSecKey)}`)}</dt>
           <dd className="max-h-24 overflow-y-auto">
             <UntrustedText value={meta[appSecKey]} />
           </dd>

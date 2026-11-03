@@ -70,6 +70,14 @@ describe('appsec summary', () => {
     expect(screen.queryByText('203.0.113.7')).toBeNull()
   })
 
+  // cscli names the target host target_host or target_fqdn depending on the
+  // source: both keys read under one label.
+  it('affiche target_host et target_fqdn sous le même libellé', () => {
+    render(<AppSecSummary events={[eventWithMeta({ target_host: 'a.example.com' }), eventWithMeta({ target_fqdn: 'b.example.com' })]} />)
+
+    expect(screen.getAllByText(en.appsec.fields.target_host)).toHaveLength(2)
+  })
+
   it('rendsNothingWithoutAnyAppSecKey', () => {
     const { container } = render(<AppSecSummary events={[eventWithMeta({ service: 'ssh' })]} />)
 

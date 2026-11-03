@@ -17,7 +17,7 @@ const KNOWN_ERROR_CODES = [
   'invalid_access_rule', 'prefix_too_broad', 'access_rule_exists', 'would_lock_out_current_client', 'geolocation_unavailable',
   'engine_exists', 'engine_deleting', 'engine_not_found', 'engine_local_readonly', 'invalid_engine', 'engine_secret_required', 'engine_unreachable', 'engine_auth_failed', 'engine_blocked_address', 'engine_secret_unreadable', 'archive_write_failed', 'registry_reload_failed',
   'allowlist_not_found', 'allowlist_exists', 'allowlist_entry_exists', 'allowlist_entry_not_found', 'allowlist_console_managed', 'allowlist_engine_readonly', 'allowlist_prefix_too_wide', 'invalid_allowlist', 'allowlist_write_failed',
-  'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'self_account', 'cannot_delete_own_account', 'network', 'unknown',
+  'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'hub_item_still_installed', 'self_account', 'cannot_delete_own_account', 'network', 'unknown',
 ]
 
 describe('i18n', () => {

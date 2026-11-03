@@ -33,7 +33,7 @@ export function HubTable({ items }: { items: HubItem[] }) {
               buttonLabel={t('hub.remove')}
               ariaLabel={t('hub.removeAria', { name: hubItem.name })}
               title={t('hub.removeTitle', { name: hubItem.name })}
-              description={t('hub.removeDescription', { name: hubItem.name })}
+              description={`${t('hub.removeDescription', { name: hubItem.name })} ${t('hub.removeAppSecWarning')}`}
               target={hubItem.name}
               request={(confirm) => removeHubItem(kind, hubItem.name, confirm)}
               invalidates={[HUB_QUERY_KEY]}
