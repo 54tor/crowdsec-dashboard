@@ -434,7 +434,7 @@ so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 
 ## Configuration files
 
-Only administrators can read configuration files, and only an allowlist is readable: `config.yaml`, `acquis.yaml`, `profiles.yaml`, `acquis.d/*.yaml|yml`
+Only administrators can read configuration files, and only an allowlist is readable: `config.yaml`, `acquis.yaml`, `profiles.yaml`, `acquis.d/*.yaml|yml`,
 `parsers/*/*whitelist*.yaml|yml` and `postoverflows/*/*whitelist*.yaml|yml`, each at most 256 KiB. Any file whose name contains
 `credentials` is refused, as is any path through a symlink. The mount is read-only; the only
 writable CrowdSec path is the optional, dedicated import directory ([Configuration import](#configuration-import)).

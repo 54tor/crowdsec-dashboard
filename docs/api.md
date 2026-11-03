@@ -276,7 +276,8 @@ Hub `{kind}` is `collections`, `appsec-rules` or `appsec-configs` (the commands 
 `appsec-configs` fails with 502 `cscli_failed`. A removal answers 409 `hub_item_still_installed`
 when the hub still lists the item as installed afterwards: `cscli` exits 0 without removing a rule
 or configuration that belongs to an installed collection; remove the collection instead (when the
-hub cannot be listed again, the removal is reported as done without that check). Hub
+hub cannot be listed again, the removal is reported as done without that check: only the
+verification fails open, the removal itself succeeded). Hub
 installs and removals are not audited ([security.md](security.md#audit-log)).
 
 Machine names match `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`; bouncer names also allow `@` after the first character (bouncers registered over TLS are named `name@<address>`); hub names allow one `/`.
@@ -373,6 +374,12 @@ The listing is:
   4 MiB (the listing is then empty) or held more than 10 000 entries in total (the entries beyond
   are not shown); the page shows a banner, and the manual ban and the sync refuse every target on
   that engine.
+- Over 4 MiB, deleting an allowlist and adding or removing an entry answer 502
+  `engine_unreachable` (the oversized read hides the allowlist); creating an allowlist still
+  proceeds. Shrink such a list with `cscli allowlists remove` on the engine host. Over 10 000
+  entries, every write proceeds with `refreshed:false`; a duplicate value beyond the cap is not
+  detected: `cscli` does nothing and exits 0, and the API still answers success with
+  `refreshed:false` and audits the write.
 - `expires_at` is null for an entry without expiry (CrowdSec stores it as
   `0001-01-01T00:00:00.000Z`); `expired` is computed against the dashboard clock at the time of the
   read. An expired entry is still listed (`expired:true`) and no longer protects its value.
@@ -411,11 +418,11 @@ that engine covered by any of its allowlists**, not only by the new value.
 | `allowlist_prefix_too_wide` | 400 | Range wider than /8 (IPv4) or /32 (IPv6) |
 | `forbidden` | 403 | A write by a `read_only` account or a `read` token |
 | `engine_not_found` | 404 | Unknown or disabled engine |
-| `allowlist_not_found`, `allowlist_entry_not_found` | 404 | No such allowlist or value on the engine (also any write to an existing allowlist when the LAPI answer was over 4 MiB) |
+| `allowlist_not_found`, `allowlist_entry_not_found` | 404 | No such allowlist or value on the engine |
 | `allowlist_exists`, `allowlist_entry_exists` | 409 | Name or value already present |
 | `allowlist_console_managed` | 409 | The allowlist is managed by the CrowdSec console: change it there |
 | `allowlist_engine_readonly` | 409 | Write on a remote engine |
-| `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address` | 502 | The allowlists could not be read: no answer, login refused, forbidden address. Any 404 on `/v1/allowlists` (a CrowdSec without allowlists, a wrong URL or a proxy) and an undecodable answer count as `engine_unreachable` |
+| `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address` | 502 | The allowlists could not be read: no answer, login refused, forbidden address. Any 404 on `/v1/allowlists` (a CrowdSec without allowlists, a wrong URL or a proxy) and an undecodable answer count as `engine_unreachable`, as does a delete or an entry write when the LAPI answer is over 4 MiB |
 | `allowlist_write_failed` | 502 | `cscli` failed or timed out, or the re-read does not show the change; the output of `cscli` is never returned |
 | `database_unavailable` | 503 | The engine table could not be read |
 
