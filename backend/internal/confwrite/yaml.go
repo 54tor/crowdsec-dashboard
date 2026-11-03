@@ -13,6 +13,8 @@ import (
 const (
 	sourceKey    = "source"
 	transformKey = "transform"
+	mergeKey     = "<<"
+	mergeTag     = "!!merge"
 )
 
 var allowedSources = []string{"file", "journalctl", "docker"}
@@ -29,7 +31,7 @@ func validateYAML(content []byte) error {
 		if decodeError != nil || usesAnchorsOrAliases(&document) {
 			return ErrInvalidYAML
 		}
-		if !declaresAllowedSource(&document) {
+		if usesMergeKeys(&document) || !declaresAllowedSource(&document) {
 			return ErrForbiddenSource
 		}
 		documentCount++
@@ -72,4 +74,16 @@ func declaresAllowedSource(document *yaml.Node) bool {
 		sourceCount++
 	}
 	return sourceCount == 1
+}
+
+func usesMergeKeys(node *yaml.Node) bool {
+	if node.Kind == yaml.MappingNode {
+		for keyIndex := 0; keyIndex < len(node.Content); keyIndex += 2 {
+			keyNode := node.Content[keyIndex]
+			if keyNode.Value == mergeKey || keyNode.Tag == mergeTag {
+				return true
+			}
+		}
+	}
+	return slices.ContainsFunc(node.Content, usesMergeKeys)
 }

@@ -36,6 +36,11 @@ func TestOnlyFileJournalctlAndDockerSourcesAreAccepted(testContext *testing.T) {
 		"second document":   "source: file\nfilenames: [/var/log/a.log]\nlabels: {type: syslog}\n---\nsource: http\nlisten_addr: 0.0.0.0:8080\n",
 		"empty document":    "source: file\nfilenames: [/var/log/a.log]\n---\n",
 		"not a mapping":     "- source: file\n",
+		"merged transform":  "source: file\nfilenames: [/var/log/a.log]\n<<: {transform: 'evt.Line.Raw'}\n",
+		"merged list":       "source: file\nfilenames: [/var/log/a.log]\n<<: [{transform: 'evt.Line.Raw'}]\n",
+		"merge-only source": "<<: {source: file}\nfilenames: [/var/log/a.log]\n",
+		"tagged merge key":  "source: file\n!!merge x: {transform: 'evt.Line.Raw'}\n",
+		"nested merge":      "source: file\nlabels:\n  <<: {type: syslog}\n",
 	}
 	for caseName, content := range refusedContents {
 		if validationError := ValidateContent([]byte(content)); !errors.Is(validationError, ErrForbiddenSource) {
