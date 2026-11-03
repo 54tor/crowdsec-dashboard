@@ -163,6 +163,37 @@ describe('decision actions', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(en.errors.self_ban)
   })
 
+  it('le formulaire de ban traduit target_allowlisted et laisse le dialogue ouvert', async () => {
+    stubFetch(decisionRoutes({ 'POST /api/decisions': { status: 409, body: { error: 'target_allowlisted' } } }))
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    const dialog = await openBanDialog(user)
+    await user.type(within(dialog).getByLabelText(en.ban.ip), '203.0.113.9')
+    await user.click(within(dialog).getByRole('button', { name: en.ban.submit }))
+
+    const alertText = await within(dialog).findByRole('alert')
+    expect(alertText).toHaveTextContent(en.errors.target_allowlisted)
+    expect(alertText).not.toHaveTextContent(en.errors.unknown)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(en.ban.ip)).toHaveValue('203.0.113.9')
+  })
+
+  it('le formulaire de ban traduit allowlist_unavailable', async () => {
+    stubFetch(decisionRoutes({ 'POST /api/decisions': { status: 503, body: { error: 'allowlist_unavailable' } } }))
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    const dialog = await openBanDialog(user)
+    await user.type(within(dialog).getByLabelText(en.ban.ip), '203.0.113.9')
+    await user.click(within(dialog).getByRole('button', { name: en.ban.submit }))
+
+    const alertText = await within(dialog).findByRole('alert')
+    expect(alertText).toHaveTextContent(en.errors.allowlist_unavailable)
+    expect(alertText).not.toHaveTextContent(en.errors.unknown)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
   it('banDialogShowsApiErrorTranslated', async () => {
     stubFetch(decisionRoutes({ 'POST /api/decisions': { status: 400, body: { error: 'invalid_target' } } }))
     const user = userEvent.setup()

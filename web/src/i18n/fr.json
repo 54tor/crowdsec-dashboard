@@ -107,6 +107,8 @@
     "cscli_timeout": "La commande cscli a expiré.",
     "self_account": "Vous ne pouvez pas agir sur le compte du tableau de bord lui-même.",
     "self_ban": "Vous ne pouvez pas bannir l'adresse depuis laquelle vous êtes connecté. Demandez à un autre administrateur ou utilisez cscli sur l'hôte.",
+    "target_allowlisted": "Adresse dans une allowlist du moteur : retirez l'entrée avant de bannir",
+    "allowlist_unavailable": "Allowlists illisibles : ban refusé par sécurité",
     "network": "Erreur réseau. Vérifiez votre connexion.",
     "unknown": "Une erreur inattendue s'est produite.",
     "file_too_large": "Le fichier est trop volumineux pour être affiché.",

@@ -107,6 +107,8 @@
     "cscli_timeout": "The cscli command timed out.",
     "self_account": "You cannot act on the dashboard's own account.",
     "self_ban": "You cannot ban the address you are connected from. Ask another administrator or use cscli on the host.",
+    "target_allowlisted": "This address is in an engine allowlist: remove the entry before banning it.",
+    "allowlist_unavailable": "The allowlists could not be read: the ban was refused as a precaution.",
     "network": "Network error. Check your connection.",
     "unknown": "An unexpected error occurred.",
     "file_too_large": "The file is too large to display.",
