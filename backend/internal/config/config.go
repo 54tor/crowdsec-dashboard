@@ -57,6 +57,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, databaseURLError
 	}
 
+	lapiURL := getenv("LAPI_URL")
+	if lapiURL == "" {
+		return Config{}, errors.New("LAPI_URL is required")
+	}
+
 	secretsKeyFile := getenv("SECRETS_KEY_FILE")
 	if secretsKeyFile == "" {
 		return Config{}, errors.New("SECRETS_KEY_FILE is required")
@@ -104,7 +109,7 @@ func Load(getenv func(string) string) (Config, error) {
 		SecretsRetiredKeyFiles: parseFileList(getenv("SECRETS_RETIRED_KEY_FILES")),
 		GeoIPDatabaseFile:      getenv("GEOIP_DATABASE_FILE"),
 		SessionTTL:             sessionTTL,
-		LAPIURL:                getenv("LAPI_URL"),
+		LAPIURL:                lapiURL,
 		LAPIMachineID:          getenv("LAPI_MACHINE_ID"),
 		LAPIMachinePassword:    getenv("LAPI_MACHINE_PASSWORD"),
 		CrowdSecContainer:      getenv("CROWDSEC_CONTAINER"),

@@ -5,7 +5,10 @@ import (
 	"testing"
 )
 
-const validTestSecretsKeyFile = "/run/dashboard-secrets/key"
+const (
+	validTestSecretsKeyFile = "/run/dashboard-secrets/key"
+	validTestLAPIURL        = "http://crowdsec:8080"
+)
 
 func environmentFrom(variables map[string]string) func(string) string {
 	return func(name string) string {
@@ -14,6 +17,9 @@ func environmentFrom(variables map[string]string) func(string) string {
 		}
 		if name == "SECRETS_KEY_FILE" {
 			return validTestSecretsKeyFile
+		}
+		if name == "LAPI_URL" {
+			return validTestLAPIURL
 		}
 		return ""
 	}
@@ -37,6 +43,28 @@ func TestLoadRefusesMissingDatabaseURL(testContext *testing.T) {
 	}
 	if !strings.Contains(loadError.Error(), "DATABASE_URL") {
 		testContext.Errorf("error must name DATABASE_URL: %v", loadError)
+	}
+}
+
+func TestLoadRefusesMissingLAPIURL(testContext *testing.T) {
+	_, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL, "LAPI_URL": ""}))
+
+	if loadError == nil {
+		testContext.Fatal("expected an error when LAPI_URL is missing")
+	}
+	if !strings.Contains(loadError.Error(), "LAPI_URL") {
+		testContext.Errorf("error must name LAPI_URL: %v", loadError)
+	}
+}
+
+func TestLoadKeepsTheLAPIURL(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL}))
+
+	if loadError != nil {
+		testContext.Fatalf("unexpected error: %v", loadError)
+	}
+	if loadedConfig.LAPIURL != validTestLAPIURL {
+		testContext.Errorf("expected %q, got %q", validTestLAPIURL, loadedConfig.LAPIURL)
 	}
 }
 
