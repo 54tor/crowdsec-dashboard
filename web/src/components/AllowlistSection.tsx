@@ -14,7 +14,7 @@ interface AllowlistSectionProps {
   onWritten: (mutation: AllowlistMutation) => void
 }
 
-function AllowlistActions({ engineName, allowlist, onWritten }: Omit<AllowlistSectionProps, 'isWritable'>) {
+function AllowlistActions({ engineName, allowlist, onWritten, disabledReason }: Omit<AllowlistSectionProps, 'isWritable'> & { disabledReason?: string }) {
   const { t } = useTranslation()
 
   async function removeAllowlist(confirm: string) {
@@ -25,7 +25,7 @@ function AllowlistActions({ engineName, allowlist, onWritten }: Omit<AllowlistSe
 
   return (
     <div className="flex flex-wrap gap-2">
-      <AllowlistEntryDialog engineName={engineName} allowlistName={allowlist.name} onWritten={onWritten} />
+      <AllowlistEntryDialog engineName={engineName} allowlistName={allowlist.name} onWritten={onWritten} disabledReason={disabledReason} />
       <RowDeleteAction
         buttonLabel={t('allowlists.delete')}
         ariaLabel={t('allowlists.deleteLabel', { name: allowlist.name })}
@@ -34,6 +34,7 @@ function AllowlistActions({ engineName, allowlist, onWritten }: Omit<AllowlistSe
         target={allowlist.name}
         request={removeAllowlist}
         invalidates={[]}
+        disabledReason={disabledReason}
       />
     </div>
   )
@@ -41,6 +42,7 @@ function AllowlistActions({ engineName, allowlist, onWritten }: Omit<AllowlistSe
 
 export function AllowlistSection({ engineName, allowlist, isWritable, onWritten }: AllowlistSectionProps) {
   const { t } = useTranslation()
+  const disabledReason = allowlist.console_managed ? t('errors.allowlist_console_managed') : undefined
   return (
     <section className="space-y-3 rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -55,9 +57,9 @@ export function AllowlistSection({ engineName, allowlist, isWritable, onWritten 
             <UntrustedText value={allowlist.description} />
           </p>
         </div>
-        {isWritable && <AllowlistActions engineName={engineName} allowlist={allowlist} onWritten={onWritten} />}
+        {isWritable && <AllowlistActions engineName={engineName} allowlist={allowlist} onWritten={onWritten} disabledReason={disabledReason} />}
       </div>
-      <AllowlistEntriesTable engineName={engineName} allowlistName={allowlist.name} entries={allowlist.entries} isWritable={isWritable} onWritten={onWritten} />
+      <AllowlistEntriesTable engineName={engineName} allowlistName={allowlist.name} entries={allowlist.entries} isWritable={isWritable} onWritten={onWritten} disabledReason={disabledReason} />
     </section>
   )
 }

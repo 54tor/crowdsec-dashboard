@@ -17,6 +17,7 @@ interface AllowlistEntriesTableProps {
   entries: AllowlistEntry[]
   isWritable: boolean
   onWritten: (mutation: AllowlistMutation) => void
+  disabledReason?: string
 }
 
 function EntryExpiry({ entry }: { entry: AllowlistEntry }) {
@@ -32,7 +33,7 @@ function EntryExpiry({ entry }: { entry: AllowlistEntry }) {
   )
 }
 
-function EntryRemoveAction({ engineName, allowlistName, entry, onWritten }: Omit<AllowlistEntriesTableProps, 'entries' | 'isWritable'> & { entry: AllowlistEntry }) {
+function EntryRemoveAction({ engineName, allowlistName, entry, onWritten, disabledReason }: Omit<AllowlistEntriesTableProps, 'entries' | 'isWritable'> & { entry: AllowlistEntry }) {
   const { t } = useTranslation()
 
   async function removeEntry(confirm: string) {
@@ -50,13 +51,14 @@ function EntryRemoveAction({ engineName, allowlistName, entry, onWritten }: Omit
       target={entry.value}
       request={removeEntry}
       invalidates={[]}
+      disabledReason={disabledReason}
     />
   )
 }
 
 function useEntryColumns(props: Omit<AllowlistEntriesTableProps, 'entries'>): DataTableColumn<AllowlistEntry>[] {
   const { t, i18n } = useTranslation()
-  const { engineName, allowlistName, isWritable, onWritten } = props
+  const { engineName, allowlistName, isWritable, onWritten, disabledReason } = props
   return useMemo(() => {
     const columns: DataTableColumn<AllowlistEntry>[] = [
       { key: 'value', header: t('allowlists.columns.value'), cell: (entry) => <UntrustedText value={entry.value} /> },
@@ -68,11 +70,11 @@ function useEntryColumns(props: Omit<AllowlistEntriesTableProps, 'entries'>): Da
       columns.push({
         key: 'actions',
         header: t('allowlists.columns.actions'),
-        cell: (entry) => <EntryRemoveAction engineName={engineName} allowlistName={allowlistName} entry={entry} onWritten={onWritten} />,
+        cell: (entry) => <EntryRemoveAction engineName={engineName} allowlistName={allowlistName} entry={entry} onWritten={onWritten} disabledReason={disabledReason} />,
       })
     }
     return columns
-  }, [t, i18n.language, engineName, allowlistName, isWritable, onWritten])
+  }, [t, i18n.language, engineName, allowlistName, isWritable, onWritten, disabledReason])
 }
 
 export function AllowlistEntriesTable({ entries, ...columnProps }: AllowlistEntriesTableProps) {

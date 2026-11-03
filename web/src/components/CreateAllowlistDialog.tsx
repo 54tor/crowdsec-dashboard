@@ -9,7 +9,7 @@ import { PendingLockDialog } from '@/components/PendingLockDialog'
 import { Button } from '@/components/ui/button'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePendingReport } from '@/hooks/usePendingReport'
-import { isValidAllowlistName } from '@/lib/allowlistValue'
+import { allowlistTextError, isValidAllowlistName } from '@/lib/allowlistValue'
 
 interface CreateAllowlistDialogProps {
   engineName: string
@@ -29,7 +29,8 @@ function CreateAllowlistForm({ engineName, onWritten, onClose, reportPending }: 
   usePendingReport(creation.isPending, reportPending)
 
   const isNameInvalid = name !== '' && !isValidAllowlistName(name)
-  const isValid = isValidAllowlistName(name) && description.trim() !== ''
+  const descriptionError = allowlistTextError(description)
+  const isValid = isValidAllowlistName(name) && description.trim() !== '' && descriptionError === null
 
   function submit(submitEvent: FormEvent) {
     submitEvent.preventDefault()
@@ -57,6 +58,7 @@ function CreateAllowlistForm({ engineName, onWritten, onClose, reportPending }: 
         label={t('allowlists.description')}
         value={description}
         onChange={(changeEvent) => setDescription(changeEvent.target.value)}
+        error={descriptionError && t(`allowlists.${descriptionError}`)}
       />
       {creation.isError && <ErrorNotice error={creation.error} />}
       <DialogFooter>

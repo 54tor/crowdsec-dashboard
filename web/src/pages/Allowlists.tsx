@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { allowlistsQueryKey, listAllowlists } from '@/api/allowlistsApi'
 import type { AllowlistListing, AllowlistMutation } from '@/api/types'
@@ -18,7 +18,6 @@ const DEFAULT_ENGINE_NAME = 'local'
 const CONFIG_PATH = '/config'
 
 function ConfigPageNote() {
-  const { t } = useTranslation()
   const { accountRole } = useAuth()
   const canOpenConfig = visibleNavItems(accountRole).some((navItem) => navItem.path === CONFIG_PATH)
   if (!canOpenConfig) {
@@ -26,12 +25,13 @@ function ConfigPageNote() {
   }
   return (
     <p className="text-sm text-muted-foreground">
-      {t('allowlists.configNote')}{' '}
-      <Link to={CONFIG_PATH} className="underline underline-offset-4">
-        {t('allowlists.configLink')}
-      </Link>
+      <Trans i18nKey="allowlists.configNote" components={{ configLink: <Link to={CONFIG_PATH} className="underline underline-offset-4" /> }} />
     </p>
   )
+}
+
+function listingOf(mutation: AllowlistMutation): AllowlistListing {
+  return { engine: mutation.engine, writable: mutation.writable, truncated: mutation.truncated, allowlists: mutation.allowlists }
 }
 
 interface AllowlistListingViewProps {
@@ -65,6 +65,10 @@ export function Allowlists() {
   const handleWritten = useCallback(
     (mutation: AllowlistMutation) => {
       setIsRefreshFailed(!mutation.refreshed)
+      if (mutation.refreshed) {
+        queryClient.setQueryData<AllowlistListing>(allowlistsQueryKey(engineName), listingOf(mutation))
+        return
+      }
       void queryClient.invalidateQueries({ queryKey: allowlistsQueryKey(engineName) })
     },
     [queryClient, engineName],

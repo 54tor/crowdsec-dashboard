@@ -9,7 +9,7 @@ import { PendingLockDialog } from '@/components/PendingLockDialog'
 import { Button } from '@/components/ui/button'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePendingReport } from '@/hooks/usePendingReport'
-import { isValidAllowlistExpiration, wideRangeConfirmationValue } from '@/lib/allowlistValue'
+import { allowlistTextError, isValidAllowlistExpiration, wideRangeConfirmationValue } from '@/lib/allowlistValue'
 
 const EXPIRATION_PRESETS = ['1h', '24h', '7d', '30d']
 
@@ -17,6 +17,10 @@ interface AllowlistEntryTarget {
   engineName: string
   allowlistName: string
   onWritten: (mutation: AllowlistMutation) => void
+}
+
+interface AllowlistEntryDialogProps extends AllowlistEntryTarget {
+  disabledReason?: string
 }
 
 interface AllowlistEntryFormProps extends AllowlistEntryTarget {
@@ -53,6 +57,7 @@ function ExpirationField({ expiration, onChange }: { expiration: string; onChang
 
 function WideRangeConfirmation({ expectedValue, typedValue, onChange }: { expectedValue: string; typedValue: string; onChange: (typedValue: string) => void }) {
   const { t } = useTranslation()
+  const isMismatch = typedValue.trim() !== '' && typedValue.trim() !== expectedValue
   return (
     <div className="space-y-2">
       <WarningNotice>{t('allowlists.wideRangeWarning')}</WarningNotice>
@@ -61,6 +66,7 @@ function WideRangeConfirmation({ expectedValue, typedValue, onChange }: { expect
         label={t('allowlists.wideRangeConfirm', { value: expectedValue })}
         value={typedValue}
         onChange={(changeEvent) => onChange(changeEvent.target.value)}
+        error={isMismatch ? t('allowlists.wideRangeMismatch') : null}
       />
     </div>
   )
@@ -86,9 +92,10 @@ function AllowlistEntryForm({ engineName, allowlistName, onWritten, onClose, rep
 
   const trimmedValue = value.trim()
   const expectedConfirmation = wideRangeConfirmationValue(trimmedValue)
-  const isConfirmed = expectedConfirmation === null || typedConfirmation === expectedConfirmation
+  const isConfirmed = expectedConfirmation === null || typedConfirmation.trim() === expectedConfirmation
   const isExpirationValid = expiration === '' || isValidAllowlistExpiration(expiration)
-  const isValid = trimmedValue !== '' && isConfirmed && isExpirationValid
+  const descriptionError = allowlistTextError(description)
+  const isValid = trimmedValue !== '' && isConfirmed && isExpirationValid && descriptionError === null
 
   function submit(submitEvent: FormEvent) {
     submitEvent.preventDefault()
@@ -113,6 +120,7 @@ function AllowlistEntryForm({ engineName, allowlistName, onWritten, onClose, rep
         label={t('allowlists.entryComment')}
         value={description}
         onChange={(changeEvent) => setDescription(changeEvent.target.value)}
+        error={descriptionError && t(`allowlists.${descriptionError}`)}
       />
       {addition.isError && <ErrorNotice error={addition.error} />}
       <DialogFooter>
@@ -127,7 +135,7 @@ function AllowlistEntryForm({ engineName, allowlistName, onWritten, onClose, rep
   )
 }
 
-export function AllowlistEntryDialog({ engineName, allowlistName, onWritten }: AllowlistEntryTarget) {
+export function AllowlistEntryDialog({ engineName, allowlistName, onWritten, disabledReason }: AllowlistEntryDialogProps) {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
 
@@ -141,7 +149,7 @@ export function AllowlistEntryDialog({ engineName, allowlistName, onWritten }: A
       open={isOpen}
       onOpenChange={setIsOpen}
       trigger={
-        <Button type="button" size="sm" aria-label={t('allowlists.addEntryLabel', { name: allowlistName })}>
+        <Button type="button" size="sm" aria-label={t('allowlists.addEntryLabel', { name: allowlistName })} disabled={disabledReason !== undefined} title={disabledReason}>
           {t('allowlists.addEntry')}
         </Button>
       }

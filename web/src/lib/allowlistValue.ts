@@ -5,6 +5,8 @@ const MIN_IPV4_CONFIRM_PREFIX_BITS = 24
 const MIN_IPV6_CONFIRM_PREFIX_BITS = 48
 const ALLOWLIST_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,31}$/
 const ALLOWLIST_EXPIRATION_PATTERN = /^[1-9][0-9]{0,3}[hd]$/
+const MAX_FREE_TEXT_BYTES = 256
+const FORBIDDEN_TEXT_CHARACTER_PATTERN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
 
 function canonicalPrefix(rawValue: string): { canonicalValue: string; prefixBits: number; isIpv4: boolean } | null {
   if (!rawValue.includes('/') || !ipaddr.isValidCIDR(rawValue)) {
@@ -31,6 +33,21 @@ export function wideRangeConfirmationValue(rawValue: string): string | null {
   }
   const minimumBits = prefix.isIpv4 ? MIN_IPV4_CONFIRM_PREFIX_BITS : MIN_IPV6_CONFIRM_PREFIX_BITS
   return prefix.prefixBits < minimumBits ? prefix.canonicalValue : null
+}
+
+export type AllowlistTextError = 'textTooLong' | 'textLeadingDash' | 'textInvalidCharacter'
+
+export function allowlistTextError(text: string): AllowlistTextError | null {
+  if (new TextEncoder().encode(text).length > MAX_FREE_TEXT_BYTES) {
+    return 'textTooLong'
+  }
+  if (text.startsWith('-')) {
+    return 'textLeadingDash'
+  }
+  if (FORBIDDEN_TEXT_CHARACTER_PATTERN.test(text)) {
+    return 'textInvalidCharacter'
+  }
+  return null
 }
 
 export function isValidAllowlistName(name: string): boolean {

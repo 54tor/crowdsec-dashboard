@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ENGINE_NAMES_QUERY_KEY, listEngineNames } from '@/api/enginesApi'
+import { ErrorNotice } from '@/components/Notice'
 import { Label } from '@/components/ui/label'
 
 interface AllowlistEngineSelectProps {
@@ -28,6 +29,7 @@ export function AllowlistEngineSelect({ value, onChange }: AllowlistEngineSelect
           </option>
         ))}
       </select>
+      {engineNamesQuery.error && <ErrorNotice error={engineNamesQuery.error} />}
     </div>
   )
 }

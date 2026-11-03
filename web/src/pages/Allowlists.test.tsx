@@ -82,6 +82,8 @@ function collectKeyPaths(node: unknown, prefix = ''): string[] {
   return Object.entries(node).flatMap(([childKey, childNode]) => collectKeyPaths(childNode, prefix ? `${prefix}.${childKey}` : childKey))
 }
 
+const CONFIG_LINK_TEXT = /<configLink>(.*)<\/configLink>/.exec(en.allowlists.configNote)![1]
+
 const ALLOWLIST_ERROR_CODES = [
   'allowlist_not_found',
   'allowlist_exists',
@@ -111,7 +113,7 @@ describe('allowlists page', () => {
     expect(await screen.findByRole('heading', { name: 'trusted' })).toBeInTheDocument()
     expect(screen.getByText('192.0.2.10')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: en.allowlists.create })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: en.allowlists.configLink })).toHaveAttribute('href', '/config')
+    expect(screen.getByRole('link', { name: CONFIG_LINK_TEXT })).toHaveAttribute('href', '/config')
 
     await user.selectOptions(await screen.findByLabelText(en.allowlists.engine), 'remote-one')
 
@@ -140,7 +142,7 @@ describe('allowlists page', () => {
     expect(screen.queryByRole('button', { name: en.allowlists.addEntryLabel.replace('{{name}}', 'trusted') })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.allowlists.deleteLabel.replace('{{name}}', 'trusted') })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: en.allowlists.removeEntryLabel.replace('{{value}}', '192.0.2.10') })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: en.allowlists.configLink })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: CONFIG_LINK_TEXT })).not.toBeInTheDocument()
   })
 
   it('affiche le bandeau lecture seule pour un moteur distant', async () => {
@@ -179,8 +181,10 @@ describe('allowlists page', () => {
     const confirmField = within(wideDialog).getByLabelText(en.allowlists.wideRangeConfirm.replace('{{value}}', '10.0.0.0/16'))
     await user.type(confirmField, '10.0.5.7/16')
     expect(submitButton).toBeDisabled()
+    expect(within(wideDialog).getByText(en.allowlists.wideRangeMismatch)).toBeInTheDocument()
     await user.clear(confirmField)
-    await user.type(confirmField, '10.0.0.0/16')
+    await user.type(confirmField, ' 10.0.0.0/16 ')
+    expect(within(wideDialog).queryByText(en.allowlists.wideRangeMismatch)).not.toBeInTheDocument()
     await user.click(within(wideDialog).getByRole('button', { name: '7d' }))
     await user.click(submitButton)
 
@@ -189,18 +193,15 @@ describe('allowlists page', () => {
   })
 
   it('traduit allowlist_prefix_too_wide et allowlist_console_managed', async () => {
-    const consoleAllowlist = makeAllowlist('console-list', [makeEntry({ value: '203.0.113.9' })], true)
+    // The listing is stale: it still says console_managed:false while the engine now refuses with 409.
     stubFetch(
       allowlistRoutes({
-        [`GET ${LOCAL_LISTING_URL}`]: makeListing('local', [TRUSTED_ALLOWLIST, consoleAllowlist]),
         [`POST ${TRUSTED_ENTRIES_URL}`]: { status: 400, body: { error: 'allowlist_prefix_too_wide' } },
-        'DELETE /api/engines/local/allowlists/console-list/entries': { status: 409, body: { error: 'allowlist_console_managed' } },
+        [`DELETE ${TRUSTED_ENTRIES_URL}`]: { status: 409, body: { error: 'allowlist_console_managed' } },
       }),
     )
     const user = userEvent.setup()
     renderApp('/allowlists')
-
-    expect(await screen.findByText(en.allowlists.consoleManaged)).toBeInTheDocument()
 
     const entryDialog = await openAddEntryDialog(user, 'trusted')
     await user.type(within(entryDialog).getByLabelText(en.allowlists.value), '10.0.0.0/4')
@@ -209,11 +210,64 @@ describe('allowlists page', () => {
     expect(await within(entryDialog).findByText(en.errors.allowlist_prefix_too_wide)).toBeInTheDocument()
     await user.click(within(entryDialog).getByRole('button', { name: en.dialog.cancel }))
 
-    await user.click(screen.getByRole('button', { name: en.allowlists.removeEntryLabel.replace('{{value}}', '203.0.113.9') }))
+    await user.click(screen.getByRole('button', { name: en.allowlists.removeEntryLabel.replace('{{value}}', '192.0.2.10') }))
     const removeDialog = await screen.findByRole('dialog')
-    await user.type(within(removeDialog).getByLabelText(en.confirmDelete.label.replace('{{target}}', '203.0.113.9')), '203.0.113.9')
+    await user.type(within(removeDialog).getByLabelText(en.confirmDelete.label.replace('{{target}}', '192.0.2.10')), '192.0.2.10')
     await user.click(within(removeDialog).getByRole('button', { name: en.allowlists.removeEntry }))
     expect(await within(removeDialog).findByText(en.errors.allowlist_console_managed)).toBeInTheDocument()
+  })
+
+  it('désactive les actions d\'une allowlist gérée par la console', async () => {
+    const consoleAllowlist = makeAllowlist('console-list', [makeEntry({ value: '203.0.113.9' })], true)
+    stubFetch(allowlistRoutes({ [`GET ${LOCAL_LISTING_URL}`]: makeListing('local', [TRUSTED_ALLOWLIST, consoleAllowlist]) }))
+    renderApp('/allowlists')
+
+    expect(await screen.findByText(en.allowlists.consoleManaged)).toBeInTheDocument()
+    const consoleActions = [
+      screen.getByRole('button', { name: en.allowlists.addEntryLabel.replace('{{name}}', 'console-list') }),
+      screen.getByRole('button', { name: en.allowlists.deleteLabel.replace('{{name}}', 'console-list') }),
+      screen.getByRole('button', { name: en.allowlists.removeEntryLabel.replace('{{value}}', '203.0.113.9') }),
+    ]
+    for (const consoleAction of consoleActions) {
+      expect(consoleAction).toBeDisabled()
+      expect(consoleAction).toHaveAttribute('title', en.errors.allowlist_console_managed)
+    }
+    expect(screen.getByRole('button', { name: en.allowlists.addEntryLabel.replace('{{name}}', 'trusted') })).toBeEnabled()
+  })
+
+  it('réutilise la liste renvoyée par une écriture sans relire le moteur', async () => {
+    const updatedAllowlist = makeAllowlist('trusted', [makeEntry({ value: '192.0.2.10' }), makeEntry({ value: '192.0.2.55' })])
+    const fetchMock = stubFetch(
+      allowlistRoutes({
+        [`POST ${TRUSTED_ENTRIES_URL}`]: { status: 201, body: { engine: 'local', writable: true, truncated: false, allowlists: [updatedAllowlist], refreshed: true } },
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/allowlists')
+
+    const entryDialog = await openAddEntryDialog(user, 'trusted')
+    const listingReadsBeforeWrite = requestsTo(fetchMock, 'GET', LOCAL_LISTING_URL).length
+    await user.type(within(entryDialog).getByLabelText(en.allowlists.value), '192.0.2.55')
+    await user.click(within(entryDialog).getByRole('button', { name: en.allowlists.entrySubmit }))
+
+    expect(await screen.findByText('192.0.2.55')).toBeInTheDocument()
+    expect(requestsTo(fetchMock, 'GET', LOCAL_LISTING_URL)).toHaveLength(listingReadsBeforeWrite)
+    expect(screen.queryByText(en.allowlists.refreshFailed)).not.toBeInTheDocument()
+  })
+
+  it('refuse un commentaire qui commence par un tiret ou contient un saut de ligne', async () => {
+    const fetchMock = stubFetch(allowlistRoutes())
+    const user = userEvent.setup()
+    renderApp('/allowlists')
+
+    const entryDialog = await openAddEntryDialog(user, 'trusted')
+    await user.type(within(entryDialog).getByLabelText(en.allowlists.value), '192.0.2.60')
+    const commentField = within(entryDialog).getByLabelText(en.allowlists.entryComment)
+    await user.type(commentField, '-flag')
+
+    expect(within(entryDialog).getByText(en.allowlists.textLeadingDash)).toBeInTheDocument()
+    expect(within(entryDialog).getByRole('button', { name: en.allowlists.entrySubmit })).toBeDisabled()
+    expect(requestsTo(fetchMock, 'POST', TRUSTED_ENTRIES_URL)).toHaveLength(0)
   })
 
   it('marque les entrées expirées', async () => {

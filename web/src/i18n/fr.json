@@ -821,8 +821,7 @@
   "allowlists": {
     "title": "Listes d'autorisation",
     "intro": "Listes d'autorisation des moteurs : le moteur ignore les adresses et plages listées. Le ban manuel et la synchronisation refusent toute cible en liste d'autorisation.",
-    "configNote": "Les whitelists de parseurs du moteur local sont affichées en lecture seule sur la",
-    "configLink": "page Configuration",
+    "configNote": "Les whitelists de parseurs du moteur local sont affichées en lecture seule sur la <configLink>page Configuration</configLink>.",
     "engine": "Moteur",
     "readOnly": "Lecture seule : le tableau de bord n'écrit que les listes d'autorisation du moteur local, la LAPI d'un moteur distant ne permet pas de les écrire.",
     "truncated": "Plus de 10 000 entrées : ban manuel et synchronisation refusés sur ce moteur par sécurité.",
@@ -868,6 +867,10 @@
     "removeEntry": "Retirer",
     "removeEntryLabel": "Retirer {{value}}",
     "removeEntryTitle": "Retirer cette entrée",
-    "removeEntryDescription": "La valeur est retirée de la liste d'autorisation {{name}}."
+    "removeEntryDescription": "La valeur est retirée de la liste d'autorisation {{name}}.",
+    "textTooLong": "256 octets au plus.",
+    "textLeadingDash": "Ne doit pas commencer par un tiret.",
+    "textInvalidCharacter": "Les sauts de ligne, caractères de contrôle et caractères invisibles sont interdits.",
+    "wideRangeMismatch": "La valeur saisie ne correspond pas à la plage ci-dessus."
   }
 }
