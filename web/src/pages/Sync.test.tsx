@@ -123,6 +123,31 @@ describe('sync page', () => {
     expect(screen.getByText(en.sync.blocked.allowlist_unavailable)).toBeInTheDocument()
   })
 
+  it('keepsUnreachablePeersOutOfTheAllowlistBanner', async () => {
+    // A failed read is also reported as allowlist_unavailable by the runner; the error code is the real cause.
+    stubFetch(syncRoutes(makeStatus({
+      peers: [
+        makePeer({ name: 'edge-down', status: 'failed', blocked_reason: 'allowlist_unavailable', error_code: 'engine_unreachable' }),
+        makePeer({ name: 'edge-unreadable', status: 'blocked', blocked_reason: 'allowlist_unavailable' }),
+      ],
+    })))
+    renderApp('/sync')
+    const banner = (await screen.findByText(en.sync.allowlistUnavailable)).closest('[role="status"]') as HTMLElement
+    expect(within(banner).getByText('edge-unreadable', { selector: 'bdi' })).toBeInTheDocument()
+    expect(within(banner).queryByText('edge-down', { selector: 'bdi' })).not.toBeInTheDocument()
+    const unreachableRow = screen.getByText('edge-down', { selector: 'table bdi' }).closest('tr') as HTMLElement
+    expect(within(unreachableRow).getByText(en.sync.errorCodes.engine_unreachable)).toBeInTheDocument()
+  })
+
+  it('showsNoAllowlistBannerWhenOnlyUnreachablePeersReportIt', async () => {
+    stubFetch(syncRoutes(makeStatus({
+      peers: [makePeer({ status: 'failed', blocked_reason: 'allowlist_unavailable', error_code: 'engine_unreachable' })],
+    })))
+    renderApp('/sync')
+    await screen.findByText(en.sync.errorCodes.engine_unreachable)
+    expect(screen.queryByText(en.sync.allowlistUnavailable)).not.toBeInTheDocument()
+  })
+
   it('showsAGenericFallbackForUnknownCodes', async () => {
     stubFetch(syncRoutes(makeStatus({ peers: [makePeer({ error_code: 'brand_new_code' })] })))
     renderApp('/sync')

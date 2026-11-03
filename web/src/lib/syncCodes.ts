@@ -14,7 +14,8 @@ export function isGuardedPeer(peer: SyncPeer): boolean {
 }
 
 export function hasUnavailableAllowlist(peer: SyncPeer): boolean {
-  return splitBlockedReasons(peer.blocked_reason).includes(ALLOWLIST_UNAVAILABLE)
+  const failedForAnotherCause = peer.error_code !== ''
+  return !failedForAnotherCause && splitBlockedReasons(peer.blocked_reason).includes(ALLOWLIST_UNAVAILABLE)
 }
 
 export function translateSyncCode(t: TFunction, group: 'errorCodes' | 'blocked' | 'reasons' | 'kinds' | 'status', code: string): string {
