@@ -147,6 +147,24 @@ func TestClientRefusesHostnameResolvingToLoopback(t *testing.T) {
 	}
 }
 
+// A URL without a host (http://:PORT/) dials an address the guardian cannot parse:
+// it is refused before any connection and must be reported as a blocked address,
+// not as an unreachable engine.
+func TestClientClassifiesAnEmptyHostAsBlocked(testContext *testing.T) {
+	targetServer, requestCount := countingServer(testContext)
+	targetPort := targetServer.Listener.Addr().(*net.TCPAddr).Port
+	client := NewClient(Settings{Guardian: DefaultGuardian()})
+
+	_, requestError := getWithTimeout(testContext, client, "http://:"+strconv.Itoa(targetPort)+"/", 2*time.Second)
+
+	if !IsBlocked(requestError) {
+		testContext.Fatalf("expected blocked, got %v", requestError)
+	}
+	if requestCount.Load() != 0 {
+		testContext.Fatalf("target was reached %d times", requestCount.Load())
+	}
+}
+
 // Alternate spellings of 127.0.0.1 must never reach a loopback listener: either the
 // resolver turns them into 127.0.0.1 and the dial-time check refuses the resolved
 // address, or the resolver rejects them. The check runs on the address actually dialed,

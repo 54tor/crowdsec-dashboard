@@ -70,7 +70,8 @@ func IsBlocked(err error) bool {
 	return errors.Is(err, ErrBlockedAddress) ||
 		errors.Is(err, ssrf.ErrProhibitedIP) ||
 		errors.Is(err, ssrf.ErrProhibitedPort) ||
-		errors.Is(err, ssrf.ErrProhibitedNetwork)
+		errors.Is(err, ssrf.ErrProhibitedNetwork) ||
+		errors.Is(err, ssrf.ErrInvalidHostPort)
 }
 
 func CheckAddress(address netip.Addr) error {
