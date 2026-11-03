@@ -95,5 +95,8 @@ func Encode(exported Bundle) ([]byte, error) {
 	if len(encoded) > MaxBytes {
 		return nil, ErrTooLarge
 	}
+	if structureError := checkStructure(encoded); structureError != nil {
+		return nil, structureError
+	}
 	return encoded, nil
 }

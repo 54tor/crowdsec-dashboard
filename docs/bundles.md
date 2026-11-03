@@ -29,8 +29,11 @@ Each section is optional. A bundle is read strictly: the `format` must match, th
 nesting deeper than 32 levels is refused, nothing may follow the JSON object, and the bundle is at
 most 8 MiB (`bundle_invalid`, `bundle_too_large`). Before the content is decoded, its structure is
 counted: any array of more than 5000 elements, or more than 1 500 000 JSON values in all (object
-keys not counted), is refused with `bundle_too_large`. Any bundle produced by the export (at most
-8 MiB) stays within these bounds. A future version of the format gets a new `version` number.
+keys not counted), is refused with `bundle_too_large`. Any bundle produced by the export stays
+within these bounds: at most 8 MiB holds fewer than 1 500 000 values, and an alert with more than
+5000 decisions, events or meta entries in one event is skipped at export (counted in
+`X-Bundle-Skipped-Alerts`); the export also checks its own output against both bounds. A future
+version of the format gets a new `version` number.
 
 ## Export
 
@@ -54,9 +57,10 @@ keys not counted), is refused with `bundle_too_large`. Any bundle produced by th
   alert pushed by another machine is exported. When fewer than 1000 native alerts exist in that
   window, the export holds the ones found; older alerts are not exported. The export is refused
   with `bundle_too_large` only when the alert read exceeds 16 MiB or the encoded bundle exceeds
-  8 MiB. Events are included unless `strip_events` is true. Alerts the dashboard cannot decode are
-  skipped and counted in the `X-Bundle-Skipped-Alerts` response header (always present, `0` when
-  none).
+  8 MiB. Events are included unless `strip_events` is true. Alerts the dashboard cannot decode, and
+  alerts the import could not read back (more than 5000 decisions, events, or meta entries in one
+  event, counted after `strip_events`), are skipped and counted in the `X-Bundle-Skipped-Alerts`
+  response header (always present, `0` when none).
 - **config**: the files of the Config page allowlist (`acquis.yaml`, `acquis.d/*.yaml|yml`,
   `profiles.yaml`, `parsers/*/*whitelist*.yaml|yml`), never `config.yaml` nor a file whose name
   contains `credential`, `secret`, `password`, `token`, `apikey`, `api_key`, `.key` or `.pem`. The

@@ -97,15 +97,38 @@ func exportAlerts(ctx context.Context, deps ExportDeps, stripEvents bool) (*Aler
 		return nil, 0, ErrTooLarge
 	}
 	alerts := exportableAlerts(read.Alerts, deps.LocalMachineID)
-	if len(alerts) > MaxAlerts {
-		alerts = alerts[:MaxAlerts]
-	}
 	if stripEvents {
 		for alertIndex := range alerts {
 			alerts[alertIndex].Events = nil
 		}
 	}
-	return &AlertsSection{Alerts: alerts}, read.Skipped, nil
+	alerts, overCapCount := withinArrayCap(alerts)
+	if len(alerts) > MaxAlerts {
+		alerts = alerts[:MaxAlerts]
+	}
+	return &AlertsSection{Alerts: alerts}, read.Skipped + overCapCount, nil
+}
+
+func withinArrayCap(alerts []lapi.Alert) ([]lapi.Alert, int) {
+	keptAlerts := make([]lapi.Alert, 0, len(alerts))
+	for _, alert := range alerts {
+		if isWithinArrayCap(alert) {
+			keptAlerts = append(keptAlerts, alert)
+		}
+	}
+	return keptAlerts, len(alerts) - len(keptAlerts)
+}
+
+func isWithinArrayCap(alert lapi.Alert) bool {
+	if len(alert.Decisions) > MaxArrayLength || len(alert.Events) > MaxArrayLength {
+		return false
+	}
+	for _, event := range alert.Events {
+		if len(event.Meta) > MaxArrayLength {
+			return false
+		}
+	}
+	return true
 }
 
 func exportableAlerts(readAlerts []lapi.Alert, localMachineID string) []lapi.Alert {
