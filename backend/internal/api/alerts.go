@@ -57,7 +57,7 @@ func (handlers alertHandlers) remove(responseWriter http.ResponseWriter, request
 		writeUpstreamError(responseWriter, deleteError)
 		return
 	}
-	recordAlertDeletion(request, handlers.recorder, handlers.trustedCIDRs, engines.ReservedLocalName, upstreamID)
+	recordAlertDeletion(request, handlers.recorder, handlers.trustedCIDRs, alertAuditTarget(engines.ReservedLocalName, upstreamID))
 	response := map[string]any{"status": "deleted"}
 	if handlers.archiveReader != nil {
 		liveKey := archive.UpstreamKey{UpstreamID: upstreamID, UUID: liveAlert.UUID}
@@ -76,9 +76,12 @@ func (handlers alertHandlers) deleteArchivedCopy(requestContext context.Context,
 	return true
 }
 
-func recordAlertDeletion(request *http.Request, recorder audit.Recorder, trustedCIDRs []*net.IPNet, engineName string, upstreamID int64) {
+func alertAuditTarget(engineName string, upstreamID int64) string {
+	return engineName + "/" + strconv.FormatInt(upstreamID, 10)
+}
+
+func recordAlertDeletion(request *http.Request, recorder audit.Recorder, trustedCIDRs []*net.IPNet, target string) {
 	identity, _ := auth.IdentityFromContext(request.Context())
 	clientIP := auditClientIP(request, trustedCIDRs)
-	target := engineName + "/" + strconv.FormatInt(upstreamID, 10)
 	audit.RecordOrLog(context.WithoutCancel(request.Context()), recorder, identity.AccountID, audit.ActionAlertDeleted, target, clientIP)
 }
