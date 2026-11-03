@@ -45,6 +45,7 @@ func TestExecuteAppliesTheCommandTimeout(testContext *testing.T) {
 		"version":             DefaultTimeout,
 		"metrics":             DefaultTimeout,
 		"hub_list":            DefaultTimeout,
+		"config_test":         DefaultTimeout,
 		"hub_update":          HubMutationTimeout,
 		"hub_upgrade":         HubMutationTimeout,
 		"collections_install": HubMutationTimeout,

@@ -96,6 +96,7 @@ func buildCommands() map[string]Command {
 		{Name: "metrics", Build: fixed("cscli", "metrics", "-o", "json")},
 		{Name: "version", Build: fixed("cscli", "version")},
 		{Name: "reload", Build: fixed(reloadArgv...)},
+		{Name: "config_test", Build: fixed("crowdsec", "-t")},
 	}
 	byName := make(map[string]Command, len(definitions))
 	for _, definition := range definitions {

@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	redactedMarker = "[REDACTED]"
+	RedactedMarker = "[REDACTED]"
 	sensitiveNames = `password|passwd|token|secret|api_key|apikey|key|authorization|bearer|credential|dsn`
 )
 
@@ -39,13 +39,13 @@ func isMaskedContinuation(line string, blockIndent int) bool {
 }
 
 func redactLine(line string) (redacted string, blockIndent int) {
-	line = urlCredentialsPattern.ReplaceAllString(line, "${1}"+redactedMarker+"@")
-	line = bearerPattern.ReplaceAllString(line, "${1}"+redactedMarker)
+	line = urlCredentialsPattern.ReplaceAllString(line, "${1}"+RedactedMarker+"@")
+	line = bearerPattern.ReplaceAllString(line, "${1}"+RedactedMarker)
 	match := sensitiveLinePattern.FindStringSubmatch(line)
 	if match == nil {
-		return inlineEntryPattern.ReplaceAllString(line, "${1}"+redactedMarker), -1
+		return inlineEntryPattern.ReplaceAllString(line, "${1}"+RedactedMarker), -1
 	}
-	return strings.TrimRight(match[1], " \t") + " " + redactedMarker, keyIndent(match[1])
+	return strings.TrimRight(match[1], " \t") + " " + RedactedMarker, keyIndent(match[1])
 }
 
 func redactSecrets(content []byte) []byte {
@@ -64,4 +64,8 @@ func redactSecrets(content []byte) []byte {
 		blockIndent = openedBlock
 	}
 	return []byte(strings.Join(output, "\n"))
+}
+
+func Redact(content []byte) []byte {
+	return redactSecrets(content)
 }

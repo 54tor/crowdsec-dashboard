@@ -55,6 +55,7 @@ func TestExecuteBuildsExpectedArgv(t *testing.T) {
 		{"metrics", nil, []string{"cscli", "metrics", "-o", "json"}},
 		{"version", nil, []string{"cscli", "version"}},
 		{"reload", nil, []string{"kill", "-HUP", "1"}},
+		{"config_test", nil, []string{"crowdsec", "-t"}},
 	}
 	for _, testCase := range testCases {
 		runner := &recordingRunner{}
@@ -244,5 +245,20 @@ func TestBouncerNameAcceptsAtSignAfterFirstCharacter(t *testing.T) {
 
 	if err != nil || !reflect.DeepEqual(runner.receivedArgv, []string{"cscli", "bouncers", "delete", "cs-fw@203.0.113.7"}) {
 		t.Fatalf("unexpected result: %v %v", err, runner.receivedArgv)
+	}
+}
+
+func TestConfigTestRunsCrowdsecValidationAndFailsClosed(t *testing.T) {
+	passingRunner := &recordingRunner{}
+	if testError := ConfigTest(context.Background(), passingRunner); testError != nil {
+		t.Fatalf("unexpected error %v", testError)
+	}
+	if !reflect.DeepEqual(passingRunner.receivedArgv, []string{"crowdsec", "-t"}) {
+		t.Fatalf("config test argv must be exactly crowdsec -t, got %v", passingRunner.receivedArgv)
+	}
+	// Exit status 1 (invalid configuration) and a missing binary both surface as errors.
+	failingRunner := &recordingRunner{err: ErrCscliFailed}
+	if testError := ConfigTest(context.Background(), failingRunner); testError == nil {
+		t.Fatal("a failing crowdsec -t must return an error")
 	}
 }
