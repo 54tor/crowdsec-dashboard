@@ -190,7 +190,8 @@ the decisions that match an entry when you add it with `cscli allowlists add`.
   second one gets 409 `operation_running` (a scheduled tick refused this way is logged
   `sync_tick_skipped` and skipped).
 - **Audit.** Manual runs are always audited (`sync_run`, target
-  `dry_run=<bool> engines=<n> added=<n> removed=<n> skipped=<n>`). Scheduled runs are audited only
+  `[err=<code> ]dry_run=<bool> engines=<n> added=<n> removed=<n> skipped=<n>`, `err=` first and
+  only when the run ended with a run-level code). Scheduled runs are audited only
   when they planned or applied a change or ended with an error code (a backed-off peer alone does
   not count), so a quiet scheduler leaves no audit row; `last_run_at` on the Sync page shows it is
   alive.
@@ -203,7 +204,8 @@ Readable by every role; "Sync now" and the link to the Engines page are shown to
 only. It shows the dry-run and disabled banners, one row per participating engine (`url_host`, last
 run, status `never_run`/`ok`/`blocked`/`failed`, added, removed, skipped, skipped because
 allowlisted, blocked reason, error code) and the last plan (at most 100 rows: changes, then skips
-with their reason). Codes are listed in [Codes](#codes).
+with their reason). When the last run ended with a run-level code, a notice at the top shows it.
+Codes are listed in [Codes](#codes).
 
 ## Codes
 
@@ -217,12 +219,14 @@ Blocked reasons (`blocked_reason`, comma-separated when several apply):
 | `source_guard` | This engine as a source would cause more than `SYNC_MAX_CHANGES` changes: none of its bans are copied and its copies are kept. |
 | `allowlist_unavailable` | The engine's allowlists could not be read (or the engine could not be read at all): nothing written to it. |
 
-Error codes (`error_code` of an engine; the run-level ones are set on every engine):
+Error codes (`error_code` of an engine). A run-level code is also the top-level `error_code` of
+`GET /api/sync` (`""` when none) and is copied onto every engine row that has no code of its own:
 
 | Code | Meaning |
 |---|---|
 | `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address` | Read or write failed: no answer, machine login refused, forbidden address ([operations.md](operations.md#troubleshooting)). |
 | `engine_backoff` | Skipped by a scheduled run because of its failure backoff. |
+| `engine_unavailable` | A participating engine is missing from the dashboard's engine registry (for example its secret cannot be decrypted, or the registry is reloading): nothing is read from or written to it, and its copies on the other engines are **kept**. |
 | `sync_guard_tripped` | An override (`expected_changes`) was refused: the recomputed plan exceeds the expected count by more than 10 %. |
 | `engine_addresses_unknown` | Run level: an engine address could not be resolved; nothing was done. |
 | `run_deadline` | Run level: the 10 minute deadline expired; remaining writes were skipped. |
@@ -235,7 +239,7 @@ Skip reasons (last plan and counters):
 |---|---|
 | `covered` | The target is already covered on that engine by an active ban. |
 | `allowlisted` | The target overlaps an active allowlist entry of that engine. |
-| `allowlist_unavailable` | The allowlists were unreadable when the write was rechecked. |
+| `allowlist_unavailable` | The allowlists read at the start of the run were unavailable when the write was rechecked (the recheck uses that snapshot, it does not read the allowlists again). |
 | `origin`, `simulated`, `too_short`, `prefix_too_wide`, `private`, `engine_address`, `excluded` | The source ban is not shareable (see [Semantics](#semantics) and [Exclusions](#exclusions)). |
 | `invalid_target` | The target could not be judged by the allowlist filter. |
 | `not_a_copy` | A planned removal no longer designates a dashboard copy: nothing deleted. |

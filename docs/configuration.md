@@ -30,7 +30,7 @@ these files, which compose would otherwise expand.
 | `SYNC_ENABLED` | `false` | Turns on the scheduled engine synchronisation ([sync.md](sync.md)). Peers are the engines of the Engines page with "Use as a synchronisation peer" checked. |
 | `SYNC_INTERVAL` | `5m` | Delay between two scheduled synchronisation runs, a Go duration, at least `1m`. It is also the extension threshold: a copy is renewed when its source has more than this much time left beyond the copy (floored at 1 minute). |
 | `SYNC_DRY_RUN` | `true` | Compute and show the plan without writing anything. Set `false` once the plan looks right. |
-| `SYNC_MAX_CHANGES` | `500` | Circuit breaker: maximum additions plus removals per target engine, and per source engine, in one run, from 1 to 100000. Also caps the decisions of one bundle import (with 500). |
+| `SYNC_MAX_CHANGES` | `500` | Circuit breaker: maximum additions plus removals per target engine, and per source engine, in one run, from 1 to 100000. The decisions of one bundle import are capped at `min(500, SYNC_MAX_CHANGES)`. |
 | `SYNC_READ_LIMIT` | `5000` | Maximum number of alerts read per request from each engine, from 100 to 50000. A read that hits the limit is treated as incomplete. |
 | `SYNC_PEERS_FILE` | removed | Refused: when set, the dashboard does not start (`SYNC_PEERS_FILE is no longer supported: add sync peers on the Engines page`). Re-enter the peers on the Engines page ([sync.md](sync.md#peers-come-from-the-engine-table)). |
 | `SHARE_EXCLUDE_CIDRS` | empty | Comma-separated CIDRs that are never shared by the sync nor imported from a bundle, for example `203.0.113.0/24`. An invalid entry stops the start. |
@@ -159,7 +159,12 @@ CrowdSec configuration:
   `/var/lib/dashboard-acquis.d`);
 - mounted **read-only** in the CrowdSec container at its acquisition directory
   (`/etc/crowdsec/acquis.d`), so that CrowdSec, and `crowdsec -t`, read the same files. Move the
-  files you already have in `acquis.d` into it first.
+  files you already have in `acquis.d` into it first;
+- mounted **read-only** in the dashboard as well, at `<CROWDSEC_CONF_DIR>/acquis.d`
+  (`/etc/crowdsec/acquis.d` in the example). The Config page and the config export read the
+  acquisition files from `CROWDSEC_CONF_DIR`, that is from the CrowdSec configuration volume: once
+  the files are moved out of it into the dedicated directory, they disappear from both without this
+  mount.
 
 Never mount `/etc/crowdsec` (or the CrowdSec configuration volume) writable in the dashboard. The
 commented lines of `deploy/compose.example.yaml` show the setup; the threat model is in

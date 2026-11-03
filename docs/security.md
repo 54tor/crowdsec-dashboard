@@ -307,9 +307,9 @@ of control characters and cut at 64 characters. Recorded actions:
 | `account_created`, `account_role_changed`, `account_second_factor_reset`, `account_sessions_revoked`, `account_unlocked`, `account_deleted` | an administrator acted on an account | `account:<name>`; at creation `account:<name>:<role>`; role change `account:<name>:<previous role>-><new role>` |
 | `secrets_rotated` | `dashboard rotate-secrets` finished a real run (no account) | number of rows rewritten |
 | `retention_purged` | the hourly job removed or scrubbed something (no account) | counts: `ips=… audit=… sessions=… tokens=… archive=…` |
-| `sync_run` | a manual sync run finished, or a scheduled one planned or applied a change or ended with an error (no account) | `dry_run=<bool> engines=<n> added=<n> removed=<n> skipped=<n>` |
+| `sync_run` | a manual sync run finished, or a scheduled one planned or applied a change or ended with an error (no account) | `[err=<code> ]dry_run=<bool> engines=<n> added=<n> removed=<n> skipped=<n>` (`err=` only when the run ended with a run-level code) |
 | `bundle_exported` | a bundle was exported | `secrets=<bool> [skipped=<n>] [skipped_files=<n>] sections=<list>` |
-| `bundle_imported` | a bundle import was applied (previews are not audited) | `dry=false hub=<n> config=<n> decisions=<n> alerts=<n> skipped=<n> failed=<n>` |
+| `bundle_imported` | a bundle import was applied (previews are not audited) | `failed=<n> hub=<n> decisions=<n> alerts=<n> config=<n> skipped=<n>` |
 
 The client address is stored as plain text with an IPv4-mapped IPv6 address shown as IPv4 (empty when
 it cannot be parsed). Not audited: rate-limited requests, session creation and logout, bouncer,

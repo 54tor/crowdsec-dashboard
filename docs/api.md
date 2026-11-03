@@ -319,7 +319,7 @@ export and an import share one operation lock: a second one answers 409 `operati
 
 | Method | Path | Access | Body | Success response | Errors |
 |---|---|---|---|---|---|
-| GET | `/api/sync` | authenticated | none | `200 {"enabled","dry_run","interval_seconds","running","peers":[{name,url_host,last_run_at,status,added,removed,skipped,skipped_allowlisted,blocked_reason,error_code}],"last_plan":[{engine,kind,target,source,reason}]}` | 401, 503 `database_unavailable` |
+| GET | `/api/sync` | authenticated | none | `200 {"enabled","dry_run","interval_seconds","running","error_code","peers":[{name,url_host,last_run_at,status,added,removed,skipped,skipped_allowlisted,blocked_reason,error_code}],"last_plan":[{engine,kind,target,source,reason}]}` | 401, 503 `database_unavailable` |
 | POST | `/api/sync/run` | admin | none, `{}`, or `{"expected_changes":{"<engine>":<n>}}` (max 1 KiB, unknown fields refused) | `202 {"status":"started"}`: the run continues in the background; poll `GET /api/sync` | 400 `invalid_request`, 403 `forbidden`, 409 `sync_disabled`, 409 `operation_running` |
 | POST | `/api/export` | admin; with `include_secrets`, session only | `{"sections":[...],"include_secrets":false,"confirm_secrets":"SECRETS","strip_events":false}` (max 1 KiB, unknown fields refused); sections among `hub`, `decisions`, `alerts`, `config` | `200` the bundle, `Content-Disposition: attachment; filename="crowdsec-bundle-<UTC date>.json"`, `Cache-Control: no-store`, `X-Bundle-Skipped-Alerts: <n>` | 400 `invalid_request`, `confirmation_required`; 403 `forbidden`, `session_required`; 409 `operation_running`; 413 `bundle_too_large`; 502/504 upstream codes |
 | POST | `/api/import` | admin, session only | `{"mode":"preview"\|"apply","bundle":{...},"sections":[...],"confirm":"IMPORT","digest":"<from the preview>"}` (at most 8 MiB plus 64 KiB) | preview: `200` the plan `{sections,hub,decisions,alerts,config,skipped,skipped_counts,warnings,unavailable,unavailable_codes,digest}`, `Cache-Control: no-store`; apply: `200 {"digest","report":{"sections":[{section,status,applied,skipped,failed,skipped_reasons,error_code?,warnings?,affected_files?}]}}`, also when a section failed | 400 `invalid_request`, `bundle_invalid`, `bundle_version`, `confirmation_required`; 403 `forbidden`, `session_required`; 409 `import_conflict`, `section_unavailable`, `operation_running`; 413 `bundle_too_large`; 422 `too_many_changes`; 503 `operation_lock_unavailable`; 504 `import_timeout`; upstream codes |
@@ -327,7 +327,8 @@ export and an import share one operation lock: a second one answers 409 `operati
 - `GET /api/sync` lists, before the first run, the participating engines with status `never_run`
   and `last_run_at: null`; afterwards the engines of the last report. `url_host` is the host and
   port of the LAPI URL, never a path, credentials or the proxy. `last_plan` holds at most 100 rows:
-  changes (`kind` `add`, `remove`, `replace`) then skips (`reason`). Codes: [sync.md](sync.md#codes).
+  changes (`kind` `add`, `remove`, `replace`) then skips (`reason`). The top-level `error_code` is the
+  run-level code of the last run (`""` when none). Codes: [sync.md](sync.md#codes).
 - `expected_changes` asks to apply the pending changes of a guarded engine once; it is honoured
   only when the recomputed count is at most 110 % of the given one, otherwise that engine reports
   `sync_guard_tripped`. The page does not use it.

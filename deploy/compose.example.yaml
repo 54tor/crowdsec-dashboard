@@ -136,6 +136,10 @@ services:
       # can read the files it creates (mode 0640):
       #   install -d -o 10000 -g 10000 -m 0750 acquis.d
       # - ./acquis.d:/var/lib/dashboard-acquis.d
+      # Once the acquisition files live in ./acquis.d they are no longer in the crowdsec-config
+      # volume: mount the same directory read-only here too, or the Config page and the config
+      # export stop listing them.
+      # - ./acquis.d:/etc/crowdsec/acquis.d:ro
     read_only: true
     # /run must be exec and not world-writable for s6-overlay.
     tmpfs:

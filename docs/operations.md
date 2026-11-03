@@ -86,15 +86,16 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `engine_secret_unreadable` | engine status | The stored secret cannot be decrypted with the current secrets key (key changed or row restored from another installation): edit the engine and re-enter the secrets. The engine is left out of collection meanwhile. |
 | `archive_write_failed` | engine status | The archive write failed (database). The engine is retried with backoff. |
 | `cscli_timeout` | 504 | The command exceeded 30 s (120 s for hub operations). Retry; check the network of the CrowdSec container for hub calls. |
-| `operation_running` | 409 | A sync run, an export or an import is already in progress (one lock for the three). Wait for it; the Sync page shows a running run. |
-| `operation_lock_unavailable` | 503 | Import refused because no operation lock is wired (fail closed). A build or startup problem: report it. |
+| `operation_running` | 409 | A sync run, an export or an import is already in progress (one lock for the three; an import is refused before its body is read). Wait for it; the Sync page shows a running run. |
+| `operation_lock_unavailable` | 503 | Export or import refused because no operation lock is wired (fail closed). A build or startup problem: report it. |
 | `sync_disabled` | 409 | "Sync now" while `SYNC_ENABLED` is false. |
 | `sync_guard_tripped` | engine status | An `expected_changes` override was refused: the recomputed plan exceeds the expected count by more than 10 %. |
 | `engine_addresses_unknown` | engine status | The host of an enabled engine could not be resolved (or the engine table could not be listed): the whole run was skipped, nothing written. Fix or disable that engine ([Sync and bundles](#sync-and-bundles)). |
 | `engine_backoff` | engine status | The engine failed recently; scheduled runs skip it for a doubling delay (at most 1 h). "Sync now" still tries it. |
-| `run_deadline`, `canceled`, `run_panicked` | engine status | The run hit its 10 minute deadline, was stopped by a shutdown, or an internal error stopped it; the next run starts afresh. |
+| `run_deadline`, `canceled`, `run_panicked` | run, engine status | The run hit its 10 minute deadline, was stopped by a shutdown, or an internal error stopped it; the next run starts afresh. Shown in a notice at the top of the Sync page (`error_code` of `GET /api/sync`), copied onto every engine row without a code of its own, and first in the `sync_run` audit target (`err=<code>`). |
+| `engine_unavailable` | engine status | A participating engine is missing from the engine registry (secret unreadable, or a registry reload in progress): nothing is written to it and its copies on the other engines are kept. Fix the engine on the Engines page (see `engine_secret_unreadable`). |
 | `bundle_invalid`, `bundle_version` | 400 | The file is not a dashboard bundle of version 1, or holds unknown fields or sections, or is too deeply nested. |
-| `bundle_too_large` | 413 | Import over 8 MiB, over 5000 decisions or 1000 alerts; export over 5000 bans, an incomplete ban read, an alert read over 16 MiB or a bundle over 8 MiB. Export fewer sections. |
+| `bundle_too_large` | 413 | Import over 8 MiB, with an array of more than 5000 elements, more than 1 500 000 JSON values, over 5000 decisions or 1000 alerts; export over 5000 bans, an incomplete ban read, an alert read over 16 MiB or a bundle over 8 MiB. Export fewer sections. |
 | `import_conflict` | 409 | The local state changed since the preview (a ban, an allowlist entry, a file), or the preview was made before midnight UTC: run the preview again. |
 | `section_unavailable` | 409 | A selected section cannot be applied (see its code in the preview): deselect it or fix the cause. |
 | `too_many_changes` | 422 | More than 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions or 500 alerts to apply: split the bundle. |
@@ -107,6 +108,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `flush_limit`, `flush_config_unreadable`, `local_alerts_unreadable` | section | Alerts import refused: the import would push CrowdSec over 90 % of `flush.max_items`, that setting cannot be read, or the local alerts cannot be counted ([bundles.md](bundles.md#alerts)). |
 | `alert_import_side_effect`, `alert_import_side_effect_unverifiable`, `alert_import_cleanup_failed` | section | An imported alert produced a decision (deleted), could not be verified, or its cleanup failed: check `cscli decisions list` for that address. |
 | `allowlist_unavailable` | engine status, section | The allowlists of the engine could not be read (error, any 404, more than 10 000 entries): nothing is written to it. |
+| `local_bans_incomplete`, `dependency_missing` | section | Decisions import unavailable: the local bans could not be read completely, or a component of the decisions import is not wired (report it). `engine_addresses_unknown` and `allowlist_unavailable` can also make that section unavailable ([bundles.md](bundles.md#codes)). |
 
 Quick checks:
 
@@ -393,6 +395,9 @@ elsewhere are kept, so a blocked engine is safe; but it is not synchronised unti
 - `target_guard` or `source_guard`: too many changes at once. Read the last plan: a mass unban, a
   new engine with many bans (bootstrap: raise `SYNC_MAX_CHANGES` for one run, in dry run first), or
   a misbehaving engine (disable its sync on the Engines page). There is no override button.
+- `engine_unavailable`: the engine is missing from the dashboard's registry (its secret cannot be
+  decrypted, or a reload is in progress); its copies elsewhere are kept. Re-enter its secrets on the
+  Engines page if the Engines page shows `engine_secret_unreadable`.
 - `engine_addresses_unknown` on every engine: one engine host does not resolve (for example a
   stopped container). Bring it back, fix its URL, or disable it: a disabled engine does not block.
 - Copies left on an engine that left the sync expire by themselves; delete them earlier with
@@ -400,7 +405,11 @@ elsewhere are kept, so a blocked engine is safe; but it is not synchronised unti
 
 **Import step by step.** Export from the old engine, import on the new one: choose the sections,
 preview, read the skipped items and warnings, type `IMPORT`, apply, then reload CrowdSec for the
-hub and configuration sections (Hub page). An `import_conflict` only means "preview again".
+hub and configuration sections (Hub page). An `import_conflict` only means "preview again". The
+apply runs inside the request: keep the page open and give the reverse proxy a read timeout above
+10 minutes, or a proxy timeout cancels it mid-way (a replay is idempotent; see
+[bundles.md](bundles.md#known-limits)). Each apply is audited `bundle_imported`, target
+`failed=<n> hub=<n> decisions=<n> alerts=<n> config=<n> skipped=<n>`.
 
 ### Config import recovery
 

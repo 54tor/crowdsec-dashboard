@@ -27,8 +27,10 @@ installed hub collections, the active bans, the alerts and the configuration fil
 Each section is optional. A bundle is read strictly: the `format` must match, then the `version`
 (only `1`; another one answers `bundle_version`), unknown fields and unknown sections are refused,
 nesting deeper than 32 levels is refused, nothing may follow the JSON object, and the bundle is at
-most 8 MiB (`bundle_invalid`, `bundle_too_large`). A future version of the format gets a new
-`version` number.
+most 8 MiB (`bundle_invalid`, `bundle_too_large`). Before the content is decoded, its structure is
+counted: any array of more than 5000 elements, or more than 1 500 000 JSON values in all (object
+keys not counted), is refused with `bundle_too_large`. Any bundle produced by the export (at most
+8 MiB) stays within these bounds. A future version of the format gets a new `version` number.
 
 ## Export
 
@@ -77,7 +79,9 @@ Import is a preview, then an apply of exactly what was previewed. `POST /api/imp
 `{"mode": "preview"|"apply", "bundle": {...}, "sections": [...], "confirm": "IMPORT", "digest": "..."}`
 and is **admin and session only**: an API token gets 403 `session_required`, a `read_only` account
 403 `forbidden`. The body is at most 8 MiB plus 64 KiB of envelope. The requested sections must
-be present in the bundle. Previews and applies take the shared operation lock.
+be present in the bundle. Previews and applies take the shared operation lock **before** the body is
+read: while another operation runs, the answer is 409 `operation_running` and the bundle is not
+read at all.
 
 1. **Preview** returns the plan per section: collections to install, decisions to add, alerts to
    push, configuration files to create or update with a redacted diff, the skipped items with their
@@ -102,8 +106,8 @@ stops the import: later sections report `not_run`, earlier ones are not rolled b
 reports `applied`, `failed` (with an `error_code`), `not_run` or `section_unavailable`, with
 applied, skipped and failed counts. The answer is 200 even when a section failed. Replaying a
 bundle is idempotent: what is already there is skipped. Each apply is audited `bundle_imported`,
-target `dry=false hub=<n> config=<n> decisions=<n> alerts=<n> skipped=<n> failed=<n>` (counts only,
-never content).
+target `failed=<n> hub=<n> decisions=<n> alerts=<n> config=<n> skipped=<n>` (counts only, never
+content; `failed` comes first so that it survives the truncation of long targets).
 
 Limits per apply, beyond which the **whole** bundle is refused with 422 `too_many_changes` (no
 truncation; split the bundle): 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions, 500 alerts.
@@ -120,18 +124,23 @@ CrowdSec is not reloaded: use "Reload CrowdSec" on the Hub page afterwards.
 
 ### Decisions
 
-Each ban goes through, in order: type `ban` (`unsupported_type`), a valid target
-(`invalid_target`), not expired (`expired`), at most 9999 hours left (`too_long`), the sync sharing
+Each ban goes through, in order: a valid target, canonicalised (`invalid_target`), type `ban`
+(`unsupported_type`), not expired (`expired`), at most 9999 hours left (`too_long`), the sync sharing
 rules (`origin`, `too_short` under 5 minutes, `prefix_too_wide`, `private`, `engine_address` for any
 engine of the table, `excluded` for `SHARE_EXCLUDE_CIDRS`; see [sync.md](sync.md#exclusions)), the
 own-address guard (`own_address`: the target is, or contains, the address of the browser doing the
 import, as resolved for the login rate limiter), duplicates (`duplicate`: an active local ban, native
 or copy, or an earlier entry of the bundle, already covers the target with at least the same time
-left, give or take one minute), and the local allowlists (`allowlisted`).
+left, give or take one minute), and the local allowlists (`allowlisted`). The bans are planned in
+the order of their value, and for the same value the one with the most time left first: a bundle
+that holds the same target twice plans the longer ban, and the other one is `duplicate`. The
+grouping is on the value as written: `203.0.113.5` and `203.0.113.5/32` are not grouped, but the
+coverage check above still applies between them in planning order.
 
 The local state is read once per plan: the allowlists (fail closed: any error, any 404, more than
-10 000 entries makes the section unavailable), the local bans (an incomplete read makes it
-unavailable) and the addresses of every engine (a failed resolution makes it unavailable). Each
+10 000 entries makes the section unavailable, `allowlist_unavailable`), the local bans (an
+incomplete read or an error makes it unavailable, `local_bans_incomplete`) and the addresses of
+every engine (a failed resolution makes it unavailable, `engine_addresses_unknown`). Each
 written ban is checked against the allowlists again just before the write. A ban is written like a
 manual ban: origin `cscli`, scenario and reason `import/<UTC date>`, duration = `until` minus the
 time of the apply. It is then a native ban of the local engine, shared by the sync.
@@ -229,15 +238,15 @@ HTTP errors of `POST /api/export` and `POST /api/import`:
 | `invalid_request` | 400 | Malformed body, unknown field, unknown mode, empty, unknown or duplicate section, section absent from the bundle. |
 | `bundle_invalid` | 400 | The bundle cannot be decoded: wrong format, unknown field or section, too deep, trailing data. |
 | `bundle_version` | 400 | Unsupported bundle version. |
-| `bundle_too_large` | 413 | Import: body over 8 MiB, more than 5000 decisions or 1000 alerts. Export: more than 5000 bans or an incomplete ban read, alert read over 16 MiB, a config file over 256 KiB, or a bundle over 8 MiB. |
+| `bundle_too_large` | 413 | Import: body over 8 MiB, an array of more than 5000 elements, more than 1 500 000 JSON values, more than 5000 decisions or 1000 alerts. Export: more than 5000 bans or an incomplete ban read, alert read over 16 MiB, a config file over 256 KiB, or a bundle over 8 MiB. |
 | `confirmation_required` | 400 | Apply without `confirm: "IMPORT"`, or a secrets export without `confirm_secrets: "SECRETS"`. |
 | `session_required` | 403 | Import with an API token, or a secrets export with a token. |
 | `forbidden` | 403 | `read_only` account or `read` token. |
 | `import_conflict` | 409 | The plan changed since the preview (or no digest): run the preview again. |
 | `section_unavailable` | 409 | Apply with a requested section unavailable: nothing written. |
-| `operation_running` | 409 | A sync run, an export or an import is in progress. |
+| `operation_running` | 409 | A sync run, an export or an import is in progress (an import is refused before its body is read). |
 | `too_many_changes` | 422 | More than 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions or 500 alerts to apply. |
-| `operation_lock_unavailable` | 503 | Import only: no operation lock wired (fail closed). |
+| `operation_lock_unavailable` | 503 | No operation lock wired (fail closed). |
 | `import_timeout` | 504 | Preview over 45 s, or apply plan over 10 minutes. |
 | `lapi_unavailable`, `lapi_error`, `cscli_failed`, `cscli_timeout`, `not_found` | 4xx/5xx | Upstream errors, as elsewhere ([operations.md](operations.md#troubleshooting)). |
 
@@ -245,7 +254,11 @@ Unavailable sections (`unavailable`, with `unavailable_codes` when known):
 
 | Code | Section | Meaning |
 |---|---|---|
-| `section_unavailable` | any | A dependency is missing or its read failed (hub list, local bans, engine addresses, allowlists for decisions; import directory missing, not a directory, not writable, or no config test for config). |
+| `section_unavailable` | any | A dependency is missing or its read failed (hub list; import directory missing, not a directory, not writable, or no config test for config). |
+| `allowlist_unavailable` | decisions | The local allowlists are unreadable (fail closed). |
+| `engine_addresses_unknown` | decisions | The address of an engine of the table could not be resolved. |
+| `local_bans_incomplete` | decisions | The local bans could not be read, or not completely. |
+| `dependency_missing` | decisions | A component the decisions import needs is not wired in this server (a build problem: report it). |
 | `allowlist_unavailable` | alerts | The local allowlists are unreadable (fail closed). |
 | `flush_limit` | alerts | Stored plus imported alerts would exceed 90 % of `flush.max_items`. |
 | `flush_config_unreadable` | alerts | `config.yaml` or `config.yaml.local` unreadable, or `max_items` not a positive integer. |
@@ -257,7 +270,7 @@ Section `error_code` after an apply:
 
 | Code | Meaning |
 |---|---|
-| `apply_failed` | Generic failure (including a pending recovery or another I/O error). |
+| `apply_failed` | Generic failure: an I/O or other error that no more specific code describes. |
 | `import_timeout`, `canceled` | The apply deadline expired, or the request was cancelled. |
 | `lapi_unavailable`, `lapi_error`, `not_found`, `invalid_request`, `cscli_timeout`, `cscli_failed` | Upstream failure while writing. |
 | `alert_import_side_effect` | A pushed alert produced a decision: it was deleted and the section stopped. |
@@ -286,3 +299,18 @@ Skip reasons:
 | `unchanged` | config | Identical content, nothing written (apply report). |
 
 Warnings: `version_mismatch:<collection>`, `simulated_decision_may_remain`.
+
+## Known limits
+
+- **The apply runs inside the HTTP request.** A reverse proxy timeout or a closed browser cancels
+  it mid-way: the sections already applied stay, the current one stops (`canceled`) and later ones
+  do not run. Preview and apply again: a replay is idempotent, and configuration writes are
+  journalled and rolled back ([Crash recovery](#configuration)). Give the proxy a read timeout
+  above 10 minutes for large imports.
+- **The digest does not cover the message and events of the alerts.** Two bundles whose alerts
+  differ only there have the same plan.
+- **Hub versions are informative.** The preview shows the version of the bundle (and
+  `version_mismatch` for an installed one), but `cscli collections install` installs the current
+  version of the hub.
+- **Bans of origin `dashboard-sync` are never exported**, including the copies pushed by another
+  dashboard, although the sync of this dashboard reads them.
