@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"crowdsec-dashboard/internal/netparse"
@@ -57,7 +58,7 @@ func ValidateProxyURL(kind, rawURL string) error {
 		return errors.New("proxy kind must be socks5 or http")
 	}
 	parsedURL, parseError := url.Parse(rawURL)
-	if parseError != nil || parsedURL.Hostname() == "" || parsedURL.Port() == "" {
+	if parseError != nil || parsedURL.Hostname() == "" || !isUsablePort(parsedURL.Port()) {
 		return errors.New("proxy url must be an absolute URL with host and port")
 	}
 	if parsedURL.Scheme != expectedScheme {
@@ -70,6 +71,11 @@ func ValidateProxyURL(kind, rawURL string) error {
 		return errors.New("proxy url must not contain a path, query or fragment")
 	}
 	return nil
+}
+
+func isUsablePort(rawPort string) bool {
+	portNumber, parseError := strconv.Atoi(rawPort)
+	return parseError == nil && portNumber >= 1 && portNumber <= 65535
 }
 
 func parseValidatedURL(rawURL string) *url.URL {

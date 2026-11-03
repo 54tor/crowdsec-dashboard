@@ -67,6 +67,10 @@ func TestValidateProxyURLRejectsCredentialsPathAndWrongScheme(testContext *testi
 		{"socks5", "socks5://proxy.example.com:1080?x=1", false},
 		{"socks5", "socks5://proxy.example.com:1080#fragment", false},
 		{"ftp", "ftp://proxy.example.com:21", false},
+		{"socks5", "socks5://proxy.example.com:0", false},
+		{"http", "http://proxy.example.com:65536", false},
+		{"http", "http://proxy.example.com:99999", false},
+		{"http", "http://proxy.example.com:65535", true},
 	}
 	for _, testCase := range testCases {
 		proxyError := ValidateProxyURL(testCase.kind, testCase.rawURL)
