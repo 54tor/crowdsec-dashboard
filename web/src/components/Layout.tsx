@@ -1,8 +1,8 @@
-import { LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet } from 'react-router'
 import { useAuth } from '@/auth/useAuth'
+import { Icon } from '@/components/Icon'
 import { LanguageSwitch } from '@/components/LanguageSwitch'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -77,7 +77,7 @@ function LogoutButton({ onLogout }: { onLogout: () => Promise<void> }) {
   const { t } = useTranslation()
   return (
     <Button variant="outline" size="sm" onClick={() => void onLogout()}>
-      <LogOut aria-hidden="true" />
+      <Icon name="logout" className="size-3.5" />
       <span className="sr-only md:not-sr-only">{t('logout')}</span>
     </Button>
   )

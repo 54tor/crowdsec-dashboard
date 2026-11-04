@@ -1,6 +1,6 @@
-import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { updateHub, upgradeHub } from '@/api/writeApi'
+import { Icon } from '@/components/Icon'
 import { InstallHubItemDialog } from '@/components/InstallHubItemDialog'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ export function HubToolbar() {
   function labelOf(isPending: boolean, idleLabel: string) {
     return (
       <>
-        {isPending && <Loader2 aria-hidden="true" className="animate-spin" />}
+        {isPending && <Icon name="progress_activity" className="size-4 motion-safe:animate-spin" />}
         {isPending ? t('dialog.working') : idleLabel}
       </>
     )

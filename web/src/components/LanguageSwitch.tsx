@@ -1,5 +1,5 @@
-import { Languages } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Icon } from '@/components/Icon'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -16,7 +16,7 @@ export function LanguageSwitch() {
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" aria-label={t('language.label')}>
-          <Languages aria-hidden="true" />
+          <Icon name="translate" className="size-3.5" />
           {i18n.language.toUpperCase()}
         </Button>
       </DropdownMenuTrigger>

@@ -1,6 +1,6 @@
-import { Copy } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Icon } from '@/components/Icon'
 import { Button } from '@/components/ui/button'
 
 type CopyOutcome = 'idle' | 'copied' | 'failed'
@@ -24,7 +24,7 @@ export function SecretReveal({ label, secret }: { label: string; secret: string 
       <code className="block rounded-md border bg-muted p-2 text-sm break-all select-all">{secret}</code>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" variant="outline" size="sm" onClick={copySecret}>
-          <Copy aria-hidden="true" />
+          <Icon name="content_copy" className="size-3.5" />
           {t('secret.copy')}
         </Button>
         <p aria-live="polite" className="text-sm text-muted-foreground">
