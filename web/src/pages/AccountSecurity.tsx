@@ -15,9 +15,10 @@ export function AccountSecurity() {
   const heading = useRef<HTMLHeadingElement>(null)
   const { data, error, isPending } = useQuery({ queryKey: ACCESS_RULES_QUERY_KEY, queryFn: fetchAccessRules })
   const clientCountry = data?.client_country ? ` (${countryLabel(data.client_country, i18n.language)})` : ''
+  const hasRows = (data?.rules.length ?? 0) > 0
   return (
     <section className="space-y-4">
-      <PageHeader title={t('accountSecurity.title')} titleRef={heading} actions={<DensityToggle keepOnMobile />} />
+      <PageHeader title={t('accountSecurity.title')} titleRef={heading} actions={hasRows && <DensityToggle keepOnMobile />} />
       <InfoNotice>{t('accountSecurity.explanation')}</InfoNotice>
       <WarningNotice>{t('accountSecurity.geoNotice')}</WarningNotice>
       {error && <ErrorNotice error={error} />}

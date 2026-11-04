@@ -10,7 +10,7 @@ export function AlertRowActions({ alertRow }: { alertRow: Alert }) {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-nowrap items-center gap-1">
       {alertRow.archive_id !== null && <AlertDetailDialog archiveId={alertRow.archive_id} alertId={alertRow.id} engineName={alertRow.engine} />}
       {canWrite && isLiveLocalRow(alertRow) && (
         <RowDeleteAction
@@ -21,6 +21,7 @@ export function AlertRowActions({ alertRow }: { alertRow: Alert }) {
           target={String(alertRow.id)}
           request={(confirm) => deleteAlert(String(alertRow.id), alertRow.uuid ?? '', confirm)}
           invalidates={[['alerts'], ['decisions']]}
+          iconOnly
         />
       )}
     </div>

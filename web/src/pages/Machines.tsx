@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import type { Machine } from '@/api/types'
 import { createMachine, deleteMachine } from '@/api/writeApi'
 import { CreateSecretDialog } from '@/components/CreateSecretDialog'
-import { DensityToggle } from '@/components/DensityToggle'
 import { HealthPageSection } from '@/components/HealthPageSection'
 import { MachinesTable } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
@@ -64,17 +63,15 @@ export function Machines() {
     <HealthPageSection
       titleKey="machines.title"
       degradedPart="machines"
+      hasRows={(report) => report.machines.length > 0}
       toolbar={
-        <>
-          <DensityToggle />
-          <WriteOnly>
-            <CreateSecretDialog
-              triggerLabel={t('machines.add')}
-              labels={labels}
-              createSecret={async (name) => (await createMachine(name)).password}
-            />
-          </WriteOnly>
-        </>
+        <WriteOnly>
+          <CreateSecretDialog
+            triggerLabel={t('machines.add')}
+            labels={labels}
+            createSecret={async (name) => (await createMachine(name)).password}
+          />
+        </WriteOnly>
       }
     >
       {(report, now) => <MachinesTable machines={report.machines} now={now} actions={actions} cardsOnMobile />}

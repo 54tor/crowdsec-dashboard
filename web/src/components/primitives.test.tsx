@@ -211,6 +211,14 @@ describe('shared primitives', () => {
     expect(screen.getByText('Recent alerts')).toBeInTheDocument()
   })
 
+  // With a long description the actions wrapped under it at the left edge:
+  // they stay at the right like on every other page.
+  it('pageHeaderActionsStayAtTheRight', () => {
+    render(<PageHeader title="Allowlists" description="A long description" actions={<button type="button">Compact</button>} />)
+
+    expect(screen.getByRole('button', { name: 'Compact' }).parentElement).toHaveClass('ml-auto')
+  })
+
   it('emptyStateShowsMessage', () => {
     const { container } = render(<EmptyState message="Nothing to show" action={<button type="button">Reset</button>} />)
 

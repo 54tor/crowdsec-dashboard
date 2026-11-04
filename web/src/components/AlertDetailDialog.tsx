@@ -4,6 +4,7 @@ import { apiFetch } from '@/api/client'
 import type { AlertDetail, AlertEvent } from '@/api/types'
 import { AppSecSummary } from '@/components/AppSecSummary'
 import { EventMetaList } from '@/components/EventMetaList'
+import { Icon } from '@/components/Icon'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { UntrustedText } from '@/components/UntrustedText'
@@ -66,8 +67,8 @@ export function AlertDetailDialog({ archiveId, alertId, engineName }: AlertDetai
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" aria-label={t('alerts.detailsAria', { id: alertId, engine: engineName })}>
-          {t('alerts.details')}
+        <Button type="button" variant="outline" size="icon" aria-label={t('alerts.detailsAria', { id: alertId, engine: engineName })} title={t('alerts.details')}>
+          <Icon name="visibility" />
         </Button>
       </DialogTrigger>
       <DialogContent showCloseButton={false} className="sm:max-w-2xl">

@@ -38,6 +38,16 @@ describe('account security page', () => {
   beforeEach(prepareEnglishApp)
   afterEach(() => vi.unstubAllGlobals())
 
+  // The toggle used to sit above an empty state, where it changes nothing.
+  it('densityToggleOnlyAppearsWithRules', async () => {
+    stubFetch(accessRoutes(EMPTY_LIST))
+    renderApp('/account/security')
+
+    await screen.findByText(/203\.0\.113\.7/)
+
+    expect(screen.queryByRole('group', { name: en.list.density.label })).toBeNull()
+  })
+
   it('showsTheClientAddressAndTheRulesAsATable', async () => {
     stubFetch(accessRoutes(LIST_WITH_RULES))
     renderApp('/account/security')

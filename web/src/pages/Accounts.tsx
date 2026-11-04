@@ -13,13 +13,14 @@ export function Accounts() {
   const { t } = useTranslation()
   const { data, error, isPending } = useQuery({ queryKey: ACCOUNTS_QUERY_KEY, queryFn: listAccounts })
   const [actionFailure, setActionFailure] = useState<unknown>(null)
+  const hasRows = (data?.length ?? 0) > 0
   return (
     <section className="space-y-4">
       <PageHeader
         title={t('accounts.title')}
         actions={
           <>
-            <DensityToggle />
+            {hasRows && <DensityToggle />}
             <CreateAccountDialog />
           </>
         }

@@ -19,6 +19,7 @@ export function AccountRoleSelect({ id, label, value, onChange, disabledReason }
       value={value}
       disabled={disabledReason !== undefined}
       title={disabledReason}
+      labelHidden
       onChange={(chosenRole) => onChange(chosenRole as AccountRole)}
       options={ACCOUNT_ROLES.map((role) => ({ value: role, label: t(`accounts.roles.${role}`) }))}
     />

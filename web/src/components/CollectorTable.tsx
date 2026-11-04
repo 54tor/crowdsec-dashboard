@@ -21,17 +21,19 @@ export function CollectorTable({ engines, now }: { engines: EngineHealth[]; now:
   const { t, i18n } = useTranslation()
   const columns = useMemo<DataTableColumn<EngineHealth>[]>(
     () => [
-      { key: 'name', header: t('health.columns.name'), cell: (engine) => engine.engine_name },
-      { key: 'lastSuccess', header: t('health.collector.lastSuccess'), cell: (engine) => <LastSuccessCell engine={engine} now={now} /> },
+      { key: 'name', header: t('health.columns.name'), noWrap: true, cell: (engine) => engine.engine_name },
+      { key: 'lastSuccess', header: t('health.collector.lastSuccess'), noWrap: true, cell: (engine) => <LastSuccessCell engine={engine} now={now} /> },
       {
         key: 'lag',
         header: t('health.collector.lag'),
+        noWrap: true,
         cell: (engine) => (engine.lag_seconds === null ? '—' : formatDuration(engine.lag_seconds, i18n.language)),
       },
-      { key: 'errors', header: t('health.collector.errors'), cell: (engine) => formatNumber(engine.errors_total, i18n.language) },
+      { key: 'errors', header: t('health.collector.errors'), noWrap: true, cell: (engine) => formatNumber(engine.errors_total, i18n.language) },
       {
         key: 'status',
         header: t('health.columns.status'),
+        noWrap: true,
         cell: (engine) => <Badge variant={engine.stale ? 'warning' : 'nominal'}>{engine.stale ? t('health.collector.stale') : t('health.ok')}</Badge>,
       },
     ],

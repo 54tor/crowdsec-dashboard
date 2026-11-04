@@ -16,6 +16,7 @@ export interface DataTableColumn<Row> {
   className?: string
   mobile?: MobileColumnPlacement
   visibleFrom?: 'wide'
+  noWrap?: boolean
 }
 
 interface DataTableProps<Row> {
@@ -30,6 +31,23 @@ interface DataTableProps<Row> {
 const ROW_HEIGHT_BY_DENSITY: Record<TableDensity, string> = {
   comfortable: 'h-10',
   compact: 'h-8',
+}
+
+const CELL_PADDING_BY_DENSITY: Record<TableDensity, string> = {
+  comfortable: 'py-1.5',
+  compact: 'py-0.5',
+}
+
+const NO_WRAP_CELL_CLASSES = 'whitespace-nowrap [&_bdi]:whitespace-nowrap'
+
+function tableCellClass<Row>(column: DataTableColumn<Row>, density: TableDensity): string {
+  return cn(
+    'whitespace-normal break-words',
+    CELL_PADDING_BY_DENSITY[density],
+    column.noWrap && NO_WRAP_CELL_CLASSES,
+    column.className,
+    columnVisibilityClass(column),
+  )
 }
 
 function columnVisibilityClass<Row>(column: DataTableColumn<Row>): string | undefined {
@@ -68,7 +86,7 @@ export function DataTable<Row>({ caption, columns, rows, rowKey, cardsOnMobile =
           {rows.map((row) => (
             <TableRow key={rowKey(row)} className={ROW_HEIGHT_BY_DENSITY[density]}>
               {columns.map((column) => (
-                <TableCell key={column.key} className={cn('whitespace-normal break-words', column.className, columnVisibilityClass(column))}>
+                <TableCell key={column.key} className={tableCellClass(column, density)}>
                   {column.cell(row)}
                 </TableCell>
               ))}

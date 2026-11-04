@@ -52,7 +52,7 @@ describe('appsec summary', () => {
 
     const uriValue = screen.getByText(longUri)
     expect(uriValue.textContent).toHaveLength(4096)
-    expect(uriValue).toHaveClass('whitespace-pre-wrap', 'break-all')
+    expect(uriValue).toHaveClass('whitespace-pre-wrap', '[overflow-wrap:anywhere]')
     expect(uriValue.closest('dd')).toHaveClass('max-h-24', 'overflow-y-auto')
   })
 

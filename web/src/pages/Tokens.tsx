@@ -12,13 +12,14 @@ export function Tokens() {
   const { t } = useTranslation()
   const { data, error, isPending } = useQuery({ queryKey: TOKENS_QUERY_KEY, queryFn: listTokens })
   const activeTokens = data?.filter((token) => token.revoked_at === null)
+  const hasRows = (activeTokens?.length ?? 0) > 0
   return (
     <section className="space-y-4">
       <PageHeader
         title={t('tokens.title')}
         actions={
           <>
-            <DensityToggle />
+            {hasRows && <DensityToggle />}
             <CreateTokenDialog />
           </>
         }

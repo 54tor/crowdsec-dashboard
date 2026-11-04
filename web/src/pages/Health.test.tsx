@@ -58,6 +58,22 @@ describe('health page', () => {
     expect(within(freshRow).getByText(en.health.ok)).toBeInTheDocument()
   })
 
+  // On a phone these tables scroll in their region: names and statuses must
+  // not be squeezed to a few characters per line.
+  it('shortHealthColumnsDoNotWrap', async () => {
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      'GET /api/health': { status: 200, body: makeHealth({ machines: [machine('quiet-machine', '2020-01-01T00:00:00Z')] }) },
+    })
+    renderApp('/health')
+
+    const machineNameCell = (await screen.findByText('quiet-machine')).closest('td')
+    const machineStatusCell = within(machineNameCell?.parentElement as HTMLElement).getByText(en.health.stale).closest('td')
+
+    expect(machineNameCell).toHaveClass('whitespace-nowrap')
+    expect(machineStatusCell).toHaveClass('whitespace-nowrap')
+  })
+
   it('marksTheDashboardOwnMachineWithoutStaleOrNeverWording', async () => {
     stubFetch({
       'GET /api/auth/me': SESSION_OK,

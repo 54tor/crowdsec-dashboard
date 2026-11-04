@@ -36,17 +36,19 @@ export function Alerts() {
 
   const columns = useMemo<DataTableColumn<Alert>[]>(
     () => [
-      { key: 'status', header: t('alerts.columns.status'), mobile: 'primary', cell: (alertRow) => <AlertStatusBadge alertRow={alertRow} /> },
+      { key: 'status', header: t('alerts.columns.status'), mobile: 'primary', noWrap: true, cell: (alertRow) => <AlertStatusBadge alertRow={alertRow} /> },
       {
         key: 'createdAt',
         header: t('alerts.columns.createdAt'),
         mobile: 'primary',
-        className: 'whitespace-nowrap font-mono',
+        noWrap: true,
+        className: 'font-mono',
         cell: (alertRow) => formatDateTimeToMinute(alertRow.created_at, i18n.language),
       },
       {
         key: 'engine',
         header: t('alerts.columns.engine'),
+        noWrap: true,
         cell: (alertRow) => (
           <EngineCell
             engineName={alertRow.engine}
@@ -67,8 +69,8 @@ export function Alerts() {
         ),
       },
       { key: 'source', header: t('alerts.columns.source'), className: 'font-mono', cell: (alertRow) => <UntrustedText value={sourceLabel(alertRow)} /> },
-      { key: 'events', header: t('alerts.columns.events'), cell: (alertRow) => formatNumber(alertRow.events_count, i18n.language) },
-      { key: 'decisions', header: t('alerts.columns.decisions'), cell: (alertRow) => formatNumber(alertRow.decisions.length, i18n.language) },
+      { key: 'events', header: t('alerts.columns.events'), noWrap: true, cell: (alertRow) => formatNumber(alertRow.events_count, i18n.language) },
+      { key: 'decisions', header: t('alerts.columns.decisions'), noWrap: true, cell: (alertRow) => formatNumber(alertRow.decisions.length, i18n.language) },
       {
         key: 'message',
         header: t('alerts.columns.message'),
@@ -76,14 +78,16 @@ export function Alerts() {
         visibleFrom: 'wide',
         cell: (alertRow) => <UntrustedText value={alertRow.message} />,
       },
-      { key: 'actions', header: t('alerts.actions'), mobile: 'actions', cell: (alertRow) => <AlertRowActions alertRow={alertRow} /> },
+      { key: 'actions', header: t('alerts.actions'), mobile: 'actions', noWrap: true, cell: (alertRow) => <AlertRowActions alertRow={alertRow} /> },
     ],
     [t, i18n.language],
   )
 
+  const hasRows = (tableQuery.data?.items.length ?? 0) > 0
+
   return (
     <section className="space-y-4">
-      <PageHeader title={t('alerts.title')} actions={<DensityToggle />} />
+      <PageHeader title={t('alerts.title')} actions={hasRows && <DensityToggle />} />
       <FiltersDisclosure activeFilterCount={controls.activeFilterCount} hasInvalidFilter={!controls.isValid}>
         <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} showOriginFilter />
       </FiltersDisclosure>

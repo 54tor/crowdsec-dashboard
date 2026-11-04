@@ -8,6 +8,7 @@ interface TokenSelectProps {
   onChange: (chosenValue: string) => void
   disabled?: boolean
   title?: string
+  labelHidden?: boolean
 }
 
 export function TokenSelect(tokenSelectProps: TokenSelectProps) {

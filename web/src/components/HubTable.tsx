@@ -4,6 +4,7 @@ import type { HubItem } from '@/api/types'
 import { isHubItemKind, removeHubItem } from '@/api/writeApi'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
+import { Badge } from '@/components/ui/badge'
 import { useCanWrite } from '@/hooks/useCanWrite'
 import { HUB_QUERY_KEY } from '@/hooks/useReadResources'
 import { isTimeoutError } from '@/lib/apiErrors'
@@ -15,10 +16,15 @@ export function HubTable({ items }: { items: HubItem[] }) {
   const canWrite = useCanWrite()
   const columns = useMemo<DataTableColumn<HubItem>[]>(
     () => [
-      { key: 'type', header: t('hub.columns.type'), cell: (hubItem) => hubItem.type },
-      { key: 'name', header: t('hub.columns.name'), cell: (hubItem) => hubItem.name },
-      { key: 'status', header: t('hub.columns.status'), cell: (hubItem) => hubItem.status },
-      { key: 'version', header: t('hub.columns.version'), cell: (hubItem) => hubItem.local_version },
+      { key: 'type', header: t('hub.columns.type'), noWrap: true, cell: (hubItem) => hubItem.type },
+      { key: 'name', header: t('hub.columns.name'), noWrap: true, cell: (hubItem) => hubItem.name },
+      {
+        key: 'status',
+        header: t('hub.columns.status'),
+        noWrap: true,
+        cell: (hubItem) => <Badge variant={hubItem.status === 'enabled' ? 'nominal' : 'outline'}>{hubItem.status}</Badge>,
+      },
+      { key: 'version', header: t('hub.columns.version'), noWrap: true, cell: (hubItem) => hubItem.local_version },
       { key: 'description', header: t('hub.columns.description'), cell: (hubItem) => hubItem.description },
       ...(canWrite ? ([{
         key: 'actions',

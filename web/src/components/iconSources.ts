@@ -9,6 +9,7 @@ import closeSvg from '@material-symbols/svg-400/outlined/close.svg?raw'
 import contentCopySvg from '@material-symbols/svg-400/outlined/content_copy.svg?raw'
 import contrastSvg from '@material-symbols/svg-400/outlined/contrast.svg?raw'
 import darkModeSvg from '@material-symbols/svg-400/outlined/dark_mode.svg?raw'
+import deleteSvg from '@material-symbols/svg-400/outlined/delete.svg?raw'
 import densityMediumSvg from '@material-symbols/svg-400/outlined/density_medium.svg?raw'
 import densitySmallSvg from '@material-symbols/svg-400/outlined/density_small.svg?raw'
 import dnsSvg from '@material-symbols/svg-400/outlined/dns.svg?raw'
@@ -31,6 +32,7 @@ import swapHorizSvg from '@material-symbols/svg-400/outlined/swap_horiz.svg?raw'
 import syncSvg from '@material-symbols/svg-400/outlined/sync.svg?raw'
 import translateSvg from '@material-symbols/svg-400/outlined/translate.svg?raw'
 import tuneSvg from '@material-symbols/svg-400/outlined/tune.svg?raw'
+import visibilitySvg from '@material-symbols/svg-400/outlined/visibility.svg?raw'
 import warningSvg from '@material-symbols/svg-400/outlined/warning.svg?raw'
 
 export type IconName =
@@ -45,6 +47,7 @@ export type IconName =
   | 'content_copy'
   | 'contrast'
   | 'dark_mode'
+  | 'delete'
   | 'density_medium'
   | 'density_small'
   | 'dns'
@@ -67,6 +70,7 @@ export type IconName =
   | 'sync'
   | 'translate'
   | 'tune'
+  | 'visibility'
   | 'warning'
 
 export const ICON_SOURCES: Record<IconName, string> = {
@@ -81,6 +85,7 @@ export const ICON_SOURCES: Record<IconName, string> = {
   content_copy: contentCopySvg,
   contrast: contrastSvg,
   dark_mode: darkModeSvg,
+  delete: deleteSvg,
   density_medium: densityMediumSvg,
   density_small: densitySmallSvg,
   dns: dnsSvg,
@@ -103,5 +108,6 @@ export const ICON_SOURCES: Record<IconName, string> = {
   sync: syncSvg,
   translate: translateSvg,
   tune: tuneSvg,
+  visibility: visibilitySvg,
   warning: warningSvg,
 }

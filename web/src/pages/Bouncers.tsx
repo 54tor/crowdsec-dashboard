@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import type { Bouncer } from '@/api/types'
 import { createBouncer, deleteBouncer } from '@/api/writeApi'
 import { CreateSecretDialog } from '@/components/CreateSecretDialog'
-import { DensityToggle } from '@/components/DensityToggle'
 import { HealthPageSection } from '@/components/HealthPageSection'
 import { BouncersTable } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
@@ -41,17 +40,15 @@ export function Bouncers() {
     <HealthPageSection
       titleKey="bouncers.title"
       degradedPart="bouncers"
+      hasRows={(report) => report.bouncers.length > 0}
       toolbar={
-        <>
-          <DensityToggle />
-          <WriteOnly>
-            <CreateSecretDialog
-              triggerLabel={t('bouncers.add')}
-              labels={labels}
-              createSecret={async (name) => (await createBouncer(name)).key}
-            />
-          </WriteOnly>
-        </>
+        <WriteOnly>
+          <CreateSecretDialog
+            triggerLabel={t('bouncers.add')}
+            labels={labels}
+            createSecret={async (name) => (await createBouncer(name)).key}
+          />
+        </WriteOnly>
       }
     >
       {(report, now) => <BouncersTable bouncers={report.bouncers} now={now} actions={actions} cardsOnMobile />}

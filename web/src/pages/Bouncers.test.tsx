@@ -42,6 +42,26 @@ describe('bouncers page', () => {
     expect(await screen.findByText('firewall-one', { selector: 'td' })).toBeInTheDocument()
   })
 
+  it('densityToggleSitsInThePageHeaderWhenBouncersExist', async () => {
+    stubFetch(bouncerRoutes())
+    renderApp('/bouncers')
+
+    const pageTitle = await screen.findByRole('heading', { level: 1, name: en.bouncers.title })
+    await screen.findByText('firewall-one', { selector: 'td' })
+
+    expect(within(pageTitle.closest('header') as HTMLElement).getByRole('group', { name: en.list.density.label })).toBeInTheDocument()
+  })
+
+  // An empty list has nothing to make denser.
+  it('densityToggleHiddenWithoutBouncers', async () => {
+    stubFetch(bouncerRoutes({ 'GET /api/health': { status: 200, body: makeHealth() } }))
+    renderApp('/bouncers')
+
+    await screen.findByText(en.health.noBouncers)
+
+    expect(screen.queryByRole('group', { name: en.list.density.label })).toBeNull()
+  })
+
   it('bouncerKeyIsClearedWhenDialogCloses', async () => {
     const fetchMock = stubFetch(bouncerRoutes({ 'POST /api/bouncers': { status: 200, body: { name: 'new-one', key: FAKE_KEY } } }))
     const user = userEvent.setup()

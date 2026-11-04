@@ -178,12 +178,67 @@ describe('alerts page layout', () => {
     expect(alertCard).not.toHaveTextContent(makeAlert().message)
   })
 
+  // Stacked text buttons made every row about 97 px high: the actions sit on
+  // one line as icon buttons that keep their accessible name and a tooltip.
+  it('rowActionsAreInlineIconButtons', async () => {
+    setViewportWidth(DESKTOP_VIEWPORT_WIDTH_IN_PIXELS)
+    stubAlertsPage([makeAlert({ id: 12, archive_id: 34 })])
+    renderApp('/alerts')
+
+    const alertRow = await findFirstAlertRow()
+    const detailButton = within(alertRow).getByRole('button', { name: 'Details of alert 12 from engine local' })
+    const deleteButton = within(alertRow).getByRole('button', { name: 'Delete alert 12' })
+
+    expect(detailButton.parentElement).toHaveClass('flex', 'flex-nowrap', 'gap-1')
+    expect(detailButton).toHaveAttribute('data-size', 'icon')
+    expect(detailButton).toHaveAttribute('title', en.alerts.details)
+    expect(deleteButton).toHaveAttribute('data-size', 'icon')
+    expect(deleteButton).toHaveAttribute('title', en.alerts.delete)
+  })
+
+  // Short columns stay on one line so the engine cell keeps exactly two lines
+  // (engine and badge, then the machine) instead of three.
+  it('shortColumnsDoNotWrap', async () => {
+    setViewportWidth(DESKTOP_VIEWPORT_WIDTH_IN_PIXELS)
+    stubAlertsPage()
+    renderApp('/alerts')
+
+    const alertRow = await findFirstAlertRow()
+    const engineCell = within(alertRow).getByText('machine-one').closest('td')
+
+    expect(engineCell).toHaveClass('whitespace-nowrap', '[&_bdi]:whitespace-nowrap')
+  })
+
+  // « Toutes les origines » used to wrap inside an equal-width segment.
+  it('originSegmentsKeepTheirLabelOnOneLine', async () => {
+    stubAlertsPage()
+    renderApp('/alerts')
+
+    const allOriginsRadio = await screen.findByRole('radio', { name: en.filters.allOrigins })
+    const visibleSegment = allOriginsRadio.nextElementSibling as HTMLElement
+
+    expect(visibleSegment).toHaveClass('whitespace-nowrap')
+    expect(allOriginsRadio.closest('label')?.parentElement).toHaveClass('flex-wrap')
+  })
+
+  // An empty list has nothing to make denser.
+  it('densityToggleHiddenWhenTheListIsEmpty', async () => {
+    stubAlertsPage([])
+    renderApp('/alerts')
+
+    await screen.findByText(en.alerts.empty)
+
+    expect(screen.queryByRole('group', { name: en.list.density.label })).toBeNull()
+  })
+
   it('densityToggleInPageHeader', async () => {
     stubAlertsPage()
     renderApp('/alerts')
 
     const pageTitle = await screen.findByRole('heading', { level: 1, name: en.alerts.title })
     const pageHeader = pageTitle.closest('header') as HTMLElement
+    // The toggle only appears once the list has rows.
+    await findFirstAlertRow()
 
     expect(within(pageHeader).getByRole('group', { name: en.list.density.label })).toBeInTheDocument()
   })

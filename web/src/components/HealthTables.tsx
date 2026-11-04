@@ -29,13 +29,13 @@ export function BouncersTable({ bouncers, now, actions, cardsOnMobile = false }:
   const { t } = useTranslation()
   const columns = useMemo<DataTableColumn<Bouncer>[]>(
     () => [
-      { key: 'name', header: t('health.columns.name'), cell: (bouncer) => bouncer.name, mobile: 'primary' },
-      { key: 'type', header: t('health.columns.type'), cell: (bouncer) => bouncer.type },
-      { key: 'version', header: t('health.columns.version'), cell: (bouncer) => bouncer.version },
-      { key: 'ip', header: t('health.columns.ip'), cell: (bouncer) => bouncer.ip_address, className: 'font-mono' },
-      { key: 'lastContact', header: t('health.columns.lastContact'), cell: (bouncer) => <AgeCell isoDate={bouncer.last_pull} now={now} /> },
-      { key: 'status', header: t('health.columns.status'), cell: (bouncer) => <ContactStatus lastContact={bouncer.last_pull} now={now} revoked={bouncer.revoked} /> },
-      { key: 'auth', header: t('health.columns.auth'), cell: (bouncer) => bouncer.auth_type },
+      { key: 'name', header: t('health.columns.name'), cell: (bouncer) => bouncer.name, mobile: 'primary', noWrap: true },
+      { key: 'type', header: t('health.columns.type'), noWrap: true, cell: (bouncer) => bouncer.type },
+      { key: 'version', header: t('health.columns.version'), noWrap: true, cell: (bouncer) => bouncer.version },
+      { key: 'ip', header: t('health.columns.ip'), cell: (bouncer) => bouncer.ip_address, className: 'font-mono', noWrap: true },
+      { key: 'lastContact', header: t('health.columns.lastContact'), noWrap: true, cell: (bouncer) => <AgeCell isoDate={bouncer.last_pull} now={now} /> },
+      { key: 'status', header: t('health.columns.status'), noWrap: true, cell: (bouncer) => <ContactStatus lastContact={bouncer.last_pull} now={now} revoked={bouncer.revoked} /> },
+      { key: 'auth', header: t('health.columns.auth'), noWrap: true, cell: (bouncer) => bouncer.auth_type },
       ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell, mobile: 'actions' as const }] : []),
     ],
     [t, now, actions],
@@ -60,6 +60,7 @@ export function MachinesTable({ machines, now, actions, cardsOnMobile = false }:
         key: 'name',
         header: t('health.columns.name'),
         mobile: 'primary',
+        noWrap: true,
         cell: (machine) => (
           <span className="flex flex-wrap items-center gap-1">
             {machine.machine_id}
@@ -67,12 +68,13 @@ export function MachinesTable({ machines, now, actions, cardsOnMobile = false }:
           </span>
         ),
       },
-      { key: 'version', header: t('health.columns.version'), cell: (machine) => machine.version },
-      { key: 'ip', header: t('health.columns.ip'), cell: (machine) => machine.ip_address, className: 'font-mono' },
-      { key: 'lastContact', header: t('health.columns.lastContact'), cell: (machine) => (machine.self ? '—' : <AgeCell isoDate={machine.last_heartbeat} now={now} />) },
+      { key: 'version', header: t('health.columns.version'), noWrap: true, cell: (machine) => machine.version },
+      { key: 'ip', header: t('health.columns.ip'), cell: (machine) => machine.ip_address, className: 'font-mono', noWrap: true },
+      { key: 'lastContact', header: t('health.columns.lastContact'), noWrap: true, cell: (machine) => (machine.self ? '—' : <AgeCell isoDate={machine.last_heartbeat} now={now} />) },
       {
         key: 'status',
         header: t('health.columns.status'),
+        noWrap: true,
         cell: (machine) => (
           <span className="flex flex-wrap gap-1">
             {!machine.self && <ContactStatus lastContact={machine.last_heartbeat} now={now} />}
@@ -80,7 +82,7 @@ export function MachinesTable({ machines, now, actions, cardsOnMobile = false }:
           </span>
         ),
       },
-      { key: 'auth', header: t('health.columns.auth'), cell: (machine) => machine.auth_type },
+      { key: 'auth', header: t('health.columns.auth'), noWrap: true, cell: (machine) => machine.auth_type },
       ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell, mobile: 'actions' as const }] : []),
     ],
     [t, now, actions],

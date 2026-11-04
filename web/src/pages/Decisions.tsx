@@ -38,6 +38,7 @@ export function Decisions() {
   const query = usePagedList<Decision>('decisions', controls.filters, controls.page, PAGE_SIZE, controls.isValid, includeExpired)
   const includeExpiredFilterCount = includeExpired ? 1 : 0
   const activeFilterCount = controls.activeFilterCount + includeExpiredFilterCount
+  const hasRows = (query.data?.items.length ?? 0) > 0
 
   function changeIncludeExpired(isChecked: boolean) {
     setIncludeExpired(isChecked)
@@ -50,17 +51,19 @@ export function Decisions() {
         key: 'value',
         header: t('decisions.columns.value'),
         mobile: 'primary',
+        noWrap: true,
         className: 'font-mono',
         cell: (decision) => <UntrustedText value={decision.value} />,
       },
       {
         key: 'engine',
         header: t('decisions.columns.engine'),
+        noWrap: true,
         cell: (decision) => <EngineCell engineName={decision.engine} badgeLabel={decision.live ? undefined : t('decisions.archivedBadge')} />,
       },
-      { key: 'scope', header: t('decisions.columns.scope'), cell: (decision) => <UntrustedText value={decision.scope} /> },
-      { key: 'type', header: t('decisions.columns.type'), cell: (decision) => <UntrustedText value={decision.type} /> },
-      { key: 'origin', header: t('decisions.columns.origin'), cell: (decision) => <UntrustedText value={decision.origin} /> },
+      { key: 'scope', header: t('decisions.columns.scope'), noWrap: true, cell: (decision) => <UntrustedText value={decision.scope} /> },
+      { key: 'type', header: t('decisions.columns.type'), noWrap: true, cell: (decision) => <UntrustedText value={decision.type} /> },
+      { key: 'origin', header: t('decisions.columns.origin'), noWrap: true, cell: (decision) => <UntrustedText value={decision.origin} /> },
       {
         key: 'scenario',
         header: t('decisions.columns.scenario'),
@@ -76,7 +79,8 @@ export function Decisions() {
         key: 'expires',
         header: t('decisions.columns.expires'),
         mobile: 'primary',
-        className: 'whitespace-nowrap font-mono',
+        noWrap: true,
+        className: 'font-mono',
         cell: (decision) => (decision.until ? formatDateTimeToMinute(decision.until, i18n.language) : <UntrustedText value={decision.duration} />),
       },
       ...(canWrite ? ([{
@@ -110,7 +114,7 @@ export function Decisions() {
             <WriteOnly>
               <BanDialog />
             </WriteOnly>
-            <DensityToggle />
+            {hasRows && <DensityToggle />}
           </>
         }
       />

@@ -1,6 +1,7 @@
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog'
+import { Icon } from '@/components/Icon'
 import { Button } from '@/components/ui/button'
 
 interface RowDeleteActionProps {
@@ -15,9 +16,10 @@ interface RowDeleteActionProps {
   onDeleted?: () => void
   onFailed?: (failure: unknown) => void
   disabledReason?: string
+  iconOnly?: boolean
 }
 
-export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, request, invalidates, onDeleted, onFailed, disabledReason }: RowDeleteActionProps) {
+export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, request, invalidates, onDeleted, onFailed, disabledReason, iconOnly = false }: RowDeleteActionProps) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const hasDeletedRef = useRef(false)
@@ -43,8 +45,15 @@ export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, ta
     <ConfirmDeleteDialog
       open={isDialogOpen}
       trigger={
-        <Button type="button" variant="destructiveOutline" size="sm" aria-label={ariaLabel} disabled={disabledReason !== undefined} title={disabledReason}>
-          {buttonLabel}
+        <Button
+          type="button"
+          variant="destructiveOutline"
+          size={iconOnly ? 'icon' : 'sm'}
+          aria-label={ariaLabel}
+          disabled={disabledReason !== undefined}
+          title={disabledReason ?? (iconOnly ? buttonLabel : undefined)}
+        >
+          {iconOnly ? <Icon name="delete" /> : buttonLabel}
         </Button>
       }
       onOpen={() => setIsDialogOpen(true)}

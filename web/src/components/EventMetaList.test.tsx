@@ -44,7 +44,7 @@ describe('event meta list', () => {
     const longValue = 'a'.repeat(4096)
     render(<EventMetaList meta={{ payload: longValue }} />)
 
-    expect(screen.getByText(longValue)).toHaveClass('whitespace-pre-wrap', 'break-all')
+    expect(screen.getByText(longValue)).toHaveClass('whitespace-pre-wrap', '[overflow-wrap:anywhere]')
   })
 
   it('showsEmptyStateWithoutMeta', () => {

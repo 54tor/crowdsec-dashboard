@@ -34,7 +34,7 @@ export function AccountRoleCell({ account, onFailed, onSucceeded }: AccountRowAc
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ACCOUNTS_QUERY_KEY }),
   })
   return (
-    <div className="max-w-40">
+    <div className="min-w-44">
       <AccountRoleSelect
         id={`account-role-${account.account_name}`}
         label={t('accounts.roleOf', { name: account.account_name })}

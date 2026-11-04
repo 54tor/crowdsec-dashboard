@@ -60,6 +60,32 @@ describe('hub page', () => {
     expect(screen.queryByText('crowdsecurity/sshd-logs', { selector: 'td' })).not.toBeInTheDocument()
   })
 
+  // The status column printed the raw cscli word: it is now a status badge.
+  it.each([
+    { hubStatus: 'enabled', expectedVariant: 'nominal' },
+    { hubStatus: 'tainted', expectedVariant: 'outline' },
+  ])('statusColumnShowsABadge $hubStatus', async ({ hubStatus, expectedVariant }) => {
+    stubFetch(hubRoutes({ 'GET /api/hub': { status: 200, body: [makeHubItem({ name: 'crowdsecurity/linux', status: hubStatus })] } }))
+    renderApp('/hub')
+
+    const hubRow = (await screen.findByText('crowdsecurity/linux', { selector: 'td' })).closest('tr') as HTMLElement
+    const statusBadge = within(hubRow).getByText(hubStatus)
+
+    expect(statusBadge).toHaveAttribute('data-slot', 'badge')
+    expect(statusBadge).toHaveAttribute('data-variant', expectedVariant)
+  })
+
+  // On a phone the table scrolls in its region: short columns must not be
+  // squeezed to two or three characters per line.
+  it('shortColumnsDoNotWrap', async () => {
+    stubFetch(hubRoutes())
+    renderApp('/hub')
+
+    const nameCell = await screen.findByText('crowdsecurity/linux', { selector: 'td' })
+
+    expect(nameCell).toHaveClass('whitespace-nowrap')
+  })
+
   it('reloadBannerAppearsAfterHubUpgrade', async () => {
     const fetchMock = stubFetch(hubRoutes({ 'POST /api/hub/upgrade': { status: 200, body: { status: 'upgraded' } } }))
     const user = userEvent.setup()

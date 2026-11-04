@@ -21,7 +21,7 @@ export function PageHeader({ title, description, actions, titleRef }: PageHeader
         </h1>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
   )
 }

@@ -8,7 +8,8 @@ interface DataTableCardsProps<Row> {
   rowKey: (row: Row) => string | number
 }
 
-const CARD_CELL_WRAP_CLASSES = 'min-w-0 whitespace-normal break-words'
+const CARD_CELL_WRAP_CLASSES =
+  'min-w-0 whitespace-normal break-words [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:min-h-[22px] [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:whitespace-normal [&_[data-slot=badge]]:text-left'
 
 function columnsPlacedAt<Row>(columns: DataTableColumn<Row>[], placement: MobileColumnPlacement): DataTableColumn<Row>[] {
   return columns.filter((column) => (column.mobile ?? 'secondary') === placement)

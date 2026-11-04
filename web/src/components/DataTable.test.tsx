@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { DensityToggle } from '@/components/DensityToggle'
 import { UntrustedText } from '@/components/UntrustedText'
+import { Badge } from '@/components/ui/badge'
 import en from '@/i18n/en.json'
 import { TABLE_DENSITY_STORAGE_KEY } from '@/hooks/useTableDensity'
 import { MALICIOUS_SCENARIO } from '@/test/fixtures'
@@ -152,6 +153,71 @@ describe('data table', () => {
     for (const compactRow of bodyRows()) {
       expect(compactRow).toHaveClass('h-8')
     }
+  })
+
+  // Compact used to change only the minimum row height, which multi-line rows
+  // already exceed: the cell padding has to shrink too.
+  it('compactDensityTightensCellPadding', () => {
+    renderSampleTable()
+    const sourceCell = screen.getByText('192.0.2.10').closest('td')
+    expect(sourceCell).toHaveClass('py-1.5')
+
+    fireEvent.click(screen.getByRole('button', { name: en.list.density.compact }))
+
+    expect(sourceCell).toHaveClass('py-0.5')
+    expect(sourceCell).not.toHaveClass('py-1.5')
+  })
+
+  // break-all split IPs and short words mid-value even when they fitted: the
+  // value may only break where it would otherwise overflow.
+  it('untrustedTextBreaksOnlyWhereItWouldOverflow', () => {
+    render(<UntrustedText value="192.0.2.44" />)
+
+    const untrustedValue = screen.getByText('192.0.2.44')
+    expect(untrustedValue).toHaveClass('whitespace-pre-wrap', '[overflow-wrap:anywhere]')
+    expect(untrustedValue).not.toHaveClass('break-all')
+  })
+
+  // A short-value column must keep its value on one line in a table (the scroll
+  // region scrolls instead), but may still wrap inside a phone card.
+  it('noWrapColumnStaysOnOneLineInTablesOnly', () => {
+    const noWrapColumns: DataTableColumn<SampleAlertRow>[] = [
+      { key: 'scenario', header: 'Scenario', mobile: 'primary', cell: (alertRow) => alertRow.scenario },
+      { key: 'source', header: 'Source', noWrap: true, cell: (alertRow) => <UntrustedText value={alertRow.sourceAddress} /> },
+    ]
+    const noWrapTable = <DataTable caption="Sample alerts" columns={noWrapColumns} rows={SAMPLE_ROWS} rowKey={(alertRow) => alertRow.identifier} cardsOnMobile />
+
+    const { rerender } = render(noWrapTable)
+    const sourceCell = screen.getByText('192.0.2.10').closest('td')
+    expect(sourceCell).toHaveClass('whitespace-nowrap', '[&_bdi]:whitespace-nowrap')
+    expect(sourceCell).not.toHaveClass('whitespace-normal')
+
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    rerender(noWrapTable)
+    const sourceDetails = screen.getByText('192.0.2.10').closest('dd')
+    expect(sourceDetails).not.toHaveClass('whitespace-nowrap')
+    expect(sourceDetails).not.toHaveClass('[&_bdi]:whitespace-nowrap')
+  })
+
+  // A long status badge (« Aucun contact depuis plus de 5 minutes ») used to
+  // overflow a 375 px card because badges never wrap.
+  it('longBadgeWrapsInsideCard', () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    const longBadgeLabel = 'No contact for more than five minutes on this machine'
+    const badgeColumns: DataTableColumn<SampleAlertRow>[] = [
+      { key: 'scenario', header: 'Scenario', mobile: 'primary', cell: (alertRow) => alertRow.scenario },
+      { key: 'status', header: 'Status', cell: () => <Badge variant="warning">{longBadgeLabel}</Badge> },
+    ]
+
+    render(<DataTable caption="Sample alerts" columns={badgeColumns} rows={SAMPLE_ROWS} rowKey={(alertRow) => alertRow.identifier} cardsOnMobile />)
+
+    const statusDetails = screen.getAllByText(longBadgeLabel)[0].closest('dd')
+    expect(statusDetails).toHaveClass(
+      '[&_[data-slot=badge]]:h-auto',
+      '[&_[data-slot=badge]]:max-w-full',
+      '[&_[data-slot=badge]]:whitespace-normal',
+      '[&_[data-slot=badge]]:text-left',
+    )
   })
 
   // A column class used to replace the wrap classes, so mono cells overflowed (audit 10).

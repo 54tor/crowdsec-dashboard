@@ -18,12 +18,15 @@ interface SelectFieldProps {
   error?: string | null
   disabled?: boolean
   title?: string
+  labelHidden?: boolean
 }
 
-export function SelectField({ id, label, value, options, onChange, hint, error, disabled, title }: SelectFieldProps) {
+export function SelectField({ id, label, value, options, onChange, hint, error, disabled, title, labelHidden = false }: SelectFieldProps) {
   return (
     <div className="space-y-1">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className={labelHidden ? 'sr-only' : undefined}>
+        {label}
+      </Label>
       <select
         id={id}
         value={value}

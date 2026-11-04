@@ -83,9 +83,10 @@ export function Allowlists() {
   }
 
   const listing = listingQuery.data
+  const hasRows = listing?.allowlists.some((allowlist) => allowlist.entries.length > 0) ?? false
   return (
     <section className="space-y-4">
-      <PageHeader title={t('allowlists.title')} description={t('allowlists.intro')} actions={<DensityToggle />} />
+      <PageHeader title={t('allowlists.title')} description={t('allowlists.intro')} actions={hasRows && <DensityToggle />} />
       <ConfigPageNote />
       <AllowlistEngineSelect value={engineName} onChange={selectEngine} />
       {isRefreshFailed && <WarningNotice>{t('allowlists.refreshFailed')}</WarningNotice>}

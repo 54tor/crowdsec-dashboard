@@ -11,18 +11,19 @@ export function SyncPeersTable({ peers }: { peers: SyncPeer[] }) {
   const { t, i18n } = useTranslation()
   const columns = useMemo<DataTableColumn<SyncPeer>[]>(
     () => [
-      { key: 'name', header: t('sync.columns.name'), cell: (peer) => <UntrustedText value={peer.name} /> },
-      { key: 'host', header: t('sync.columns.host'), cell: (peer) => <UntrustedText value={peer.url_host} /> },
+      { key: 'name', header: t('sync.columns.name'), noWrap: true, cell: (peer) => <UntrustedText value={peer.name} /> },
+      { key: 'host', header: t('sync.columns.host'), noWrap: true, cell: (peer) => <UntrustedText value={peer.url_host} /> },
       {
         key: 'lastRun',
         header: t('sync.columns.lastRun'),
+        noWrap: true,
         cell: (peer) => (peer.last_run_at === null ? t('sync.neverRun') : formatDateTime(peer.last_run_at, i18n.language)),
       },
-      { key: 'status', header: t('sync.columns.status'), cell: (peer) => <SyncPeerStatusBadge peerStatus={peer.status} /> },
-      { key: 'added', header: t('sync.columns.added'), cell: (peer) => formatNumber(peer.added, i18n.language) },
-      { key: 'removed', header: t('sync.columns.removed'), cell: (peer) => formatNumber(peer.removed, i18n.language) },
-      { key: 'skipped', header: t('sync.columns.skipped'), cell: (peer) => formatNumber(peer.skipped, i18n.language) },
-      { key: 'skippedAllowlisted', header: t('sync.columns.skippedAllowlisted'), cell: (peer) => formatNumber(peer.skipped_allowlisted, i18n.language) },
+      { key: 'status', header: t('sync.columns.status'), noWrap: true, cell: (peer) => <SyncPeerStatusBadge peerStatus={peer.status} /> },
+      { key: 'added', header: t('sync.columns.added'), noWrap: true, cell: (peer) => formatNumber(peer.added, i18n.language) },
+      { key: 'removed', header: t('sync.columns.removed'), noWrap: true, cell: (peer) => formatNumber(peer.removed, i18n.language) },
+      { key: 'skipped', header: t('sync.columns.skipped'), noWrap: true, cell: (peer) => formatNumber(peer.skipped, i18n.language) },
+      { key: 'skippedAllowlisted', header: t('sync.columns.skippedAllowlisted'), noWrap: true, cell: (peer) => formatNumber(peer.skipped_allowlisted, i18n.language) },
       {
         key: 'blocked',
         header: t('sync.columns.blocked'),

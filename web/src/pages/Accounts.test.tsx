@@ -103,6 +103,19 @@ describe('accounts page', () => {
     expect(JSON.parse(String(requestsTo(fetchMock, 'POST', `${ACCOUNTS_URL}/carol/role`)[0].body))).toEqual({ account_role: 'admin' })
   })
 
+  // The per-row label was printed inside the cell over four cramped lines and
+  // the select clipped « Administrator »: the label is for assistive tech only.
+  it('roleSelectKeepsItsNameWithoutAVisibleLabel', async () => {
+    stubFetch(accountRoutes())
+    renderApp('/accounts')
+
+    const roleSelect = await screen.findByRole('combobox', { name: 'Role of carol' })
+    const roleLabel = screen.getByText('Role of carol')
+
+    expect(roleLabel).toHaveClass('sr-only')
+    expect(roleSelect.parentElement?.parentElement).toHaveClass('min-w-44')
+  })
+
   it('translatesLastAdminWhenDemoting', async () => {
     const otherAdministrator = { ...ACCOUNT_ALICE, account_name: 'erin' }
     stubFetch(

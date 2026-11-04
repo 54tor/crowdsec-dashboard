@@ -71,6 +71,21 @@ describe('sync page', () => {
     expect(statusBadge).toHaveAttribute('data-variant', expectedVariant)
   })
 
+  // On a phone the host column wrapped one or two characters per line: the
+  // short columns keep one line and the table scrolls in its region instead.
+  it('shortPeerColumnsDoNotWrap', async () => {
+    stubFetch(syncRoutes(makeStatus()))
+    renderApp('/sync')
+
+    const nameCell = (await screen.findByText('edge-1', { selector: 'bdi' })).closest('td')
+    const hostCell = screen.getByText('edge-1.example.com:8080', { selector: 'bdi' }).closest('td')
+    const statusCell = nameCell?.parentElement?.querySelector('[data-slot="badge"]')?.closest('td')
+
+    for (const shortCell of [nameCell, hostCell, statusCell]) {
+      expect(shortCell).toHaveClass('whitespace-nowrap', '[&_bdi]:whitespace-nowrap')
+    }
+  })
+
   it('neverRunPeersShowNeverRun', async () => {
     stubFetch(syncRoutes(makeStatus({ peers: [makePeer({ last_run_at: null, status: 'never_run' })] })))
     renderApp('/sync')
