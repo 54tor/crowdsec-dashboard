@@ -48,6 +48,8 @@ describe('mobile navigation', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    // The theme menu writes the class on <html>, which outlives the render.
+    document.documentElement.classList.remove('dark')
   })
 
   it('tabBarShowsFourTabsAndPlus', async () => {
@@ -122,6 +124,51 @@ describe('mobile navigation', () => {
 
     expect(await screen.findByRole('heading', { name: en.nav.hub, level: 1 })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: en.shell.more })).not.toBeInTheDocument()
+     expect(screen.getByRole('button', { name: en.shell.more })).toHaveFocus()
+  })
+
+  // The account link points at the page already shown: no route change happens,
+  // so the link itself must close the sheet.
+  it('plusSheetClosesWhenAccountLinkTargetsCurrentPage', async () => {
+    stubSignedInApp('admin', {
+      'GET /api/account/access-rules': { status: 200, body: { rules: [], client_ip: '203.0.113.7', client_country: null } },
+    })
+    const user = userEvent.setup()
+    renderApp('/account/security')
+    const plusSheet = await openPlusSheet(user)
+
+    await user.click(within(plusSheet).getByRole('link', { name: 'alice' }))
+
+    expect(screen.queryByRole('dialog', { name: en.shell.more })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: en.shell.more })).toHaveFocus()
+  })
+
+  // The theme menu portals outside the dialog: its radios must still be
+  // reachable and usable despite the sheet's focus trap.
+  it('themeMenuWorksInsidePlusSheet', async () => {
+    stubSignedInApp('admin')
+    const user = userEvent.setup()
+    renderApp('/alerts')
+    const plusSheet = await openPlusSheet(user)
+
+    await user.click(within(plusSheet).getByRole('button', { name: `${en.theme.label}: ${en.theme.system}` }))
+    const darkChoice = await screen.findByRole('menuitemradio', { name: en.theme.dark })
+    await user.click(darkChoice)
+
+    expect(document.documentElement).toHaveClass('dark')
+    expect(within(plusSheet).getByRole('button', { name: `${en.theme.label}: ${en.theme.dark}` })).toBeInTheDocument()
+  })
+
+  // Under 768px every target in the sheet must reach 44px (min-h-11).
+  it('plusSheetTargetsAreTouchSized', async () => {
+    stubSignedInApp('admin')
+    const user = userEvent.setup()
+    renderApp('/alerts')
+    const plusSheet = await openPlusSheet(user)
+
+    expect(within(plusSheet).getByRole('link', { name: en.nav.hub })).toHaveClass('max-md:min-h-11')
+    expect(within(plusSheet).getByRole('link', { name: 'alice' })).toHaveClass('max-md:min-h-11')
+    expect(within(plusSheet).getByRole('button', { name: en.logout })).toHaveClass('max-md:h-11')
   })
 
   it('mobileHeaderShowsBrandAndRole', async () => {

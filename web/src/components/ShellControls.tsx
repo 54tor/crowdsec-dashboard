@@ -6,7 +6,7 @@ import { LanguageSwitch } from '@/components/LanguageSwitch'
 import { ThemeSwitch } from '@/components/ThemeSwitch'
 import { Button } from '@/components/ui/button'
 
-export function ShellControls({ onLogout }: { onLogout: () => Promise<void> }) {
+export function ShellControls({ onLogout, onNavigate }: { onLogout: () => Promise<void>; onNavigate?: () => void }) {
   const { t } = useTranslation()
   const { accountName } = useAuth()
   return (
@@ -16,7 +16,8 @@ export function ShellControls({ onLogout }: { onLogout: () => Promise<void> }) {
       </p>
       <Link
         to="/account/security"
-        className="flex min-h-10 items-center rounded-md px-2.5 text-sm font-medium focus-ring hover:bg-secondary"
+        onClick={onNavigate}
+        className="flex min-h-10 items-center rounded-md max-md:min-h-11 px-2.5 text-sm font-medium focus-ring hover:bg-secondary"
       >
         <span className="min-w-0 truncate">{accountName ?? t('nav.accountSecurity')}</span>
       </Link>

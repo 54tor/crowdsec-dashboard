@@ -7,7 +7,7 @@ import type { NavItemGroup } from '@/routes'
 
 function railLinkClassName({ isActive }: { isActive: boolean }): string {
   return cn(
-    'relative flex min-h-10 items-center gap-3 rounded-md px-2.5 text-sm text-muted-foreground focus-ring hover:bg-secondary hover:text-foreground',
+    'relative flex min-h-10 items-center max-md:min-h-11 gap-3 rounded-md px-2.5 text-sm text-muted-foreground focus-ring hover:bg-secondary hover:text-foreground',
     isActive &&
       'bg-secondary font-medium text-foreground before:absolute before:inset-y-1.5 before:-left-3 before:w-[3px] before:rounded-r before:bg-primary',
   )

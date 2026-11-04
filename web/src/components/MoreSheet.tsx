@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLocation } from 'react-router'
 import { useAuth } from '@/auth/useAuth'
 import { MOBILE_TAB_CLASS_NAME, MobileTabContent } from '@/components/MobileTab'
 import { RailNavGroups } from '@/components/RailNavGroups'
@@ -13,7 +14,19 @@ const BOTTOM_SHEET_CLASS_NAME =
 export function MoreSheet({ onLogout }: { onLogout: () => Promise<void> }) {
   const { t } = useTranslation()
   const { accountRole } = useAuth()
+  const { pathname } = useLocation()
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const [openedOnPathname, setOpenedOnPathname] = useState(pathname)
+
+  if (pathname !== openedOnPathname) {
+    setOpenedOnPathname(pathname)
+    setIsSheetOpen(false)
+  }
+
+  function closeSheet() {
+    setIsSheetOpen(false)
+  }
+
   return (
     <Dialog open={isSheetOpen} onOpenChange={setIsSheetOpen}>
       <DialogTrigger asChild>
@@ -23,8 +36,8 @@ export function MoreSheet({ onLogout }: { onLogout: () => Promise<void> }) {
       </DialogTrigger>
       <DialogContent aria-describedby={undefined} className={BOTTOM_SHEET_CLASS_NAME}>
         <DialogTitle className="px-2.5 pt-1">{t('shell.more')}</DialogTitle>
-        <RailNavGroups navItemGroups={moreSheetGroups(accountRole)} onNavigate={() => setIsSheetOpen(false)} />
-        <ShellControls onLogout={onLogout} />
+        <RailNavGroups navItemGroups={moreSheetGroups(accountRole)} onNavigate={closeSheet} />
+        <ShellControls onLogout={onLogout} onNavigate={closeSheet} />
       </DialogContent>
     </Dialog>
   )
