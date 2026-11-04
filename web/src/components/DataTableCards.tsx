@@ -23,7 +23,7 @@ export function DataTableCards<Row>({ caption, columns, rows, rowKey }: DataTabl
   const secondaryColumns = columnsPlacedAt(columns, 'secondary')
   const actionColumns = columnsPlacedAt(columns, 'actions')
   return (
-    <ul aria-label={caption} className="space-y-3">
+    <ul role="list" aria-label={caption} className="space-y-3">
       {rows.map((row) => (
         <li key={rowKey(row)} className="min-w-0 space-y-2 rounded-md border bg-card p-3">
           {primaryColumns.length > 0 && (

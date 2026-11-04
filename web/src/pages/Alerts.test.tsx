@@ -67,7 +67,7 @@ describe('alerts page', () => {
     stubFetch(alertsRoutes(makePage([], { window_size: 0 })))
     renderApp('/alerts')
 
-    expect(await screen.findByText(en.list.empty)).toBeInTheDocument()
+    expect(await screen.findByText(en.alerts.empty)).toBeInTheDocument()
   })
 
   it('showsTranslatedMessageWhenServerFails', async () => {
@@ -150,11 +150,11 @@ describe('alerts page', () => {
     renderApp('/alerts')
     await screen.findByText('crowdsecurity/ssh-bf', { selector: 'td bdi' })
 
-    await userEvent.selectOptions(screen.getByLabelText(en.filters.origin), 'appsec')
+    await userEvent.click(screen.getByRole('radio', { name: en.filters.originAppSec }))
     expect(await screen.findByText('crowdsecurity/appsec-only')).toBeInTheDocument()
     expect(requestedUrls(fetchMock)).toContain(appSecUrl)
 
-    await userEvent.selectOptions(screen.getByLabelText(en.filters.origin), 'log')
+    await userEvent.click(screen.getByRole('radio', { name: en.filters.originLogs }))
     expect(await screen.findByText('crowdsecurity/log-only')).toBeInTheDocument()
     expect(requestedUrls(fetchMock)).toContain(logUrl)
   })

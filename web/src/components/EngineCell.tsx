@@ -1,16 +1,22 @@
 import { UntrustedText } from '@/components/UntrustedText'
 import { Badge } from '@/components/ui/badge'
 
-interface EngineCellProps {
+export interface EngineCellProps {
   engineName: string
   badgeLabel?: string
+  machineId?: string
 }
 
-export function EngineCell({ engineName, badgeLabel }: EngineCellProps) {
+export function EngineCell({ engineName, badgeLabel, machineId }: EngineCellProps) {
   return (
     <>
       <UntrustedText value={engineName} />
       {badgeLabel && <Badge variant="outline" className="ml-2">{badgeLabel}</Badge>}
+      {machineId && (
+        <span className="block text-xs text-muted-foreground">
+          <UntrustedText value={machineId} />
+        </span>
+      )}
     </>
   )
 }

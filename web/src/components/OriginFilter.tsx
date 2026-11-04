@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { SelectField } from '@/components/SelectField'
+import { SegmentedControl } from '@/components/SegmentedControl'
 
 interface OriginFilterProps {
   value: string
@@ -9,9 +9,9 @@ interface OriginFilterProps {
 export function OriginFilter({ value, onChange }: OriginFilterProps) {
   const { t } = useTranslation()
   return (
-    <SelectField
-      id="filter-origin"
-      label={t('filters.origin')}
+    <SegmentedControl
+      name="filter-origin"
+      legend={t('filters.origin')}
       value={value}
       options={[
         { value: '', label: t('filters.allOrigins') },

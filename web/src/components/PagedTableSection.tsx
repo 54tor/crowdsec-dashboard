@@ -18,6 +18,7 @@ interface PagedTableSectionProps<Row> {
   rowKey: (row: Row) => string | number
   isLiveWindowRead?: boolean
   cardsOnMobile?: boolean
+  emptyMessage?: string
 }
 
 function totalPagesOf<Row>(data: Page<Row>): number {
@@ -39,7 +40,7 @@ function useKeepPageInRange(page: number, lastExistingPage: number | undefined, 
   }, [page, lastExistingPage, onPageChange])
 }
 
-export function PagedTableSection<Row>({ query, page, onPageChange, caption, columns, rowKey, isLiveWindowRead = true, cardsOnMobile = false }: PagedTableSectionProps<Row>) {
+export function PagedTableSection<Row>({ query, page, onPageChange, caption, columns, rowKey, isLiveWindowRead = true, cardsOnMobile = false, emptyMessage }: PagedTableSectionProps<Row>) {
   const { t } = useTranslation()
   const { data, error, isPending } = query
   useKeepPageInRange(page, data ? totalPagesOf(data) : undefined, onPageChange)
@@ -54,7 +55,7 @@ export function PagedTableSection<Row>({ query, page, onPageChange, caption, col
       {error && <ListErrorNotice error={error} />}
       {data.live_status === 'unavailable' && <WarningNotice>{t('list.liveUnavailable')}</WarningNotice>}
       {data.may_be_truncated && <WarningNotice>{t('list.truncated', { count: data.window_size })}</WarningNotice>}
-      <DataTable caption={caption} columns={columns} rows={data.items} rowKey={rowKey} cardsOnMobile={cardsOnMobile} />
+      <DataTable caption={caption} columns={columns} rows={data.items} rowKey={rowKey} cardsOnMobile={cardsOnMobile} emptyMessage={emptyMessage} />
       <ListSummary data={data} />
       {isLiveWindowRead && data.live_status !== 'unavailable' && <p className="text-sm text-muted-foreground">{t('list.windowInfo', { count: data.window_size })}</p>}
       <PaginationBar page={page} totalPages={totalPagesOf(data)} onPageChange={onPageChange} />

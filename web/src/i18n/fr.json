@@ -205,6 +205,7 @@
     "allowlist_write_failed": "Le moteur n'a pas appliqué la modification : la liste d'autorisation est inchangée."
   },
   "filters": {
+    "toggle": "Filtres",
     "label": "Filtres",
     "scenario": "Scénario",
     "ip": "Adresse IP ou CIDR",
@@ -248,15 +249,20 @@
     "caption": "Alertes signalées par CrowdSec",
     "chartTitle": "Alertes par heure",
     "columns": {
+      "status": "Statut",
       "createdAt": "Date",
       "scenario": "Scénario",
       "source": "Source",
-      "machine": "Machine",
       "events": "Événements",
       "decisions": "Décisions",
       "message": "Message",
       "engine": "Moteur"
     },
+    "status": {
+      "activeBan": "Ban actif",
+      "report": "Signalement"
+    },
+    "empty": "Aucune alerte pour ces filtres.",
     "simulated": "Simulée",
     "actions": "Actions",
     "delete": "Supprimer",

@@ -1,3 +1,4 @@
+import { screen } from '@testing-library/react'
 import { resetUnauthenticatedGuard } from '@/api/client'
 import { initI18n, setLanguage } from '@/i18n'
 
@@ -51,3 +52,15 @@ export function holdPostRequests(fetchMock: { getMockImplementation: () => ((inp
 
 // The shell always shows the brand logo; injection tests look for any other image.
 export const INJECTED_IMAGE_SELECTOR = 'img:not([src="/crowdsec-logo.png"])'
+
+// Browsers expose a header nested in <main> (the page header) as a plain group,
+// but the testing library maps every <header> to the banner role. The
+// application banner is the only header outside <main>.
+export async function findApplicationHeader(): Promise<HTMLElement> {
+  const bannerCandidates = await screen.findAllByRole('banner')
+  const applicationHeader = bannerCandidates.find((bannerCandidate) => bannerCandidate.closest('main') === null)
+  if (!applicationHeader) {
+    throw new Error('no header outside the main region')
+  }
+  return applicationHeader
+}

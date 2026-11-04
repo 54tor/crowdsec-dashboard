@@ -5,14 +5,10 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useIsDark } from '@/hooks/useIsDark'
+import { readChartPalette } from '@/lib/chartPalette'
 import type { HourBucket } from '@/lib/hourlyBuckets'
 
 registerEchartsModules([BarChart, GridComponent, CanvasRenderer])
-
-const PALETTES = {
-  light: { text: '#3f3f46', grid: '#d4d4d8', bar: '#1d4ed8' },
-  dark: { text: '#d4d4d8', grid: '#3f3f46', bar: '#60a5fa' },
-}
 
 export default function TimelineChartCanvas({ buckets }: { buckets: HourBucket[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -24,7 +20,7 @@ export default function TimelineChartCanvas({ buckets }: { buckets: HourBucket[]
     if (!container) {
       return
     }
-    const palette = isDark ? PALETTES.dark : PALETTES.light
+    const palette = readChartPalette()
     const hourFormatter = new Intl.DateTimeFormat(i18n.language, { day: 'numeric', month: 'short', hour: 'numeric' })
     const chart = init(container, undefined, { renderer: 'canvas' })
     chart.setOption({

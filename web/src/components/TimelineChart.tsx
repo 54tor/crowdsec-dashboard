@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Alert } from '@/api/types'
+import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { bucketAlertsPerHour } from '@/lib/hourlyBuckets'
 import { formatNumber } from '@/lib/format'
@@ -11,7 +12,7 @@ export function TimelineChart({ alerts }: { alerts: Alert[] }) {
   const { t, i18n } = useTranslation()
   const buckets = useMemo(() => bucketAlertsPerHour(alerts), [alerts])
   if (buckets.length === 0) {
-    return <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{t('chart.empty')}</p>
+    return <EmptyState message={t('chart.empty')} />
   }
   const totalAlerts = buckets.reduce((runningTotal, bucket) => runningTotal + bucket.count, 0)
   const hourFormatter = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })

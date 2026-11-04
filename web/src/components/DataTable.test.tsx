@@ -4,6 +4,8 @@ import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { DensityToggle } from '@/components/DensityToggle'
 import { UntrustedText } from '@/components/UntrustedText'
 import en from '@/i18n/en.json'
+import { TABLE_DENSITY_STORAGE_KEY } from '@/hooks/useTableDensity'
+import { MALICIOUS_SCENARIO } from '@/test/fixtures'
 import { setViewportWidth } from '@/test/matchMedia'
 import { prepareEnglishApp } from '@/test/pageHarness'
 
@@ -106,6 +108,17 @@ describe('data table', () => {
     expect(localStorage.getItem('table-density')).toBe('compact')
   })
 
+  it('densityIsRestoredFromStorageOnMount', () => {
+    localStorage.setItem(TABLE_DENSITY_STORAGE_KEY, 'compact')
+
+    renderSampleTable()
+
+    for (const compactRow of bodyRows()) {
+      expect(compactRow).toHaveClass('h-8')
+    }
+    expect(screen.getByRole('button', { name: en.list.density.compact })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   // Private browsing or a blocked site storage makes every access throw: the
   // table must still render at the default density and the toggle must still work.
   it('densityFallsBackWhenStorageThrows', () => {
@@ -149,6 +162,8 @@ describe('data table', () => {
 
     expect(container.querySelector('table')).toBeNull()
     const cardList = screen.getByRole('list', { name: 'Sample alerts' })
+    // Safari VoiceOver drops the list semantics of a ul styled without bullets.
+    expect(cardList).toHaveAttribute('role', 'list')
     const cards = within(cardList).getAllByRole('listitem')
     expect(cards).toHaveLength(SAMPLE_ROWS.length)
     cards.forEach((card, rowPosition) => {
@@ -178,6 +193,16 @@ describe('data table', () => {
 
     const longValueDetails = screen.getAllByText(longUntrustedValue)[0].closest('dd')
     expect(longValueDetails).toHaveClass('min-w-0', 'break-words')
+  })
+
+  it('hostileValueStaysTextInsideCard', () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    const hostileRows = [{ ...SAMPLE_ROWS[0], scenario: MALICIOUS_SCENARIO }]
+
+    const { container } = renderSampleTable({ cardsOnMobile: true, rows: hostileRows })
+
+    expect(screen.getByRole('list', { name: 'Sample alerts' })).toHaveTextContent(MALICIOUS_SCENARIO)
+    expect(container.querySelector('img')).toBeNull()
   })
 
   it('smallTablesStayTablesOnMobile', () => {

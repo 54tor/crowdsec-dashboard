@@ -205,6 +205,7 @@
     "allowlist_write_failed": "The engine did not apply the change: the allowlist is unchanged."
   },
   "filters": {
+    "toggle": "Filters",
     "label": "Filters",
     "scenario": "Scenario",
     "ip": "IP address or CIDR",
@@ -248,15 +249,20 @@
     "caption": "Alerts reported by CrowdSec",
     "chartTitle": "Alerts per hour",
     "columns": {
+      "status": "Status",
       "createdAt": "Date",
       "scenario": "Scenario",
       "source": "Source",
-      "machine": "Machine",
       "events": "Events",
       "decisions": "Decisions",
       "message": "Message",
       "engine": "Engine"
     },
+    "status": {
+      "activeBan": "Active ban",
+      "report": "Report"
+    },
+    "empty": "No alert matches these filters.",
     "simulated": "Simulated",
     "actions": "Actions",
     "delete": "Delete",

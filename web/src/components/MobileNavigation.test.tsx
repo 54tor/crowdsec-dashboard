@@ -5,7 +5,7 @@ import en from '@/i18n/en.json'
 import { makeHealth, makePage } from '@/test/fixtures'
 import { stubFetch, type RouteTable } from '@/test/fetchStub'
 import { setViewportWidth } from '@/test/matchMedia'
-import { prepareEnglishApp } from '@/test/pageHarness'
+import { findApplicationHeader, prepareEnglishApp } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const PHONE_VIEWPORT_WIDTH_IN_PIXELS = 390
@@ -175,7 +175,7 @@ describe('mobile navigation', () => {
     stubSignedInApp('read_only')
     renderApp('/alerts')
 
-    const applicationHeader = await screen.findByRole('banner')
+    const applicationHeader = await findApplicationHeader()
 
     expect(within(applicationHeader).getByText(en.app.title)).toBeInTheDocument()
     expect(await within(applicationHeader).findByText(en.shell.role.read_only)).toBeInTheDocument()

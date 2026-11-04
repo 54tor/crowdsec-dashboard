@@ -5,7 +5,7 @@ import en from '@/i18n/en.json'
 import { makePage } from '@/test/fixtures'
 import { stubFetch, type RouteTable } from '@/test/fetchStub'
 import { setViewportWidth } from '@/test/matchMedia'
-import { prepareEnglishApp } from '@/test/pageHarness'
+import { findApplicationHeader, prepareEnglishApp } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const DESKTOP_VIEWPORT_WIDTH_IN_PIXELS = 1920
@@ -82,7 +82,7 @@ describe('desktop application shell', () => {
     stubSignedInApp(accountRole)
     renderApp('/alerts')
 
-    const applicationHeader = await screen.findByRole('banner')
+    const applicationHeader = await findApplicationHeader()
 
     expect(await within(applicationHeader).findByText(expectedRoleLabel)).toBeInTheDocument()
   })

@@ -7,12 +7,20 @@ const RELATIVE_UNITS: { unit: Intl.RelativeTimeFormatUnit; minutes: number }[] =
   { unit: 'minute', minutes: 1 },
 ]
 
-export function formatDateTime(isoDate: string, language: string): string {
+function formatParsedDate(isoDate: string, language: string, formatOptions: Intl.DateTimeFormatOptions): string {
   const parsedDate = new Date(isoDate)
   if (Number.isNaN(parsedDate.getTime())) {
     return isoDate
   }
-  return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: 'medium' }).format(parsedDate)
+  return new Intl.DateTimeFormat(language, formatOptions).format(parsedDate)
+}
+
+export function formatDateTime(isoDate: string, language: string): string {
+  return formatParsedDate(isoDate, language, { dateStyle: 'medium', timeStyle: 'medium' })
+}
+
+export function formatDateTimeToMinute(isoDate: string, language: string): string {
+  return formatParsedDate(isoDate, language, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 export function minutesSince(isoDate: string, now: number): number | null {

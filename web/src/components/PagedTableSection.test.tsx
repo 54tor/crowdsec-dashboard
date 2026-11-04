@@ -54,4 +54,22 @@ describe('paged table section', () => {
     expect(pageChangeSpy).not.toHaveBeenCalled()
     expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
   })
+
+  it('forwardsTheEmptyMessageToTheTable', () => {
+    const emptyPage = makePage<Decision>([], { page: 1, per_page: 20, total: 0, window_size: 0 })
+
+    render(
+      <PagedTableSection
+        query={settledQuery(emptyPage)}
+        page={1}
+        onPageChange={vi.fn()}
+        caption="Decisions"
+        columns={VALUE_COLUMN}
+        rowKey={(decision) => decision.id}
+        emptyMessage="No decision yet."
+      />,
+    )
+
+    expect(screen.getByText('No decision yet.')).toBeInTheDocument()
+  })
 })
