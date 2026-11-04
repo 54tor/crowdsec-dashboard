@@ -45,7 +45,7 @@ export function Alerts() {
           <>
             <UntrustedText value={alertRow.scenario} />
             {alertRow.simulated && <Badge variant="outline" className="ml-2">{t('alerts.simulated')}</Badge>}
-            {alertRow.source_kind === 'appsec' && <Badge variant="secondary" className="ml-2">{t('alerts.appSecBadge')}</Badge>}
+            {alertRow.source_kind === 'appsec' && <Badge variant="neutral" className="ml-2">{t('alerts.appSecBadge')}</Badge>}
           </>
         ),
       },

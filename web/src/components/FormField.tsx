@@ -1,6 +1,8 @@
 import type { ComponentProps } from 'react'
+import { FieldMessages } from '@/components/FieldMessages'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { describedByIds } from '@/lib/fieldDescription'
 
 interface FormFieldProps extends Omit<ComponentProps<typeof Input>, 'id'> {
   id: string
@@ -10,7 +12,6 @@ interface FormFieldProps extends Omit<ComponentProps<typeof Input>, 'id'> {
 }
 
 export function FormField({ id, label, hint, error, ...inputProps }: FormFieldProps) {
-  const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(' ')
   return (
     <div className="space-y-1">
       <Label htmlFor={id}>{label}</Label>
@@ -19,19 +20,10 @@ export function FormField({ id, label, hint, error, ...inputProps }: FormFieldPr
         autoComplete="off"
         spellCheck={false}
         aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy || undefined}
+        aria-describedby={describedByIds(id, hint, error)}
         {...inputProps}
       />
-      {hint && (
-        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p id={`${id}-error`} className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      <FieldMessages fieldId={id} hint={hint} error={error} />
     </div>
   )
 }

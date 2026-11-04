@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { CheckboxField } from '@/components/CheckboxField'
 import { FormField } from '@/components/FormField'
-import { Label } from '@/components/ui/label'
+import { SelectField } from '@/components/SelectField'
 import type { EngineFormValues, ProxyKindChoice, RequiredSecrets } from '@/lib/engineForm'
 
 interface EngineProxyFieldsProps {
@@ -17,19 +17,17 @@ export function EngineProxyFields({ values, required, isEditing, onChange }: Eng
   const credentialsHint = required.proxyCredentials ? t('engines.fields.proxyCredentialsRequired') : t('engines.fields.proxyCredentialsHint')
   return (
     <div className="space-y-3">
-      <div className="space-y-1">
-        <Label htmlFor="engine-proxy-kind">{t('engines.fields.proxyKind')}</Label>
-        <select
-          id="engine-proxy-kind"
-          value={values.proxyKind}
-          onChange={(changeEvent) => onChange({ proxyKind: changeEvent.target.value as ProxyKindChoice })}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-        >
-          <option value="">{t('engines.fields.proxyNone')}</option>
-          <option value="socks5">socks5</option>
-          <option value="http">http</option>
-        </select>
-      </div>
+      <SelectField
+        id="engine-proxy-kind"
+        label={t('engines.fields.proxyKind')}
+        value={values.proxyKind}
+        options={[
+          { value: '', label: t('engines.fields.proxyNone') },
+          { value: 'socks5', label: 'socks5' },
+          { value: 'http', label: 'http' },
+        ]}
+        onChange={(chosenKind) => onChange({ proxyKind: chosenKind as ProxyKindChoice })}
+      />
       {hasProxy && (
         <>
           <FormField id="engine-proxy-url" label={t('engines.fields.proxyUrl')} value={values.proxyUrl} onChange={(changeEvent) => onChange({ proxyUrl: changeEvent.target.value })} />

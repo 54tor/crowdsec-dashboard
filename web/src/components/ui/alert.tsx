@@ -3,29 +3,30 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
 const alertVariants = cva(
-  "group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>[data-icon]]:grid-cols-[auto_1fr] has-[>[data-icon]]:gap-x-2 *:data-icon:row-span-2 *:data-icon:translate-y-0.5 *:data-icon:text-current",
+  "group/alert relative grid w-full gap-0.5 rounded-md border border-l-4 px-3.5 py-3 text-left text-sm text-foreground has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>[data-icon]]:grid-cols-[auto_1fr] has-[>[data-icon]]:gap-x-3 *:data-icon:row-span-2 *:data-icon:translate-y-0.5",
   {
     variants: {
       variant: {
-        default: "bg-card text-card-foreground",
-        destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:data-icon:text-current",
+        info: "border-info bg-info-tint *:data-icon:text-info",
+        warning: "border-warning bg-warning-tint *:data-icon:text-warning",
+        critical: "border-critical bg-critical-tint *:data-icon:text-critical",
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "info",
     },
   }
 )
 
 function Alert({
   className,
-  variant,
+  variant = "info",
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
   return (
     <div
       data-slot="alert"
+      data-variant={variant}
       role="alert"
       className={cn(alertVariants({ variant }), className)}
       {...props}
@@ -54,7 +55,7 @@ function AlertDescription({
     <div
       data-slot="alert-description"
       className={cn(
-        "text-sm text-balance text-muted-foreground md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+        "text-sm text-balance text-foreground md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
         className
       )}
       {...props}

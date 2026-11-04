@@ -27,7 +27,7 @@ export function Config() {
                 {data.files.map((fileName) => (
                   <li key={fileName}>
                     <Button
-                      variant={fileName === selectedFile ? 'secondary' : 'ghost'}
+                      variant={fileName === selectedFile ? 'outline' : 'ghost'}
                       size="sm"
                       aria-pressed={fileName === selectedFile}
                       className="w-full justify-start font-mono break-all"

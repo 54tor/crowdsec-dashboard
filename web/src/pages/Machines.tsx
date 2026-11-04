@@ -25,7 +25,7 @@ export function Machines() {
             <div className="flex flex-col gap-1">
               <Button
                 type="button"
-                variant="destructive"
+                variant="destructiveOutline"
                 size="sm"
                 disabled
                 aria-label={t('machines.deleteAria', { name: machine.machine_id })}

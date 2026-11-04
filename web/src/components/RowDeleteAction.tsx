@@ -31,7 +31,7 @@ export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, ta
     <ConfirmDeleteDialog
       open={isDialogOpen}
       trigger={
-        <Button type="button" variant="destructive" size="sm" aria-label={ariaLabel} disabled={disabledReason !== undefined} title={disabledReason}>
+        <Button type="button" variant="destructiveOutline" size="sm" aria-label={ariaLabel} disabled={disabledReason !== undefined} title={disabledReason}>
           {buttonLabel}
         </Button>
       }

@@ -10,7 +10,7 @@ import { isTimeoutError } from '@/lib/apiErrors'
 
 export function InfoNotice({ children }: { children: ReactNode }) {
   return (
-    <Alert role="status">
+    <Alert variant="info" role="status">
       <Icon name="info" className="size-4" />
       <AlertDescription>{children}</AlertDescription>
     </Alert>
@@ -19,7 +19,7 @@ export function InfoNotice({ children }: { children: ReactNode }) {
 
 export function WarningNotice({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <Alert role="status" className="border-amber-600">
+    <Alert variant="warning" role="status">
       <Icon name="warning" className="size-4" />
       {title && <AlertTitle>{title}</AlertTitle>}
       <AlertDescription>{children}</AlertDescription>
@@ -31,7 +31,7 @@ export function ErrorNotice({ error, message }: { error: unknown; message?: stri
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   return (
-    <Alert variant="destructive" role="alert">
+    <Alert variant="critical" role="alert">
       <Icon name="warning" className="size-4" />
       <AlertDescription>
         {message ?? errorMessage(error)}

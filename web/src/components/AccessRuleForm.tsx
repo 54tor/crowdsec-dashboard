@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { ACCESS_RULES_QUERY_KEY, addAccessRule, type AccessRuleKind } from '@/api/accessRulesApi'
 import { FormError } from '@/components/FormError'
 import { LabelledInput } from '@/components/LabelledInput'
+import { SelectField } from '@/components/SelectField'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 
 export function AccessRuleForm() {
   const { t } = useTranslation()
@@ -32,18 +32,16 @@ export function AccessRuleForm() {
   return (
     <form onSubmit={submit} className="space-y-3" aria-label={t('accountSecurity.addTitle')}>
       <h2 className="text-lg font-medium">{t('accountSecurity.addTitle')}</h2>
-      <div className="space-y-2">
-        <Label htmlFor="access-rule-kind">{t('accountSecurity.kindLabel')}</Label>
-        <select
-          id="access-rule-kind"
-          value={kind}
-          onChange={(changeEvent) => setKind(changeEvent.target.value as AccessRuleKind)}
-          className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
-        >
-          <option value="ip">{t('accountSecurity.kinds.ip')}</option>
-          <option value="country">{t('accountSecurity.kinds.country')}</option>
-        </select>
-      </div>
+      <SelectField
+        id="access-rule-kind"
+        label={t('accountSecurity.kindLabel')}
+        value={kind}
+        options={[
+          { value: 'ip', label: t('accountSecurity.kinds.ip') },
+          { value: 'country', label: t('accountSecurity.kinds.country') },
+        ]}
+        onChange={(chosenKind) => setKind(chosenKind as AccessRuleKind)}
+      />
       <LabelledInput
         ref={valueInput}
         id="access-rule-value"

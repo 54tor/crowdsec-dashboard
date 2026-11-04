@@ -33,9 +33,9 @@ function EngineState({ engine }: { engine: EngineView }) {
   const { t } = useTranslation()
   return (
     <div className="flex flex-wrap gap-1">
-      {engine.is_local && <Badge variant="secondary">{t('engines.local')}</Badge>}
-      <Badge variant={engine.enabled ? 'default' : 'outline'}>{engine.enabled ? t('engines.enabled') : t('engines.disabled')}</Badge>
-      {engine.sync_enabled && <Badge variant="secondary">{t('engines.syncEnabled')}</Badge>}
+      {engine.is_local && <Badge variant="neutral">{t('engines.local')}</Badge>}
+      <Badge variant={engine.enabled ? 'neutral' : 'outline'}>{engine.enabled ? t('engines.enabled') : t('engines.disabled')}</Badge>
+      {engine.sync_enabled && <Badge variant="neutral">{t('engines.syncEnabled')}</Badge>}
     </div>
   )
 }

@@ -51,7 +51,7 @@ export function AllowlistSection({ engineName, allowlist, isWritable, onWritten 
             <h2 className="text-lg font-semibold">
               <UntrustedText value={allowlist.name} />
             </h2>
-            {allowlist.console_managed && <Badge variant="secondary">{t('allowlists.consoleManaged')}</Badge>}
+            {allowlist.console_managed && <Badge variant="neutral">{t('allowlists.consoleManaged')}</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">
             <UntrustedText value={allowlist.description} />

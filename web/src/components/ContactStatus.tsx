@@ -11,7 +11,7 @@ interface ContactStatusProps {
 export function ContactStatus({ lastContact, now, revoked = false }: ContactStatusProps) {
   const { t } = useTranslation()
   if (revoked) {
-    return <Badge variant="destructive">{t('health.revoked')}</Badge>
+    return <Badge variant="critical">{t('health.revoked')}</Badge>
   }
   if (isStale(lastContact, now)) {
     return (
@@ -20,5 +20,5 @@ export function ContactStatus({ lastContact, now, revoked = false }: ContactStat
       </Badge>
     )
   }
-  return <Badge variant="secondary">{t('health.ok')}</Badge>
+  return <Badge variant="neutral">{t('health.ok')}</Badge>
 }
