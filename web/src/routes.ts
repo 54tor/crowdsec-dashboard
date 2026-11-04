@@ -47,3 +47,26 @@ export function groupNavItems(navItems: readonly NavItem[]): NavItemGroup[] {
   }))
   return navItemGroups.filter((navItemGroup) => navItemGroup.items.length > 0)
 }
+
+export const MOBILE_TAB_PATHS: readonly string[] = ['/alerts', '/decisions', '/sync', '/engines']
+
+const MOBILE_TAB_FALLBACK_PATHS: readonly string[] = ['/health']
+
+function isNavItem(candidate: NavItem | undefined): candidate is NavItem {
+  return candidate !== undefined
+}
+
+export function mobileTabItems(accountRole: AccountRole | null): readonly NavItem[] {
+  const visibleItems = visibleNavItems(accountRole)
+  const candidatePaths = [...MOBILE_TAB_PATHS, ...MOBILE_TAB_FALLBACK_PATHS]
+  const candidateItems = candidatePaths
+    .map((candidatePath) => visibleItems.find((navItem) => navItem.path === candidatePath))
+    .filter(isNavItem)
+  return candidateItems.slice(0, MOBILE_TAB_PATHS.length)
+}
+
+export function moreSheetGroups(accountRole: AccountRole | null): NavItemGroup[] {
+  const tabPaths = new Set(mobileTabItems(accountRole).map((tabItem) => tabItem.path))
+  const remainingItems = visibleNavItems(accountRole).filter((navItem) => !tabPaths.has(navItem.path))
+  return groupNavItems(remainingItems)
+}

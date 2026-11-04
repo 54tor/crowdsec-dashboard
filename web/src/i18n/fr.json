@@ -31,7 +31,9 @@
       "admin": "Administrateur",
       "read_only": "Lecture seule"
     },
-    "account": "Compte"
+    "account": "Compte",
+    "more": "Plus",
+    "mobileNavLabel": "Navigation rapide"
   },
   "common": {
     "retry": "Réessayer",

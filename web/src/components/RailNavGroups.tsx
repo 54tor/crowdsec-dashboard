@@ -1,10 +1,9 @@
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router'
-import { useAuth } from '@/auth/useAuth'
 import { Icon } from '@/components/Icon'
 import { cn } from '@/lib/utils'
-import { groupNavItems, visibleNavItems, type NavItemGroup } from '@/routes'
+import type { NavItemGroup } from '@/routes'
 
 function railLinkClassName({ isActive }: { isActive: boolean }): string {
   return cn(
@@ -14,7 +13,7 @@ function railLinkClassName({ isActive }: { isActive: boolean }): string {
   )
 }
 
-function RailNavGroup({ navItemGroup }: { navItemGroup: NavItemGroup }) {
+function RailNavGroup({ navItemGroup, onNavigate }: { navItemGroup: NavItemGroup; onNavigate?: () => void }) {
   const { t } = useTranslation()
   const headingId = useId()
   return (
@@ -25,7 +24,7 @@ function RailNavGroup({ navItemGroup }: { navItemGroup: NavItemGroup }) {
       <ul aria-labelledby={headingId} className="space-y-0.5">
         {navItemGroup.items.map((navItem) => (
           <li key={navItem.path}>
-            <NavLink to={navItem.path} className={railLinkClassName}>
+            <NavLink to={navItem.path} className={railLinkClassName} onClick={onNavigate}>
               <Icon name={navItem.icon} className="size-5" />
               {t(navItem.labelKey)}
             </NavLink>
@@ -36,13 +35,18 @@ function RailNavGroup({ navItemGroup }: { navItemGroup: NavItemGroup }) {
   )
 }
 
-export function RailNavGroups() {
+export function RailNavGroups({
+  navItemGroups,
+  onNavigate,
+}: {
+  navItemGroups: readonly NavItemGroup[]
+  onNavigate?: () => void
+}) {
   const { t } = useTranslation()
-  const { accountRole } = useAuth()
   return (
     <nav aria-label={t('nav.label')}>
-      {groupNavItems(visibleNavItems(accountRole)).map((navItemGroup) => (
-        <RailNavGroup key={navItemGroup.group} navItemGroup={navItemGroup} />
+      {navItemGroups.map((navItemGroup) => (
+        <RailNavGroup key={navItemGroup.group} navItemGroup={navItemGroup} onNavigate={onNavigate} />
       ))}
     </nav>
   )
