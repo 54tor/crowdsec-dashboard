@@ -80,6 +80,31 @@ describe('decisions page layout', () => {
     expect(within(pageHeader).getByRole('group', { name: en.list.density.label })).toBeInTheDocument()
   })
 
+  // The include-expired checkbox folds with the filters, so it counts as one.
+  it('includeExpiredCountsAsAnActiveFilter', async () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    stubDecisionsPage()
+    const user = userEvent.setup()
+    renderApp('/decisions')
+
+    await user.click(await screen.findByRole('button', { name: en.filters.toggle }))
+    await user.click(screen.getByLabelText(en.decisions.includeExpired))
+    const filtersToggle = screen.getByRole('button', { name: /^Filters/ })
+    await user.click(filtersToggle)
+
+    expect(filtersToggle).toHaveAccessibleName(en.filters.toggleWithCount.replace('{{count}}', '1'))
+  })
+
+  it('densityToggleHiddenOnMobileCards', async () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    stubDecisionsPage()
+    renderApp('/decisions')
+
+    await screen.findByRole('list', { name: en.decisions.caption })
+
+    expect(screen.queryByRole('group', { name: en.list.density.label })).toBeNull()
+  })
+
   it('banDialogConfirmIsPrimaryNotDestructive', async () => {
     stubDecisionsPage()
     const user = userEvent.setup()

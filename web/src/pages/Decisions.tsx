@@ -36,6 +36,8 @@ export function Decisions() {
   const canWrite = useCanWrite()
   const [includeExpired, setIncludeExpired] = useState(false)
   const query = usePagedList<Decision>('decisions', controls.filters, controls.page, PAGE_SIZE, controls.isValid, includeExpired)
+  const includeExpiredFilterCount = includeExpired ? 1 : 0
+  const activeFilterCount = controls.activeFilterCount + includeExpiredFilterCount
 
   function changeIncludeExpired(isChecked: boolean) {
     setIncludeExpired(isChecked)
@@ -113,7 +115,7 @@ export function Decisions() {
         }
       />
       <InfoNotice>{t('decisions.communityNotice')}</InfoNotice>
-      <FiltersDisclosure>
+      <FiltersDisclosure activeFilterCount={activeFilterCount} hasInvalidFilter={!controls.isValid}>
         <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} />
         <CheckboxField id="decisions-include-expired" label={t('decisions.includeExpired')} checked={includeExpired} onChange={changeIncludeExpired} />
       </FiltersDisclosure>

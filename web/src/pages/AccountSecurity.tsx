@@ -17,7 +17,7 @@ export function AccountSecurity() {
   const clientCountry = data?.client_country ? ` (${countryLabel(data.client_country, i18n.language)})` : ''
   return (
     <section className="space-y-4">
-      <PageHeader title={t('accountSecurity.title')} titleRef={heading} actions={<DensityToggle />} />
+      <PageHeader title={t('accountSecurity.title')} titleRef={heading} actions={<DensityToggle keepOnMobile />} />
       <InfoNotice>{t('accountSecurity.explanation')}</InfoNotice>
       <WarningNotice>{t('accountSecurity.geoNotice')}</WarningNotice>
       {error && <ErrorNotice error={error} />}

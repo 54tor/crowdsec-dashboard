@@ -206,6 +206,7 @@
   },
   "filters": {
     "toggle": "Filters",
+    "toggleWithCount": "Filters ({{count}})",
     "label": "Filters",
     "scenario": "Scenario",
     "ip": "IP address or CIDR",

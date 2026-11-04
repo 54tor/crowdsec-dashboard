@@ -108,6 +108,23 @@ describe('data table', () => {
     expect(localStorage.getItem('table-density')).toBe('compact')
   })
 
+  // The density lives in one shared store: a page showing two toggles must
+  // never let them disagree after one of them is used.
+  it('twoDensityTogglesStayInSync', () => {
+    render(
+      <>
+        <DensityToggle />
+        <DensityToggle />
+      </>,
+    )
+    const [firstCompactButton, secondCompactButton] = screen.getAllByRole('button', { name: en.list.density.compact })
+
+    fireEvent.click(firstCompactButton)
+
+    expect(firstCompactButton).toHaveAttribute('aria-pressed', 'true')
+    expect(secondCompactButton).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('densityIsRestoredFromStorageOnMount', () => {
     localStorage.setItem(TABLE_DENSITY_STORAGE_KEY, 'compact')
 

@@ -95,6 +95,54 @@ describe('alerts page layout', () => {
     expect(screen.getByLabelText(en.filters.scenario)).toBeInTheDocument()
   })
 
+  // Once folded, the panel no longer shows what narrows the list: the toggle
+  // label carries the number of filters currently set.
+  it('foldedFiltersToggleCountsActiveFilters', async () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    stubAlertsPage()
+    const user = userEvent.setup()
+    renderApp('/alerts')
+
+    await user.click(await screen.findByRole('button', { name: en.filters.toggle }))
+    await user.type(screen.getByLabelText(en.filters.scenario), 'crowdsecurity/ssh-bf')
+    await user.type(screen.getByLabelText(en.filters.since), '24h')
+    const filtersToggle = screen.getByRole('button', { name: /^Filters/ })
+    await user.click(filtersToggle)
+
+    const expectedToggleLabel = en.filters.toggleWithCount.replace('{{count}}', '2')
+    expect(filtersToggle).toHaveAccessibleName(expectedToggleLabel)
+    expect(filtersToggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  // A folded panel would hide the message explaining why the list stopped
+  // refreshing, so an invalid field keeps the panel open.
+  it('filtersPanelStaysOpenWhileAFieldIsInvalid', async () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    stubAlertsPage()
+    const user = userEvent.setup()
+    renderApp('/alerts')
+
+    await user.click(await screen.findByRole('button', { name: en.filters.toggle }))
+    await user.type(screen.getByLabelText(en.filters.ip), 'not-an-ip')
+    expect(await screen.findByText(en.filters.ipInvalid)).toBeInTheDocument()
+    const filtersToggle = screen.getByRole('button', { name: /^Filters/ })
+    await user.click(filtersToggle)
+
+    expect(filtersToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(en.filters.ipInvalid)).toBeInTheDocument()
+  })
+
+  // Cards ignore the row density, so the toggle would do nothing on a phone.
+  it('densityToggleHiddenOnMobileCards', async () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    stubAlertsPage()
+    renderApp('/alerts')
+
+    await screen.findByRole('list', { name: en.alerts.caption })
+
+    expect(screen.queryByRole('group', { name: en.list.density.label })).toBeNull()
+  })
+
   it('filtersStayVisibleWithoutToggleOnDesktop', async () => {
     setViewportWidth(DESKTOP_VIEWPORT_WIDTH_IN_PIXELS)
     stubAlertsPage()

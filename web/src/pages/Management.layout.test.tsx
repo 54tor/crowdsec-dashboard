@@ -118,6 +118,28 @@ describe('management pages layout', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
+  // Cards ignore the row density, so the toggle is pointless above them on a phone.
+  it.each(MOBILE_CARD_LISTS)('densityToggleHiddenOnMobileCards on $path', async (mobileCardList) => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    stubFetch(managementRoutes())
+    renderApp(mobileCardList.path)
+
+    await screen.findByRole('list', { name: mobileCardList.listName })
+
+    expect(screen.queryByRole('group', { name: en.list.density.label })).toBeNull()
+  })
+
+  // The access rules stay a table on a phone, where the density still applies.
+  it('densityToggleStaysOnMobileAboveTheAccessRulesTable', async () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    stubFetch(managementRoutes())
+    renderApp('/account/security')
+
+    await screen.findByRole('heading', { level: 1, name: en.accountSecurity.title })
+
+    expect(screen.getByRole('group', { name: en.list.density.label })).toBeInTheDocument()
+  })
+
   it('allowlistEntryCardKeepsMonoValueAndRemoveAction', async () => {
     setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
     stubFetch(managementRoutes())

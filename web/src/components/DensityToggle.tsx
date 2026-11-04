@@ -1,12 +1,17 @@
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { useIsMobileViewport } from '@/hooks/useMediaQuery'
 import { useTableDensity, type TableDensity } from '@/hooks/useTableDensity'
 
 const DENSITY_CHOICES: readonly TableDensity[] = ['comfortable', 'compact']
 
-export function DensityToggle() {
+export function DensityToggle({ keepOnMobile = false }: { keepOnMobile?: boolean }) {
   const { t } = useTranslation()
   const { density, changeDensity } = useTableDensity()
+  const isMobileViewport = useIsMobileViewport()
+  if (isMobileViewport && !keepOnMobile) {
+    return null
+  }
   return (
     <div role="group" aria-label={t('list.density.label')} className="inline-flex gap-1">
       {DENSITY_CHOICES.map((densityChoice) => (

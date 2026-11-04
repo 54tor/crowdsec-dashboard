@@ -84,7 +84,7 @@ export function Alerts() {
   return (
     <section className="space-y-4">
       <PageHeader title={t('alerts.title')} actions={<DensityToggle />} />
-      <FiltersDisclosure>
+      <FiltersDisclosure activeFilterCount={controls.activeFilterCount} hasInvalidFilter={!controls.isValid}>
         <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} showOriginFilter />
       </FiltersDisclosure>
       <section aria-labelledby="alerts-chart-title" className="space-y-2">

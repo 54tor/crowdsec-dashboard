@@ -19,8 +19,10 @@ export function useListControls() {
   }
 
   const isLiveWindowRead = filters.engine === '' || filters.engine === LOCAL_ENGINE_NAME
+  const activeFilterCount = Object.values(draftFilters).filter((filterValue) => filterValue !== '').length
 
   return {
+    activeFilterCount,
     draftFilters,
     isLiveWindowRead,
     filters,
