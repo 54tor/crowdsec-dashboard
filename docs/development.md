@@ -264,8 +264,11 @@ that starts failing after a refresh means CrowdSec changed an output shape.
 - **Theme choice** (light, dark or system) is stored in `localStorage` under `theme-preference`.
   `web/public/theme-init.js` applies it before React mounts, so the page never flashes the wrong
   theme; it is an external file because the CSP `default-src 'self'` forbids inline scripts.
-- **Table density** (comfortable 40 px rows, compact 32 px) is stored under `table-density` and
-  shared by every list. The toggle is hidden on phones above lists shown as cards, which ignore it.
+- **Table density** (comfortable: 40 px minimum rows and roomier cells, compact: 32 px and tight
+  cells) is stored under `table-density` and shared by every list. The toggle sits in the page
+  header, only when the list has rows, and is hidden on phones above lists shown as cards, which
+  ignore it. Columns with short values set `noWrap` on their `DataTableColumn`: they stay on one
+  line in tables (the scroll region scrolls instead) and still wrap inside cards.
 - **Fonts** are IBM Plex Sans, Sans Condensed and Mono from the `@fontsource/*` packages, latin
   subsets only, bundled with the front end: no CDN, no external request.
 - **Icons** are Material Symbols (outlined, weight 400) from `@material-symbols/svg-400`, inlined as
