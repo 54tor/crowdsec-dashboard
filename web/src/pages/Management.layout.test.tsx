@@ -104,7 +104,8 @@ describe('management pages layout', () => {
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(pageTitle).toHaveClass('font-condensed')
-    expect(within(pageHeader).getByRole('group', { name: en.list.density.label })).toBeInTheDocument()
+    // The toggle only appears once the list has rows.
+    expect(await within(pageHeader).findByRole('group', { name: en.list.density.label })).toBeInTheDocument()
   })
 
   it.each(MOBILE_CARD_LISTS)('mainListsBecomeCardsOnMobile on $path', async (mobileCardList) => {
@@ -137,7 +138,7 @@ describe('management pages layout', () => {
 
     await screen.findByRole('heading', { level: 1, name: en.accountSecurity.title })
 
-    expect(screen.getByRole('group', { name: en.list.density.label })).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: en.list.density.label })).toBeInTheDocument()
   })
 
   it('allowlistEntryCardKeepsMonoValueAndRemoveAction', async () => {
