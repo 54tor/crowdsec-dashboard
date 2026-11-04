@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AcquisitionMetric, MetricsAvailable, ParserMetric } from '@/api/types'
+import { EmptyState } from '@/components/EmptyState'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { formatNumber } from '@/lib/format'
 
@@ -25,7 +26,7 @@ export function MetricsTables({ metrics }: { metrics: MetricsAvailable }) {
     [t, i18n.language],
   )
   if (metrics.acquisition.length === 0 && metrics.parsers.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t('metrics.empty')}</p>
+    return <EmptyState message={t('metrics.empty')} />
   }
   return (
     <div className="space-y-6">

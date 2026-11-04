@@ -32,13 +32,18 @@ export function CollectorTable({ engines, now }: { engines: EngineHealth[]; now:
       {
         key: 'status',
         header: t('health.columns.status'),
-        cell: (engine) => <Badge variant="outline">{engine.stale ? t('health.collector.stale') : t('health.ok')}</Badge>,
+        cell: (engine) => <Badge variant={engine.stale ? 'warning' : 'nominal'}>{engine.stale ? t('health.collector.stale') : t('health.ok')}</Badge>,
       },
     ],
     [t, i18n.language, now],
   )
-  if (engines.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t('health.collector.empty')}</p>
-  }
-  return <DataTable caption={t('health.collector.tableCaption')} columns={columns} rows={engines} rowKey={(engine) => engine.engine_name} />
+  return (
+    <DataTable
+      caption={t('health.collector.tableCaption')}
+      columns={columns}
+      rows={engines}
+      rowKey={(engine) => engine.engine_name}
+      emptyMessage={t('health.collector.empty')}
+    />
+  )
 }

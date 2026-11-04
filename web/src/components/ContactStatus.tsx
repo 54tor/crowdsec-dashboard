@@ -15,10 +15,8 @@ export function ContactStatus({ lastContact, now, revoked = false }: ContactStat
   }
   if (isStale(lastContact, now)) {
     return (
-      <Badge variant="outline" className="border-amber-600 text-amber-800 dark:text-amber-300">
-        {t('health.stale')}
-      </Badge>
+      <Badge variant="warning">{t('health.stale')}</Badge>
     )
   }
-  return <Badge variant="neutral">{t('health.ok')}</Badge>
+  return <Badge variant="nominal">{t('health.ok')}</Badge>
 }

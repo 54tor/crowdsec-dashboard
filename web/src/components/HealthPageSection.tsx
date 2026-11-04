@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DegradedPart, HealthReport } from '@/api/types'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
+import { PageHeader } from '@/components/PageHeader'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { useHealth } from '@/hooks/useReadResources'
 
@@ -17,8 +18,7 @@ export function HealthPageSection({ titleKey, degradedPart, toolbar, children }:
   const { data, dataUpdatedAt, error, isPending } = useHealth()
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">{t(titleKey)}</h1>
-      {toolbar}
+      <PageHeader title={t(titleKey)} actions={toolbar} />
       {error && <ErrorNotice error={error} />}
       {isPending && <TableSkeleton />}
       {data?.degraded.includes(degradedPart) && <WarningNotice>{t(`health.degraded.${degradedPart}`)}</WarningNotice>}

@@ -26,10 +26,15 @@ export function BouncersTable({ bouncers, now, actions }: { bouncers: Bouncer[];
     ],
     [t, now, actions],
   )
-  if (bouncers.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t('health.noBouncers')}</p>
-  }
-  return <DataTable caption={t('health.bouncersCaption')} columns={columns} rows={bouncers} rowKey={(bouncer) => bouncer.name} />
+  return (
+    <DataTable
+      caption={t('health.bouncersCaption')}
+      columns={columns}
+      rows={bouncers}
+      rowKey={(bouncer) => bouncer.name}
+      emptyMessage={t('health.noBouncers')}
+    />
+  )
 }
 
 export function MachinesTable({ machines, now, actions }: { machines: Machine[]; now: number; actions?: RowActions<Machine> }) {
@@ -64,8 +69,13 @@ export function MachinesTable({ machines, now, actions }: { machines: Machine[];
     ],
     [t, now, actions],
   )
-  if (machines.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t('health.noMachines')}</p>
-  }
-  return <DataTable caption={t('health.machinesCaption')} columns={columns} rows={machines} rowKey={(machine) => machine.machine_id} />
+  return (
+    <DataTable
+      caption={t('health.machinesCaption')}
+      columns={columns}
+      rows={machines}
+      rowKey={(machine) => machine.machine_id}
+      emptyMessage={t('health.noMachines')}
+    />
+  )
 }

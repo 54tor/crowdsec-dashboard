@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { EmptyState } from '@/components/EmptyState'
+import { PageHeader } from '@/components/PageHeader'
 import { ErrorNotice } from '@/components/Notice'
 import { HubFilters } from '@/components/HubFilters'
 import { HubTable } from '@/components/HubTable'
@@ -25,7 +27,7 @@ export function Hub() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">{t('hub.title')}</h1>
+      <PageHeader title={t('hub.title')} />
       <WriteOnly>
         <ReloadBanner />
         <HubToolbar />
@@ -34,7 +36,7 @@ export function Hub() {
       {error && <ErrorNotice error={error} />}
       {isPending && !error && <TableSkeleton />}
       {data && visibleItems.length === 0 && (
-        <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{t(data.length === 0 ? 'hub.noItems' : 'hub.empty')}</p>
+        <EmptyState message={t(data.length === 0 ? 'hub.noItems' : 'hub.empty')} />
       )}
       {data && visibleItems.length > 0 && <HubTable items={visibleItems} />}
     </section>

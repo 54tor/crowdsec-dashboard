@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { CollectorTable } from '@/components/CollectorTable'
 import { BouncersTable, MachinesTable } from '@/components/HealthTables'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
+import { PageHeader } from '@/components/PageHeader'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { useHealth } from '@/hooks/useReadResources'
 
@@ -10,7 +11,7 @@ export function Health() {
   const { data, dataUpdatedAt, error, isPending } = useHealth()
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">{t('health.title')}</h1>
+      <PageHeader title={t('health.title')} />
       {error && <ErrorNotice error={error} />}
       {isPending && <TableSkeleton />}
       {data && (
