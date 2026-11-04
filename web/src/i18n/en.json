@@ -236,7 +236,12 @@
     "liveUnavailable": "Local API unreachable, showing the archive.",
     "totalInfo": "{{total}} entries in total",
     "totalCapped": "{{total}}+ entries (only these can be browsed)",
-    "invalidRequest": "The server refused this page or these filters: go back to the first page or fix the filters."
+    "invalidRequest": "The server refused this page or these filters: go back to the first page or fix the filters.",
+    "density": {
+      "label": "Density",
+      "comfortable": "Comfortable",
+      "compact": "Compact"
+    }
   },
   "alerts": {
     "title": "Alerts",

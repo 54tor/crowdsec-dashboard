@@ -1,12 +1,21 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { cn } from 'cn'
+import { DataTableCards } from '@/components/DataTableCards'
+import { EmptyState } from '@/components/EmptyState'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useIsMobileViewport } from '@/hooks/useMediaQuery'
+import { useTableDensity, type TableDensity } from '@/hooks/useTableDensity'
+
+export type MobileColumnPlacement = 'primary' | 'secondary' | 'hidden' | 'actions'
 
 export interface DataTableColumn<Row> {
   key: string
   header: string
   cell: (row: Row) => ReactNode
   className?: string
+  mobile?: MobileColumnPlacement
+  visibleFrom?: 'wide'
 }
 
 interface DataTableProps<Row> {
@@ -14,23 +23,42 @@ interface DataTableProps<Row> {
   columns: DataTableColumn<Row>[]
   rows: Row[]
   rowKey: (row: Row) => string | number
+  cardsOnMobile?: boolean
+  emptyMessage?: string
 }
 
-export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProps<Row>) {
+const ROW_HEIGHT_BY_DENSITY: Record<TableDensity, string> = {
+  comfortable: 'h-10',
+  compact: 'h-8',
+}
+
+function columnVisibilityClass<Row>(column: DataTableColumn<Row>): string | undefined {
+  return column.visibleFrom === 'wide' ? 'hidden min-[1680px]:table-cell' : undefined
+}
+
+export function DataTable<Row>({ caption, columns, rows, rowKey, cardsOnMobile = false, emptyMessage }: DataTableProps<Row>) {
   const { t } = useTranslation()
+  const { density } = useTableDensity()
+  const isMobileViewport = useIsMobileViewport()
+  if (rows.length === 0) {
+    return <EmptyState message={emptyMessage ?? t('list.empty')} />
+  }
+  if (cardsOnMobile && isMobileViewport) {
+    return <DataTableCards caption={caption} columns={columns} rows={rows} rowKey={rowKey} />
+  }
   return (
     <div
       role="region"
       aria-label={t('list.scrollRegion', { name: caption })}
       tabIndex={0}
-      className="overflow-x-auto rounded-lg border outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="max-h-[calc(100vh-14rem)] overflow-auto rounded-md border bg-card focus-ring"
     >
       <Table>
         <TableCaption className="sr-only">{caption}</TableCaption>
         <TableHeader>
           <TableRow>
             {columns.map((column) => (
-              <TableHead key={column.key} scope="col" className={column.className}>
+              <TableHead key={column.key} scope="col" className={columnVisibilityClass(column)}>
                 {column.header}
               </TableHead>
             ))}
@@ -38,9 +66,9 @@ export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProp
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={rowKey(row)}>
+            <TableRow key={rowKey(row)} className={ROW_HEIGHT_BY_DENSITY[density]}>
               {columns.map((column) => (
-                <TableCell key={column.key} className={column.className ?? 'whitespace-normal break-words'}>
+                <TableCell key={column.key} className={cn('whitespace-normal break-words', column.className, columnVisibilityClass(column))}>
                   {column.cell(row)}
                 </TableCell>
               ))}

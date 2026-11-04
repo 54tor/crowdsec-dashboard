@@ -236,7 +236,12 @@
     "liveUnavailable": "LAPI injoignable, affichage depuis l'archive.",
     "totalInfo": "{{total}} entrées au total",
     "totalCapped": "{{total}}+ entrées (seules celles-ci sont consultables)",
-    "invalidRequest": "Le serveur a refusé cette page ou ces filtres : revenez à la première page ou corrigez les filtres."
+    "invalidRequest": "Le serveur a refusé cette page ou ces filtres : revenez à la première page ou corrigez les filtres.",
+    "density": {
+      "label": "Densité",
+      "comfortable": "Confortable",
+      "compact": "Compacte"
+    }
   },
   "alerts": {
     "title": "Alertes",

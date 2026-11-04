@@ -9,7 +9,7 @@ export function TableSkeleton() {
     <div aria-busy="true" className="space-y-2">
       <span className="sr-only" role="status">{t('list.loading')}</span>
       {Array.from({ length: SKELETON_ROW_COUNT }, (_unused, rowPosition) => (
-        <Skeleton key={rowPosition} className="h-8 w-full" />
+        <Skeleton key={rowPosition} className="h-10 w-full" />
       ))}
     </div>
   )
