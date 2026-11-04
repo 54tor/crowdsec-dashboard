@@ -133,7 +133,8 @@ describe('alerts page', () => {
     const table = await screen.findByRole('table', { name: en.alerts.caption })
     const appSecRow = within(table).getByText('crowdsecurity/vpatch-env-access').closest('tr') as HTMLElement
     const logRow = within(table).getByText('crowdsecurity/ssh-bf').closest('tr') as HTMLElement
-    expect(within(appSecRow).getByText(en.alerts.appSecBadge)).toBeInTheDocument()
+    // A neutral tag: the info colour belongs to the status column alone.
+    expect(within(appSecRow).getByText(en.alerts.appSecBadge)).toHaveAttribute('data-variant', 'outline')
     expect(within(logRow).queryByText(en.alerts.appSecBadge)).toBeNull()
   })
 

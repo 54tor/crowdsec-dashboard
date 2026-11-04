@@ -62,7 +62,7 @@ export function Alerts() {
         cell: (alertRow) => (
           <>
             <UntrustedText value={alertRow.scenario} />
-            {alertRow.source_kind === 'appsec' && <Badge variant="info" className="ml-2">{t('alerts.appSecBadge')}</Badge>}
+            {alertRow.source_kind === 'appsec' && <Badge variant="outline" className="ml-2">{t('alerts.appSecBadge')}</Badge>}
           </>
         ),
       },

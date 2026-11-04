@@ -13,6 +13,7 @@ vi.mock('@/components/TimelineChartCanvas', () => ({
 }))
 
 const PHONE_VIEWPORT_WIDTH_IN_PIXELS = 390
+const DESKTOP_VIEWPORT_WIDTH_IN_PIXELS = 1920
 const TIME_WITH_SECONDS_PATTERN = /\d{1,2}:\d{2}:\d{2}/
 const TIME_TO_THE_MINUTE_PATTERN = /\d{1,2}:\d{2}/
 
@@ -92,6 +93,29 @@ describe('alerts page layout', () => {
 
     expect(filtersToggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByLabelText(en.filters.scenario)).toBeInTheDocument()
+  })
+
+  it('filtersStayVisibleWithoutToggleOnDesktop', async () => {
+    setViewportWidth(DESKTOP_VIEWPORT_WIDTH_IN_PIXELS)
+    stubAlertsPage()
+    renderApp('/alerts')
+
+    await findFirstAlertRow()
+
+    expect(screen.getByLabelText(en.filters.scenario)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: en.filters.toggle })).toBeNull()
+  })
+
+  // The segment hides its native radio, so the double focus ring (amber outline
+  // plus inner dark halo) has to be drawn on the visible segment.
+  it('originSegmentShowsTheDoubleFocusRing', async () => {
+    stubAlertsPage()
+    renderApp('/alerts')
+
+    const appSecRadio = await screen.findByRole('radio', { name: en.filters.originAppSec })
+    const visibleSegment = appSecRadio.nextElementSibling as HTMLElement
+
+    expect(visibleSegment).toHaveClass('peer-focus-visible:outline-ring', 'peer-focus-visible:shadow-[0_0_0_2px_var(--focus-inner)]')
   })
 
   it('alertCardKeepsDeleteAction', async () => {

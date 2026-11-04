@@ -23,7 +23,7 @@ export function SegmentedControl({ name, legend, value, options, onChange }: Seg
               onChange={() => onChange(option.value)}
               className="peer sr-only"
             />
-            <span className="flex flex-1 items-center justify-center rounded-sm px-3 text-sm text-muted-foreground peer-checked:bg-secondary peer-checked:text-foreground peer-checked:shadow-[inset_0_0_0_1px_var(--input)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring">
+            <span className="flex flex-1 items-center justify-center rounded-sm px-3 text-sm text-muted-foreground peer-checked:bg-secondary peer-checked:text-foreground peer-checked:shadow-[inset_0_0_0_1px_var(--input)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring peer-focus-visible:shadow-[0_0_0_2px_var(--focus-inner)]">
               {option.label}
             </span>
           </label>
