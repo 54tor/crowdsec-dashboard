@@ -53,7 +53,7 @@ export function Decisions() {
         mobile: 'primary',
         noWrap: true,
         className: 'font-mono',
-        cell: (decision) => <UntrustedText value={decision.value} />,
+        cell: (decision) => <UntrustedText value={decision.value} maxWidthClassName="max-w-[40ch]" />,
       },
       {
         key: 'engine',
@@ -61,9 +61,9 @@ export function Decisions() {
         noWrap: true,
         cell: (decision) => <EngineCell engineName={decision.engine} badgeLabel={decision.live ? undefined : t('decisions.archivedBadge')} />,
       },
-      { key: 'scope', header: t('decisions.columns.scope'), noWrap: true, cell: (decision) => <UntrustedText value={decision.scope} /> },
-      { key: 'type', header: t('decisions.columns.type'), noWrap: true, cell: (decision) => <UntrustedText value={decision.type} /> },
-      { key: 'origin', header: t('decisions.columns.origin'), noWrap: true, cell: (decision) => <UntrustedText value={decision.origin} /> },
+      { key: 'scope', header: t('decisions.columns.scope'), noWrap: true, cell: (decision) => <UntrustedText value={decision.scope} maxWidthClassName="max-w-[20ch]" /> },
+      { key: 'type', header: t('decisions.columns.type'), noWrap: true, cell: (decision) => <UntrustedText value={decision.type} maxWidthClassName="max-w-[20ch]" /> },
+      { key: 'origin', header: t('decisions.columns.origin'), noWrap: true, cell: (decision) => <UntrustedText value={decision.origin} maxWidthClassName="max-w-[20ch]" /> },
       {
         key: 'scenario',
         header: t('decisions.columns.scenario'),
@@ -81,7 +81,7 @@ export function Decisions() {
         mobile: 'primary',
         noWrap: true,
         className: 'font-mono',
-        cell: (decision) => (decision.until ? formatDateTimeToMinute(decision.until, i18n.language) : <UntrustedText value={decision.duration} />),
+        cell: (decision) => (decision.until ? formatDateTimeToMinute(decision.until, i18n.language) : <UntrustedText value={decision.duration} maxWidthClassName="max-w-[16ch]" />),
       },
       ...(canWrite ? ([{
         key: 'actions',

@@ -206,7 +206,8 @@ describe('alerts page layout', () => {
     const alertRow = await findFirstAlertRow()
     const engineCell = within(alertRow).getByText('machine-one').closest('td')
 
-    expect(engineCell).toHaveClass('whitespace-nowrap', '[&_bdi]:whitespace-nowrap')
+    expect(engineCell).toHaveClass('whitespace-nowrap')
+    expect(within(engineCell as HTMLElement).getByText('local')).toHaveClass('max-w-[24ch]', 'truncate')
   })
 
   // « Toutes les origines » used to wrap inside an equal-width segment.

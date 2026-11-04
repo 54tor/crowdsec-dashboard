@@ -11,8 +11,8 @@ export function SyncPeersTable({ peers }: { peers: SyncPeer[] }) {
   const { t, i18n } = useTranslation()
   const columns = useMemo<DataTableColumn<SyncPeer>[]>(
     () => [
-      { key: 'name', header: t('sync.columns.name'), noWrap: true, cell: (peer) => <UntrustedText value={peer.name} /> },
-      { key: 'host', header: t('sync.columns.host'), noWrap: true, cell: (peer) => <UntrustedText value={peer.url_host} /> },
+      { key: 'name', header: t('sync.columns.name'), noWrap: true, cell: (peer) => <UntrustedText value={peer.name} maxWidthClassName="max-w-[24ch]" /> },
+      { key: 'host', header: t('sync.columns.host'), noWrap: true, cell: (peer) => <UntrustedText value={peer.url_host} maxWidthClassName="max-w-[32ch]" /> },
       {
         key: 'lastRun',
         header: t('sync.columns.lastRun'),

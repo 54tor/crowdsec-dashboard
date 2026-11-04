@@ -10,7 +10,7 @@ export interface EngineCellProps {
 export function EngineCell({ engineName, badgeLabel, machineId }: EngineCellProps) {
   return (
     <>
-      <UntrustedText value={engineName} />
+      <UntrustedText value={engineName} maxWidthClassName="max-w-[24ch]" />
       {badgeLabel && <Badge variant="outline" className="ml-2">{badgeLabel}</Badge>}
       {machineId && (
         <span className="block text-xs text-muted-foreground">

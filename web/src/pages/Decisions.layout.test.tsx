@@ -12,6 +12,7 @@ const DECISIONS_URL = 'GET /api/decisions?page=1&per_page=20'
 const PHONE_VIEWPORT_WIDTH_IN_PIXELS = 390
 const TIME_WITH_SECONDS_PATTERN = /\d{1,2}:\d{2}:\d{2}/
 const TIME_TO_THE_MINUTE_PATTERN = /\d{1,2}:\d{2}/
+const HOSTILE_VALUE_LENGTH = 300
 
 function stubDecisionsPage(decisionRows = [makeDecision()]) {
   return stubFetch({
@@ -46,6 +47,49 @@ describe('decisions page layout', () => {
 
     expect(within(decisionRow).getByText('203.0.113.7').closest('td')).toHaveClass('font-mono')
     expect(within(decisionRow).getByText('crowdsecurity/ssh-bf').closest('td')).toHaveClass('font-mono')
+  })
+
+  // A one-line value column must not let a 300-character value widen the whole
+  // table: the value is cut to a bounded width, the full text stays in its title.
+  it('longValueIsBoundedInTheTable', async () => {
+    const hostileValue = 'a'.repeat(HOSTILE_VALUE_LENGTH)
+    stubDecisionsPage([makeDecision({ value: hostileValue })])
+    renderApp('/decisions')
+
+    const table = await screen.findByRole('table', { name: en.decisions.caption })
+    const boundedValue = within(table).getByText(hostileValue)
+
+    expect(boundedValue).toHaveClass('inline-block', 'max-w-[40ch]', 'truncate')
+    expect(boundedValue).toHaveAttribute('title', hostileValue)
+  })
+
+  // An IP stays on one line: it fits the bounded width, so nothing is cut.
+  it('ipValueStaysOnOneLine', async () => {
+    stubDecisionsPage()
+    renderApp('/decisions')
+
+    const decisionRow = await findFirstDecisionRow()
+    const ipValue = within(decisionRow).getByText('203.0.113.7')
+
+    expect(ipValue).toHaveClass('truncate')
+    expect(ipValue.closest('td')).toHaveClass('whitespace-nowrap')
+  })
+
+  // Cards have room to wrap: there the bound and the cut are lifted.
+  it('longValueWrapsInsideCard', async () => {
+    setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
+    const hostileValue = 'a'.repeat(HOSTILE_VALUE_LENGTH)
+    stubDecisionsPage([makeDecision({ value: hostileValue })])
+    renderApp('/decisions')
+
+    const cardList = await screen.findByRole('list', { name: en.decisions.caption })
+    const valueCell = within(cardList).getByText(hostileValue).parentElement
+
+    expect(valueCell).toHaveClass(
+      '[&_bdi[data-truncated]]:max-w-none',
+      '[&_bdi[data-truncated]]:overflow-visible',
+      '[&_bdi[data-truncated]]:whitespace-pre-wrap',
+    )
   })
 
   it('expiryStopsAtTheMinute', async () => {

@@ -9,7 +9,7 @@ interface DataTableCardsProps<Row> {
 }
 
 const CARD_CELL_WRAP_CLASSES =
-  'min-w-0 whitespace-normal break-words [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:min-h-[22px] [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:whitespace-normal [&_[data-slot=badge]]:text-left'
+  'min-w-0 whitespace-normal break-words [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:min-h-[22px] [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:whitespace-normal [&_[data-slot=badge]]:text-left [&_bdi[data-truncated]]:max-w-none [&_bdi[data-truncated]]:overflow-visible [&_bdi[data-truncated]]:whitespace-pre-wrap [&_bdi[data-truncated]]:[overflow-wrap:anywhere]'
 
 function columnsPlacedAt<Row>(columns: DataTableColumn<Row>[], placement: MobileColumnPlacement): DataTableColumn<Row>[] {
   return columns.filter((column) => (column.mobile ?? 'secondary') === placement)

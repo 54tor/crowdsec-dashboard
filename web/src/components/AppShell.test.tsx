@@ -80,9 +80,12 @@ describe('desktop application shell', () => {
     const railFooter = within(rail).getByRole('button', { name: en.logout }).closest('[data-slot=app-rail-footer]')
 
     expect(rail.tagName).not.toBe('ASIDE')
-    expect(rail).toHaveClass('sticky', 'top-0', 'flex', 'h-screen', 'flex-col', 'overflow-hidden')
+    // The rail itself scrolls only as a fallback on very short windows.
+    expect(rail).toHaveClass('sticky', 'top-0', 'flex', 'h-screen', 'flex-col', 'overflow-y-auto')
     expect(railNavigation).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto', '[scrollbar-width:thin]')
     expect(railFooter).toHaveClass('shrink-0')
+    // ShellControls draws the separator: the footer must not add a second border.
+    expect(railFooter).not.toHaveClass('border-t')
   })
 
   // The skip link moves focus to <main>: it must accept programmatic focus.

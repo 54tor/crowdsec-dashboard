@@ -189,14 +189,24 @@ describe('data table', () => {
 
     const { rerender } = render(noWrapTable)
     const sourceCell = screen.getByText('192.0.2.10').closest('td')
-    expect(sourceCell).toHaveClass('whitespace-nowrap', '[&_bdi]:whitespace-nowrap')
+    expect(sourceCell).toHaveClass('whitespace-nowrap')
     expect(sourceCell).not.toHaveClass('whitespace-normal')
 
     setViewportWidth(PHONE_VIEWPORT_WIDTH_IN_PIXELS)
     rerender(noWrapTable)
     const sourceDetails = screen.getByText('192.0.2.10').closest('dd')
     expect(sourceDetails).not.toHaveClass('whitespace-nowrap')
-    expect(sourceDetails).not.toHaveClass('[&_bdi]:whitespace-nowrap')
+  })
+
+  // A bounded value is cut with an ellipsis and keeps its full text in a title.
+  it('boundedUntrustedTextTruncatesWithTitle', () => {
+    const longUntrustedValue = 'a'.repeat(LONG_UNTRUSTED_VALUE_LENGTH)
+    render(<UntrustedText value={longUntrustedValue} maxWidthClassName="max-w-[40ch]" />)
+
+    const boundedValue = screen.getByText(longUntrustedValue)
+    expect(boundedValue).toHaveClass('inline-block', 'max-w-[40ch]', 'truncate', 'align-bottom')
+    expect(boundedValue).toHaveAttribute('title', longUntrustedValue)
+    expect(boundedValue).toHaveAttribute('data-truncated')
   })
 
   // A long status badge (« Aucun contact depuis plus de 5 minutes ») used to

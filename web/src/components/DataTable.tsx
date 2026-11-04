@@ -38,7 +38,7 @@ const CELL_PADDING_BY_DENSITY: Record<TableDensity, string> = {
   compact: 'py-0.5',
 }
 
-const NO_WRAP_CELL_CLASSES = 'whitespace-nowrap [&_bdi]:whitespace-nowrap'
+const NO_WRAP_CELL_CLASSES = 'whitespace-nowrap'
 
 function tableCellClass<Row>(column: DataTableColumn<Row>, density: TableDensity): string {
   return cn(

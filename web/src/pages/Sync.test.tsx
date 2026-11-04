@@ -82,8 +82,21 @@ describe('sync page', () => {
     const statusCell = nameCell?.parentElement?.querySelector('[data-slot="badge"]')?.closest('td')
 
     for (const shortCell of [nameCell, hostCell, statusCell]) {
-      expect(shortCell).toHaveClass('whitespace-nowrap', '[&_bdi]:whitespace-nowrap')
+      expect(shortCell).toHaveClass('whitespace-nowrap')
     }
+  })
+
+  // A peer host is free text from the configuration: a 300-character host is
+  // cut to a bounded width instead of widening the table.
+  it('longPeerHostIsBoundedInTheTable', async () => {
+    const hostileHost = 'h'.repeat(300)
+    stubFetch(syncRoutes(makeStatus({ peers: [makePeer({ url_host: hostileHost })] })))
+    renderApp('/sync')
+
+    const boundedHost = await screen.findByText(hostileHost, { selector: 'bdi' })
+
+    expect(boundedHost).toHaveClass('inline-block', 'max-w-[32ch]', 'truncate')
+    expect(boundedHost).toHaveAttribute('title', hostileHost)
   })
 
   it('neverRunPeersShowNeverRun', async () => {
