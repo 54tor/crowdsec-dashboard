@@ -268,67 +268,6 @@ func TestDeletingAccountCascadesRecoveryCodesAndAccessRules(testContext *testing
 	}
 }
 
-func TestMigrationOpensSetupWindowForExistingAccounts(testContext *testing.T) {
-	database := storetest.NewUnmigrated(testContext)
-	ctx := context.Background()
-	provider := newMigrationProvider(testContext, database)
-
-	if _, upToOneError := provider.UpTo(ctx, 1); upToOneError != nil {
-		testContext.Fatalf("migrate to 1: %v", upToOneError)
-	}
-	existingAccountIdentifier := insertTestAccount(testContext, database, "alice")
-	if _, upError := provider.Up(ctx); upError != nil {
-		testContext.Fatalf("migrate to latest: %v", upError)
-	}
-	newAccountIdentifier := insertTestAccount(testContext, database, "bob")
-
-	var existingWindowIsOpen bool
-	existingError := database.NewRaw(
-		"SELECT COALESCE(account_second_factor_setup_until > now(), false) FROM account WHERE account_id = ?", existingAccountIdentifier,
-	).Scan(ctx, &existingWindowIsOpen)
-	if existingError != nil || !existingWindowIsOpen {
-		testContext.Fatalf("existing account window open = %v (error %v), want true", existingWindowIsOpen, existingError)
-	}
-
-	var newWindowIsNull bool
-	newError := database.NewRaw(
-		"SELECT account_second_factor_setup_until IS NULL FROM account WHERE account_id = ?", newAccountIdentifier,
-	).Scan(ctx, &newWindowIsNull)
-	if newError != nil || !newWindowIsNull {
-		testContext.Fatalf("new account window null = %v (error %v), want true", newWindowIsNull, newError)
-	}
-}
-
-func TestMigrationDownThenUpRestoresSchema(testContext *testing.T) {
-	database := storetest.New(testContext)
-	ctx := context.Background()
-	provider := newMigrationProvider(testContext, database)
-	accountIdentifier := insertTestAccount(testContext, database, "alice")
-
-	if _, downError := provider.DownTo(ctx, 1); downError != nil {
-		testContext.Fatalf("down to 1: %v", downError)
-	}
-	_, passwordError := database.ExecContext(ctx,
-		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_hash) VALUES (?, 'password', 'hash')", accountIdentifier)
-	if passwordError != nil {
-		testContext.Fatalf("password after down: %v", passwordError)
-	}
-	_, totpError := database.ExecContext(ctx,
-		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_hash) VALUES (?, 'totp', 'hash')", accountIdentifier)
-	if totpError == nil || !strings.Contains(totpError.Error(), "credential_credential_kind_check") {
-		testContext.Fatalf("totp after down error = %v, want credential_credential_kind_check violation", totpError)
-	}
-
-	if _, upError := provider.Up(ctx); upError != nil {
-		testContext.Fatalf("up again: %v", upError)
-	}
-	_, totpAgainError := database.ExecContext(ctx,
-		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_ciphertext, credential_key_id) VALUES (?, 'totp', '\\x01', 'key1')", accountIdentifier)
-	if totpAgainError != nil {
-		testContext.Fatalf("totp after up: %v", totpAgainError)
-	}
-}
-
 const insertRemoteEngineQuery = "INSERT INTO engine (engine_name, engine_lapi_url, engine_machine_id, engine_machine_password_sealed, engine_machine_password_key_id) VALUES (?, 'https://lapi.example.com', 'machine', '\\x01', 'key1') RETURNING engine_id"
 
 func insertTestEngine(testContext *testing.T, database *bun.DB, engineName string) int64 {
@@ -536,28 +475,6 @@ func TestDeletingEngineCascadesArchive(testContext *testing.T) {
 	}
 }
 
-func TestMigrationDownRemovesArchiveTablesAndUpRestoresThem(testContext *testing.T) {
-	database := storetest.New(testContext)
-	ctx := context.Background()
-	provider := newMigrationProvider(testContext, database)
-
-	if _, downError := provider.DownTo(ctx, 2); downError != nil {
-		testContext.Fatalf("down to 2: %v", downError)
-	}
-	var archiveTableCount int
-	countError := database.NewRaw(
-		"SELECT count(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('engine', 'alert', 'event', 'decision')",
-	).Scan(ctx, &archiveTableCount)
-	if countError != nil || archiveTableCount != 0 {
-		testContext.Fatalf("archive tables after down = %d (error %v), want 0", archiveTableCount, countError)
-	}
-
-	if _, upError := provider.Up(ctx); upError != nil {
-		testContext.Fatalf("up again: %v", upError)
-	}
-	insertTestEngine(testContext, database, "remote")
-}
-
 func TestEngineSealedSecretsRequireTheirKeyIdentifier(testContext *testing.T) {
 	database := storetest.New(testContext)
 	ctx := context.Background()
@@ -634,7 +551,7 @@ func TestSchemaVersionReportsLatestAppliedMigration(testContext *testing.T) {
 
 	schemaVersion, versionError := store.NewVersionReader(database).SchemaVersion(context.Background())
 
-	if versionError != nil || schemaVersion < 3 {
+	if versionError != nil || schemaVersion != 1 {
 		testContext.Errorf("schema version = %d, error = %v", schemaVersion, versionError)
 	}
 }
