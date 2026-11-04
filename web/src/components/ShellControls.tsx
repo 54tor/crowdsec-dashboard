@@ -16,9 +16,9 @@ export function ShellControls({ onLogout }: { onLogout: () => Promise<void> }) {
       </p>
       <Link
         to="/account/security"
-        className="flex min-h-10 items-center truncate rounded-md px-2.5 text-sm font-medium focus-ring hover:bg-secondary"
+        className="flex min-h-10 items-center rounded-md px-2.5 text-sm font-medium focus-ring hover:bg-secondary"
       >
-        {accountName ?? t('shell.account')}
+        <span className="min-w-0 truncate">{accountName ?? t('nav.accountSecurity')}</span>
       </Link>
       <div className="flex flex-wrap gap-2">
         <LanguageSwitch />

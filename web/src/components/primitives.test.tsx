@@ -8,6 +8,7 @@ import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { PageHeader } from '@/components/PageHeader'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { SelectField } from '@/components/SelectField'
+import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -115,6 +116,17 @@ describe('shared primitives', () => {
 
     expect(screen.getByRole('status')).toHaveAttribute('data-variant', 'warning')
     expect(screen.getByRole('alert')).toHaveAttribute('data-variant', 'critical')
+  })
+
+  // A bare Alert must not interrupt screen readers unless it reports a failure.
+  it.each([
+    ['info', 'status'],
+    ['warning', 'status'],
+    ['critical', 'alert'],
+  ] as const)('alertRoleFollowsVariant (%s)', (alertVariant, expectedRole) => {
+    render(<Alert variant={alertVariant}>Message</Alert>)
+
+    expect(screen.getByRole(expectedRole)).toHaveAttribute('data-variant', alertVariant)
   })
 
   it('selectFieldIsLabelledAndDescribed', () => {

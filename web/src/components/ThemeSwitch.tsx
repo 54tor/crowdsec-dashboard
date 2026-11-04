@@ -37,12 +37,14 @@ export function ThemeSwitch() {
     }
   }
 
+  const currentChoiceLabel = t(`theme.${themePreference}`)
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" aria-label={t('theme.label')}>
+        <Button variant="outline" size="sm" aria-label={`${t('theme.label')}: ${currentChoiceLabel}`}>
           <Icon name={iconForPreference(themePreference)} className="size-3.5" />
-          {t(`theme.${themePreference}`)}
+          {currentChoiceLabel}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
