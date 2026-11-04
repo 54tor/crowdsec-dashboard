@@ -148,29 +148,12 @@ after the database is healthy.
   then serves requests. It refuses to start if `DATABASE_URL` is missing or unreachable, or if a
   migration fails: read the container log.
 - Back up the database before upgrading the dashboard to a new version, since an upgrade may migrate
-  the schema ([Backup and restore](#backup-and-restore)). The upgrade that introduces the second factor applies migration 00002 at the next
-  start: it adds the factor, recovery code, allowlist and lockout columns and tables, and opens the
-  second-factor setup window of every existing account (see
-  [security.md](security.md#accounts-from-the-first-release)). The dashboard also needs the secrets
-  key before that start ([Secrets key](#secrets-key)). Sign in right after upgrading to enrol
-  your factor.
-- The hardening release adds migrations 00004 (API token constraints and indexes), 00005 (archive
-  ordering indexes and the persisted `engine_history_incomplete` flag) and 00006 (`engine_deleting_at`).
-  None of them was applied anywhere before this release: they run together at the next start, so back
-  up first and let that start apply all three. 00005 builds two indexes on `alert` without
-  `CONCURRENTLY`, inside the fixed 60 s start-up timeout (not configurable): on a very large archive
-  that first start can time out and the dashboard then exits. The same start reseals the engine secrets that still use
-  the former associated data ([Rotating the secrets key](#rotating-the-secrets-key)).
-- The AppSec release adds migration 00007 (`alert_source_kind`, [AppSec origin of archived
-  alerts](#appsec-origin-of-archived-alerts)). It runs in one transaction at the next start: it adds
-  the column, then **scans the whole `event` table** to classify the archived alerts, and holds an
-  `ACCESS EXCLUSIVE` lock on `alert` until it commits (every read of `alert` waits, not only the
-  writes). The dashboard serves nothing and collects nothing during that start. Back up first, apply
-  it with the dashboard as the only client of the database (no second replica, no SQL session or
-  report reading `alert`), then run `VACUUM ANALYZE alert;` once it is done, since the backfill
-  rewrites the classified rows. Like 00005, it runs inside the 60 s start-up timeout: on a very
-  large `event` table that start can time out, the transaction is rolled back and the dashboard
-  exits; the next start tries again.
+  the schema ([Backup and restore](#backup-and-restore)). The dashboard also needs the secrets key
+  before its first start ([Secrets key](#secrets-key)).
+- The first release is 0.1.0. Its schema is created by a single initial migration (`00001_initial`);
+  later releases add their migrations after it. A database created by a development build older than
+  0.1.0 carries the former migration history and is not upgraded: recreate it (drop the database or
+  its volume, then start the dashboard on an empty one).
 - If PostgreSQL goes down while the dashboard runs, `/api/healthz` answers 503 and login and
   authenticated routes answer 503 `database_unavailable`. Nobody is signed out: sessions are valid
   again once the database is back.
@@ -207,8 +190,9 @@ keep the logs private ([security.md](security.md#accounts-and-enrolment)). The d
 (`deploy/dev/up.sh`) prints the token for you.
 
 Signing in afterwards: password, then a TOTP code (or a passkey, or a recovery code), then the
-allowlist if you defined one. Accounts that existed before the second factor are asked to enrol one
-at their next login; see [security.md](security.md#accounts-from-the-first-release).
+allowlist if you defined one. An account without a factor (created by an administrator, or whose
+factor was reset) is asked to enrol one at its next login; see
+[security.md](security.md#second-factor-setup-window).
 
 ## Secrets key
 
@@ -403,12 +387,10 @@ back" guarantee has one gap: a collection of that engine already running when th
 still store the alert from the answer it read earlier, and it is then archived again (delete the
 archived copy again).
 
-**Schema notes.** The archive tables (`engine`, `alert`, `event`, `decision`, migration 00003)
-deliberately keep two denormalisations: alert fields that CrowdSec repeats per alert (scenario,
-source scope and value, country, AS, decision type and origin) are stored as text instead of
-lookup tables, and `event_meta` and `engine_public_address_list` are JSONB documents. Upgrading to
-the release that adds the archive applies migration 00003 at the next start: back up the database
-first (see [PostgreSQL](#postgresql)).
+**Schema notes.** The archive tables (`engine`, `alert`, `event`, `decision`) deliberately keep
+two denormalisations: alert fields that CrowdSec repeats per alert (scenario, source scope and
+value, country, AS, decision type and origin) are stored as text instead of lookup tables, and
+`event_meta` and `engine_public_address_list` are JSONB documents.
 
 ## Allowlists
 
@@ -493,18 +475,13 @@ after a removal, the removal (which succeeded) is reported as done without that 
 
 ### AppSec origin of archived alerts
 
-The archive stores the origin of each alert in `alert.alert_source_kind` (`log` or `appsec`,
-migration 00007). An alert is `appsec` when at least one of its events has the meta `service` equal
-to `appsec`, a `log_type` starting with `appsec-`, or both the keys `matched_zones` and
-`target_fqdn`; otherwise `log`.
+The archive stores the origin of each alert in `alert.alert_source_kind` (`log` or `appsec`). An
+alert is `appsec` when at least one of its events has the meta `service` equal to `appsec`, a
+`log_type` starting with `appsec-`, or both the keys `matched_zones` and `target_fqdn`; otherwise
+`log`.
 
 - The kind is computed when the alert is first archived and is then frozen: the archive insert
   ignores an alert it already holds, so a later change of the rule is never applied to it.
-- Migration 00007 classifies the alerts already archived from their stored events. Alerts whose
-  events were already purged by retention (`ARCHIVE_EVENT_RETENTION_DAYS`, 90 days by default), or
-  whose marker keys were cut by the event bounds of an earlier release, stay `log`. On meta with
-  duplicated keys the SQL of the migration and the collector can disagree; this only concerns that
-  one-time backfill.
 - **Schema note.** `alert_source_kind` is derived from the events, so storing it on `alert` breaks
   the third normal form on purpose: events are kept 90 days and alerts 365 by default, and the
   origin must outlive the events. It is indexed with the creation date for the filtered lists.

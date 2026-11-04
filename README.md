@@ -75,7 +75,7 @@ Every destructive action asks you to retype the target, and the server checks it
 - Remote engines (archive, sync) are reached over their LAPI with a machine account each, sealed in
   the database; the optional config import writes only to a dedicated `acquis.d` mount
   ([docs/bundles.md](docs/bundles.md#configuration)).
-- Accounts and sessions are stored in PostgreSQL (passwords and session tokens are hashed); schema migrations run at every start.
+- Accounts and sessions are stored in PostgreSQL (passwords and session tokens are hashed); schema migrations run at every start. The first release, 0.1.0, creates the whole schema from one initial migration; a database from an earlier development build must be recreated ([docs/operations.md](docs/operations.md#postgresql)).
 - Sign-in is password, then a second factor (TOTP, or a passkey / security key when WebAuthn is configured, with recovery codes), then an optional per-account IP and country allowlist (country rules use GeoLite2 data, refreshed inside the image when you provide a MaxMind account).
 
 ## Quick start

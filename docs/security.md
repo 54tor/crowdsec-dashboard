@@ -96,7 +96,7 @@ prefer `read` tokens.
   administrator cannot be demoted or deleted (409 `last_admin`, checked under an advisory lock so two
   simultaneous requests cannot remove both).
 - A created account gets a password chosen by the administrator and a 72 hours second-factor
-  setup window ([Accounts from the first release](#accounts-from-the-first-release)). **The
+  setup window ([Second-factor setup window](#second-factor-setup-window)). **The
   administrator knows the initial password, so they could enrol a second factor of their own before
   the user does and then sign in as that user.** Give the password over a channel you trust, let the
   user enrol at once, and treat an unused window as a risk. There is no password reset: a new password
@@ -113,7 +113,7 @@ issued only at the end.
    dashboard creates a *pending login* and answers `second_factor_required` with the enrolled
    methods (`totp`, `webauthn` when enabled; a recovery code is always accepted as well), or
    `second_factor_setup_required` for an account that has no factor yet (see
-   [Accounts from the first release](#accounts-from-the-first-release)).
+   [Second-factor setup window](#second-factor-setup-window)).
 2. **Second factor**: a TOTP code, a recovery code or a WebAuthn assertion.
 3. **Access allowlist**: the client address and country are checked against the account's rules
    ([Access allowlist](#access-allowlist)). The session is created only if they pass.
@@ -226,13 +226,12 @@ key and remove the old one, because the old blobs then no longer open at all. Pa
 and recovery-code hashes are not secret and are not encrypted. The key is read from a tmpfs file
 that only `docker-user` can read, and is never logged.
 
-### Accounts from the first release
+### Second-factor setup window
 
-Accounts created before the second factor existed have none. Migration 00002 opens a *setup window*
-on every such account (`account_second_factor_setup_until = infinity`). An account created by an
-administrator, or whose factor an administrator reset, gets the same window for 72 hours. At the next login, after
+An account created by an administrator, or whose factor an administrator reset, has no factor and
+gets a *setup window* of 72 hours (`account_second_factor_setup_until`). At the next login, after
 the correct password, the dashboard asks to enrol a factor instead of asking for one: **whoever
-presents the password first enrols their own factor**. Sign in right after upgrading. On completion
+presents the password first enrols their own factor**. Hand over the password and sign in at once. On completion
 the window closes, the recovery codes are shown, and every session of the account is revoked. An
 account with no factor and a closed window is refused with 403
 `second_factor_setup_not_allowed`. An administrator reopens the window by resetting the factor, or an

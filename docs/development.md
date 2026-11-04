@@ -18,7 +18,7 @@ backend/                 Go module "crowdsec-dashboard" (Go 1.26)
   internal/confread/     allowlisted, redacted reading of configuration files
   internal/cscli/        command allowlist, field validation, Docker exec runner
   internal/sessions/     session store in PostgreSQL (hashed tokens, pruning)
-  internal/store/        database connection, goose migrations (`migrations/*.sql`)
+  internal/store/        database connection, goose migrations (`migrations/*.sql`, 0.1.0 schema in `00001_initial.sql`)
   internal/lapi/         LAPI client (machine login, alerts, decisions)
   internal/webui/        embeds the built front end (dist/) and serves the SPA
 web/                     Vite + React + TypeScript front end, Tailwind, TanStack Query, i18next
