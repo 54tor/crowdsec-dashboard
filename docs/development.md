@@ -255,3 +255,24 @@ that starts failing after a refresh means CrowdSec changed an output shape.
 - New API behaviour comes with a test first, and a change of behaviour updates these docs in the
   same change.
 - No names, local paths or e-mail addresses of people in code, docs, fixtures or file names.
+
+## Interface
+
+- **Theme tokens** live in `web/src/index.css`: light values on `:root`, dark values on `.dark`
+  (surfaces, text, amber accent, state colours `critical`, `warning`, `info`, `nominal` and their
+  tints). Components use the tokens through Tailwind classes.
+- **Theme choice** (light, dark or system) is stored in `localStorage` under `theme-preference`.
+  `web/public/theme-init.js` applies it before React mounts, so the page never flashes the wrong
+  theme; it is an external file because the CSP `default-src 'self'` forbids inline scripts.
+- **Table density** (comfortable 40 px rows, compact 32 px) is stored under `table-density` and
+  shared by every list. The toggle is hidden on phones above lists shown as cards, which ignore it.
+- **Fonts** are IBM Plex Sans, Sans Condensed and Mono from the `@fontsource/*` packages, latin
+  subsets only, bundled with the front end: no CDN, no external request.
+- **Icons** are Material Symbols (outlined, weight 400) from `@material-symbols/svg-400`, inlined as
+  SVG. To add one, add its name to `IconName` and its `?raw` import to `ICON_SOURCES` in
+  `web/src/components/iconSources.ts`, then use `<Icon name="…" />`.
+- **Contrast** of text, field borders and focus ring in both themes is pinned by
+  `web/src/theme.contrast.test.ts` (WCAG AA: 4.5:1 for text, 3:1 for borders and focus ring).
+- **Mobile**: below 768 px the rail becomes a bottom tab bar and lists rendered with
+  `cardsOnMobile` turn into one card per row. Tests drive the viewport with `setViewportWidth`
+  from the `matchMedia` stub in `web/src/test/matchMedia.ts`.
