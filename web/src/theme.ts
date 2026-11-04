@@ -1,6 +1,13 @@
-export function followSystemColorScheme(): void {
-  const darkSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-  const applyScheme = () => document.documentElement.classList.toggle('dark', darkSchemeQuery.matches)
-  applyScheme()
-  darkSchemeQuery.addEventListener('change', applyScheme)
+import { applyThemePreference, DARK_SCHEME_QUERY, readThemePreference } from './lib/themePreference'
+
+function reapplyWhenFollowingSystem(): void {
+  const currentPreference = readThemePreference()
+  if (currentPreference === 'system') {
+    applyThemePreference(currentPreference)
+  }
+}
+
+export function followThemePreference(): void {
+  applyThemePreference(readThemePreference())
+  window.matchMedia(DARK_SCHEME_QUERY).addEventListener('change', reapplyWhenFollowingSystem)
 }

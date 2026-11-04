@@ -14,7 +14,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    css: false,
+    css: { include: [/\.css\?raw$/] },
   },
   build: {
     outDir: '../backend/internal/webui/dist',
