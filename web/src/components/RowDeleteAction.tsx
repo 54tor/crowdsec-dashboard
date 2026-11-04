@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog'
 import { Button } from '@/components/ui/button'
 
@@ -20,11 +20,23 @@ interface RowDeleteActionProps {
 export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, request, invalidates, onDeleted, onFailed, disabledReason }: RowDeleteActionProps) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const hasDeletedRef = useRef(false)
 
   function finishDeletion() {
+    hasDeletedRef.current = true
     setIsDialogOpen(false)
-    onDeleted?.()
     invalidates.forEach((queryKey) => void queryClient.invalidateQueries({ queryKey }))
+  }
+
+  function notifyDeletionOnceClosed(closeFocusEvent: Event) {
+    if (!hasDeletedRef.current) {
+      return
+    }
+    hasDeletedRef.current = false
+    if (onDeleted) {
+      closeFocusEvent.preventDefault()
+      onDeleted()
+    }
   }
 
   return (
@@ -45,6 +57,7 @@ export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, ta
       onDeleted={finishDeletion}
       onFailed={onFailed}
       onClose={() => setIsDialogOpen(false)}
+      onCloseAutoFocus={notifyDeletionOnceClosed}
     />
   )
 }

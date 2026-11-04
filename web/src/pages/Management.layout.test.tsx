@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
@@ -99,11 +99,11 @@ describe('management pages layout', () => {
     renderApp(managementPage.path)
 
     const pageTitle = await screen.findByRole('heading', { level: 1, name: managementPage.title })
+    expect(pageTitle.closest('header')).not.toBeNull()
     const pageHeader = pageTitle.closest('header') as HTMLElement
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(pageTitle).toHaveClass('font-condensed')
-    expect(pageHeader).not.toBeNull()
     expect(within(pageHeader).getByRole('group', { name: en.list.density.label })).toBeInTheDocument()
   })
 
@@ -138,6 +138,48 @@ describe('management pages layout', () => {
     const emptyMessage = await screen.findByText(en.accountSecurity.emptyAllowsAll)
 
     expect(emptyMessage.parentElement).toHaveClass('border-dashed')
+  })
+
+  it('onlyTheAccountSecurityHeadingIsAFocusTarget', async () => {
+    // Only the account security page moves focus to its title, so only that h1 is programmatically focusable.
+    for (const managementPage of MANAGEMENT_PAGES) {
+      stubFetch(managementRoutes())
+      const { unmount } = renderApp(managementPage.path)
+      const pageTitle = await screen.findByRole('heading', { level: 1, name: managementPage.title })
+      const isAccountSecurityPage = managementPage.path === '/account/security'
+
+      if (isAccountSecurityPage) {
+        expect(pageTitle).toHaveAttribute('tabindex', '-1')
+      } else {
+        expect(pageTitle).not.toHaveAttribute('tabindex')
+      }
+      unmount()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('focusReturnsToAccountSecurityHeadingAfterDeletingTheLastRule', async () => {
+    // The rule list only becomes empty once the DELETE has been served, like the real API.
+    let isRuleDeleted = false
+    stubFetch(
+      managementRoutes({
+        'GET /api/account/access-rules': () => (isRuleDeleted ? ACCESS_RULES_EMPTY : ACCESS_RULES_WITH_ONE_RULE),
+        'DELETE /api/account/access-rules/1': () => {
+          isRuleDeleted = true
+          return { status: 204 }
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/account/security')
+
+    await user.click(await screen.findByRole('button', { name: en.accountSecurity.deleteAria.replace('{{value}}', '203.0.113.0/24') }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(/203\.0\.113\.0\/24/), '203.0.113.0/24')
+    await user.click(within(dialog).getByRole('button', { name: en.common.delete }))
+    await screen.findByText(en.accountSecurity.emptyAllowsAll)
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: en.accountSecurity.title })).toHaveFocus())
   })
 
   it('selfDeleteButtonIsOutlineDestructive', async () => {

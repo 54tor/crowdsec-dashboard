@@ -63,7 +63,7 @@ function useEntryColumns(props: Omit<AllowlistEntriesTableProps, 'entries'>): Da
     const columns: DataTableColumn<AllowlistEntry>[] = [
       { key: 'value', header: t('allowlists.columns.value'), cell: (entry) => <UntrustedText value={entry.value} />, className: 'font-mono', mobile: 'primary' },
       { key: 'description', header: t('allowlists.columns.description'), cell: (entry) => <UntrustedText value={entry.description} /> },
-      { key: 'created', header: t('allowlists.columns.created'), cell: (entry) => formatDateTime(entry.created_at, i18n.language), mobile: 'hidden' },
+      { key: 'created', header: t('allowlists.columns.created'), cell: (entry) => formatDateTime(entry.created_at, i18n.language) },
       { key: 'expires', header: t('allowlists.columns.expires'), cell: (entry) => <EntryExpiry entry={entry} /> },
     ]
     if (isWritable) {

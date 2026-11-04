@@ -21,9 +21,10 @@ export interface ConfirmDeleteDialogProps {
   onFailed?: (failure: unknown) => void
   onOpen: () => void
   onClose: () => void
+  onCloseAutoFocus?: (closeFocusEvent: Event) => void
 }
 
-function ConfirmDeleteForm({ title, description, target, confirmValue, submitLabel, request, onDeleted, onFailed, onClose, reportPending }: Omit<ConfirmDeleteDialogProps, 'open' | 'trigger' | 'onOpen'> & { reportPending: (isPending: boolean) => void }) {
+function ConfirmDeleteForm({ title, description, target, confirmValue, submitLabel, request, onDeleted, onFailed, onClose, reportPending }: Omit<ConfirmDeleteDialogProps, 'open' | 'trigger' | 'onOpen' | 'onCloseAutoFocus'> & { reportPending: (isPending: boolean) => void }) {
   const { t } = useTranslation()
   const [typedTarget, setTypedTarget] = useState('')
   const deletion = useMutation({ mutationFn: request, onSuccess: onDeleted, onError: onFailed })
@@ -69,6 +70,7 @@ export function ConfirmDeleteDialog(props: ConfirmDeleteDialogProps) {
       open={props.open}
       onOpenChange={(isOpen) => (isOpen ? props.onOpen() : props.onClose())}
       trigger={props.trigger}
+      onCloseAutoFocus={props.onCloseAutoFocus}
     >
       {(reportPending) => (
         <ConfirmDeleteForm

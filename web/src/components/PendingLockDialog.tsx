@@ -6,10 +6,11 @@ interface PendingLockDialogProps {
   onOpenChange: (isOpen: boolean) => void
   trigger: ReactNode
   contentClassName?: string
+  onCloseAutoFocus?: (closeFocusEvent: Event) => void
   children: (reportPending: (isPending: boolean) => void) => ReactNode
 }
 
-export function PendingLockDialog({ open, onOpenChange, trigger, contentClassName, children }: PendingLockDialogProps) {
+export function PendingLockDialog({ open, onOpenChange, trigger, contentClassName, onCloseAutoFocus, children }: PendingLockDialogProps) {
   const [isPending, setIsPending] = useState(false)
 
   function preventCloseWhilePending(closeEvent: Event) {
@@ -27,6 +28,7 @@ export function PendingLockDialog({ open, onOpenChange, trigger, contentClassNam
         onEscapeKeyDown={preventCloseWhilePending}
         onPointerDownOutside={preventCloseWhilePending}
         onInteractOutside={preventCloseWhilePending}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         {children(setIsPending)}
       </DialogContent>
