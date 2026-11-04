@@ -55,6 +55,22 @@ describe('sync page', () => {
     expect(screen.getByRole('button', { name: en.sync.syncNow })).toBeDisabled()
   })
 
+  // Audit defect 4: the peer status must carry its state colour, and a status
+  // the front end does not know yet falls back to the neutral outline badge.
+  it.each([
+    { peerStatus: 'ok', expectedVariant: 'nominal' },
+    { peerStatus: 'blocked', expectedVariant: 'warning' },
+    { peerStatus: 'failed', expectedVariant: 'critical' },
+    { peerStatus: 'never_run', expectedVariant: 'outline' },
+    { peerStatus: 'unknown_future_status', expectedVariant: 'outline' },
+  ])('peerStatusBadgeUsesSemanticVariant $peerStatus', async ({ peerStatus, expectedVariant }) => {
+    stubFetch(syncRoutes(makeStatus({ peers: [makePeer({ status: peerStatus })] })))
+    renderApp('/sync')
+    const peerRow = (await screen.findByText('edge-1', { selector: 'bdi' })).closest('tr') as HTMLElement
+    const statusBadge = peerRow.querySelector('[data-slot="badge"]') as HTMLElement
+    expect(statusBadge).toHaveAttribute('data-variant', expectedVariant)
+  })
+
   it('neverRunPeersShowNeverRun', async () => {
     stubFetch(syncRoutes(makeStatus({ peers: [makePeer({ last_run_at: null, status: 'never_run' })] })))
     renderApp('/sync')

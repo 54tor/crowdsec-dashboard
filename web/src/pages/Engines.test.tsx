@@ -207,6 +207,8 @@ describe('engines page', () => {
 
     expect(gapMessage).toHaveClass('text-warning')
     expect(gapMessage.className).not.toContain('amber')
+    const collectionStatus = gapMessage.parentElement as HTMLElement
+    expect(collectionStatus.querySelector('[class*="amber-"]')).toBeNull()
   })
 
   it("affiche l'état de collecte et l'avertissement de rechargement", async () => {

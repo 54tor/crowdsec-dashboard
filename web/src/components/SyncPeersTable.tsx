@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SyncPeer } from '@/api/syncApi'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
-import { Badge } from '@/components/ui/badge'
+import { SyncPeerStatusBadge } from '@/components/SyncPeerStatusBadge'
 import { UntrustedText } from '@/components/UntrustedText'
 import { formatDateTime, formatNumber } from '@/lib/format'
 import { splitBlockedReasons, translateSyncCode } from '@/lib/syncCodes'
@@ -18,7 +18,7 @@ export function SyncPeersTable({ peers }: { peers: SyncPeer[] }) {
         header: t('sync.columns.lastRun'),
         cell: (peer) => (peer.last_run_at === null ? t('sync.neverRun') : formatDateTime(peer.last_run_at, i18n.language)),
       },
-      { key: 'status', header: t('sync.columns.status'), cell: (peer) => <Badge variant="outline">{translateSyncCode(t, 'status', peer.status)}</Badge> },
+      { key: 'status', header: t('sync.columns.status'), cell: (peer) => <SyncPeerStatusBadge peerStatus={peer.status} /> },
       { key: 'added', header: t('sync.columns.added'), cell: (peer) => formatNumber(peer.added, i18n.language) },
       { key: 'removed', header: t('sync.columns.removed'), cell: (peer) => formatNumber(peer.removed, i18n.language) },
       { key: 'skipped', header: t('sync.columns.skipped'), cell: (peer) => formatNumber(peer.skipped, i18n.language) },
