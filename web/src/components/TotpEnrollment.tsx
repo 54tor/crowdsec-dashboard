@@ -63,10 +63,12 @@ export function TotpEnrollment({ flow, onConfirmed, onFailure }: TotpEnrollmentP
   return (
     <form onSubmit={submitCode} className="space-y-4">
       <p className="text-sm text-muted-foreground">{t('enroll.secondFactor.totpIntro')}</p>
-      <div className="flex justify-center self-center rounded-md bg-white p-3">
+      <div className="flex justify-center rounded-md bg-white p-3">
         <QRCodeSVG
           value={details.otpauth_url}
           size={176}
+          fgColor="black"
+          bgColor="white"
           role="img"
           aria-label={t('enroll.secondFactor.qrLabel')}
         />

@@ -39,6 +39,18 @@ describe('second factor enrolment components', () => {
     Reflect.deleteProperty(navigator, 'clipboard')
   })
 
+  // The QR tile stays white in the dark theme: the code itself must be pinned
+  // to black modules on white so scanners read it whatever the library defaults.
+  it('TotpQrCodeIsPaintedBlackOnWhite', async () => {
+    stubFetch({ 'POST /api/auth/enroll/totp': TOTP_BEGIN })
+    render(<TotpEnrollment flow={FLOW} onConfirmed={vi.fn()} />)
+
+    const qrImage = await screen.findByRole('img', { name: en.enroll.secondFactor.qrLabel })
+    const [backgroundPath, modulesPath] = Array.from(qrImage.querySelectorAll('path'))
+    expect(backgroundPath).toHaveAttribute('fill', 'white')
+    expect(modulesPath).toHaveAttribute('fill', 'black')
+  })
+
   it('TotpEnrollmentShowsTheQrCodeAndTheSecretThenConfirmsTheCode', async () => {
     const fetchMock = stubFetch({ 'POST /api/auth/enroll/totp': TOTP_BEGIN, 'POST /api/auth/enroll/totp/confirm': OK })
     const onConfirmed = vi.fn()
