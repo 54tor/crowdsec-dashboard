@@ -57,13 +57,13 @@ export function TotpEnrollment({ flow, onConfirmed, onFailure }: TotpEnrollmentP
   }
 
   if (!details) {
-    return failure ? <FormError failure={failure.cause} /> : <p role="status" className="text-sm text-muted-foreground">{t('enroll.secondFactor.loadingTotp')}</p>
+    return failure ? <FormError failure={failure.cause} /> : <div role="status" className="text-sm text-muted-foreground">{t('enroll.secondFactor.loadingTotp')}</div>
   }
 
   return (
     <form onSubmit={submitCode} className="space-y-4">
       <p className="text-sm text-muted-foreground">{t('enroll.secondFactor.totpIntro')}</p>
-      <div className="flex justify-center rounded-md bg-white p-3">
+      <div className="flex justify-center self-center rounded-md bg-white p-3">
         <QRCodeSVG
           value={details.otpauth_url}
           size={176}
@@ -72,8 +72,8 @@ export function TotpEnrollment({ flow, onConfirmed, onFailure }: TotpEnrollmentP
         />
       </div>
       <div className="space-y-1">
-        <p className="text-sm">{t('enroll.secondFactor.secretLabel')}</p>
-        <code className="block break-all rounded-md bg-muted p-2 text-sm">{details.secret}</code>
+        <p className="text-sm text-muted-foreground">{t('enroll.secondFactor.secretLabel')}</p>
+        <code className="block break-all rounded-md border bg-secondary p-2 font-mono text-sm text-foreground">{details.secret}</code>
       </div>
       <LabelledInput
         id="totp-code"

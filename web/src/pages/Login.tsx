@@ -26,7 +26,7 @@ export function Login() {
     return <Navigate to="/alerts" replace />
   }
   if (isStatusPending) {
-    return <p className="p-6 text-sm text-muted-foreground">{t('common.loading')}</p>
+    return <AuthPageShell title={t('login.title')} description={t('login.description')} isLoading />
   }
   if (isEnrollmentRequired) {
     return <Navigate to="/enroll" replace />

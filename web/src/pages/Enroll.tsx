@@ -48,7 +48,7 @@ export function Enroll() {
     return <Navigate to="/alerts" replace />
   }
   if (isStatusPending) {
-    return <p className="p-6 text-sm text-muted-foreground">{t('common.loading')}</p>
+    return <AuthPageShell title={t('enroll.title')} description={t('enroll.description')} isLoading />
   }
   if (!isEnrollmentRequired) {
     return <Navigate to="/login" replace />

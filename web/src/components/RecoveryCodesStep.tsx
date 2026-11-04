@@ -84,31 +84,31 @@ export function RecoveryCodesStep({ flow, onFinish, onFailure }: RecoveryCodesSt
       <StepHeading title={t('enroll.recoveryCodes.title')} description={t('enroll.recoveryCodes.description')} />
       {recoveryCodes ? (
         <>
-          <ul aria-label={t('enroll.recoveryCodes.listLabel')} className="grid grid-cols-2 gap-2 rounded-md bg-muted p-3">
+          <ul aria-label={t('enroll.recoveryCodes.listLabel')} className="grid grid-cols-2 gap-2 rounded-md border bg-secondary p-3 font-mono text-foreground">
             {recoveryCodes.map((recoveryCode) => (
               <li key={recoveryCode}>
                 <code className="text-sm">{recoveryCode}</code>
               </li>
             ))}
           </ul>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => void copyCodes()}>
+          <div className="flex gap-2 max-md:flex-col">
+            <Button type="button" variant="outline" className="max-md:w-full" onClick={() => void copyCodes()}>
               {hasCopied ? t('enroll.recoveryCodes.copied') : t('enroll.recoveryCodes.copy')}
             </Button>
-            <Button type="button" variant="outline" onClick={() => downloadAsTextFile(recoveryCodes.join('\n'))}>
+            <Button type="button" variant="outline" className="max-md:w-full" onClick={() => downloadAsTextFile(recoveryCodes.join('\n'))}>
               {t('enroll.recoveryCodes.download')}
             </Button>
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex min-h-10 items-center gap-2 text-sm max-md:min-h-11">
             <input type="checkbox" checked={isAcknowledged} onChange={(changeEvent) => setIsAcknowledged(changeEvent.target.checked)} />
             {t('enroll.recoveryCodes.acknowledge')}
           </label>
         </>
       ) : (
         !failure && (
-          <p role="status" className="text-sm text-muted-foreground">
+          <div role="status" className="text-sm text-muted-foreground">
             {t('enroll.recoveryCodes.loading')}
-          </p>
+          </div>
         )
       )}
       {failure && <FormError failure={failure.cause} />}
