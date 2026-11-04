@@ -48,3 +48,6 @@ export function holdPostRequests(fetchMock: { getMockImplementation: () => ((inp
   fetchMock.mockImplementation(async (input, init) => (init?.method === 'POST' || init?.method === 'DELETE' ? heldResponse.promise : defaultImplementation(input, init)))
   return heldResponse
 }
+
+// The shell always shows the brand logo; injection tests look for any other image.
+export const INJECTED_IMAGE_SELECTOR = 'img:not([src="/crowdsec-logo.png"])'

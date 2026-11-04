@@ -5,7 +5,7 @@ import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { makeHealth } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
-import { prepareEnglishApp, SESSION_OK } from '@/test/pageHarness'
+import { INJECTED_IMAGE_SELECTOR, prepareEnglishApp, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const ONE_MINUTE_MILLISECONDS = 60_000
@@ -117,7 +117,7 @@ describe('health page', () => {
     const { container } = renderApp('/health')
 
     expect(await screen.findByText('<img src=x onerror=alert(1)>')).toBeInTheDocument()
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector(INJECTED_IMAGE_SELECTOR)).toBeNull()
   })
 
   it('showsDatabaseUnavailable', async () => {

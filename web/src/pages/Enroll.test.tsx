@@ -5,6 +5,7 @@ import { resetUnauthenticatedGuard } from '@/api/client'
 import { initI18n, setLanguage } from '@/i18n'
 import en from '@/i18n/en.json'
 import { stubFetch } from '@/test/fetchStub'
+import { INJECTED_IMAGE_SELECTOR } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const ENROLLMENT_TOKEN = 'T'.repeat(43)
@@ -136,6 +137,6 @@ describe('first account enrolment wizard', () => {
     const { container } = renderApp('/enroll')
     await submitAccountStep(user)
     await screen.findByRole('img', { name: en.enroll.secondFactor.qrLabel })
-    await waitFor(() => expect(container.querySelector('img')).toBeNull())
+    await waitFor(() => expect(container.querySelector(INJECTED_IMAGE_SELECTOR)).toBeNull())
   })
 })

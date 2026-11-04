@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
 import { MALICIOUS_SCENARIO, makeAlert, makePage } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
-import { prepareEnglishApp, requestedUrls, SESSION_OK, waitForDebounce } from '@/test/pageHarness'
+import { INJECTED_IMAGE_SELECTOR, prepareEnglishApp, requestedUrls, SESSION_OK, waitForDebounce } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 vi.mock('@/components/TimelineChartCanvas', () => ({
@@ -116,7 +116,7 @@ describe('alerts page', () => {
 
     const table = await screen.findByRole('table', { name: en.alerts.caption })
     expect(within(table).getAllByText(MALICIOUS_SCENARIO).length).toBe(2)
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector(INJECTED_IMAGE_SELECTOR)).toBeNull()
   })
 
   it('affiche le badge AppSec', async () => {

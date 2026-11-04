@@ -18,7 +18,20 @@
     "accounts": "Comptes",
     "sync": "Synchro",
     "exportImport": "Export / Import",
-    "allowlists": "Listes d'autorisation"
+    "allowlists": "Listes d'autorisation",
+    "accountSecurity": "Sécurité du compte"
+  },
+  "shell": {
+    "groups": {
+      "surveillance": "Surveillance",
+      "infrastructure": "Infrastructure",
+      "administration": "Administration"
+    },
+    "role": {
+      "admin": "Administrateur",
+      "read_only": "Lecture seule"
+    },
+    "account": "Compte"
   },
   "common": {
     "retry": "Réessayer",
@@ -30,6 +43,12 @@
     "label": "Langue",
     "fr": "Français",
     "en": "English"
+  },
+  "theme": {
+    "label": "Thème",
+    "system": "Système",
+    "light": "Clair",
+    "dark": "Sombre"
   },
   "login": {
     "title": "Connexion",

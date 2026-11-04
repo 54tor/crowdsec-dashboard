@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
 import { stubFetch } from '@/test/fetchStub'
-import { prepareEnglishApp } from '@/test/pageHarness'
+import { INJECTED_IMAGE_SELECTOR, prepareEnglishApp } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const ADMIN_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'alice', account_role: 'admin' } }
@@ -42,7 +42,7 @@ describe('config page', () => {
 
     const viewer = await screen.findByLabelText('Content of acquis.d/nginx.yaml')
     expect(viewer.textContent).toBe(hostileContent)
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector(INJECTED_IMAGE_SELECTOR)).toBeNull()
   })
 
   it('showsTranslatedErrorWhenFileIsTooLarge', async () => {

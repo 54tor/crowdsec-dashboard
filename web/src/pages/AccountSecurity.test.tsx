@@ -5,7 +5,7 @@ import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { setLanguage } from '@/i18n'
 import { stubFetch, type RouteTable } from '@/test/fetchStub'
-import { prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
+import { INJECTED_IMAGE_SELECTOR, prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const RULES_URL = '/api/account/access-rules'
@@ -167,7 +167,7 @@ describe('account security page', () => {
     const { container } = renderApp('/account/security')
 
     expect(await screen.findByText(hostile)).toBeInTheDocument()
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector(INJECTED_IMAGE_SELECTOR)).toBeNull()
     expect(container.querySelector('b, i')).toBeNull()
   })
 

@@ -40,6 +40,7 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/tokens': <Tokens />,
   '/accounts': <Accounts />,
   '/export-import': <ExportImport />,
+  '/account/security': <AccountSecurity />,
 }
 
 function pageFor(navItem: NavItem): ReactElement {
@@ -60,7 +61,6 @@ export function AppRoutes() {
               {NAV_ITEMS.map((navItem) => (
                 <Route key={navItem.path} path={navItem.path} element={pageFor(navItem)} />
               ))}
-              <Route path="/account/security" element={<AccountSecurity />} />
             </Route>
           </Route>
         </Route>

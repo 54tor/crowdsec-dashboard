@@ -6,7 +6,7 @@ import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { SECTION_PROBLEM_CODES, SKIP_REASON_CODES, WARNING_CODES, SECTION_STATUS_CODES } from '@/lib/bundleCodes'
 import { stubFetch } from '@/test/fetchStub'
-import { holdPostRequests, prepareEnglishApp, requestsTo } from '@/test/pageHarness'
+import { INJECTED_IMAGE_SELECTOR, holdPostRequests, prepareEnglishApp, requestsTo } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const ADMIN_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'alice', account_role: 'admin' } }
@@ -228,7 +228,7 @@ describe('export and import page', () => {
     const { container } = renderApp(PAGE_PATH)
     await uploadAndPreview(user)
     expect(await screen.findByText(`${hostileName} 1`, { selector: 'bdi' })).toBeInTheDocument()
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector(INJECTED_IMAGE_SELECTOR)).toBeNull()
   })
 
   it('oversizedFileIsRejectedBeforeUpload', async () => {

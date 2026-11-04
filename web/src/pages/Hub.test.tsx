@@ -5,7 +5,7 @@ import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { makeHealth, makeHubItem } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
-import { prepareEnglishApp, requestsTo, SESSION_OK, slowResponse } from '@/test/pageHarness'
+import { INJECTED_IMAGE_SELECTOR, prepareEnglishApp, requestsTo, SESSION_OK, slowResponse } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 function hubRoutes(extraRoutes = {}) {
@@ -273,7 +273,7 @@ describe('hub page', () => {
 
     // The hostile description must stay a text node, never parsed as markup.
     expect(await screen.findByText(HOSTILE_DESCRIPTION, { selector: 'td' })).toBeInTheDocument()
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector(INJECTED_IMAGE_SELECTOR)).toBeNull()
     expect(screen.getByRole('button', { name: 'Remove crowdsecurity/appsec-default' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Remove crowdsecurity/vpatch-env-access' }))

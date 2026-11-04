@@ -18,7 +18,20 @@
     "accounts": "Accounts",
     "sync": "Sync",
     "exportImport": "Export / Import",
-    "allowlists": "Allowlists"
+    "allowlists": "Allowlists",
+    "accountSecurity": "Account security"
+  },
+  "shell": {
+    "groups": {
+      "surveillance": "Monitoring",
+      "infrastructure": "Infrastructure",
+      "administration": "Administration"
+    },
+    "role": {
+      "admin": "Administrator",
+      "read_only": "Read only"
+    },
+    "account": "Account"
   },
   "common": {
     "retry": "Retry",
@@ -30,6 +43,12 @@
     "label": "Language",
     "fr": "Français",
     "en": "English"
+  },
+  "theme": {
+    "label": "Theme",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
   },
   "login": {
     "title": "Sign in",
