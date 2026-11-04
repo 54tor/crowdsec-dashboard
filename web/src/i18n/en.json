@@ -508,6 +508,7 @@
     "addTitle": "Add an engine",
     "editTitle": "Edit engine {{name}}",
     "description": "CrowdSec engines whose alerts are archived by the dashboard.",
+    "empty": "No engine configured yet.",
     "caption": "Engines",
     "actions": "Actions",
     "local": "Local",

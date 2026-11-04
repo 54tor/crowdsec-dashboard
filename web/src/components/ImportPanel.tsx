@@ -19,7 +19,7 @@ export function ImportPanel() {
   const canApply = plan !== null && !hasUnavailableSection && plan.sections.length > 0
 
   return (
-    <section className="space-y-3" aria-labelledby="import-heading">
+    <section className="space-y-3 bg-card border rounded-md p-4" aria-labelledby="import-heading">
       <h2 id="import-heading" className="text-base font-medium">
         {t('bundle.importTitle')}
       </h2>

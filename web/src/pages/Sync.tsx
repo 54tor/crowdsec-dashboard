@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { getSyncStatus, SYNC_POLL_INTERVAL_MILLISECONDS, SYNC_QUERY_KEY, SYNC_START_WAIT_MILLISECONDS, type SyncStatus } from '@/api/syncApi'
 import { ErrorNotice, InfoNotice, WarningNotice } from '@/components/Notice'
+import { PageHeader } from '@/components/PageHeader'
 import { SyncNowButton } from '@/components/SyncNowButton'
 import { SyncPeersTable } from '@/components/SyncPeersTable'
 import { SyncPlanTable } from '@/components/SyncPlanTable'
@@ -84,14 +85,16 @@ export function Sync() {
   const { data, error, isPending, isAwaitingStart, awaitStart } = useSyncStatus()
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">{t('sync.title')}</h1>
-        <WriteOnly>
-          <Link to="/engines" className="text-sm underline">
-            {t('sync.manageEngines')}
-          </Link>
-        </WriteOnly>
-      </div>
+      <PageHeader
+        title={t('sync.title')}
+        actions={
+          <WriteOnly>
+            <Link to="/engines" className="text-sm underline">
+              {t('sync.manageEngines')}
+            </Link>
+          </WriteOnly>
+        }
+      />
       {error && <ErrorNotice error={error} />}
       {isPending && <TableSkeleton />}
       {data && (

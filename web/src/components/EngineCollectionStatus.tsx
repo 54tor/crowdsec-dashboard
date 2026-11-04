@@ -11,7 +11,7 @@ export function EngineCollectionStatus({ engine, now }: { engine: EngineView; no
       <p>
         {t('engines.status.lastCollected')} {collection.last_collected_at ? <AgeCell isoDate={collection.last_collected_at} now={now} /> : t('engines.status.never')}
       </p>
-      {collection.last_error_code && <p className="text-destructive">{errorMessage({ code: collection.last_error_code })}</p>}
+      {collection.last_error_code && <p className="text-critical">{errorMessage({ code: collection.last_error_code })}</p>}
       {collection.consecutive_failures > 0 && <p className="text-muted-foreground">{t('engines.status.failures', { count: collection.consecutive_failures })}</p>}
       {collection.gaps > 0 && <p className="text-warning">{t('engines.status.incomplete')}</p>}
     </div>

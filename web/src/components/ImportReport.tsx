@@ -22,7 +22,7 @@ function SectionResult({ sectionReport }: { sectionReport: SectionReport }) {
           ))}
         </ul>
       )}
-      {sectionReport.error_code && <p className="text-sm text-destructive">{translateBundleCode(t, 'problems', sectionReport.error_code)}</p>}
+      {sectionReport.error_code && <p className="text-sm text-critical">{translateBundleCode(t, 'problems', sectionReport.error_code)}</p>}
       {(sectionReport.affected_files?.length ?? 0) > 0 && (
         <div className="text-sm">
           <p>{t('bundle.affectedFiles')}</p>

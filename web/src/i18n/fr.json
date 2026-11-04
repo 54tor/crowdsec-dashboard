@@ -508,6 +508,7 @@
     "addTitle": "Ajouter un moteur",
     "editTitle": "Modifier le moteur {{name}}",
     "description": "Moteurs CrowdSec dont le tableau de bord archive les alertes.",
+    "empty": "Aucun moteur configuré pour l'instant.",
     "caption": "Moteurs",
     "actions": "Actions",
     "local": "Local",

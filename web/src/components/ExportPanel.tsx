@@ -37,7 +37,7 @@ export function ExportPanel() {
 
   const hasNoSection = selectedSections.length === 0
   return (
-    <section className="space-y-3" aria-labelledby="export-heading">
+    <section className="space-y-3 bg-card border rounded-md p-4" aria-labelledby="export-heading">
       <h2 id="export-heading" className="text-base font-medium">
         {t('bundle.exportTitle')}
       </h2>

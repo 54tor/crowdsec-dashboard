@@ -22,6 +22,7 @@ export function SyncPlanTable({ entries }: { entries: SyncPlanEntry[] }) {
       caption={t('sync.planTableCaption')}
       columns={columns}
       rows={entries}
+      emptyMessage={t('sync.noPlan')}
       rowKey={(entry) => `${entry.engine}|${entry.kind}|${entry.target}|${entry.source}|${entry.reason}`}
     />
   )
