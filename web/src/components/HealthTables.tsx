@@ -11,18 +11,32 @@ export interface RowActions<Row> {
   cell: (row: Row) => ReactNode
 }
 
-export function BouncersTable({ bouncers, now, actions }: { bouncers: Bouncer[]; now: number; actions?: RowActions<Bouncer> }) {
+interface BouncersTableProps {
+  bouncers: Bouncer[]
+  now: number
+  actions?: RowActions<Bouncer>
+  cardsOnMobile?: boolean
+}
+
+interface MachinesTableProps {
+  machines: Machine[]
+  now: number
+  actions?: RowActions<Machine>
+  cardsOnMobile?: boolean
+}
+
+export function BouncersTable({ bouncers, now, actions, cardsOnMobile = false }: BouncersTableProps) {
   const { t } = useTranslation()
   const columns = useMemo<DataTableColumn<Bouncer>[]>(
     () => [
-      { key: 'name', header: t('health.columns.name'), cell: (bouncer) => bouncer.name },
+      { key: 'name', header: t('health.columns.name'), cell: (bouncer) => bouncer.name, mobile: 'primary' },
       { key: 'type', header: t('health.columns.type'), cell: (bouncer) => bouncer.type },
       { key: 'version', header: t('health.columns.version'), cell: (bouncer) => bouncer.version },
-      { key: 'ip', header: t('health.columns.ip'), cell: (bouncer) => bouncer.ip_address },
+      { key: 'ip', header: t('health.columns.ip'), cell: (bouncer) => bouncer.ip_address, className: 'font-mono' },
       { key: 'lastContact', header: t('health.columns.lastContact'), cell: (bouncer) => <AgeCell isoDate={bouncer.last_pull} now={now} /> },
       { key: 'status', header: t('health.columns.status'), cell: (bouncer) => <ContactStatus lastContact={bouncer.last_pull} now={now} revoked={bouncer.revoked} /> },
       { key: 'auth', header: t('health.columns.auth'), cell: (bouncer) => bouncer.auth_type },
-      ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell }] : []),
+      ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell, mobile: 'actions' as const }] : []),
     ],
     [t, now, actions],
   )
@@ -32,18 +46,20 @@ export function BouncersTable({ bouncers, now, actions }: { bouncers: Bouncer[];
       columns={columns}
       rows={bouncers}
       rowKey={(bouncer) => bouncer.name}
+      cardsOnMobile={cardsOnMobile}
       emptyMessage={t('health.noBouncers')}
     />
   )
 }
 
-export function MachinesTable({ machines, now, actions }: { machines: Machine[]; now: number; actions?: RowActions<Machine> }) {
+export function MachinesTable({ machines, now, actions, cardsOnMobile = false }: MachinesTableProps) {
   const { t } = useTranslation()
   const columns = useMemo<DataTableColumn<Machine>[]>(
     () => [
       {
         key: 'name',
         header: t('health.columns.name'),
+        mobile: 'primary',
         cell: (machine) => (
           <span className="flex flex-wrap items-center gap-1">
             {machine.machine_id}
@@ -52,7 +68,7 @@ export function MachinesTable({ machines, now, actions }: { machines: Machine[];
         ),
       },
       { key: 'version', header: t('health.columns.version'), cell: (machine) => machine.version },
-      { key: 'ip', header: t('health.columns.ip'), cell: (machine) => machine.ip_address },
+      { key: 'ip', header: t('health.columns.ip'), cell: (machine) => machine.ip_address, className: 'font-mono' },
       { key: 'lastContact', header: t('health.columns.lastContact'), cell: (machine) => (machine.self ? '—' : <AgeCell isoDate={machine.last_heartbeat} now={now} />) },
       {
         key: 'status',
@@ -65,7 +81,7 @@ export function MachinesTable({ machines, now, actions }: { machines: Machine[];
         ),
       },
       { key: 'auth', header: t('health.columns.auth'), cell: (machine) => machine.auth_type },
-      ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell }] : []),
+      ...(actions ? [{ key: 'actions', header: actions.header, cell: actions.cell, mobile: 'actions' as const }] : []),
     ],
     [t, now, actions],
   )
@@ -75,6 +91,7 @@ export function MachinesTable({ machines, now, actions }: { machines: Machine[];
       columns={columns}
       rows={machines}
       rowKey={(machine) => machine.machine_id}
+      cardsOnMobile={cardsOnMobile}
       emptyMessage={t('health.noMachines')}
     />
   )

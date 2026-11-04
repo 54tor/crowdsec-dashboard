@@ -626,6 +626,7 @@
       "read_only": "Read only"
     },
     "tableCaption": "Dashboard accounts",
+    "empty": "No account.",
     "columns": {
       "name": "Name",
       "role": "Role",

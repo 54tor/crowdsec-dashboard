@@ -61,15 +61,16 @@ function useEntryColumns(props: Omit<AllowlistEntriesTableProps, 'entries'>): Da
   const { engineName, allowlistName, isWritable, onWritten, disabledReason } = props
   return useMemo(() => {
     const columns: DataTableColumn<AllowlistEntry>[] = [
-      { key: 'value', header: t('allowlists.columns.value'), cell: (entry) => <UntrustedText value={entry.value} /> },
+      { key: 'value', header: t('allowlists.columns.value'), cell: (entry) => <UntrustedText value={entry.value} />, className: 'font-mono', mobile: 'primary' },
       { key: 'description', header: t('allowlists.columns.description'), cell: (entry) => <UntrustedText value={entry.description} /> },
-      { key: 'created', header: t('allowlists.columns.created'), cell: (entry) => formatDateTime(entry.created_at, i18n.language) },
+      { key: 'created', header: t('allowlists.columns.created'), cell: (entry) => formatDateTime(entry.created_at, i18n.language), mobile: 'hidden' },
       { key: 'expires', header: t('allowlists.columns.expires'), cell: (entry) => <EntryExpiry entry={entry} /> },
     ]
     if (isWritable) {
       columns.push({
         key: 'actions',
         header: t('allowlists.columns.actions'),
+        mobile: 'actions',
         cell: (entry) => <EntryRemoveAction engineName={engineName} allowlistName={allowlistName} entry={entry} onWritten={onWritten} disabledReason={disabledReason} />,
       })
     }
@@ -85,9 +86,6 @@ export function AllowlistEntriesTable({ entries, ...columnProps }: AllowlistEntr
   const currentPage = Math.min(page, totalPages)
   const visibleEntries = entries.slice((currentPage - 1) * ENTRIES_PER_PAGE, currentPage * ENTRIES_PER_PAGE)
 
-  if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t('allowlists.noEntries')}</p>
-  }
   return (
     <div className="space-y-2">
       <DataTable
@@ -95,6 +93,8 @@ export function AllowlistEntriesTable({ entries, ...columnProps }: AllowlistEntr
         columns={columns}
         rows={visibleEntries}
         rowKey={(entry) => entry.value}
+        cardsOnMobile
+        emptyMessage={t('allowlists.noEntries')}
       />
       {totalPages > 1 && <PaginationBar page={currentPage} totalPages={totalPages} onPageChange={setPage} />}
     </div>

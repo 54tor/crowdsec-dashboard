@@ -9,7 +9,10 @@ import { AllowlistBanners } from '@/components/AllowlistBanners'
 import { AllowlistEngineSelect } from '@/components/AllowlistEngineSelect'
 import { AllowlistSection } from '@/components/AllowlistSection'
 import { CreateAllowlistDialog } from '@/components/CreateAllowlistDialog'
+import { DensityToggle } from '@/components/DensityToggle'
+import { EmptyState } from '@/components/EmptyState'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
+import { PageHeader } from '@/components/PageHeader'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { useCanWrite } from '@/hooks/useCanWrite'
 import { visibleNavItems } from '@/routes'
@@ -46,7 +49,7 @@ function AllowlistListingView({ listing, isWritable, onWritten }: AllowlistListi
     <>
       <AllowlistBanners listing={listing} />
       {isWritable && <CreateAllowlistDialog engineName={listing.engine} onWritten={onWritten} />}
-      {listing.allowlists.length === 0 && <p className="text-sm text-muted-foreground">{t('allowlists.empty')}</p>}
+      {listing.allowlists.length === 0 && <EmptyState message={t('allowlists.empty')} />}
       {listing.allowlists.map((allowlist) => (
         <AllowlistSection key={`${listing.engine}/${allowlist.name}`} engineName={listing.engine} allowlist={allowlist} isWritable={isWritable} onWritten={onWritten} />
       ))}
@@ -82,8 +85,7 @@ export function Allowlists() {
   const listing = listingQuery.data
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">{t('allowlists.title')}</h1>
-      <p className="text-sm text-muted-foreground">{t('allowlists.intro')}</p>
+      <PageHeader title={t('allowlists.title')} description={t('allowlists.intro')} actions={<DensityToggle />} />
       <ConfigPageNote />
       <AllowlistEngineSelect value={engineName} onChange={selectEngine} />
       {isRefreshFailed && <WarningNotice>{t('allowlists.refreshFailed')}</WarningNotice>}

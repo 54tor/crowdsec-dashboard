@@ -626,6 +626,7 @@
       "read_only": "Lecture seule"
     },
     "tableCaption": "Comptes du tableau de bord",
+    "empty": "Aucun compte.",
     "columns": {
       "name": "Nom",
       "role": "Rôle",

@@ -31,5 +31,13 @@ export function AccessRulesTable({ rules, onRuleDeleted }: AccessRulesTableProps
       ),
     },
   ]
-  return <DataTable caption={t('accountSecurity.tableCaption')} columns={columns} rows={rules} rowKey={(rule) => rule.id} />
+  return (
+    <DataTable
+      caption={t('accountSecurity.tableCaption')}
+      columns={columns}
+      rows={rules}
+      rowKey={(rule) => rule.id}
+      emptyMessage={t('accountSecurity.emptyAllowsAll')}
+    />
+  )
 }

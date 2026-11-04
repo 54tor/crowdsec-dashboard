@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { ACCOUNTS_QUERY_KEY, listAccounts } from '@/api/accountsApi'
 import { AccountsTable } from '@/components/AccountsTable'
 import { CreateAccountDialog } from '@/components/CreateAccountDialog'
+import { DensityToggle } from '@/components/DensityToggle'
 import { ErrorNotice } from '@/components/Notice'
+import { PageHeader } from '@/components/PageHeader'
 import { TableSkeleton } from '@/components/TableSkeleton'
 
 export function Accounts() {
@@ -13,10 +15,15 @@ export function Accounts() {
   const [actionFailure, setActionFailure] = useState<unknown>(null)
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">{t('accounts.title')}</h1>
-        <CreateAccountDialog />
-      </div>
+      <PageHeader
+        title={t('accounts.title')}
+        actions={
+          <>
+            <DensityToggle />
+            <CreateAccountDialog />
+          </>
+        }
+      />
       {error && <ErrorNotice error={error} />}
       {actionFailure !== null && <ErrorNotice error={actionFailure} />}
       {isPending && <TableSkeleton />}

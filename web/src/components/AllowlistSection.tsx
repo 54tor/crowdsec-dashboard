@@ -44,14 +44,14 @@ export function AllowlistSection({ engineName, allowlist, isWritable, onWritten 
   const { t } = useTranslation()
   const disabledReason = allowlist.console_managed ? t('errors.allowlist_console_managed') : undefined
   return (
-    <section className="space-y-3 rounded-lg border p-4">
+    <section className="space-y-3 rounded-md border bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold">
+            <h2 className="font-condensed text-lg font-semibold">
               <UntrustedText value={allowlist.name} />
             </h2>
-            {allowlist.console_managed && <Badge variant="neutral">{t('allowlists.consoleManaged')}</Badge>}
+            {allowlist.console_managed && <Badge variant="info">{t('allowlists.consoleManaged')}</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">
             <UntrustedText value={allowlist.description} />

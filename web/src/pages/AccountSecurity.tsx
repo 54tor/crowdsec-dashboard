@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { ACCESS_RULES_QUERY_KEY, fetchAccessRules } from '@/api/accessRulesApi'
 import { AccessRuleForm } from '@/components/AccessRuleForm'
 import { AccessRulesTable } from '@/components/AccessRulesTable'
+import { DensityToggle } from '@/components/DensityToggle'
 import { InfoNotice, ErrorNotice, WarningNotice } from '@/components/Notice'
+import { PageHeader } from '@/components/PageHeader'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { countryLabel } from '@/lib/countryLabel'
 
@@ -15,9 +17,7 @@ export function AccountSecurity() {
   const clientCountry = data?.client_country ? ` (${countryLabel(data.client_country, i18n.language)})` : ''
   return (
     <section className="space-y-4">
-      <h1 ref={heading} tabIndex={-1} className="text-xl font-semibold outline-none">
-        {t('accountSecurity.title')}
-      </h1>
+      <PageHeader title={t('accountSecurity.title')} titleRef={heading} actions={<DensityToggle />} />
       <InfoNotice>{t('accountSecurity.explanation')}</InfoNotice>
       <WarningNotice>{t('accountSecurity.geoNotice')}</WarningNotice>
       {error && <ErrorNotice error={error} />}
@@ -25,11 +25,7 @@ export function AccountSecurity() {
       {data && (
         <>
           <p className="text-sm">{t('accountSecurity.clientAddress', { address: data.client_ip })}{clientCountry}</p>
-          {data.rules.length === 0 ? (
-            <p>{t('accountSecurity.emptyAllowsAll')}</p>
-          ) : (
-            <AccessRulesTable rules={data.rules} onRuleDeleted={() => heading.current?.focus()} />
-          )}
+          <AccessRulesTable rules={data.rules} onRuleDeleted={() => heading.current?.focus()} />
         </>
       )}
       <AccessRuleForm />
