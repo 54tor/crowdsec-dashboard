@@ -9,7 +9,7 @@ interface CheckboxFieldProps {
 
 export function CheckboxField({ id, label, checked, onChange }: CheckboxFieldProps) {
   return (
-    <div className="flex min-h-10 items-center gap-2 max-md:min-h-11">
+    <label htmlFor={id} className="flex min-h-10 cursor-pointer items-center gap-2 text-sm max-md:min-h-11">
       <input
         id={id}
         type="checkbox"
@@ -17,9 +17,7 @@ export function CheckboxField({ id, label, checked, onChange }: CheckboxFieldPro
         onChange={(changeEvent: ChangeEvent<HTMLInputElement>) => onChange(changeEvent.target.checked)}
         className="size-5 accent-primary focus-ring"
       />
-      <label htmlFor={id} className="text-sm">
-        {label}
-      </label>
-    </div>
+      {label}
+    </label>
   )
 }

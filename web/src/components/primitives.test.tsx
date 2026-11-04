@@ -10,8 +10,17 @@ import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { SelectField } from '@/components/SelectField'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { CheckboxField } from '@/components/CheckboxField'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { setLanguage } from '@/i18n'
 import { prepareEnglishApp } from '@/test/pageHarness'
@@ -81,6 +90,57 @@ describe('shared primitives', () => {
 
     expect(meetsDesktopTarget).toBe(true)
     expect(meetsMobileTarget).toBe(true)
+  })
+
+  // A pressed toggle used to differ only by a faint background (about 1.1:1):
+  // it must also gain the inset border and the strong text of a checked segment.
+  it('pressedOutlineToggleIsMarkedBeyondColour', () => {
+    render(
+      <>
+        <Button variant="outline" aria-pressed>
+          Pressed
+        </Button>
+        <Button variant="outline" aria-pressed={false}>
+          Released
+        </Button>
+      </>,
+    )
+
+    const pressedToggleClasses = ['aria-pressed:shadow-[inset_0_0_0_1px_var(--input)]', 'aria-pressed:text-foreground', 'aria-pressed:font-medium']
+    expect(screen.getByRole('button', { name: 'Pressed' })).toHaveClass(...pressedToggleClasses)
+    expect(screen.getByRole('button', { name: 'Released' })).toHaveClass('aria-[pressed=false]:text-muted-foreground', 'aria-[pressed=false]:font-normal')
+  })
+
+  // The whole row, label text included, is the hit area of a checkbox.
+  it('checkboxLabelWrapsTheBoxAndMeetsTouchTargets', () => {
+    render(<CheckboxField id="include-expired" label="Include expired" checked={false} onChange={vi.fn()} />)
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Include expired' })
+    const checkboxLabel = checkbox.closest('label')
+
+    expect(checkboxLabel).not.toBeNull()
+    expect(checkboxLabel).toHaveClass('flex', 'min-h-10', 'max-md:min-h-11', 'cursor-pointer')
+  })
+
+  // Menu items were 28 px high and only tinted on focus: they need the touch
+  // target height and the double focus ring for keyboard users.
+  it('menuItemsMeetTouchTargetsAndShowKeyboardFocus', () => {
+    render(
+      <DropdownMenu open>
+        <DropdownMenuTrigger>Menu</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>Plain item</DropdownMenuItem>
+          <DropdownMenuRadioGroup value="first">
+            <DropdownMenuRadioItem value="first">Radio item</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    )
+
+    const menuItems = [screen.getByRole('menuitem', { name: 'Plain item' }), screen.getByRole('menuitemradio', { name: 'Radio item' })]
+    for (const menuItem of menuItems) {
+      expect(menuItem).toHaveClass('min-h-10', 'max-md:min-h-11', 'focus-ring')
+    }
   })
 
   it('controlsUseTheDoubleFocusRing', () => {

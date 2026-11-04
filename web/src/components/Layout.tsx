@@ -37,7 +37,8 @@ export function Layout() {
         <AppHeader />
         <main
           id="main-content"
-          className={cn('mx-auto w-full max-w-[1600px] min-w-0 space-y-4', isMobileViewport ? 'p-4 pb-24' : 'p-6')}
+          tabIndex={-1}
+          className={cn('mx-auto w-full max-w-[1600px] min-w-0 space-y-4 outline-none', isMobileViewport ? 'p-4 pb-24' : 'p-6')}
         >
           {logoutError && <ErrorNotice error={logoutError.failure} />}
           <Outlet />

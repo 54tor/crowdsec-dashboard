@@ -12,12 +12,13 @@ import { SUPPORTED_LANGUAGES, setLanguage, type Language } from '@/i18n'
 
 export function LanguageSwitch() {
   const { t, i18n } = useTranslation()
+  const currentLanguageCode = i18n.language.toUpperCase()
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" aria-label={t('language.label')}>
+        <Button variant="outline" size="sm" aria-label={`${t('language.label')}: ${currentLanguageCode}`}>
           <Icon name="translate" className="size-3.5" />
-          {i18n.language.toUpperCase()}
+          {currentLanguageCode}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

@@ -9,7 +9,7 @@ function subscribeToPreference(onPreferenceChange: () => void): () => void {
   return () => preferenceListeners.delete(onPreferenceChange)
 }
 
-function readCurrentPreference(): ThemePreference {
+export function readCurrentPreference(): ThemePreference {
   return lastChosenPreference ?? readThemePreference()
 }
 

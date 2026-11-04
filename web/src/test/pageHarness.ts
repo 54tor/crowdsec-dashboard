@@ -51,7 +51,7 @@ export function holdPostRequests(fetchMock: { getMockImplementation: () => ((inp
 }
 
 // The shell always shows the brand logo; injection tests look for any other image.
-export const INJECTED_IMAGE_SELECTOR = 'img:not([src="/crowdsec-logo.png"])'
+export const INJECTED_IMAGE_SELECTOR = 'img[onerror], img:not([src="/crowdsec-logo.png"])'
 
 // Browsers expose a header nested in <main> (the page header) as a plain group,
 // but the testing library maps every <header> to the banner role. The

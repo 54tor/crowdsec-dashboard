@@ -18,9 +18,9 @@ function RailNavGroup({ navItemGroup, onNavigate }: { navItemGroup: NavItemGroup
   const headingId = useId()
   return (
     <div>
-      <h2 id={headingId} className="px-2.5 pt-3.5 pb-1.5 font-condensed text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+      <p id={headingId} className="px-2.5 pt-3.5 pb-1.5 font-condensed text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
         {t(`shell.groups.${navItemGroup.group}`)}
-      </h2>
+      </p>
       <ul aria-labelledby={headingId} className="space-y-0.5">
         {navItemGroup.items.map((navItem) => (
           <li key={navItem.path}>
@@ -38,13 +38,15 @@ function RailNavGroup({ navItemGroup, onNavigate }: { navItemGroup: NavItemGroup
 export function RailNavGroups({
   navItemGroups,
   onNavigate,
+  className,
 }: {
   navItemGroups: readonly NavItemGroup[]
   onNavigate?: () => void
+  className?: string
 }) {
   const { t } = useTranslation()
   return (
-    <nav aria-label={t('nav.label')}>
+    <nav aria-label={t('nav.label')} className={className}>
       {navItemGroups.map((navItemGroup) => (
         <RailNavGroup key={navItemGroup.group} navItemGroup={navItemGroup} onNavigate={onNavigate} />
       ))}

@@ -21,6 +21,9 @@ function themeSwitchName(themeChoiceLabel: string): string {
   return `${en.theme.label}: ${themeChoiceLabel}`
 }
 
+// The language switch shows the current language code: its name must contain it too.
+const LANGUAGE_SWITCH_NAME = `${en.language.label}: EN`
+
 // The alerts page is the landing page: both of its list requests answer empty
 // so the shell is the only thing under test.
 function stubSignedInApp(accountRole: 'admin' | 'read_only', extraRoutes: RouteTable = {}) {
@@ -34,7 +37,7 @@ function stubSignedInApp(accountRole: 'admin' | 'read_only', extraRoutes: RouteT
 
 async function findRail(): Promise<HTMLElement> {
   const railNavigation = await screen.findByRole('navigation', { name: en.nav.label })
-  return railNavigation.closest('aside')!
+  return railNavigation.closest('[data-slot=app-rail]')!
 }
 
 describe('desktop application shell', () => {
@@ -57,11 +60,38 @@ describe('desktop application shell', () => {
 
     const railNavigation = await screen.findByRole('navigation', { name: en.nav.label })
 
-    expect(within(railNavigation).getByRole('heading', { name: en.shell.groups.surveillance })).toBeInTheDocument()
-    expect(within(railNavigation).getByRole('heading', { name: en.shell.groups.infrastructure })).toBeInTheDocument()
-    expect(within(railNavigation).getByRole('heading', { name: en.shell.groups.administration })).toBeInTheDocument()
+    // Group labels name their link lists without being headings: the page h1 stays the first heading.
+    expect(within(railNavigation).queryByRole('heading')).not.toBeInTheDocument()
+    expect(within(railNavigation).getByRole('list', { name: en.shell.groups.surveillance })).toBeInTheDocument()
+    expect(within(railNavigation).getByRole('list', { name: en.shell.groups.infrastructure })).toBeInTheDocument()
+    expect(within(railNavigation).getByRole('list', { name: en.shell.groups.administration })).toBeInTheDocument()
     expect(within(railNavigation).getByRole('link', { name: en.nav.hub })).toHaveAttribute('aria-current', 'page')
     expect(within(railNavigation).getByRole('link', { name: en.nav.alerts })).not.toHaveAttribute('aria-current')
+  })
+
+  // A 900 px window used to push the account, language, theme and logout
+  // controls below the fold of the rail: only the link list may scroll.
+  it('railKeepsItsFooterVisibleAndScrollsOnlyTheLinks', async () => {
+    stubSignedInApp('admin')
+    renderApp('/alerts')
+
+    const rail = await findRail()
+    const railNavigation = within(rail).getByRole('navigation', { name: en.nav.label })
+    const railFooter = within(rail).getByRole('button', { name: en.logout }).closest('[data-slot=app-rail-footer]')
+
+    expect(rail.tagName).not.toBe('ASIDE')
+    expect(rail).toHaveClass('sticky', 'top-0', 'flex', 'h-screen', 'flex-col', 'overflow-hidden')
+    expect(railNavigation).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto', '[scrollbar-width:thin]')
+    expect(railFooter).toHaveClass('shrink-0')
+  })
+
+  // The skip link moves focus to <main>: it must accept programmatic focus.
+  it('mainContentAcceptsFocusFromTheSkipLink', async () => {
+    stubSignedInApp('admin')
+    renderApp('/alerts')
+    await findRail()
+
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1')
   })
 
   it('skipLinkIsTheFirstFocusableElement', async () => {
@@ -95,7 +125,7 @@ describe('desktop application shell', () => {
 
     expect(within(rail).getByText(en.shell.account)).toBeInTheDocument()
     expect(within(rail).getByRole('link', { name: 'alice' })).toHaveAttribute('href', '/account/security')
-    expect(within(rail).getByRole('button', { name: en.language.label })).toBeInTheDocument()
+    expect(within(rail).getByRole('button', { name: LANGUAGE_SWITCH_NAME })).toBeInTheDocument()
     expect(within(rail).getByRole('button', { name: themeSwitchName(en.theme.system) })).toBeInTheDocument()
     expect(within(rail).getByRole('button', { name: en.logout })).toBeInTheDocument()
   })
@@ -154,7 +184,7 @@ describe('desktop application shell', () => {
 
     const logoImage = document.querySelector('img')
     expect(logoImage).toHaveAttribute('src', '/crowdsec-logo.png')
-    expect(screen.getByRole('button', { name: en.language.label })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: LANGUAGE_SWITCH_NAME })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: themeSwitchName(en.theme.system) })).toBeInTheDocument()
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
