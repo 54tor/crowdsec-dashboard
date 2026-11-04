@@ -7,7 +7,10 @@ import { WriteOnly } from '@/components/WriteOnly'
 import { useCanWrite } from '@/hooks/useCanWrite'
 import { CheckboxField } from '@/components/CheckboxField'
 import { EngineCell } from '@/components/EngineCell'
+import { DensityToggle } from '@/components/DensityToggle'
 import { FilterBar } from '@/components/FilterBar'
+import { FiltersDisclosure } from '@/components/FiltersDisclosure'
+import { PageHeader } from '@/components/PageHeader'
 import { InfoNotice } from '@/components/Notice'
 import { PagedTableSection } from '@/components/PagedTableSection'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
@@ -16,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { deleteDecision } from '@/api/writeApi'
 import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTimeToMinute } from '@/lib/format'
 import { isLiveLocalRow } from '@/lib/liveRow'
 
 function decisionRowKey(decision: Decision): string {
@@ -41,7 +44,13 @@ export function Decisions() {
 
   const columns = useMemo<DataTableColumn<Decision>[]>(
     () => [
-      { key: 'value', header: t('decisions.columns.value'), cell: (decision) => <UntrustedText value={decision.value} /> },
+      {
+        key: 'value',
+        header: t('decisions.columns.value'),
+        mobile: 'primary',
+        className: 'font-mono',
+        cell: (decision) => <UntrustedText value={decision.value} />,
+      },
       {
         key: 'engine',
         header: t('decisions.columns.engine'),
@@ -53,22 +62,25 @@ export function Decisions() {
       {
         key: 'scenario',
         header: t('decisions.columns.scenario'),
+        className: 'font-mono',
         cell: (decision) => (
           <>
             <UntrustedText value={decision.scenario} />
-            {decision.simulated && <Badge variant="outline" className="ml-2">{t('decisions.columns.simulated')}</Badge>}
+            {decision.simulated && <Badge variant="warning" className="ml-2">{t('decisions.columns.simulated')}</Badge>}
           </>
         ),
       },
       {
         key: 'expires',
         header: t('decisions.columns.expires'),
-        className: 'whitespace-nowrap',
-        cell: (decision) => (decision.until ? formatDateTime(decision.until, i18n.language) : <UntrustedText value={decision.duration} />),
+        mobile: 'primary',
+        className: 'whitespace-nowrap font-mono',
+        cell: (decision) => (decision.until ? formatDateTimeToMinute(decision.until, i18n.language) : <UntrustedText value={decision.duration} />),
       },
       ...(canWrite ? ([{
         key: 'actions',
         header: t('decisions.actions'),
+        mobile: 'actions',
         cell: (decision) =>
           isLiveLocalRow(decision) ? (
             <RowDeleteAction
@@ -89,13 +101,22 @@ export function Decisions() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">{t('decisions.title')}</h1>
-      <WriteOnly>
-        <BanDialog />
-      </WriteOnly>
+      <PageHeader
+        title={t('decisions.title')}
+        actions={
+          <>
+            <WriteOnly>
+              <BanDialog />
+            </WriteOnly>
+            <DensityToggle />
+          </>
+        }
+      />
       <InfoNotice>{t('decisions.communityNotice')}</InfoNotice>
-      <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} />
-      <CheckboxField id="decisions-include-expired" label={t('decisions.includeExpired')} checked={includeExpired} onChange={changeIncludeExpired} />
+      <FiltersDisclosure>
+        <FilterBar values={controls.draftFilters} errors={controls.errors} onChange={controls.changeFilter} />
+        <CheckboxField id="decisions-include-expired" label={t('decisions.includeExpired')} checked={includeExpired} onChange={changeIncludeExpired} />
+      </FiltersDisclosure>
       <PagedTableSection
         query={query}
         page={controls.page}
@@ -104,6 +125,8 @@ export function Decisions() {
         caption={includeExpired ? t('decisions.captionWithExpired') : t('decisions.caption')}
         columns={columns}
         rowKey={decisionRowKey}
+        cardsOnMobile
+        emptyMessage={t('decisions.empty')}
       />
     </section>
   )

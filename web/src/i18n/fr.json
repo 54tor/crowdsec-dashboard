@@ -296,7 +296,8 @@
     "unbanDescription": "La décision {{id}} sera supprimée et la cible ne sera plus bloquée. Retapez l'adresse ou la plage {{target}} ci-dessous pour confirmer.",
     "archivedBadge": "Archivée, non active",
     "includeExpired": "Afficher les décisions expirées",
-    "captionWithExpired": "Décisions, expirées comprises"
+    "captionWithExpired": "Décisions, expirées comprises",
+    "empty": "Aucune décision pour ces filtres."
   },
   "chart": {
     "label": "Graphique des alertes par heure",

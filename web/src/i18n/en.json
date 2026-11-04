@@ -296,7 +296,8 @@
     "unbanDescription": "The decision {{id}} will be deleted and the target will no longer be blocked. Retype the address or range {{target}} below to confirm.",
     "archivedBadge": "Archived, not active",
     "includeExpired": "Show expired decisions",
-    "captionWithExpired": "Decisions, expired ones included"
+    "captionWithExpired": "Decisions, expired ones included",
+    "empty": "No decision matches these filters."
   },
   "chart": {
     "label": "Alerts per hour chart",

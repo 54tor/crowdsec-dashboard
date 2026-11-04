@@ -22,7 +22,7 @@ export function BanDialog() {
       <p role="status" className="text-sm text-muted-foreground">
         {lastBannedTarget && t('ban.success', { target: lastBannedTarget })}
       </p>
-      <PendingLockDialog open={isOpen} onOpenChange={setIsOpen} trigger={<Button type="button">{t('ban.open')}</Button>}>
+      <PendingLockDialog open={isOpen} onOpenChange={setIsOpen} trigger={<Button type="button">{t('ban.open')}</Button>} contentClassName="sm:max-w-lg">
         {(reportPending) => <BanForm onBanned={finishBan} onClose={() => setIsOpen(false)} reportPending={reportPending} />}
       </PendingLockDialog>
     </div>

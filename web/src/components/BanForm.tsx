@@ -44,28 +44,30 @@ export function BanForm({ onBanned, onClose, reportPending }: BanFormProps) {
         <DialogTitle>{t('ban.title')}</DialogTitle>
         <DialogDescription>{t('ban.description')}</DialogDescription>
       </DialogHeader>
-      <FormField
-        id="ban-ip"
-        label={t('ban.ip')}
-        value={target}
-        onChange={(changeEvent) => setTarget(changeEvent.target.value)}
-        error={targetError && t(`errors.${targetError}`)}
-      />
-      <div className="space-y-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormField
-          id="ban-duration"
-          label={t('ban.duration')}
-          hint={t('ban.durationHint')}
-          value={duration}
-          onChange={(changeEvent) => setDuration(changeEvent.target.value)}
-          error={durationError && t(`errors.${durationError}`)}
+          id="ban-ip"
+          label={t('ban.ip')}
+          value={target}
+          onChange={(changeEvent) => setTarget(changeEvent.target.value)}
+          error={targetError && t(`errors.${targetError}`)}
         />
-        <div role="group" aria-label={t('ban.presets')} className="flex flex-wrap gap-2">
-          {DURATION_PRESETS.map((preset) => (
-            <Button key={preset} type="button" size="sm" variant="outline" aria-pressed={duration === preset} onClick={() => setDuration(preset)}>
-              {preset}
-            </Button>
-          ))}
+        <div className="space-y-2">
+          <FormField
+            id="ban-duration"
+            label={t('ban.duration')}
+            hint={t('ban.durationHint')}
+            value={duration}
+            onChange={(changeEvent) => setDuration(changeEvent.target.value)}
+            error={durationError && t(`errors.${durationError}`)}
+          />
+          <div role="group" aria-label={t('ban.presets')} className="flex flex-wrap gap-2">
+            {DURATION_PRESETS.map((preset) => (
+              <Button key={preset} type="button" size="sm" variant="outline" aria-pressed={duration === preset} onClick={() => setDuration(preset)}>
+                {preset}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
       <FormField

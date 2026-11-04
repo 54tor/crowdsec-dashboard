@@ -198,6 +198,17 @@ describe('engines page', () => {
     expect(lastJsonBody(fetchMock, 'POST', '/api/engines').machine_password).toBe('typed-test-password')
   })
 
+  it('collectionGapIsAWarningNotAmberClass', async () => {
+    const engineWithGaps = makeEngine({ name: 'remote-one', collection: { ...REMOTE_ENGINE.collection, gaps: 2 } })
+    stubFetch(engineRoutes({ 'GET /api/engines': { status: 200, body: { items: [LOCAL_ENGINE, engineWithGaps] } } }))
+    renderApp('/engines')
+
+    const gapMessage = await screen.findByText(en.engines.status.incomplete)
+
+    expect(gapMessage).toHaveClass('text-warning')
+    expect(gapMessage.className).not.toContain('amber')
+  })
+
   it("affiche l'état de collecte et l'avertissement de rechargement", async () => {
     const collectedEngine = makeEngine({
       name: 'remote-one',

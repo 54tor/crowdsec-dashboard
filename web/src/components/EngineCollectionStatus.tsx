@@ -13,7 +13,7 @@ export function EngineCollectionStatus({ engine, now }: { engine: EngineView; no
       </p>
       {collection.last_error_code && <p className="text-destructive">{errorMessage({ code: collection.last_error_code })}</p>}
       {collection.consecutive_failures > 0 && <p className="text-muted-foreground">{t('engines.status.failures', { count: collection.consecutive_failures })}</p>}
-      {collection.gaps > 0 && <p className="text-amber-700 dark:text-amber-400">{t('engines.status.incomplete')}</p>}
+      {collection.gaps > 0 && <p className="text-warning">{t('engines.status.incomplete')}</p>}
     </div>
   )
 }
