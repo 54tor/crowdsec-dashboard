@@ -384,3 +384,17 @@ func TestImportAuditTargetPutsFailedFirstWithTwoDigitCounters(testContext *testi
 		testContext.Errorf("the target must fit the audit column, got %d runes", runeCount)
 	}
 }
+
+// The longest engine name fills 40 of the 64 audit runes with its prefix: the
+// truncation eats the last counters, never the leading failed count.
+func TestImportAuditTargetKeepsFailedAfterTheLongestEngineName(testContext *testing.T) {
+	longestEngineName := strings.Repeat("e", 32)
+	report := bundle.ApplyReport{Sections: []bundle.SectionReport{{Section: bundle.SectionHub, Applied: 3, Failed: 1}}}
+
+	fullTarget := []rune(BundleImportAuditTarget(report, longestEngineName))
+	storedTarget := string(fullTarget[:min(len(fullTarget), audit.MaximumTargetRunes)])
+
+	if !strings.HasPrefix(storedTarget, "engine="+longestEngineName+" failed=1 ") {
+		testContext.Errorf("expected the engine then failed= to survive the truncation, got %q", storedTarget)
+	}
+}

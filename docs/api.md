@@ -620,8 +620,10 @@ export and an import share one operation lock: a second one answers 409 `operati
 
 - `POST /api/export` and `POST /api/import` take the optional `engine` query parameter with the
   rules of the [engine target](#engine-target) (absent or `engine=local`: the local engine, as
-  before). The engine is resolved once, after the import lock and before the body is read, and the
-  whole request runs on it ([bundles.md](bundles.md#remote-engines)). A remote export with
+  before). The engine is resolved once and the whole request runs on it
+  ([bundles.md](bundles.md#remote-engines)): the import resolves it right after the operation lock,
+  the export before the body is read. A remote config import also requires
+  `CONFIG_IMPORT_ENABLED=true` on the dashboard (otherwise `import_disabled`, as locally). A remote export with
   `include_secrets: true` answers 409 `remote_secrets_unsupported` before any read. A remote plan's
   `previous_sha256` is an opaque digest of that engine's sidecar, never comparable with `sha256`;
   the digest of a remote plan includes the engine name, so applying it to another engine gives 409

@@ -290,6 +290,71 @@ func TestRemotePreviewNeverShowsASecretOfTheTargetConfig(testContext *testing.T)
 	}
 }
 
+func TestRemoteExportMasksAnUnmaskedSidecarFile(testContext *testing.T) {
+	fixture := newRemoteBundleFixture(testContext)
+	// A faulty sidecar that forgets to mask: the dashboard masks again.
+	fixture.peer.sidecar.serveExportedFile(bundleAcquisition + "password: " + bundlePlantedSecret + "\n")
+
+	response := fixture.post(withEngine("/api/export", bundlePeerName), `{"sections":["config"]}`)
+
+	expectStatus(testContext, response, http.StatusOK)
+	if exportBody := response.Body.String(); strings.Contains(exportBody, bundlePlantedSecret) {
+		testContext.Errorf("the export leaked a secret: %s", exportBody)
+	}
+	exportedFiles := decodeExportedBundle(testContext, response).Sections.Config.Files
+	if len(exportedFiles) != 1 || !strings.Contains(exportedFiles[0].Content, "password: [REDACTED]") {
+		testContext.Errorf("expected the planted password masked, got %+v", exportedFiles)
+	}
+}
+
+// CONFIG_IMPORT_ENABLED is the dashboard-level opt-in: off, a remote config
+// section is unavailable with the local code and the sidecar is never asked
+// for its acquisition state, its current files or an apply.
+func TestRemoteConfigImportHonoursTheDashboardOptIn(testContext *testing.T) {
+	fixture := newRemoteBundleFixtureWithConfigImport(testContext, false)
+
+	plan := fixture.previewOn(testContext, bundlePeerName, everyBundleSection)
+
+	if !slices.Equal(plan.Unavailable, []string{bundle.SectionConfig}) || plan.UnavailableCodes[bundle.SectionConfig] != bundle.ErrorCodeImportDisabled {
+		testContext.Fatalf("expected only the config section unavailable with %s, got %+v", bundle.ErrorCodeImportDisabled, plan)
+	}
+	refusedApply := fixture.applyOn(testContext, bundlePeerName, everyBundleSection, plan.Digest)
+	expectError(testContext, refusedApply, http.StatusConflict, "section_unavailable")
+
+	withoutConfig := []string{bundle.SectionHub, bundle.SectionDecision, bundle.SectionAlerts}
+	planWithoutConfig := fixture.previewOn(testContext, bundlePeerName, withoutConfig)
+	report := decodeApplyReport(testContext, fixture, bundlePeerName, withoutConfig, planWithoutConfig.Digest)
+	for _, sectionName := range withoutConfig {
+		if sectionReport := sectionReportOf(testContext, report, sectionName); sectionReport.Status != bundle.StatusApplied {
+			testContext.Errorf("section %s: the other sections still apply, got %+v", sectionName, sectionReport)
+		}
+	}
+	for _, sidecarCall := range fixture.peer.sidecar.calls() {
+		isAcquisitionCall := strings.Contains(sidecarCall, sidecarapi.PathAcquisitionState) ||
+			strings.Contains(sidecarCall, sidecarapi.PathAcquisitionFilePrefix) ||
+			strings.Contains(sidecarCall, sidecarapi.PathConfigApply)
+		if isAcquisitionCall {
+			testContext.Errorf("the sidecar must not be asked for the acquisition directory, got %q", sidecarCall)
+		}
+	}
+	fixture.expectLocalUntouched(testContext)
+}
+
+func TestRemoteConfigImportProceedsWhenTheDashboardOptsIn(testContext *testing.T) {
+	fixture := newRemoteBundleFixtureWithConfigImport(testContext, true)
+	configOnly := []string{bundle.SectionConfig}
+	plan := fixture.previewOn(testContext, bundlePeerName, configOnly)
+
+	report := decodeApplyReport(testContext, fixture, bundlePeerName, configOnly, plan.Digest)
+
+	if configReport := sectionReportOf(testContext, report, bundle.SectionConfig); configReport.Status != bundle.StatusApplied || configReport.Applied != 1 {
+		testContext.Errorf("expected the config file applied through the sidecar, got %+v", configReport)
+	}
+	if appliedBodies := fixture.peer.sidecar.applies(); len(appliedBodies) != 1 {
+		testContext.Errorf("expected one sidecar apply, got %+v", appliedBodies)
+	}
+}
+
 func TestRemoteImportReportsTheConfigFailedWhenTheSidecarIsReadOnly(testContext *testing.T) {
 	fixture := newRemoteBundleFixture(testContext)
 	fixture.peer.sidecar.refuseApply(http.StatusForbidden, sidecarapi.ErrorResponse{Code: sidecarapi.CodeReadOnly})

@@ -126,40 +126,59 @@ func TestRemoteFileReadRefusesContentAboveTheRedactedCap(testContext *testing.T)
 	}
 }
 
-// nearLimitSecretFile is a raw file just under confread's cap made only of
-// secret lines: redaction makes it longer than the raw cap ("password: x"
-// becomes "password: [REDACTED]"), which the client must still accept.
-func nearLimitSecretFile(testContext *testing.T) (string, string) {
+// redactionGrowthFixtures are raw files just under confread's cap that grow
+// once redacted, which the client must still accept: secret lines
+// ("password: x" becomes "password: [REDACTED]") and the worst case, a file
+// of empty URL userinfo ("://@" becomes "://[REDACTED]@", 3.5 times longer).
+func redactionGrowthFixtures(testContext *testing.T) map[string]string {
 	testContext.Helper()
-	secretLine := "password: x\n"
-	rawContent := strings.Repeat(secretLine, confread.MaxFileBytes/len(secretLine))
-	redactedContent := string(confread.Redact([]byte(rawContent)))
-	if len(redactedContent) <= confread.MaxFileBytes {
-		testContext.Fatalf("the fixture must grow past the raw cap once redacted, got %d bytes", len(redactedContent))
+	repeatedPatterns := map[string]string{"secret lines": "password: x\n", "worst-case url userinfo": "://@"}
+	rawContentByFixture := map[string]string{}
+	for fixtureName, repeatedPattern := range repeatedPatterns {
+		rawContent := strings.Repeat(repeatedPattern, confread.MaxFileBytes/len(repeatedPattern))
+		if redactedLength := len(confread.Redact([]byte(rawContent))); redactedLength <= confread.MaxFileBytes {
+			testContext.Fatalf("%s: the fixture must grow past the raw cap once redacted, got %d bytes", fixtureName, redactedLength)
+		}
+		rawContentByFixture[fixtureName] = rawContent
 	}
-	return rawContent, redactedContent
+	return rawContentByFixture
 }
 
 func TestRemoteFileReadAcceptsANearLimitFileThatGrowsWhenRedacted(testContext *testing.T) {
-	sidecar := startConfigSidecar(testContext, nil)
-	rawContent, redactedContent := nearLimitSecretFile(testContext)
-	writeFixtureFile(testContext, filepath.Join(sidecar.confDir, "config.yaml"), rawContent)
+	for fixtureName, rawContent := range redactionGrowthFixtures(testContext) {
+		testContext.Run(fixtureName, func(caseTest *testing.T) {
+			sidecar := startConfigSidecar(caseTest, nil)
+			redactedContent := string(confread.Redact([]byte(rawContent)))
+			writeFixtureFile(caseTest, filepath.Join(sidecar.confDir, "config.yaml"), rawContent)
 
-	obtainedContent, readError := sidecar.client.ReadFile(context.Background(), "config.yaml")
+			obtainedContent, readError := sidecar.client.ReadFile(context.Background(), "config.yaml")
 
-	if readError != nil || string(obtainedContent) != redactedContent {
-		testContext.Errorf("expected the %d redacted bytes, got %d bytes (%v)", len(redactedContent), len(obtainedContent), readError)
+			if readError != nil || string(obtainedContent) != redactedContent {
+				caseTest.Errorf("expected the %d redacted bytes, got %d bytes (%v)", len(redactedContent), len(obtainedContent), readError)
+			}
+		})
 	}
 }
 
 func TestRemoteAcquisitionReadAcceptsANearLimitFileThatGrowsWhenRedacted(testContext *testing.T) {
-	sidecar := startConfigSidecar(testContext, nil)
-	rawContent, redactedContent := nearLimitSecretFile(testContext)
-	writeFixtureFile(testContext, filepath.Join(sidecar.acquisitionDir, "nginx.yaml"), rawContent)
+	for fixtureName, rawContent := range redactionGrowthFixtures(testContext) {
+		testContext.Run(fixtureName, func(caseTest *testing.T) {
+			sidecar := startConfigSidecar(caseTest, nil)
+			redactedContent := string(confread.Redact([]byte(rawContent)))
+			writeFixtureFile(caseTest, filepath.Join(sidecar.acquisitionDir, "nginx.yaml"), rawContent)
 
-	acquisitionFile, readError := sidecar.client.ReadAcquisitionFile(context.Background(), "nginx.yaml")
+			acquisitionFile, readError := sidecar.client.ReadAcquisitionFile(context.Background(), "nginx.yaml")
 
-	if readError != nil || acquisitionFile.Oversized || string(acquisitionFile.RedactedContent) != redactedContent {
-		testContext.Errorf("expected the %d redacted bytes, got %d bytes oversized=%v (%v)", len(redactedContent), len(acquisitionFile.RedactedContent), acquisitionFile.Oversized, readError)
+			if readError != nil || acquisitionFile.Oversized || string(acquisitionFile.RedactedContent) != redactedContent {
+				caseTest.Errorf("expected the %d redacted bytes, got %d bytes oversized=%v (%v)", len(redactedContent), len(acquisitionFile.RedactedContent), acquisitionFile.Oversized, readError)
+			}
+		})
+	}
+}
+
+// The largest redacted file still fits the response cap once base64-encoded.
+func TestRedactedFileCapFitsTheResponseCap(testContext *testing.T) {
+	if encodedLength := base64.StdEncoding.EncodedLen(maxRedactedFileBytes); encodedLength >= maxResponseBytes {
+		testContext.Errorf("a %d-byte redacted file encodes to %d bytes, over the %d-byte response cap", maxRedactedFileBytes, encodedLength, maxResponseBytes)
 	}
 }

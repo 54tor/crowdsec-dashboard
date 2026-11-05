@@ -28,7 +28,8 @@ const (
 	bundleImportedAlertIP = "198.51.100.30"
 	bundleAcquisitionName = "nginx.yaml"
 	bundleAcquisition     = "source: file\nfilenames: [/var/log/nginx/access.log]\nlabels: {type: nginx}\n"
-	bundlePeerMaskedFile  = "filenames:\n  - /var/log/auth.log\npassword: [REDACTED]\n"
+	// In confread.Redact's own output form: masking it again changes nothing.
+	bundlePeerMaskedFile  = "filenames:\n  - /var/log/auth.log\npassword: [REDACTED]"
 	bundlePlantedSecret   = "hunter2"
 	bundleImportedSecret  = "hunter3"
 	bundleImportedVersion = "version: v1.6.8\n"
@@ -111,13 +112,15 @@ func (fakeLAPI *bundleEngineLAPI) pushes() []recordedLAPIRequest {
 }
 
 // bundleSidecar plays the configuration routes of a peer sidecar over TLS:
-// one exportable file served already masked, a writable acquisition
+// one exportable file (served already masked unless the test plants an
+// unmasked one to stand for a faulty sidecar), a writable acquisition
 // directory, a current acquisition file chosen by the test (absent by
 // default) and an apply answer chosen by the test. It does not verify tokens
 // (the sidecar packages test that) and records every method and path.
 type bundleSidecar struct {
 	mutex          sync.Mutex
 	requestedCalls []string
+	exportedFile   string
 	currentFile    sidecarapi.AcquisitionFileResponse
 	applyStatus    int
 	applyRefusal   sidecarapi.ErrorResponse
@@ -132,7 +135,7 @@ func (sidecar *bundleSidecar) ServeHTTP(responseWriter http.ResponseWriter, requ
 	case request.URL.Path == sidecarapi.PathFiles:
 		writeSidecarJSON(responseWriter, http.StatusOK, sidecarapi.FileListResponse{Files: []string{"acquis.yaml", "config.yaml"}})
 	case request.URL.Path == sidecarapi.PathFilePrefix+"acquis.yaml":
-		writeSidecarJSON(responseWriter, http.StatusOK, sidecarapi.FileResponse{Name: "acquis.yaml", Content: []byte(bundlePeerMaskedFile)})
+		writeSidecarJSON(responseWriter, http.StatusOK, sidecarapi.FileResponse{Name: "acquis.yaml", Content: []byte(sidecar.exportedFile)})
 	case request.URL.Path == sidecarapi.PathFlushMaxItems:
 		writeSidecarJSON(responseWriter, http.StatusOK, sidecarapi.FlushMaxItemsResponse{MaxItems: 5000, Readable: true})
 	case request.URL.Path == sidecarapi.PathAcquisitionState:
@@ -165,6 +168,12 @@ func (sidecar *bundleSidecar) refuseApply(status int, refusal sidecarapi.ErrorRe
 	sidecar.mutex.Lock()
 	defer sidecar.mutex.Unlock()
 	sidecar.applyStatus, sidecar.applyRefusal = status, refusal
+}
+
+func (sidecar *bundleSidecar) serveExportedFile(exportedFile string) {
+	sidecar.mutex.Lock()
+	defer sidecar.mutex.Unlock()
+	sidecar.exportedFile = exportedFile
 }
 
 func (sidecar *bundleSidecar) serveCurrentFile(currentFile sidecarapi.AcquisitionFileResponse) {
@@ -254,7 +263,7 @@ func newBundlePeer(testContext *testing.T, engineName string) bundlePeer {
 		"hub_list": `{"collections":[{"name":"crowdsecurity/linux","status":"enabled","local_version":"0.2"}]}`,
 		"version":  bundleImportedVersion,
 	}}
-	peerSidecar := &bundleSidecar{currentFile: sidecarapi.AcquisitionFileResponse{}}
+	peerSidecar := &bundleSidecar{exportedFile: bundlePeerMaskedFile, currentFile: sidecarapi.AcquisitionFileResponse{}}
 	server := httptest.NewTLSServer(peerSidecar)
 	testContext.Cleanup(server.Close)
 	target := engines.Target{
@@ -312,6 +321,13 @@ type remoteBundleFixture struct {
 
 func newRemoteBundleFixture(testContext *testing.T) remoteBundleFixture {
 	testContext.Helper()
+	return newRemoteBundleFixtureWithConfigImport(testContext, true)
+}
+
+// newRemoteBundleFixtureWithConfigImport sets the dashboard-level
+// CONFIG_IMPORT_ENABLED opt-in, which governs remote config imports too.
+func newRemoteBundleFixtureWithConfigImport(testContext *testing.T, configImportEnabled bool) remoteBundleFixture {
+	testContext.Helper()
 	localLAPI := newBundleEngineLAPI(testContext, localMachineID)
 	localExecutor := &scriptedExecutor{outputsByName: map[string]string{"hub_list": `{"collections":[]}`, "version": bundleImportedVersion}}
 	localConfig := &recordingBundleConfig{}
@@ -327,7 +343,7 @@ func newRemoteBundleFixture(testContext *testing.T) remoteBundleFixture {
 	services.BundleExport.Config = localConfig
 	services.BundleImport.Config = localConfig
 	services.BundleImport.Acquisition = localConfig
-	services.BundleImport.ConfigImportEnabled = true
+	services.BundleImport.ConfigImportEnabled = configImportEnabled
 	services.BundleImport.ShareRules = func(context.Context) (enginesync.Rules, bool) {
 		return enginesync.Rules{MaxChanges: 500, MinRemaining: 5 * time.Minute}, true
 	}

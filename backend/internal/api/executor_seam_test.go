@@ -211,7 +211,7 @@ func TestCscliServicesRefuseInvalidInputWithoutRunningAnything(testContext *test
 // Only the local executor may hand an argv to a cscli.Runner: every other
 // production file must go through cscli.Executor so a remote engine can be swapped in.
 func TestNoProductionCodeOutsideCscliCallsTheRunnerDirectly(testContext *testing.T) {
-	gitGrep := exec.Command("git", "grep", "--untracked", "-nE", `cscli\.Execute\(|cscli\.Runner\b|\.Run\(ctx, argv|NewDockerRunner\(`, "--", "../..", ":(exclude)*_test.go", ":(exclude)../cscli/", ":(exclude)../../cmd/dashboard/main.go")
+	gitGrep := exec.Command("git", "grep", "--untracked", "-InE", `cscli\.Execute\(|cscli\.Runner\b|\.Run\(ctx, argv|NewDockerRunner\(`, "--", "../..", ":(exclude)*_test.go", ":(exclude)../cscli/", ":(exclude)../../cmd/dashboard/main.go")
 	grepOutput, grepError := gitGrep.Output()
 
 	var exitError *exec.ExitError

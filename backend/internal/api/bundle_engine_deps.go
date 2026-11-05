@@ -50,7 +50,7 @@ func remoteBundleImportDeps(target engines.Target, shared bundle.ImportDeps) bun
 		DeleteDecision:      target.Client.DeleteDecision,
 		Config:              sidecarBundleConfig{sidecar: target.Sidecar},
 		LocalMachineID:      target.Engine.MachineID,
-		ConfigImportEnabled: true,
+		ConfigImportEnabled: shared.ConfigImportEnabled,
 		Acquisition:         sidecarAcquisition{sidecar: target.Sidecar},
 		TargetEngine:        target.Engine.Name,
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"crowdsec-dashboard/internal/bundle"
+	"crowdsec-dashboard/internal/confread"
 	"crowdsec-dashboard/internal/confwrite"
 	"crowdsec-dashboard/internal/sidecarclient"
 )
@@ -15,7 +16,11 @@ func (reader sidecarBundleConfig) List(ctx context.Context) ([]string, error) {
 }
 
 func (reader sidecarBundleConfig) Read(ctx context.Context, name string) ([]byte, error) {
-	return reader.sidecar.ReadFile(ctx, name)
+	content, readError := reader.sidecar.ReadFile(ctx, name)
+	if readError != nil {
+		return nil, readError
+	}
+	return confread.Redact(content), nil
 }
 
 func (sidecarBundleConfig) ReadUnredacted(context.Context, string) ([]byte, error) {

@@ -11,7 +11,7 @@ import (
 
 const (
 	fileReadTimeout      = 15 * time.Second
-	maxRedactedFileBytes = 2 * confread.MaxFileBytes
+	maxRedactedFileBytes = 4 * confread.MaxFileBytes
 )
 
 func (client *Client) ListFiles(ctx context.Context) ([]string, error) {

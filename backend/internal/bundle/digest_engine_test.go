@@ -59,3 +59,20 @@ func digestWithoutEngine(testContext *testing.T, plan ImportPlan) string {
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }
+
+// The local digest of a fixed hub plan, pinned in hex: it is the SHA-256 of
+// {"sections":["hub"],"hub":[{"name":"crowdsecurity/nginx","version":"0.2"}],
+// "decisions":[],"alerts":[],"config":[],"skipped":[],"warnings":[],"unavailable":[]},
+// so reordering, renaming or adding a digested field breaks it, and with it
+// every preview an open page still holds.
+func TestLocalDigestOfAFixedHubPlanIsPinned(testContext *testing.T) {
+	imported := hubBundle(HubCollection{Name: "crowdsecurity/nginx", Version: "0.2"})
+	fixture := newImportFixture()
+
+	plan, planError := PlanImport(context.Background(), fixture.deps(), imported, []string{SectionHub})
+
+	expectedDigest := "dbb865167fbcd33a4b81d83ab5db63763c4371e5b943ba47aa7ffdb4914850ce"
+	if planError != nil || plan.Digest != expectedDigest {
+		testContext.Errorf("expected the pinned digest %s, got %s (%v)", expectedDigest, plan.Digest, planError)
+	}
+}

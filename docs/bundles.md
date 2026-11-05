@@ -115,8 +115,8 @@ applied, skipped and failed counts. The answer is 200 even when a section failed
 bundle is idempotent: what is already there is skipped. Each apply is audited `bundle_imported`,
 target `failed=<n> hub=<n> decisions=<n> alerts=<n> config=<n> skipped=<n>` (counts only, never
 content; `failed` comes first so that it survives the truncation of long targets). On a remote
-engine the target starts with `engine=<name> ` (the engine is kept before the counters by the
-64-character truncation).
+engine the target starts with `engine=<name> `: the engine comes first, and the 64-character
+truncation drops the last counters first (with the longest engine name, `failed` still survives).
 
 Limits per apply, beyond which the **whole** bundle is refused with 422 `too_many_changes` (no
 truncation; split the bundle): 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions, 500 alerts.
@@ -256,7 +256,9 @@ falls back to the local one:
   engine's LAPI after a real read of **that engine's** allowlists (unreadable: the section is
   unavailable with `allowlist_unavailable` and nothing is written). The caller-address and sharing
   rules are the same as locally; the alerts flush limit is read through the sidecar.
-- **Configuration import** is always enabled on a sidecar engine (the sidecar decides): files are
+- **Configuration import** on a sidecar engine requires `CONFIG_IMPORT_ENABLED=true` on the
+  dashboard (otherwise the section is unavailable with `import_disabled`, as locally, and the
+  sidecar is not asked anything) and `SIDECAR_ACQUISITION_DIR` on the sidecar. Files are
   written only by the sidecar's apply (`/v1/config/apply`) into its dedicated `acquis.d`, which runs
   `crowdsec -t` and rolls back itself. The current file is read masked with an opaque digest
   computed by that sidecar: `previous_sha256` in a remote plan is that digest, comparable only with
