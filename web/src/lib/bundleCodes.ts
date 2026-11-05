@@ -11,6 +11,7 @@ export const SECTION_PROBLEM_CODES = [
   'alert_import_side_effect', 'alert_import_side_effect_unverifiable', 'alert_import_cleanup_failed', 'config_test_failed', 'config_inconsistent',
   'config_changed_concurrently', 'config_recovery_pending', 'apply_failed', 'import_timeout', 'canceled', 'lapi_unavailable', 'lapi_error',
   'not_found', 'invalid_request', 'cscli_timeout', 'cscli_failed', 'engine_addresses_unknown', 'local_bans_incomplete', 'dependency_missing',
+  'sidecar_command_refused', 'sidecar_unavailable',
 ]
 
 export const WARNING_CODES = ['version_mismatch', 'simulated_decision_may_remain']

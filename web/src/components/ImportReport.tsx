@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import type { SectionReport } from '@/api/bundleApi'
 import { BundleWarnings } from '@/components/BundleWarnings'
+import { EngineTargetNote } from '@/components/EngineTargetNote'
 import { UntrustedText } from '@/components/UntrustedText'
 import { translateBundleCode } from '@/lib/bundleCodes'
 
@@ -40,13 +41,14 @@ function SectionResult({ sectionReport }: { sectionReport: SectionReport }) {
   )
 }
 
-export function ImportReport({ sections }: { sections: readonly SectionReport[] }) {
+export function ImportReport({ engineName, sections }: { engineName: string; sections: readonly SectionReport[] }) {
   const { t } = useTranslation()
   return (
     <section role="status" className="space-y-2" aria-labelledby="import-report-heading">
       <h3 id="import-report-heading" className="text-base font-medium">
         {t('bundle.resultTitle')}
       </h3>
+      <EngineTargetNote engineName={engineName} />
       <ul className="space-y-2">
         {sections.map((sectionReport) => (
           <SectionResult key={sectionReport.section} sectionReport={sectionReport} />

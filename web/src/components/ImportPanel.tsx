@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { IMPORT_CONFIRMATION } from '@/api/bundleApi'
+import { EngineTargetNote } from '@/components/EngineTargetNote'
+import { EngineTargetSelect } from '@/components/EngineTargetSelect'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { ImportPlanDetails } from '@/components/ImportPlanDetails'
 import { ImportPlanSummary } from '@/components/ImportPlanSummary'
@@ -10,19 +12,28 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useBundleImport } from '@/hooks/useBundleImport'
+import { useEngineTarget } from '@/hooks/useEngineTarget'
 
 export function ImportPanel() {
   const { t } = useTranslation()
-  const bundleImport = useBundleImport()
+  const [engineName, setEngineName] = useEngineTarget()
+  const bundleImport = useBundleImport(engineName)
   const { plan, phase, selectedSections } = bundleImport
   const hasUnavailableSection = plan !== null && plan.unavailable.length > 0
   const canApply = plan !== null && !hasUnavailableSection && plan.sections.length > 0
+
+  function changeEngine(nextEngineName: string) {
+    bundleImport.discardPlan()
+    setEngineName(nextEngineName)
+  }
 
   return (
     <section className="space-y-3 bg-card border rounded-md p-4" aria-labelledby="import-heading">
       <h2 id="import-heading" className="text-base font-medium">
         {t('bundle.importTitle')}
       </h2>
+      <EngineTargetSelect id="import-engine" value={engineName} disabled={phase !== 'idle'} onChange={changeEngine} />
+      <EngineTargetNote engineName={engineName} />
       <div className="space-y-1">
         <Label htmlFor="import-file">{t('bundle.fileLabel')}</Label>
         <Input
@@ -69,6 +80,7 @@ export function ImportPanel() {
             trigger={<Button type="button" disabled={!canApply || phase !== 'idle'}>{t('bundle.applyButton')}</Button>}
             title={t('bundle.applyDialogTitle')}
             description={t('bundle.applyDialogDescription')}
+            details={<EngineTargetNote engineName={engineName} />}
             confirmWord={IMPORT_CONFIRMATION}
             submitLabel={t('bundle.applyButton')}
             isRunning={phase === 'applying'}
@@ -76,7 +88,9 @@ export function ImportPanel() {
           />
         </>
       )}
-      {bundleImport.applyResponse !== null && <ImportReport sections={bundleImport.applyResponse.report.sections} />}
+      {bundleImport.applyResponse !== null && (
+        <ImportReport engineName={engineName} sections={bundleImport.applyResponse.report.sections} />
+      )}
     </section>
   )
 }

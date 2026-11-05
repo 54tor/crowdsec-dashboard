@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchResponse } from '@/api/client'
+import { withEngine } from '@/api/engineQuery'
 
 export const BUNDLE_SECTIONS = ['hub', 'decisions', 'alerts', 'config'] as const
 export type BundleSection = (typeof BUNDLE_SECTIONS)[number]
@@ -95,8 +96,8 @@ function neutralFileName(contentDisposition: string | null): string {
   return `crowdsec-bundle-${new Date().toISOString().slice(0, 10)}.json`
 }
 
-export async function exportBundle(options: ExportOptions): Promise<ExportedBundle> {
-  const response = await apiFetchResponse('/api/export', {
+export async function exportBundle(options: ExportOptions, engine?: string): Promise<ExportedBundle> {
+  const response = await apiFetchResponse(withEngine('/api/export', engine), {
     method: 'POST',
     body: JSON.stringify({
       sections: options.sections,
@@ -112,11 +113,11 @@ export async function exportBundle(options: ExportOptions): Promise<ExportedBund
   }
 }
 
-export const previewImport = (bundle: ParsedBundle, sections: BundleSection[]) =>
-  apiFetch<ImportPlan>('/api/import', { method: 'POST', body: JSON.stringify({ mode: 'preview', bundle, sections }) })
+export const previewImport = (bundle: ParsedBundle, sections: BundleSection[], engine?: string) =>
+  apiFetch<ImportPlan>(withEngine('/api/import', engine), { method: 'POST', body: JSON.stringify({ mode: 'preview', bundle, sections }) })
 
-export const applyImport = (bundle: ParsedBundle, sections: BundleSection[], digest: string) =>
-  apiFetch<ApplyResponse>('/api/import', {
+export const applyImport = (bundle: ParsedBundle, sections: BundleSection[], digest: string, engine?: string) =>
+  apiFetch<ApplyResponse>(withEngine('/api/import', engine), {
     method: 'POST',
     body: JSON.stringify({ mode: 'apply', bundle, sections, confirm: IMPORT_CONFIRMATION, digest }),
   })

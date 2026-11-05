@@ -11,6 +11,7 @@ interface TypedConfirmDialogProps {
   trigger: ReactNode
   title: string
   description: string
+  details?: ReactNode
   confirmWord: string
   submitLabel: string
   isRunning: boolean
@@ -22,7 +23,7 @@ interface TypedConfirmFormProps extends Omit<TypedConfirmDialogProps, 'trigger'>
   reportPending: (isPending: boolean) => void
 }
 
-function TypedConfirmForm({ idPrefix, title, description, confirmWord, submitLabel, isRunning, run, onClose, reportPending }: TypedConfirmFormProps) {
+function TypedConfirmForm({ idPrefix, title, description, details, confirmWord, submitLabel, isRunning, run, onClose, reportPending }: TypedConfirmFormProps) {
   const { t } = useTranslation()
   const [typedWord, setTypedWord] = useState('')
   usePendingReport(isRunning, reportPending)
@@ -43,6 +44,7 @@ function TypedConfirmForm({ idPrefix, title, description, confirmWord, submitLab
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
+      {details}
       <FormField
         id={`${idPrefix}-confirm`}
         label={t('bundle.typeToConfirm', { word: confirmWord })}

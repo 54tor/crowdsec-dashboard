@@ -7,24 +7,41 @@ type Phase = 'idle' | 'previewing' | 'applying'
 
 const PLAN_INVALIDATING_CODES = ['import_conflict', 'import_timeout']
 
-export function useBundleImport() {
+interface PreparedPlan {
+  plan: ImportPlan
+  sections: BundleSection[]
+  engineName: string
+}
+
+interface ApplyResult {
+  response: ApplyResponse
+  engineName: string
+}
+
+export function useBundleImport(engineName: string) {
   const [bundle, setBundle] = useState<ParsedBundle | null>(null)
   const [availableSections, setAvailableSections] = useState<BundleSection[]>([])
   const [selectedSections, setSelectedSections] = useState<BundleSection[]>([])
-  const [plan, setPlan] = useState<ImportPlan | null>(null)
-  const [plannedSections, setPlannedSections] = useState<BundleSection[]>([])
-  const [applyResponse, setApplyResponse] = useState<ApplyResponse | null>(null)
+  const [preparedPlan, setPreparedPlan] = useState<PreparedPlan | null>(null)
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [failure, setFailure] = useState<unknown>(null)
   const [fileErrorCode, setFileErrorCode] = useState<string | null>(null)
 
+  const currentPlan = preparedPlan !== null && preparedPlan.engineName === engineName ? preparedPlan : null
+  const currentApplyResult = applyResult !== null && applyResult.engineName === engineName ? applyResult : null
+
+  function discardPlan() {
+    setPreparedPlan(null)
+    setApplyResult(null)
+    setFailure(null)
+  }
+
   function reset() {
+    discardPlan()
     setBundle(null)
     setAvailableSections([])
     setSelectedSections([])
-    setPlan(null)
-    setApplyResponse(null)
-    setFailure(null)
     setFileErrorCode(null)
   }
 
@@ -41,8 +58,8 @@ export function useBundleImport() {
   }
 
   function toggleSection(sectionName: BundleSection) {
-    setPlan(null)
-    setApplyResponse(null)
+    setPreparedPlan(null)
+    setApplyResult(null)
     setSelectedSections((previous) => (previous.includes(sectionName) ? previous.filter((name) => name !== sectionName) : [...previous, sectionName]))
   }
 
@@ -50,14 +67,16 @@ export function useBundleImport() {
     if (bundle === null || phase !== 'idle') {
       return
     }
+    const previewEngineName = engineName
+    const previewSections = selectedSections
     setPhase('previewing')
     setFailure(null)
-    setApplyResponse(null)
+    setApplyResult(null)
     try {
-      setPlan(await previewImport(bundle, selectedSections))
-      setPlannedSections(selectedSections)
+      const plan = await previewImport(bundle, previewSections, previewEngineName)
+      setPreparedPlan({ plan, sections: previewSections, engineName: previewEngineName })
     } catch (previewFailure) {
-      setPlan(null)
+      setPreparedPlan(null)
       setFailure(previewFailure)
     } finally {
       setPhase('idle')
@@ -65,23 +84,40 @@ export function useBundleImport() {
   }
 
   async function apply() {
-    if (bundle === null || plan === null || phase !== 'idle') {
+    if (bundle === null || currentPlan === null || phase !== 'idle') {
       return
     }
+    const { plan, sections, engineName: planEngineName } = currentPlan
     setPhase('applying')
     setFailure(null)
     try {
-      setApplyResponse(await applyImport(bundle, plannedSections, plan.digest))
-      setPlan(null)
+      const response = await applyImport(bundle, sections, plan.digest, planEngineName)
+      setApplyResult({ response, engineName: planEngineName })
+      setPreparedPlan(null)
     } catch (applyFailure) {
       setFailure(applyFailure)
       if (applyFailure instanceof ApiError && PLAN_INVALIDATING_CODES.includes(applyFailure.code)) {
-        setPlan(null)
+        setPreparedPlan(null)
       }
     } finally {
       setPhase('idle')
     }
   }
 
-  return { bundle, availableSections, selectedSections, plan, applyResponse, phase, failure, fileErrorCode, loadFile, toggleSection, preview, apply, reset }
+  return {
+    bundle,
+    availableSections,
+    selectedSections,
+    plan: currentPlan?.plan ?? null,
+    applyResponse: currentApplyResult?.response ?? null,
+    phase,
+    failure,
+    fileErrorCode,
+    loadFile,
+    toggleSection,
+    preview,
+    apply,
+    reset,
+    discardPlan,
+  }
 }

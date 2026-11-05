@@ -218,7 +218,8 @@
     "sidecar_no_next_key": "Aucune clé suivante n'est en attente.",
     "engine_has_no_sidecar": "Ce moteur n'a pas de sidecar utilisable : il reste en lecture seule.",
     "sidecar_busy": "Le sidecar est occupé. Réessayez dans un instant.",
-    "engine_target_mismatch": "Le tableau de bord a résolu un autre moteur que celui demandé : rien n'a été exécuté."
+    "engine_target_mismatch": "Le tableau de bord a résolu un autre moteur que celui demandé : rien n'a été exécuté.",
+    "remote_secrets_unsupported": "Les secrets ne peuvent pas être exportés depuis un moteur distant : son sidecar ne renvoie que du contenu masqué."
   },
   "filters": {
     "q": "Rechercher",
@@ -828,6 +829,7 @@
     "exportTitle": "Export",
     "exportButton": "Exporter",
     "includeSecrets": "Inclure les secrets dans l'export",
+    "secretsRemoteUnavailable": "Les secrets ne peuvent pas être inclus pour un moteur distant : son sidecar ne renvoie que du contenu masqué.",
     "secretsWarningTitle": "Secrets inclus",
     "secretsWarning": "Le fichier contiendra des secrets en clair. Conservez-le en lieu sûr et supprimez-le après usage.",
     "secretsDialogTitle": "Export avec secrets",
@@ -936,7 +938,9 @@
       "cscli_failed": "La commande cscli a échoué",
       "engine_addresses_unknown": "Les adresses des moteurs n'ont pas pu être résolues",
       "local_bans_incomplete": "Les bannissements locaux n'ont pas pu être lus entièrement",
-      "dependency_missing": "Un composant nécessaire à cette section manque sur le serveur"
+      "dependency_missing": "Un composant nécessaire à cette section manque sur le serveur",
+      "sidecar_command_refused": "Le sidecar a refusé cette modification",
+      "sidecar_unavailable": "Le sidecar est injoignable ou a donné une réponse invalide"
     }
   },
   "allowlists": {

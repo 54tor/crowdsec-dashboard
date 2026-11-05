@@ -218,7 +218,8 @@
     "sidecar_no_next_key": "No next key is staged.",
     "engine_has_no_sidecar": "This engine has no usable sidecar: it stays read-only.",
     "sidecar_busy": "The sidecar is busy. Try again in a moment.",
-    "engine_target_mismatch": "The dashboard resolved another engine than the one requested: nothing was run."
+    "engine_target_mismatch": "The dashboard resolved another engine than the one requested: nothing was run.",
+    "remote_secrets_unsupported": "Secrets cannot be exported from a remote engine: its sidecar only returns redacted content."
   },
   "filters": {
     "q": "Search",
@@ -828,6 +829,7 @@
     "exportTitle": "Export",
     "exportButton": "Export",
     "includeSecrets": "Include secrets in the export",
+    "secretsRemoteUnavailable": "Secrets cannot be included for a remote engine: its sidecar only returns redacted content.",
     "secretsWarningTitle": "Secrets included",
     "secretsWarning": "The file will contain secrets in clear text. Store it securely and delete it after use.",
     "secretsDialogTitle": "Export with secrets",
@@ -936,7 +938,9 @@
       "cscli_failed": "The cscli command failed",
       "engine_addresses_unknown": "Engine addresses could not be resolved",
       "local_bans_incomplete": "The local bans could not be read completely",
-      "dependency_missing": "A component this section needs is missing on the server"
+      "dependency_missing": "A component this section needs is missing on the server",
+      "sidecar_command_refused": "The sidecar refused this change",
+      "sidecar_unavailable": "The sidecar cannot be reached or gave an invalid answer"
     }
   },
   "allowlists": {
