@@ -41,6 +41,10 @@ const (
 	seededMachinePass  = "machine-test-only-password"
 	totpSecretFileName = "totp-secret"
 	seededAlertCount   = 3
+	searchedScenario   = "ssh-bf"
+	searchedAlertCount = 2
+	otherScenario      = "crowdsecurity/http-probing"
+	trigramIndexCount  = 12
 	setupWindow        = time.Hour
 	totpPeriod         = 30 * time.Second
 )
@@ -73,17 +77,23 @@ func loadKeyring(testContext *testing.T, keyFileVariableName string) *secrets.Ke
 	return keyring
 }
 
+// seededAlerts stores searchedAlertCount ssh-bf alerts and one alert of
+// another scenario, so a search after the restore proves it filters.
 func seededAlerts() []lapi.Alert {
 	seededList := []lapi.Alert{}
 	for upstreamID := int64(1); upstreamID <= seededAlertCount; upstreamID++ {
+		scenario := "crowdsecurity/ssh-bf"
+		if upstreamID > searchedAlertCount {
+			scenario = otherScenario
+		}
 		seededList = append(seededList, lapi.Alert{
 			ID: upstreamID, UUID: fmt.Sprintf("uuid-%d", upstreamID), CreatedAt: "2026-10-31T13:34:06Z",
-			MachineID: seededMachineID, Scenario: "crowdsecurity/ssh-bf", Message: "backup check", EventsCount: 1,
+			MachineID: seededMachineID, Scenario: scenario, Message: "backup check", EventsCount: 1,
 			StartAt: "2026-10-30T17:34:06Z", StopAt: "2026-10-30T17:34:06Z",
 			Source: lapi.Source{Scope: "Ip", Value: "203.0.113.10", Country: "ZZ", ASName: "Example Net", ASNumber: "64496"},
 			Decisions: []lapi.Decision{{
 				ID: upstreamID * 10, Origin: "crowdsec", Type: "ban", Scope: "Ip", Value: "203.0.113.10",
-				Duration: "4h0m0s", Scenario: "crowdsecurity/ssh-bf",
+				Duration: "4h0m0s", Scenario: scenario,
 			}},
 			Events: []lapi.Event{{
 				Timestamp: "2026-10-30 17:34:06 +0000 UTC",
@@ -197,6 +207,8 @@ func TestRestoredDatabaseServesLoginAndArchive(testContext *testing.T) {
 		testContext.Errorf("expected %d events, got %d", seededAlertCount, eventCount)
 	}
 
+	expectRestoredSearch(testContext, ctx, database)
+
 	engineRepository := engines.NewRepository(database, keyring)
 	restoredEngine, getEngineError := engineRepository.Get(ctx, seededEngineName)
 	if getEngineError != nil {
@@ -226,5 +238,30 @@ func TestRestoredDatabaseServesLoginAndArchive(testContext *testing.T) {
 	}
 	if replayError := factors.VerifyTOTP(ctx, identity.AccountID, nextStepCode, now); !errors.Is(replayError, secondfactor.ErrInvalidCode) {
 		testContext.Errorf("a consumed totp step must be refused after restore, got %v", replayError)
+	}
+}
+
+// expectRestoredSearch checks that the restore kept what the search needs: the
+// pg_trgm extension in public (where the gin_trgm_ops operator class resolves),
+// every trigram index, and a working archive search.
+func expectRestoredSearch(testContext *testing.T, ctx context.Context, database *bun.DB) {
+	testContext.Helper()
+	var extensionSchema string
+	schemaError := database.NewRaw(`SELECT extnamespace::regnamespace::text FROM pg_extension WHERE extname = 'pg_trgm'`).Scan(ctx, &extensionSchema)
+	if schemaError != nil {
+		testContext.Fatalf("read the pg_trgm schema: %v", schemaError)
+	}
+	if extensionSchema != "public" {
+		testContext.Errorf("expected pg_trgm in public, got %q", extensionSchema)
+	}
+	if restoredIndexCount := countRows(testContext, ctx, database, `SELECT count(*) FROM pg_indexes WHERE indexdef LIKE '%gin_trgm_ops%'`); restoredIndexCount != trigramIndexCount {
+		testContext.Errorf("expected %d trigram indexes, got %d", trigramIndexCount, restoredIndexCount)
+	}
+	searchedAlerts, searchTotal, _, searchError := archive.NewReader(database).ListAlerts(ctx, archive.AlertQuery{Search: searchedScenario, Limit: seededAlertCount})
+	if searchError != nil {
+		testContext.Fatalf("search the restored archive: %v", searchError)
+	}
+	if searchTotal != searchedAlertCount || len(searchedAlerts) != searchedAlertCount {
+		testContext.Errorf("expected %d %s alerts, got total %d and %d listed", searchedAlertCount, searchedScenario, searchTotal, len(searchedAlerts))
 	}
 }
