@@ -53,6 +53,9 @@ func ValidateLAPIURL(rawURL string, allowInsecureHTTP bool) error {
 }
 
 func ValidateSidecarURL(rawURL string) error {
+	if parsedURL := parseValidatedURL(rawURL); parsedURL.Scheme != "" && parsedURL.Scheme != "https" {
+		return errors.New("must use https")
+	}
 	if lapiURLError := ValidateLAPIURL(rawURL, false); lapiURLError != nil {
 		return lapiURLError
 	}

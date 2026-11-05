@@ -131,7 +131,7 @@ CREATE TABLE engine (
     engine_history_incomplete boolean NOT NULL DEFAULT false,
     engine_deleting_at timestamptz,
     engine_sidecar_url text,
-    engine_sidecar_spki_sha256 text CHECK (engine_sidecar_spki_sha256 ~ '^[0-9a-f]{64}$'),
+    engine_sidecar_spki_sha256 text,
     engine_sidecar_signing_key_kid text,
     engine_sidecar_signing_public_key text,
     engine_sidecar_signing_key_sealed bytea,
@@ -140,6 +140,7 @@ CREATE TABLE engine (
     engine_sidecar_next_signing_public_key text,
     engine_sidecar_next_signing_key_sealed bytea,
     engine_sidecar_next_signing_key_key_id text,
+    CONSTRAINT engine_sidecar_spki_sha256_check CHECK (engine_sidecar_spki_sha256 ~ '^[0-9a-f]{64}$'),
     CONSTRAINT engine_sidecar_complete_check CHECK (
         num_nonnulls(engine_sidecar_url, engine_sidecar_spki_sha256, engine_sidecar_signing_key_kid,
             engine_sidecar_signing_public_key, engine_sidecar_signing_key_sealed, engine_sidecar_signing_key_key_id) IN (0, 6)

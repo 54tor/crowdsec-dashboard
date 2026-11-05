@@ -104,7 +104,7 @@ func TestEngineSidecarConstraintsRejectPartialConfigurationAndTheLocalEngine(tes
 	requireSQLState(testContext, droppedKeyError, "23514", "engine_sidecar_complete_check")
 
 	upperCasePinError := updateEngineSidecar(database, remoteEngineIdentifier, "engine_sidecar_spki_sha256 = repeat('AB', 32)")
-	requireSQLState(testContext, upperCasePinError, "23514", "engine_engine_sidecar_spki_sha256_check")
+	requireSQLState(testContext, upperCasePinError, "23514", "engine_sidecar_spki_sha256_check")
 
 	partialNextKeyError := updateEngineSidecar(database, remoteEngineIdentifier, "engine_sidecar_next_signing_key_kid = 'kid-next'")
 	requireSQLState(testContext, partialNextKeyError, "23514", "engine_sidecar_next_complete_check")
@@ -173,7 +173,7 @@ func TestMigrationDownThenUpRestoresTheWholeSchema(testContext *testing.T) {
 	}
 	accountIdentifier := insertTestAccount(testContext, database, "alice")
 	_, totpError := database.ExecContext(ctx,
-		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_ciphertext, credential_key_id) VALUES (?, 'totp', '\x01', 'key1')", accountIdentifier)
+		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_ciphertext, credential_key_id) VALUES (?, 'totp', '\\x01', 'key1')", accountIdentifier)
 	if totpError != nil {
 		testContext.Errorf("totp after up: %v", totpError)
 	}

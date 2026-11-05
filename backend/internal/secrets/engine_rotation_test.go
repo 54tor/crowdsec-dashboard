@@ -157,9 +157,10 @@ func TestEngineAssociatedDataSeparatesItsParts(testContext *testing.T) {
 }
 
 // credentialColumnReports keeps the reports of the two engine columns sealed
-// by insertProxiedEngine: the other engine columns (sidecar keys) hold no row
-// in these tests, so they report nothing unreadable.
-func credentialColumnReports(report RotationReport) []ColumnReport {
+// by insertProxiedEngine and checks that every other engine column (sidecar
+// keys) holds no row in these tests, so it reports nothing unreadable.
+func credentialColumnReports(testContext *testing.T, report RotationReport) []ColumnReport {
+	testContext.Helper()
 	credentialColumnNames := map[string]bool{
 		"engine.engine_machine_password_sealed": true,
 		"engine.engine_proxy_credential_sealed": true,
@@ -168,7 +169,14 @@ func credentialColumnReports(report RotationReport) []ColumnReport {
 	for _, columnReport := range report.Columns {
 		if credentialColumnNames[columnReport.Column] {
 			credentialReports = append(credentialReports, columnReport)
+			continue
 		}
+		if strings.HasPrefix(columnReport.Column, "engine.") && len(columnReport.UnreadableIDs) != 0 {
+			testContext.Errorf("%s: expected no unreadable ids, got %v", columnReport.Column, columnReport.UnreadableIDs)
+		}
+	}
+	if len(credentialReports) != len(credentialColumnNames) {
+		testContext.Fatalf("expected %d credential column reports, got %d", len(credentialColumnNames), len(credentialReports))
 	}
 	return credentialReports
 }
@@ -203,7 +211,7 @@ func TestRotateReportsUnreadableRowsAndContinues(testContext *testing.T) {
 	if !errors.Is(dryRunError, ErrUnreadableRows) {
 		testContext.Errorf("the dry run must report the unreadable rows, got %v", dryRunError)
 	}
-	for _, columnReport := range credentialColumnReports(dryRunReport) {
+	for _, columnReport := range credentialColumnReports(testContext, dryRunReport) {
 		if fmt.Sprint(columnReport.UnreadableIDs) != fmt.Sprint(expectedUnreadable) {
 			testContext.Errorf("dry run %s: expected unreadable %v, got %v", columnReport.Column, expectedUnreadable, columnReport.UnreadableIDs)
 		}
@@ -223,7 +231,7 @@ func TestRotateReportsUnreadableRowsAndContinues(testContext *testing.T) {
 	if report.Rewritten() != 3 || len(report.Columns) != len(EncryptedColumns) {
 		testContext.Errorf("expected the totp and both readable engine secrets rewritten over every column, got %+v", report)
 	}
-	for _, columnReport := range credentialColumnReports(report) {
+	for _, columnReport := range credentialColumnReports(testContext, report) {
 		if fmt.Sprint(columnReport.UnreadableIDs) != fmt.Sprint(expectedUnreadable) {
 			testContext.Errorf("%s: expected unreadable %v, got %v", columnReport.Column, expectedUnreadable, columnReport.UnreadableIDs)
 		}

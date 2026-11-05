@@ -51,6 +51,19 @@ func TestValidateLAPIURLRequiresHTTPSUnlessAllowed(testContext *testing.T) {
 	}
 }
 
+func TestValidateSidecarURLRequiresHTTPSAndNoPath(testContext *testing.T) {
+	httpError := ValidateSidecarURL("http://sidecar.example.com:8443")
+	if httpError == nil || !strings.Contains(httpError.Error(), "must use https") {
+		testContext.Errorf("an http sidecar URL must be refused with a must use https error, got %v", httpError)
+	}
+	if acceptedError := ValidateSidecarURL("https://sidecar.example.com:8443"); acceptedError != nil {
+		testContext.Errorf("an https sidecar URL must be accepted: %v", acceptedError)
+	}
+	if pathError := ValidateSidecarURL("https://sidecar.example.com/base"); pathError == nil {
+		testContext.Errorf("a sidecar URL with a path must be refused")
+	}
+}
+
 func TestValidateProxyURLRejectsCredentialsPathAndWrongScheme(testContext *testing.T) {
 	testCases := []struct {
 		kind           string
