@@ -1,6 +1,7 @@
 package egress
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -30,8 +31,9 @@ var metadataPrefixes = []netip.Prefix{
 }
 
 type Settings struct {
-	Guardian *ssrf.Guardian
-	ProxyURL *url.URL
+	Guardian  *ssrf.Guardian
+	ProxyURL  *url.URL
+	TLSConfig *tls.Config
 }
 
 func DefaultGuardian() *ssrf.Guardian {
@@ -59,6 +61,7 @@ func NewClient(settings Settings) *http.Client {
 		MaxResponseHeaderBytes: maxResponseHeaderBytes,
 		IdleConnTimeout:        idleConnTimeout,
 		MaxIdleConnsPerHost:    maxIdleConnsPerHost,
+		TLSClientConfig:        settings.TLSConfig,
 	}
 	if settings.ProxyURL != nil {
 		transport.Proxy = http.ProxyURL(settings.ProxyURL)

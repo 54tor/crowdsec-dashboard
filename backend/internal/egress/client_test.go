@@ -2,6 +2,7 @@ package egress
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -397,4 +398,28 @@ func TestNilGuardianFallsBackToDefaultPolicy(t *testing.T) {
 
 func basicCredentials(username, password string) string {
 	return base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+}
+
+// The TLS configuration given in Settings must reach the handshake: a
+// VerifyConnection that refuses every peer has to make the request fail with
+// its own error, before the server sees anything.
+func TestClientAppliesTheGivenTLSConfig(testContext *testing.T) {
+	errRefusedByTest := errors.New("connection refused by the test TLS config")
+	requestCount := &atomic.Int64{}
+	tlsServer := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+	}))
+	testContext.Cleanup(tlsServer.Close)
+	refusingTLSConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS13,
+		InsecureSkipVerify: true,
+		VerifyConnection:   func(tls.ConnectionState) error { return errRefusedByTest },
+	}
+	client := NewClient(Settings{Guardian: loopbackTestGuardian(), TLSConfig: refusingTLSConfig})
+
+	_, requestError := getWithTimeout(testContext, client, tlsServer.URL+"/", 2*time.Second)
+
+	if !errors.Is(requestError, errRefusedByTest) || requestCount.Load() != 0 {
+		testContext.Fatalf("expected the TLS config to refuse the handshake, got %v (%d hits)", requestError, requestCount.Load())
+	}
 }
