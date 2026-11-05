@@ -132,7 +132,7 @@ func (fixture *importFixture) deps() ImportDeps {
 		PushImportedAlert: fixture.pushImportedAlert,
 		GetAlert:          fixture.getAlert,
 		DeleteDecision:    fixture.deleteDecision,
-		ConfigDir:         fixture.configDir,
+		Config:            LocalConfig(fixture.configDir),
 		LocalMachineID:    "dashboard",
 	}
 }

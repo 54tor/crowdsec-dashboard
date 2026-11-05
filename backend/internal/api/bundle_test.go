@@ -54,7 +54,7 @@ func newExportFixture(testContext *testing.T, alerts lapi.ArchiveRead) exportFix
 			return alerts, nil
 		},
 		EngineVersion: func(context.Context) (string, error) { return "v1.8.2", nil },
-		ConfigDir:     testContext.TempDir(),
+		Config:        bundle.LocalConfig(testContext.TempDir()),
 		Now:           func() time.Time { return exportTestTime },
 	}
 	return exportFixture{

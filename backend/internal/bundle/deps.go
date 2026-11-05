@@ -20,6 +20,6 @@ type ExportDeps struct {
 	ReadAlerts     func(ctx context.Context, limit int, maxBytes int64, timeout time.Duration) (lapi.ArchiveRead, error)
 	EngineVersion  func(ctx context.Context) (string, error)
 	LocalMachineID string
-	ConfigDir      string
+	Config         ConfigReader
 	Now            func() time.Time
 }

@@ -36,7 +36,7 @@ func exportFixture(testContext *testing.T, bans []lapi.SyncDecision, alerts lapi
 		},
 		EngineVersion:  func(context.Context) (string, error) { return "v1.8.2", nil },
 		LocalMachineID: "dashboard",
-		ConfigDir:      testContext.TempDir(),
+		Config:         LocalConfig(testContext.TempDir()),
 		Now:            func() time.Time { return exportTestReadTime },
 	}
 }
@@ -181,7 +181,7 @@ func TestExportSkipsConfigFileGoneOrTurnedSymlinkAfterListing(testContext *testi
 	if symlinkError := os.Symlink("../profiles.yaml", filepath.Join(configDir, "acquis.d", "late.yaml")); symlinkError != nil {
 		testContext.Fatal(symlinkError)
 	}
-	section, skippedFiles, exportError := exportListedConfig(configDir, []string{"acquis.d/gone.yaml", "acquis.d/late.yaml", "acquis.yaml"}, false)
+	section, skippedFiles, exportError := exportListedConfig(context.Background(), LocalConfig(configDir), []string{"acquis.d/gone.yaml", "acquis.d/late.yaml", "acquis.yaml"}, false)
 	if exportError != nil {
 		testContext.Fatal(exportError)
 	}
@@ -312,7 +312,9 @@ func TestExportTruncatedAlertReadIsTooLarge(testContext *testing.T) {
 
 func TestExportConfigIsRedactedByDefault(testContext *testing.T) {
 	deps := exportFixture(testContext, nil, lapi.ArchiveRead{})
-	writeConfigFile(testContext, deps.ConfigDir, "profiles.yaml", "notifications:\n  api_key: hunter2\n")
+	configDir := testContext.TempDir()
+	deps.Config = LocalConfig(configDir)
+	writeConfigFile(testContext, configDir, "profiles.yaml", "notifications:\n  api_key: hunter2\n")
 
 	redactedExport, redactedError := Export(context.Background(), deps, ExportRequest{Sections: []string{SectionConfig}})
 	if redactedError != nil {
@@ -334,12 +336,14 @@ func TestExportConfigIsRedactedByDefault(testContext *testing.T) {
 
 func TestExportNeverIncludesCredentialsFiles(testContext *testing.T) {
 	deps := exportFixture(testContext, nil, lapi.ArchiveRead{})
-	writeConfigFile(testContext, deps.ConfigDir, "acquis.yaml", "source: file\n")
-	writeConfigFile(testContext, deps.ConfigDir, "config.yaml", "db_config:\n  password: hunter2\n")
-	writeConfigFile(testContext, deps.ConfigDir, "local_api_credentials.yaml", "password: hunter2\n")
-	writeConfigFile(testContext, deps.ConfigDir, "acquis.d/token.yaml", "source: file\n")
-	writeConfigFile(testContext, deps.ConfigDir, "acquis.d/Machine_Credentials.yaml", "password: hunter2\n")
-	writeConfigFile(testContext, deps.ConfigDir, "parsers/s02-enrich/secret-whitelist.yaml", "name: x\n")
+	configDir := testContext.TempDir()
+	deps.Config = LocalConfig(configDir)
+	writeConfigFile(testContext, configDir, "acquis.yaml", "source: file\n")
+	writeConfigFile(testContext, configDir, "config.yaml", "db_config:\n  password: hunter2\n")
+	writeConfigFile(testContext, configDir, "local_api_credentials.yaml", "password: hunter2\n")
+	writeConfigFile(testContext, configDir, "acquis.d/token.yaml", "source: file\n")
+	writeConfigFile(testContext, configDir, "acquis.d/Machine_Credentials.yaml", "password: hunter2\n")
+	writeConfigFile(testContext, configDir, "parsers/s02-enrich/secret-whitelist.yaml", "name: x\n")
 
 	// Secrets requested on purpose: even a raw export must leave these files out.
 	exported, exportError := Export(context.Background(), deps, ExportRequest{Sections: []string{SectionConfig}, IncludeSecrets: true})

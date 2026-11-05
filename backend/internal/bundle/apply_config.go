@@ -58,15 +58,15 @@ var configSkipReasons = []struct {
 
 type configImport struct{}
 
-func (configImport) Plan(_ context.Context, deps ImportDeps, imported Bundle) (SectionPlan, error) {
+func (configImport) Plan(ctx context.Context, deps ImportDeps, imported Bundle) (SectionPlan, error) {
 	if !deps.ConfigImportEnabled {
 		return SectionPlan{Unavailable: true, UnavailableCode: ErrorCodeImportDisabled}, nil
 	}
-	if deps.TestConfig == nil || confwrite.CheckWritable(deps.ConfigImportDir) != nil {
+	if deps.Acquisition == nil {
 		return SectionPlan{Unavailable: true, UnavailableCode: ErrorCodeImportDirUnavailable}, nil
 	}
-	recoveryPending, recoveryError := confwrite.HasPendingRecovery(deps.ConfigImportDir)
-	if recoveryError != nil {
+	writable, recoveryPending, stateError := deps.Acquisition.State(ctx)
+	if stateError != nil || !writable {
 		return SectionPlan{Unavailable: true, UnavailableCode: ErrorCodeImportDirUnavailable}, nil
 	}
 	if recoveryPending {
@@ -75,7 +75,7 @@ func (configImport) Plan(_ context.Context, deps ImportDeps, imported Bundle) (S
 	sectionPlan := SectionPlan{}
 	plannedNames := map[string]bool{}
 	for fileIndex, configFile := range imported.Sections.Config.Files {
-		if planError := sectionPlan.planConfigFile(deps.ConfigImportDir, fileIndex, configFile, plannedNames); planError != nil {
+		if planError := sectionPlan.planConfigFile(ctx, deps.Acquisition, fileIndex, configFile, plannedNames); planError != nil {
 			return SectionPlan{Unavailable: true, UnavailableCode: ErrorCodeImportDirUnavailable}, nil
 		}
 	}
@@ -83,7 +83,7 @@ func (configImport) Plan(_ context.Context, deps ImportDeps, imported Bundle) (S
 	return sectionPlan, nil
 }
 
-func (sectionPlan *SectionPlan) planConfigFile(importDir string, fileIndex int, configFile ConfigFile, plannedNames map[string]bool) error {
+func (sectionPlan *SectionPlan) planConfigFile(ctx context.Context, acquisition AcquisitionWriter, fileIndex int, configFile ConfigFile, plannedNames map[string]bool) error {
 	fileName, isAcquisition := strings.CutPrefix(configFile.Name, acquisitionDirPrefix)
 	if !isAcquisition {
 		sectionPlan.skip(SectionConfig, displayName(configFile.Name, fileIndex), ReasonForbiddenName)
@@ -103,7 +103,7 @@ func (sectionPlan *SectionPlan) planConfigFile(importDir string, fileIndex int, 
 		sectionPlan.skip(SectionConfig, fileName, configSkipReason(contentError))
 		return nil
 	}
-	current, readError := confwrite.ReadCurrent(importDir, fileName)
+	current, readError := acquisition.ReadCurrent(ctx, fileName)
 	if errors.Is(readError, confwrite.ErrNotRegularFile) {
 		sectionPlan.skip(SectionConfig, fileName, ReasonNotRegularFile)
 		return nil
@@ -115,19 +115,19 @@ func (sectionPlan *SectionPlan) planConfigFile(importDir string, fileIndex int, 
 	return nil
 }
 
-func newFileAction(fileName string, content []byte, current confwrite.Current) FileAction {
+func newFileAction(fileName string, content []byte, current CurrentFile) FileAction {
 	action := FileAction{Name: fileName, Change: FileCreated, SHA256: contentHash(content), content: content}
 	if current.Exists {
 		action.Change = FileUpdated
 		if !current.Oversized {
-			action.PreviousSHA256 = contentHash(current.Content)
+			action.PreviousSHA256 = current.Digest
 		}
 	}
 	if action.PreviousSHA256 == action.SHA256 {
 		action.Change = FileUnchanged
 		return action
 	}
-	action.Diff, action.DiffTruncated = boundedDiff(current.Content, content)
+	action.Diff, action.DiffTruncated = boundedDiff(current.RedactedContent, content)
 	action.DiffTruncated = action.DiffTruncated || current.Oversized
 	return action
 }
@@ -159,8 +159,7 @@ func (configImport) Apply(ctx context.Context, deps ImportDeps, sectionPlan Sect
 	for _, fileAction := range sectionPlan.Config {
 		changes = append(changes, confwrite.FileChange{Name: fileAction.Name, Content: fileAction.content})
 	}
-	runConfigTest := func(context.Context) error { return deps.TestConfig(ctx) }
-	result, applyError := confwrite.Apply(deps.ConfigImportDir, changes, runConfigTest)
+	result, applyError := deps.Acquisition.Apply(ctx, changes)
 	for range result.Unchanged {
 		report.skip(ReasonUnchanged)
 	}

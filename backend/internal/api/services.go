@@ -68,9 +68,11 @@ type Services struct {
 	BundleExport       bundle.ExportDeps
 	BundleImport       bundle.ImportDeps
 	LifecycleContext   context.Context
+	localConfigTest    func(ctx context.Context) error
 }
 
 func NewServices(lapiClient *lapi.Client, executor cscli.Executor, confDir string) Services {
+	importDeps := localBundleImportDeps(lapiClient, executor, confDir)
 	return Services{
 		Decisions:          lapiDecisions{client: lapiClient},
 		DecisionAllowlists: lapiClient,
@@ -85,7 +87,8 @@ func NewServices(lapiClient *lapi.Client, executor cscli.Executor, confDir strin
 		Hub:                cscliHub{executor: executor},
 		Reloader:           cscliReloader{executor: executor},
 		BundleExport:       localBundleExportDeps(lapiClient, executor, confDir),
-		BundleImport:       localBundleImportDeps(lapiClient, executor, confDir),
+		BundleImport:       importDeps.ImportDeps,
+		localConfigTest:    importDeps.TestConfig,
 	}
 }
 

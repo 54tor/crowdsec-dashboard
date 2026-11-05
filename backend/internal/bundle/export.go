@@ -78,7 +78,7 @@ func exportSections(ctx context.Context, deps ExportDeps, request ExportRequest,
 		}
 	}
 	if request.includes(SectionConfig) {
-		sections.Config, exported.Skipped.Files, sectionError = exportConfig(deps.ConfigDir, request.IncludeSecrets)
+		sections.Config, exported.Skipped.Files, sectionError = exportConfig(ctx, deps.Config, request.IncludeSecrets)
 	}
 	return sectionError
 }

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/allowguard"
-	"crowdsec-dashboard/internal/confread"
 	"crowdsec-dashboard/internal/lapi"
 )
 
@@ -85,7 +84,7 @@ func newAlertPlanner(ctx context.Context, deps ImportDeps) (*alertPlanner, local
 	if !guard.Available() {
 		return nil, localAlertBudget{}, ErrorCodeAllowlistUnavailable
 	}
-	maxItems, configReadable := confread.FlushMaxItems(deps.ConfigDir)
+	maxItems, configReadable := deps.Config.FlushMaxItems(ctx)
 	if !configReadable {
 		return nil, localAlertBudget{}, ErrorCodeFlushConfigUnreadable
 	}

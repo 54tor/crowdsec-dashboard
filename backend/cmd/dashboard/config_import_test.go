@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -26,7 +27,7 @@ func TestConfigImportStaysOffUnlessEnabled(testContext *testing.T) {
 
 	enableConfigImport(&services, config.Config{ConfigImportDir: importDirectory}, time.Now(), noLog)
 
-	if services.BundleImport.ConfigImportEnabled || services.BundleImport.ConfigImportDir != "" {
+	if services.BundleImport.ConfigImportEnabled || services.BundleImport.Acquisition != nil {
 		testContext.Error("config import must stay disabled when CONFIG_IMPORT_ENABLED is false")
 	}
 	if _, statError := os.Stat(staleTemp); statError != nil {
@@ -35,8 +36,15 @@ func TestConfigImportStaysOffUnlessEnabled(testContext *testing.T) {
 
 	enableConfigImport(&services, config.Config{ConfigImportEnabled: true, ConfigImportDir: importDirectory}, time.Now(), noLog)
 
-	if !services.BundleImport.ConfigImportEnabled || services.BundleImport.ConfigImportDir != importDirectory {
-		testContext.Errorf("enabled import must be wired, got %+v", services.BundleImport.ConfigImportDir)
+	if !services.BundleImport.ConfigImportEnabled || services.BundleImport.Acquisition == nil {
+		testContext.Fatalf("enabled import must be wired, got %+v", services.BundleImport.Acquisition)
+	}
+	// The wired acquisition must read the configured directory, not another one.
+	if writeError := os.WriteFile(filepath.Join(importDirectory, "nginx.yaml"), []byte("source: file\n"), 0o640); writeError != nil {
+		testContext.Fatalf("write: %v", writeError)
+	}
+	if currentFile, readError := services.BundleImport.Acquisition.ReadCurrent(context.Background(), "nginx.yaml"); readError != nil || !currentFile.Exists {
+		testContext.Errorf("enabled import must be wired to %s, got %+v (%v)", importDirectory, currentFile, readError)
 	}
 	if _, statError := os.Stat(staleTemp); !errors.Is(statError, fs.ErrNotExist) {
 		testContext.Error("startup must clean stale temporary files")

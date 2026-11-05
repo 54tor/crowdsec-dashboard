@@ -25,9 +25,8 @@ type ImportDeps struct {
 	PushImportedAlert   func(ctx context.Context, alert lapi.Alert) (int64, error)
 	GetAlert            func(ctx context.Context, alertID int64) (lapi.Alert, error)
 	DeleteDecision      func(ctx context.Context, decisionID int64) error
-	ConfigDir           string
+	Config              ConfigReader
 	LocalMachineID      string
 	ConfigImportEnabled bool
-	ConfigImportDir     string
-	TestConfig          func(ctx context.Context) error
+	Acquisition         AcquisitionWriter
 }

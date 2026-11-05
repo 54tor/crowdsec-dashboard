@@ -26,10 +26,9 @@ func newConfigImportFixture(testContext *testing.T, importDirectory string) impo
 	services.OperationLock = fixture.lock
 	services.BundleImport = fixture.engine.deps(500)
 	services.BundleImport.ConfigImportEnabled = true
-	services.BundleImport.ConfigImportDir = importDirectory
-	services.BundleImport.TestConfig = func(context.Context) error {
+	services.BundleImport.Acquisition = bundle.LocalAcquisition(importDirectory, func(context.Context) error {
 		return errors.New("level=fatal msg=\"/etc/crowdsec/acquis.d/ssh.yaml: invalid\"")
-	}
+	})
 	fixture.handler = newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, services)
 	return fixture
 }

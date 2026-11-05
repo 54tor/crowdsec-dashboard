@@ -12,7 +12,6 @@ func enableConfigImport(services *api.Services, loadedConfig config.Config, now 
 	if !loadedConfig.ConfigImportEnabled {
 		return
 	}
-	services.BundleImport.ConfigImportEnabled = true
-	services.BundleImport.ConfigImportDir = loadedConfig.ConfigImportDir
+	services.EnableLocalConfigImport(loadedConfig.ConfigImportDir)
 	confwrite.PrepareImportDir(loadedConfig.ConfigImportDir, now, logLine)
 }

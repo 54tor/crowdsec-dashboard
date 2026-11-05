@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"path"
@@ -30,20 +31,20 @@ func IsExcludedConfigFile(name string) bool {
 	return false
 }
 
-func exportConfig(configDir string, includeSecrets bool) (*ConfigSection, int, error) {
-	names, listError := confread.List(configDir)
+func exportConfig(ctx context.Context, reader ConfigReader, includeSecrets bool) (*ConfigSection, int, error) {
+	names, listError := reader.List(ctx)
 	if listError != nil {
 		return nil, 0, listError
 	}
 	exportableNames := slices.DeleteFunc(names, IsExcludedConfigFile)
-	return exportListedConfig(configDir, exportableNames, includeSecrets)
+	return exportListedConfig(ctx, reader, exportableNames, includeSecrets)
 }
 
-func exportListedConfig(configDir string, names []string, includeSecrets bool) (*ConfigSection, int, error) {
+func exportListedConfig(ctx context.Context, reader ConfigReader, names []string, includeSecrets bool) (*ConfigSection, int, error) {
 	section := &ConfigSection{Redacted: !includeSecrets, Files: []ConfigFile{}}
 	skippedFiles := 0
 	for _, name := range names {
-		content, readError := readConfigFile(configDir, name, includeSecrets)
+		content, readError := readConfigFile(ctx, reader, name, includeSecrets)
 		if isVanishedConfigFile(readError) {
 			skippedFiles++
 			continue
@@ -60,12 +61,12 @@ func isVanishedConfigFile(readError error) bool {
 	return errors.Is(readError, fs.ErrNotExist) || errors.Is(readError, confread.ErrNotAllowed)
 }
 
-func readConfigFile(configDir, name string, includeSecrets bool) ([]byte, error) {
-	read := confread.Read
+func readConfigFile(ctx context.Context, reader ConfigReader, name string, includeSecrets bool) ([]byte, error) {
+	read := reader.Read
 	if includeSecrets {
-		read = confread.ReadUnredacted
+		read = reader.ReadUnredacted
 	}
-	content, readError := read(configDir, name)
+	content, readError := read(ctx, name)
 	if errors.Is(readError, confread.ErrTooLarge) {
 		return nil, ErrTooLarge
 	}

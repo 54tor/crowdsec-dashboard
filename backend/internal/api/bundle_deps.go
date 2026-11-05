@@ -15,14 +15,19 @@ func localBundleExportDeps(localClient *lapi.Client, executor cscli.Executor, co
 		ReadBans:      localClient.ReadNativeBans,
 		ReadAlerts:    localClient.ReadAlertsForArchive,
 		EngineVersion: cscliPlatform{executor: executor}.Version,
-		ConfigDir:     confDir,
+		Config:        bundle.LocalConfig(confDir),
 		Now:           time.Now,
 	}
 }
 
-func localBundleImportDeps(localClient *lapi.Client, executor cscli.Executor, confDir string) bundle.ImportDeps {
+type localImportDeps struct {
+	bundle.ImportDeps
+	TestConfig func(ctx context.Context) error
+}
+
+func localBundleImportDeps(localClient *lapi.Client, executor cscli.Executor, confDir string) localImportDeps {
 	hub := cscliHub{executor: executor}
-	return bundle.ImportDeps{
+	importDeps := bundle.ImportDeps{
 		ReadHub:           hub.bundleHubItems,
 		InstallCollection: hub.installCollection,
 		Allowlists:        localClient,
@@ -33,12 +38,18 @@ func localBundleImportDeps(localClient *lapi.Client, executor cscli.Executor, co
 		PushImportedAlert: localClient.PushImportedAlert,
 		GetAlert:          localClient.GetAlert,
 		DeleteDecision:    localClient.DeleteDecision,
-		ConfigDir:         confDir,
+		Config:            bundle.LocalConfig(confDir),
 		LocalMachineID:    localClient.MachineID(),
-		TestConfig: func(ctx context.Context) error {
-			return cscli.ConfigTest(ctx, executor)
-		},
 	}
+	testConfig := func(ctx context.Context) error {
+		return cscli.ConfigTest(ctx, executor)
+	}
+	return localImportDeps{ImportDeps: importDeps, TestConfig: testConfig}
+}
+
+func (services *Services) EnableLocalConfigImport(importDir string) {
+	services.BundleImport.ConfigImportEnabled = true
+	services.BundleImport.Acquisition = bundle.LocalAcquisition(importDir, services.localConfigTest)
 }
 
 func (service cscliHub) installCollection(ctx context.Context, name string) error {

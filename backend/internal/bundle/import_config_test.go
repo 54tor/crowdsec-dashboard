@@ -33,12 +33,15 @@ func newConfigImportFixture(testContext *testing.T) *configImportFixture {
 func (fixture *configImportFixture) configDeps() ImportDeps {
 	deps := fixture.deps()
 	deps.ConfigImportEnabled = true
-	deps.ConfigImportDir = fixture.importDirectory
-	deps.TestConfig = func(context.Context) error {
+	deps.Acquisition = fixture.acquisitionIn(fixture.importDirectory)
+	return deps
+}
+
+func (fixture *configImportFixture) acquisitionIn(importDirectory string) AcquisitionWriter {
+	return LocalAcquisition(importDirectory, func(context.Context) error {
 		fixture.configTestRuns++
 		return fixture.configTestError
-	}
-	return deps
+	})
 }
 
 func configBundle(files ...ConfigFile) Bundle {
@@ -88,7 +91,7 @@ func TestImportConfigDisabledByDefault(testContext *testing.T) {
 func TestImportConfigRequiresAnExistingWritableDirectory(testContext *testing.T) {
 	fixture := newConfigImportFixture(testContext)
 	deps := fixture.configDeps()
-	deps.ConfigImportDir = filepath.Join(fixture.importDirectory, "missing")
+	deps.Acquisition = fixture.acquisitionIn(filepath.Join(fixture.importDirectory, "missing"))
 	plan := planConfigOrFail(testContext, deps, configBundle(ConfigFile{Name: "acquis.d/nginx.yaml", Content: nginxAcquisition}))
 	if plan.UnavailableCodes[SectionConfig] != ErrorCodeImportDirUnavailable {
 		testContext.Errorf("a missing import directory must make the section unavailable, got %v", plan.UnavailableCodes)
