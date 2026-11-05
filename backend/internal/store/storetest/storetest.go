@@ -52,7 +52,8 @@ func NewUnmigrated(testContext *testing.T) *bun.DB {
 	}
 	defer adminDatabase.Close()
 
-	createSharedTrigramExtension(testContext, ctx, adminDatabase)
+	requirePublicSchemaWithoutTables(ctx, testContext, adminDatabase)
+	createSharedTrigramExtension(ctx, testContext, adminDatabase)
 	if _, createError := adminDatabase.ExecContext(ctx, "CREATE SCHEMA "+schemaName); createError != nil {
 		testContext.Fatalf("create schema: %v", createError)
 	}
@@ -76,6 +77,20 @@ func randomSchemaName(testContext *testing.T) string {
 	return "t_" + hex.EncodeToString(randomBytes)
 }
 
+// Each test schema falls back to public through its search_path, so a table left
+// in public could be read silently by a test instead of its own schema's table.
+func requirePublicSchemaWithoutTables(ctx context.Context, testContext *testing.T, adminDatabase *bun.DB) {
+	testContext.Helper()
+	var publicTableCount int
+	countError := adminDatabase.NewRaw("SELECT count(*) FROM pg_tables WHERE schemaname = 'public'").Scan(ctx, &publicTableCount)
+	if countError != nil {
+		testContext.Fatalf("count tables of the public schema: %v", countError)
+	}
+	if publicTableCount > 0 {
+		testContext.Fatalf("the public schema of %s holds %d tables: use an empty test database, since each test schema falls back to public", databaseURLVariable, publicTableCount)
+	}
+}
+
 // The pg_trgm extension lives once in public, shared by every test schema: the
 // migration's gin_trgm_ops operator class must resolve while each test owns its
 // schema, and dropping a test schema must not drop the shared extension. That is
@@ -83,7 +98,8 @@ func randomSchemaName(testContext *testing.T) string {
 //
 // Several test processes may create it at the same time; the loser of that race
 // gets a unique violation (23505) or a duplicate object (42710), both harmless.
-func createSharedTrigramExtension(testContext *testing.T, ctx context.Context, adminDatabase *bun.DB) {
+func createSharedTrigramExtension(ctx context.Context, testContext *testing.T, adminDatabase *bun.DB) {
+	testContext.Helper()
 	_, createError := adminDatabase.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public")
 	if createError == nil || isConcurrentExtensionCreation(createError) {
 		return
