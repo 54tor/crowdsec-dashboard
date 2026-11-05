@@ -248,6 +248,57 @@ When upgrading CrowdSec, regenerate them from a seeded dev stack and rerun the b
 Keep only documentation addresses, no real host names and no real credentials in them. A parser test
 that starts failing after a refresh means CrowdSec changed an output shape.
 
+## CI and releases
+
+Two GitHub Actions workflows live in `.github/workflows`; third-party actions are pinned by commit
+SHA (with the version in a trailing comment) and Dependabot (`.github/dependabot.yml`) proposes
+grouped weekly updates for the actions, the Go modules, the npm packages and the base images of
+`deploy/`.
+
+`ci.yml` runs on every pull request and every push to `main` (a newer run of the same ref cancels
+the older one), and is reused by the release workflow. Its jobs:
+
+| Job | What it checks |
+|---|---|
+| `backend` | `go vet ./...`, `go build ./cmd/dashboard`, `go test -p 2` against a `postgres:latest` service (`TEST_DATABASE_URL` set, `pg_trgm` comes with the image), `-race` on `./internal/api` only; the backup check tests skip without their variables |
+| `web` | Node LTS, `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` |
+| `docker` | hadolint on `deploy/Dockerfile` (`.hadolint.yaml` ignores the floating-tag and unpinned-package rules on purpose), then a buildx build without push, cached in the GitHub Actions cache; `linux/amd64` on pull requests, `linux/amd64` and `linux/arm64` otherwise |
+| `docs-hygiene` | fails when a tracked file other than a changelog holds a local home path, or when `docs/superpowers` or `.superpowers` is tracked |
+
+`release.yml` runs on a tag `vX.Y.Z` (or `vX.Y.Z-rc.N`). It refuses a tag that differs from `v`
+plus the `version` of `web/package.json`, runs the whole `ci.yml`, then builds the image from the
+tag commit for `linux/amd64` and `linux/arm64` and pushes it to `ghcr.io/<owner>/<repository>`
+(the repository name, lowercased) with the tags `X.Y.Z`, `X.Y` and `latest`; a pre-release tag
+(with a `-`) only gets `X.Y.Z-rc.N`. The image carries a max-mode provenance and an SBOM, and a
+signed build provenance attestation is stored with it (`gh attestation verify
+oci://ghcr.io/<owner>/<repository>:X.Y.Z --repo <owner>/<repository>`). Finally a GitHub Release
+is created with generated notes, marked as a pre-release for a pre-release tag. Only the publish
+job may write packages and attestations, and only the release job may write the repository
+contents. A further image is published by adding one entry (`name`, `dockerfile`, `context`) to the
+`images` matrix of the `publish` job; it is pushed as `ghcr.io/<owner>/<repository>/<name>`.
+
+To cut a release:
+
+1. in `web/`, `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and
+   `package-lock.json`), then commit both on `main`;
+2. `git tag vX.Y.Z` on that commit and push the tag (`git push origin vX.Y.Z`);
+3. follow the Release workflow in the Actions tab; the tag must point at the commit that holds the
+   version, otherwise the first job fails and nothing is published.
+
+The same checks run locally with the commands of [Tests](#tests), plus `hadolint deploy/Dockerfile`
+(it reads `.hadolint.yaml`) and `docker build -f deploy/Dockerfile .` from the repository root.
+`actionlint` checks the workflow files.
+
+Repository settings and first publication:
+
+- Settings, Actions, General: allow GitHub Actions and the actions used by the workflows; under
+  Workflow permissions the default `read` is enough, the workflows ask for more per job.
+- Branch protection (or a ruleset) on `main` requiring the `backend`, `web`, `docker` and
+  `docs-hygiene` checks, and, if wanted, a tag ruleset restricting who can push `v*` tags.
+- After the first release, the package is private: in the package settings on GitHub
+  (Packages, the image, Package settings), change its visibility to public once and check that it
+  is linked to the repository. Later releases keep that visibility.
+
 ## Conventions
 
 - No comments in production code; the code states what it does through names. Non-production code
