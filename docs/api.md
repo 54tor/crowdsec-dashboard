@@ -416,11 +416,11 @@ admin; all but the test are session only (403 `session_required` for a token). B
 
 | Method | Path | Body | Success response | Errors |
 |---|---|---|---|---|
-| POST | `/api/engines/{name}/sidecar/observe` | `{"url"}` | `200 {"spki_sha256"}`: the SPKI SHA-256 of the certificate the sidecar presents | 400 `invalid_engine`; 404; 409 `engine_local_readonly`; 502 `sidecar_*` |
+| POST | `/api/engines/{name}/sidecar/observe` | `{"url"}` | `200 {"spki_sha256"}`: the SPKI SHA-256 of the certificate the sidecar presents | 400 `invalid_engine`; 404; 409 `engine_local_readonly`, `engine_secret_unreadable` (unusable engine); 502 `sidecar_*` |
 | PUT | `/api/engines/{name}/sidecar` | `{"url","spki_sha256","confirm":"<name>"}` | `200 {"sidecar","trusted_key_line","issuer","audience"}` | 400 `confirmation_required`, `invalid_engine`; 404; 409 `sidecar_fingerprint_changed`, `sidecar_url_change_requires_removal`, `engine_local_readonly`; 502 `sidecar_*`; 503 `sidecar_issuer_missing` |
-| POST | `/api/engines/{name}/sidecar/test` | none | `200 {"status":"ok"}`: a ping signed with the current key | 404; 409 `engine_has_no_sidecar`, `engine_secret_unreadable`; 502 `sidecar_*`; 503 `sidecar_busy`; 504 `cscli_timeout` |
+| POST | `/api/engines/{name}/sidecar/test` | none | `200 {"status":"ok"}`: a ping signed with the current key | 404; 409 `engine_has_no_sidecar`, `engine_local_readonly`, `engine_secret_unreadable` (unusable engine); 502 `sidecar_*`; 503 `sidecar_busy`; 504 `cscli_timeout` |
 | POST | `/api/engines/{name}/sidecar/keys/next` | none | `200 {"sidecar","trusted_key_line"}` (the line of the staged key) | 404; 409 `engine_has_no_sidecar` |
-| POST | `/api/engines/{name}/sidecar/keys/promote` | none | `200 {"sidecar","trusted_key_line"}` (the line of the new current key) | 404; 409 `engine_has_no_sidecar`, `sidecar_no_next_key`; 502 `sidecar_*` |
+| POST | `/api/engines/{name}/sidecar/keys/promote` | none | `200 {"sidecar","trusted_key_line"}` (the line of the new current key) | 404; 409 `engine_has_no_sidecar`, `sidecar_no_next_key`, `sidecar_next_key_changed`, `engine_secret_unreadable` (unusable engine); 502 `sidecar_*` |
 | DELETE | `/api/engines/{name}/sidecar` | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400 `confirmation_required`; 404; 409 `engine_has_no_sidecar` |
 
 - `url` is `https`, with a host, an optional port and no path, query, fragment or credentials; the
@@ -439,16 +439,22 @@ admin; all but the test are session only (403 `session_required` for a token). B
 - Key rotation: `keys/next` stages a new key (replacing a previously staged one) and returns its
   line, to add to the trusted keys file; `keys/promote` first pings the sidecar with the staged key
   and only promotes it when that ping succeeds (otherwise the error is returned and nothing
-  changes). The old line can then be removed from the file.
+  changes). The promotion makes current exactly the key the ping was signed with: when another
+  `keys/next` replaced the staged key in between, it is refused with 409 `sidecar_next_key_changed`
+  and nothing changes (add the new staged line to the file, then promote again). The old line can
+  then be removed from the file.
 - `sidecar_*` errors: `sidecar_unavailable` (unreachable or invalid answer),
   `sidecar_fingerprint_mismatch` (the certificate is not the pinned one), `sidecar_auth_failed`
   (the sidecar refused the token, for example an untrusted key), `sidecar_clock_skew`; also
   409 `sidecar_command_refused`. `engine_secret_unreadable`: the engine's stored sidecar key cannot be
-  opened; `DELETE` still works, so the sidecar can be removed and enrolled again.
+  opened, the dashboard has no issuer, or the sidecar client cannot be built: the engine is unusable
+  and left out of the registry, so `observe`, `test` and `keys/promote` answer this code; `DELETE`
+  still works, so the sidecar can be removed and enrolled again.
 - The configuration, the staging, the promotion and the removal are audited
   (`engine_sidecar_configured`, `engine_sidecar_key_staged`, `engine_sidecar_key_promoted`,
   `engine_sidecar_removed`) with the engine name as target, and each reloads the engine registry
-  (`"warning":"registry_reload_failed"` as above). Observing and testing are not audited.
+  (`"warning":"registry_reload_failed"` as above). A successful test is audited as
+  `engine_tested`, like `POST /api/engines/{name}/test`. Observing is not audited.
 
 ## Allowlists
 

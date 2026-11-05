@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -202,6 +204,44 @@ func TestPromotePingsWithTheNextKeyBeforePromoting(testContext *testing.T) {
 		testContext.Errorf("expected a next-key ping then one promotion, got pings %v promotions %d",
 			fixture.sidecarService.pingedWithNext, fixture.sidecarService.promoteCount)
 	}
+	expectedKeyIDs := []string{fixture.sidecarService.enrolledEngine.Sidecar.NextKeyID}
+	if !slices.Equal(fixture.sidecarService.promotedKeyIDs, expectedKeyIDs) {
+		testContext.Errorf("the promotion must name the pinged key %v, got %v", expectedKeyIDs, fixture.sidecarService.promotedKeyIDs)
+	}
+}
+
+func TestPromoteRefusesANextKeyRestagedAfterThePing(testContext *testing.T) {
+	fixture := newSidecarFixture(testContext, auth.RoleAdmin, sidecarTestIssuer)
+	fixture.sidecarService.promoteError = engines.ErrNextSidecarKeyChanged
+
+	recorder := fixture.send(http.MethodPost, sidecarPromotePath, "")
+
+	expectError(testContext, recorder, http.StatusConflict, "sidecar_next_key_changed")
+	if len(fixture.recorder.events) != 0 || fixture.service.reloadCount != 0 {
+		testContext.Errorf("a refused promotion is neither audited nor reloaded: events %+v reloads %d",
+			fixture.recorder.events, fixture.service.reloadCount)
+	}
+}
+
+func TestSidecarTestIsAuditedOnlyWhenThePingSucceeds(testContext *testing.T) {
+	fixture := newSidecarFixture(testContext, auth.RoleAdmin, sidecarTestIssuer)
+	fixture.sidecarService.pingError = sidecarclient.ErrUnavailable
+
+	expectError(testContext, fixture.send(http.MethodPost, sidecarTestPath, ""), http.StatusBadGateway, "sidecar_unavailable")
+	if len(fixture.recorder.events) != 0 {
+		testContext.Errorf("a failed sidecar test must not be audited, got %+v", fixture.recorder.events)
+	}
+
+	fixture.sidecarService.pingError = nil
+	recorder := fixture.send(http.MethodPost, sidecarTestPath, "")
+
+	if recorder.Code != http.StatusOK {
+		testContext.Fatalf("expected 200, got %d %q", recorder.Code, recorder.Body.String())
+	}
+	expectedEvents := []recordedAuditEvent{{action: audit.ActionEngineTested, target: sidecarTestEngineName, clientIP: testClientIP}}
+	if !slices.Equal(fixture.recorder.events, expectedEvents) {
+		testContext.Errorf("expected audit %+v, got %+v", expectedEvents, fixture.recorder.events)
+	}
 }
 
 func TestStageSidecarKeyReturnsTheNextTrustedKeyLine(testContext *testing.T) {
@@ -383,4 +423,18 @@ func TestRenamingAnEngineWithASidecarAnswersAConflict(testContext *testing.T) {
 	recorder := fixture.send(http.MethodPatch, "/api/engines/"+sidecarTestEngineName, `{"name":"peer-renamed"}`)
 
 	expectError(testContext, recorder, http.StatusConflict, "sidecar_rename_requires_removal")
+}
+
+// Pins the shape of the sidecar view: a new field (a sealed or secret key) must
+// fail here and be reviewed before any response can carry it.
+func TestSidecarViewExposesOnlyThePublicFields(testContext *testing.T) {
+	expectedFieldNames := []string{"URL", "SPKISHA256", "KeyID", "PublicKey", "NextKeyID", "NextPublicKey"}
+	viewType := reflect.TypeFor[sidecarView]()
+	obtainedFieldNames := make([]string, 0, viewType.NumField())
+	for fieldIndex := range viewType.NumField() {
+		obtainedFieldNames = append(obtainedFieldNames, viewType.Field(fieldIndex).Name)
+	}
+	if !slices.Equal(obtainedFieldNames, expectedFieldNames) {
+		testContext.Errorf("expected the sidecar view fields %v, got %v", expectedFieldNames, obtainedFieldNames)
+	}
 }

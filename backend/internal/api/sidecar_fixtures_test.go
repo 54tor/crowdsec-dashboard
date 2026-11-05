@@ -39,7 +39,7 @@ func (service *fakeEngineService) StageSidecarKey(context.Context, string) (engi
 	return engines.Engine{}, errSidecarNotFaked
 }
 
-func (service *fakeEngineService) PromoteSidecarKey(context.Context, string) (engines.Engine, error) {
+func (service *fakeEngineService) PromoteSidecarKey(context.Context, string, string) (engines.Engine, error) {
 	return engines.Engine{}, errSidecarNotFaked
 }
 
@@ -47,8 +47,8 @@ func (service *fakeEngineService) RemoveSidecar(context.Context, string) error {
 	return errSidecarNotFaked
 }
 
-func (service *fakeEngineService) PingSidecar(context.Context, string, bool) error {
-	return errSidecarNotFaked
+func (service *fakeEngineService) PingSidecar(context.Context, string, bool) (string, error) {
+	return "", errSidecarNotFaked
 }
 
 // fakeSidecarEngineService records every sidecar call so a test can prove a
@@ -63,6 +63,7 @@ type fakeSidecarEngineService struct {
 	stageCount       int
 	stageError       error
 	promoteCount     int
+	promotedKeyIDs   []string
 	promoteError     error
 	removedNames     []string
 	removeError      error
@@ -89,8 +90,9 @@ func (service *fakeSidecarEngineService) StageSidecarKey(context.Context, string
 	return service.enrolledEngine, service.stageError
 }
 
-func (service *fakeSidecarEngineService) PromoteSidecarKey(context.Context, string) (engines.Engine, error) {
+func (service *fakeSidecarEngineService) PromoteSidecarKey(_ context.Context, _ string, expectedNextKeyID string) (engines.Engine, error) {
 	service.promoteCount++
+	service.promotedKeyIDs = append(service.promotedKeyIDs, expectedNextKeyID)
 	return service.enrolledEngine, service.promoteError
 }
 
@@ -99,12 +101,13 @@ func (service *fakeSidecarEngineService) RemoveSidecar(_ context.Context, name s
 	return service.removeError
 }
 
-func (service *fakeSidecarEngineService) PingSidecar(_ context.Context, _ string, useNextKey bool) error {
+func (service *fakeSidecarEngineService) PingSidecar(_ context.Context, _ string, useNextKey bool) (string, error) {
 	service.pingedWithNext = append(service.pingedWithNext, useNextKey)
+	enrolledSidecar := service.enrolledEngine.Sidecar
 	if useNextKey {
-		return service.nextPingError
+		return enrolledSidecar.NextKeyID, service.nextPingError
 	}
-	return service.pingError
+	return enrolledSidecar.KeyID, service.pingError
 }
 
 func (service *fakeSidecarEngineService) sidecarCalls() int {

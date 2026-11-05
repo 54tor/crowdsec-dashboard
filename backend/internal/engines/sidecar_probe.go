@@ -18,25 +18,25 @@ func (registry *Registry) ObserveSidecar(ctx context.Context, name, sidecarURL s
 	return sidecarclient.ObserveFingerprint(ctx, sidecarURL, egressSettings)
 }
 
-func (registry *Registry) PingSidecar(ctx context.Context, name string, useNextKey bool) error {
+func (registry *Registry) PingSidecar(ctx context.Context, name string, useNextKey bool) (string, error) {
 	sidecarTarget, targetError := registry.Target(name)
 	if targetError != nil {
-		return targetError
+		return "", targetError
 	}
 	if sidecarTarget.Engine.IsLocal {
-		return ErrLocalReadOnly
+		return "", ErrLocalReadOnly
 	}
 	if !useNextKey {
-		return sidecarTarget.Sidecar.Ping(ctx)
+		return sidecarTarget.Engine.Sidecar.KeyID, sidecarTarget.Sidecar.Ping(ctx)
 	}
 	_, nextKey, keysError := registry.repository.sidecarSigningKeys(ctx, sidecarTarget.Engine.ID)
 	if keysError != nil {
-		return keysError
+		return "", keysError
 	}
 	if nextKey == nil {
-		return ErrNoNextSidecarKey
+		return "", ErrNoNextSidecarKey
 	}
-	return sidecarTarget.Sidecar.WithSigner(registry.signerFor(name, *nextKey)).Ping(ctx)
+	return nextKey.KeyID, sidecarTarget.Sidecar.WithSigner(registry.signerFor(name, *nextKey)).Ping(ctx)
 }
 
 func (registry *Registry) remoteEgress(name string) (egress.Settings, error) {

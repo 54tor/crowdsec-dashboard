@@ -32,9 +32,9 @@ type EngineService interface {
 	ObserveSidecar(ctx context.Context, name, sidecarURL string) (string, error)
 	ConfigureSidecar(ctx context.Context, name string, input engines.SidecarInput) (engines.Engine, error)
 	StageSidecarKey(ctx context.Context, name string) (engines.Engine, error)
-	PromoteSidecarKey(ctx context.Context, name string) (engines.Engine, error)
+	PromoteSidecarKey(ctx context.Context, name, expectedNextKeyID string) (engines.Engine, error)
 	RemoveSidecar(ctx context.Context, name string) error
-	PingSidecar(ctx context.Context, name string, useNextKey bool) error
+	PingSidecar(ctx context.Context, name string, useNextKey bool) (string, error)
 }
 
 type engineService struct {

@@ -258,10 +258,11 @@ func TestPingSidecarWithNextKeyNeedsTheNextKeyTrusted(testContext *testing.T) {
 	ctx := context.Background()
 	currentLineA := currentTrustedLine(scenario.engineA)
 
-	if pingError := scenario.registry.PingSidecar(ctx, "peer-a", false); pingError != nil {
-		testContext.Fatalf("ping with the current key: %v", pingError)
+	currentKeyID, pingError := scenario.registry.PingSidecar(ctx, "peer-a", false)
+	if pingError != nil || currentKeyID != scenario.engineA.Sidecar.KeyID {
+		testContext.Fatalf("ping with the current key: kid %q, %v", currentKeyID, pingError)
 	}
-	if noNextError := scenario.registry.PingSidecar(ctx, "peer-a", true); !errors.Is(noNextError, ErrNoNextSidecarKey) {
+	if _, noNextError := scenario.registry.PingSidecar(ctx, "peer-a", true); !errors.Is(noNextError, ErrNoNextSidecarKey) {
 		testContext.Fatalf("expected ErrNoNextSidecarKey before staging, got %v", noNextError)
 	}
 	stagedEngine, stageError := scenario.fixture.repository.StageSidecarKey(ctx, "peer-a")
@@ -270,20 +271,21 @@ func TestPingSidecarWithNextKeyNeedsTheNextKeyTrusted(testContext *testing.T) {
 	}
 	mustReload(testContext, scenario.registry)
 
-	untrustedError := scenario.registry.PingSidecar(ctx, "peer-a", true)
+	_, untrustedError := scenario.registry.PingSidecar(ctx, "peer-a", true)
 	if !errors.Is(untrustedError, sidecarclient.ErrAuthRefused) {
 		testContext.Fatalf("a next key the sidecar does not trust must be refused, got %v", untrustedError)
 	}
 	nextLineA := trustedLineOf(stagedEngine.Sidecar.NextKeyID, stagedEngine.Sidecar.NextPublicKeyHex)
 	scenario.sidecarA.trust(testContext, currentLineA, nextLineA)
 
-	if trustedError := scenario.registry.PingSidecar(ctx, "peer-a", true); trustedError != nil {
-		testContext.Errorf("a trusted next key must be accepted, got %v", trustedError)
+	pingedNextKeyID, trustedError := scenario.registry.PingSidecar(ctx, "peer-a", true)
+	if trustedError != nil || pingedNextKeyID != stagedEngine.Sidecar.NextKeyID {
+		testContext.Errorf("a trusted next key must be accepted and named, got kid %q, %v", pingedNextKeyID, trustedError)
 	}
-	if localError := scenario.registry.PingSidecar(ctx, ReservedLocalName, false); !errors.Is(localError, ErrLocalReadOnly) {
+	if _, localError := scenario.registry.PingSidecar(ctx, ReservedLocalName, false); !errors.Is(localError, ErrLocalReadOnly) {
 		testContext.Errorf("local: expected ErrLocalReadOnly, got %v", localError)
 	}
-	if missingError := scenario.registry.PingSidecar(ctx, "missing", false); !errors.Is(missingError, ErrEngineNotFound) {
+	if _, missingError := scenario.registry.PingSidecar(ctx, "missing", false); !errors.Is(missingError, ErrEngineNotFound) {
 		testContext.Errorf("missing: expected ErrEngineNotFound, got %v", missingError)
 	}
 }

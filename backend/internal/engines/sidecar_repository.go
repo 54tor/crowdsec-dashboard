@@ -49,13 +49,16 @@ func (repository *Repository) StageSidecarKey(ctx context.Context, name string) 
 	})
 }
 
-func (repository *Repository) PromoteSidecarKey(ctx context.Context, name string) (Engine, error) {
+func (repository *Repository) PromoteSidecarKey(ctx context.Context, name, expectedNextKeyID string) (Engine, error) {
 	return repository.changeSidecar(ctx, name, func(ctx context.Context, transaction bun.Tx, currentRow engineRow) error {
 		if currentRow.SidecarURL == nil {
 			return ErrEngineHasNoSidecar
 		}
 		if currentRow.SidecarNextKeyID == nil {
 			return ErrNoNextSidecarKey
+		}
+		if *currentRow.SidecarNextKeyID != expectedNextKeyID {
+			return ErrNextSidecarKeyChanged
 		}
 		return execSidecarUpdate(ctx, transaction, currentRow.ID,
 			`engine_sidecar_signing_key_kid = engine_sidecar_next_signing_key_kid,

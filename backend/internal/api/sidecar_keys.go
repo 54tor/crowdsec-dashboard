@@ -24,11 +24,12 @@ func (handlers sidecarHandlers) stageKey(responseWriter http.ResponseWriter, req
 
 func (handlers sidecarHandlers) promoteKey(responseWriter http.ResponseWriter, request *http.Request) {
 	name := request.PathValue("name")
-	if pingError := handlers.service.PingSidecar(request.Context(), name, true); pingError != nil {
+	pingedKeyID, pingError := handlers.service.PingSidecar(request.Context(), name, true)
+	if pingError != nil {
 		handlers.writeSidecarError(responseWriter, name, "ping sidecar with the next key", pingError)
 		return
 	}
-	promotedEngine, promoteError := handlers.service.PromoteSidecarKey(request.Context(), name)
+	promotedEngine, promoteError := handlers.service.PromoteSidecarKey(request.Context(), name, pingedKeyID)
 	if promoteError != nil {
 		handlers.writeSidecarError(responseWriter, name, "promote sidecar key", promoteError)
 		return

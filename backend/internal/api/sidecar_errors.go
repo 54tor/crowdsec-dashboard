@@ -29,6 +29,8 @@ func (handlers sidecarHandlers) writeSidecarError(responseWriter http.ResponseWr
 		writeError(responseWriter, http.StatusConflict, "sidecar_url_change_requires_removal")
 	case errors.Is(operationError, engines.ErrNoNextSidecarKey):
 		writeError(responseWriter, http.StatusConflict, "sidecar_no_next_key")
+	case errors.Is(operationError, engines.ErrNextSidecarKeyChanged):
+		writeError(responseWriter, http.StatusConflict, "sidecar_next_key_changed")
 	case errors.Is(operationError, secrets.ErrDecrypt), errors.Is(operationError, secrets.ErrUnknownKeyID):
 		writeError(responseWriter, http.StatusConflict, engines.ErrorCodeSecretUnreadable)
 	case errors.Is(operationError, engines.ErrEngineNotFound) && handlers.unavailableCode(engineName) != "":

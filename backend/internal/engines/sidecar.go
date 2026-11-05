@@ -12,6 +12,8 @@ var (
 	ErrSidecarURLChange   = errors.New("sidecar url cannot change while a sidecar is configured")
 	ErrNoNextSidecarKey   = errors.New("engine has no staged sidecar key")
 
+	ErrNextSidecarKeyChanged = errors.New("staged sidecar key changed since it was tested")
+
 	ErrSidecarRenameRequiresRemoval = errors.New("an engine with a sidecar cannot be renamed")
 )
 

@@ -91,10 +91,11 @@ func (handlers sidecarHandlers) configure(responseWriter http.ResponseWriter, re
 
 func (handlers sidecarHandlers) test(responseWriter http.ResponseWriter, request *http.Request) {
 	name := request.PathValue("name")
-	if pingError := handlers.service.PingSidecar(request.Context(), name, false); pingError != nil {
+	if _, pingError := handlers.service.PingSidecar(request.Context(), name, false); pingError != nil {
 		handlers.writeSidecarError(responseWriter, name, "test sidecar", pingError)
 		return
 	}
+	handlers.record(request, audit.ActionEngineTested, name)
 	writeStatus(responseWriter, "ok")
 }
 

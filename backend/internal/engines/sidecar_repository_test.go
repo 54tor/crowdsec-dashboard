@@ -217,7 +217,7 @@ func TestPromoteSidecarKeyReplacesCurrentByNext(testContext *testing.T) {
 		testContext.Errorf("both keys must open, got %v and %v", stagedCurrentKey, stagedNextKey)
 	}
 
-	promotedEngine, promoteError := fixture.repository.PromoteSidecarKey(ctx, "edge-1")
+	promotedEngine, promoteError := fixture.repository.PromoteSidecarKey(ctx, "edge-1", stagedSidecar.NextKeyID)
 	if promoteError != nil {
 		testContext.Fatalf("promote: %v", promoteError)
 	}
@@ -233,13 +233,13 @@ func TestPromoteSidecarKeyReplacesCurrentByNext(testContext *testing.T) {
 		testContext.Errorf("the promoted key must open under its own kid, got %v next %v", promotedCurrentKey, promotedNextKey)
 	}
 
-	if _, secondPromoteError := fixture.repository.PromoteSidecarKey(ctx, "edge-1"); !errors.Is(secondPromoteError, ErrNoNextSidecarKey) {
+	if _, secondPromoteError := fixture.repository.PromoteSidecarKey(ctx, "edge-1", stagedSidecar.NextKeyID); !errors.Is(secondPromoteError, ErrNoNextSidecarKey) {
 		testContext.Errorf("promoting without a staged key must be refused, got %v", secondPromoteError)
 	}
 	if _, stageWithoutSidecarError := fixture.repository.StageSidecarKey(ctx, "edge-2"); !errors.Is(stageWithoutSidecarError, ErrEngineHasNoSidecar) {
 		testContext.Errorf("staging without a sidecar must be refused, got %v", stageWithoutSidecarError)
 	}
-	if _, promoteWithoutSidecarError := fixture.repository.PromoteSidecarKey(ctx, "edge-2"); !errors.Is(promoteWithoutSidecarError, ErrEngineHasNoSidecar) {
+	if _, promoteWithoutSidecarError := fixture.repository.PromoteSidecarKey(ctx, "edge-2", stagedSidecar.NextKeyID); !errors.Is(promoteWithoutSidecarError, ErrEngineHasNoSidecar) {
 		testContext.Errorf("promoting without a sidecar must be refused, got %v", promoteWithoutSidecarError)
 	}
 }
@@ -336,5 +336,36 @@ func TestDeleteClearsTheSidecarSigningKeys(testContext *testing.T) {
 	}
 	if remainingSidecarColumns != 0 {
 		testContext.Errorf("a deleted engine must not keep its sidecar key, %d columns left", remainingSidecarColumns)
+	}
+}
+
+// The key a promotion makes current must be the one the sidecar accepted: a
+// stage that lands between the next-key ping and the promotion replaces the
+// staged key, so the promotion is refused and nothing changes.
+func TestPromoteSidecarKeyRefusesAKeyRestagedAfterThePing(testContext *testing.T) {
+	fixture := newFixture(testContext)
+	ctx := context.Background()
+	mustCreate(testContext, fixture, remoteInput("edge-1", "https://one.example.com"))
+	enrolledEngine := mustConfigureSidecar(testContext, fixture, "edge-1", firstSidecarPin)
+	pingedEngine, firstStageError := fixture.repository.StageSidecarKey(ctx, "edge-1")
+	if firstStageError != nil {
+		testContext.Fatalf("stage: %v", firstStageError)
+	}
+	restagedEngine, secondStageError := fixture.repository.StageSidecarKey(ctx, "edge-1")
+	if secondStageError != nil {
+		testContext.Fatalf("restage: %v", secondStageError)
+	}
+
+	_, promoteError := fixture.repository.PromoteSidecarKey(ctx, "edge-1", pingedEngine.Sidecar.NextKeyID)
+
+	if !errors.Is(promoteError, ErrNextSidecarKeyChanged) {
+		testContext.Fatalf("expected ErrNextSidecarKeyChanged, got %v", promoteError)
+	}
+	unchangedEngine, getError := fixture.repository.Get(ctx, "edge-1")
+	if getError != nil {
+		testContext.Fatalf("get: %v", getError)
+	}
+	if unchangedEngine.Sidecar.KeyID != enrolledEngine.Sidecar.KeyID || unchangedEngine.Sidecar.NextKeyID != restagedEngine.Sidecar.NextKeyID {
+		testContext.Errorf("a refused promotion must leave both keys in place, got %+v", unchangedEngine.Sidecar)
 	}
 }
