@@ -30,6 +30,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/config', labelKey: 'nav.config', icon: 'tune', group: 'infrastructure', requiredRole: 'admin' },
   { path: '/tokens', labelKey: 'nav.tokens', icon: 'key', group: 'administration' },
   { path: '/accounts', labelKey: 'nav.accounts', icon: 'group', group: 'administration', requiredRole: 'admin' },
+  { path: '/audit', labelKey: 'nav.audit', icon: 'history', group: 'administration', requiredRole: 'admin' },
   { path: '/export-import', labelKey: 'nav.exportImport', icon: 'swap_horiz', group: 'administration', requiredRole: 'admin' },
   { path: '/account/security', labelKey: 'nav.accountSecurity', icon: 'lock', group: 'administration' },
   { path: '/bouncers', labelKey: 'nav.bouncers', icon: 'shield', group: 'administration' },

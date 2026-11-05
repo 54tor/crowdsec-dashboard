@@ -19,7 +19,8 @@
     "sync": "Synchro",
     "exportImport": "Export / Import",
     "allowlists": "Listes d'autorisation",
-    "accountSecurity": "Sécurité du compte"
+    "accountSecurity": "Sécurité du compte",
+    "audit": "Journal d'audit"
   },
   "shell": {
     "groups": {
@@ -948,6 +949,29 @@
       "log_type": "Type de journal",
       "remediation_cmpt_ip": "IP du composant de remédiation",
       "appsec_action": "Action AppSec"
+    }
+  },
+  "audit": {
+    "title": "Journal d'audit",
+    "caption": "Événements d'audit, du plus récent au plus ancien",
+    "empty": "Aucun événement ne correspond.",
+    "noAccount": "—",
+    "noTarget": "Non disponible",
+    "noClientIp": "effacée",
+    "columns": {
+      "createdAt": "Date",
+      "account": "Compte",
+      "action": "Action",
+      "target": "Cible",
+      "clientIp": "IP du client"
+    },
+    "filters": {
+      "qHint": "Action, compte ou cible… (3 caractères minimum)",
+      "action": "Action",
+      "actionHint": "Nom exact de l'action, par exemple login_failure",
+      "actionInvalid": "Lettres minuscules et tirets bas uniquement (64 au maximum).",
+      "account": "Compte",
+      "accountInvalid": "Nom de compte invalide."
     }
   }
 }

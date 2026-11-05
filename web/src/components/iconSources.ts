@@ -18,6 +18,7 @@ import favoriteSvg from '@material-symbols/svg-400/outlined/favorite.svg?raw'
 import filterListSvg from '@material-symbols/svg-400/outlined/filter_list.svg?raw'
 import gavelSvg from '@material-symbols/svg-400/outlined/gavel.svg?raw'
 import groupSvg from '@material-symbols/svg-400/outlined/group.svg?raw'
+import historySvg from '@material-symbols/svg-400/outlined/history.svg?raw'
 import inboxSvg from '@material-symbols/svg-400/outlined/inbox.svg?raw'
 import infoSvg from '@material-symbols/svg-400/outlined/info.svg?raw'
 import keySvg from '@material-symbols/svg-400/outlined/key.svg?raw'
@@ -56,6 +57,7 @@ export type IconName =
   | 'filter_list'
   | 'gavel'
   | 'group'
+  | 'history'
   | 'inbox'
   | 'info'
   | 'key'
@@ -94,6 +96,7 @@ export const ICON_SOURCES: Record<IconName, string> = {
   filter_list: filterListSvg,
   gavel: gavelSvg,
   group: groupSvg,
+  history: historySvg,
   inbox: inboxSvg,
   info: infoSvg,
   key: keySvg,

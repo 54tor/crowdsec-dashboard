@@ -10,6 +10,7 @@ import { Placeholder } from '@/pages/Placeholder'
 import { AccountSecurity } from '@/pages/AccountSecurity'
 import { Accounts } from '@/pages/Accounts'
 import { Alerts } from '@/pages/Alerts'
+import { Audit } from '@/pages/Audit'
 import { Allowlists } from '@/pages/Allowlists'
 import { Bouncers } from '@/pages/Bouncers'
 import { Config } from '@/pages/Config'
@@ -39,6 +40,7 @@ const READ_PAGES: Record<string, ReactElement> = {
   '/sync': <Sync />,
   '/tokens': <Tokens />,
   '/accounts': <Accounts />,
+  '/audit': <Audit />,
   '/export-import': <ExportImport />,
   '/account/security': <AccountSecurity />,
 }

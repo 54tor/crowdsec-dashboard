@@ -19,7 +19,8 @@
     "sync": "Sync",
     "exportImport": "Export / Import",
     "allowlists": "Allowlists",
-    "accountSecurity": "Account security"
+    "accountSecurity": "Account security",
+    "audit": "Audit log"
   },
   "shell": {
     "groups": {
@@ -948,6 +949,29 @@
       "log_type": "Log type",
       "remediation_cmpt_ip": "Remediation component IP",
       "appsec_action": "AppSec action"
+    }
+  },
+  "audit": {
+    "title": "Audit log",
+    "caption": "Audit events, newest first",
+    "empty": "No event matches.",
+    "noAccount": "—",
+    "noTarget": "Not available",
+    "noClientIp": "erased",
+    "columns": {
+      "createdAt": "Date",
+      "account": "Account",
+      "action": "Action",
+      "target": "Target",
+      "clientIp": "Client IP"
+    },
+    "filters": {
+      "qHint": "Action, account or target… (3 characters minimum)",
+      "action": "Action",
+      "actionHint": "Exact action name, e.g. login_failure",
+      "actionInvalid": "Use lowercase letters and underscores only (64 at most).",
+      "account": "Account",
+      "accountInvalid": "Invalid account name."
     }
   }
 }

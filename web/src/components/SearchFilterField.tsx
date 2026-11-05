@@ -12,14 +12,15 @@ interface SearchFilterFieldProps {
   value: string
   error: string | null
   onChange: (searchTerm: string) => void
+  hint?: string
 }
 
 const SEARCH_FIELD_ID = 'filter-q'
 
-export function SearchFilterField({ value, error, onChange }: SearchFilterFieldProps) {
+export function SearchFilterField({ value, error, onChange, hint }: SearchFilterFieldProps) {
   const { t } = useTranslation()
   const searchInputReference = useRef<HTMLInputElement>(null)
-  const hint = t('filters.qHint')
+  const displayedHint = hint ?? t('filters.qHint')
 
   function clearSearch() {
     onChange('')
@@ -40,7 +41,7 @@ export function SearchFilterField({ value, error, onChange }: SearchFilterFieldP
           value={value}
           onChange={(changeEvent) => onChange(changeEvent.target.value)}
           aria-invalid={error ? true : undefined}
-          aria-describedby={describedByIds(SEARCH_FIELD_ID, hint, error)}
+          aria-describedby={describedByIds(SEARCH_FIELD_ID, displayedHint, error)}
           className="pr-10 [&::-webkit-search-cancel-button]:appearance-none"
         />
         {value !== '' && (
@@ -49,7 +50,7 @@ export function SearchFilterField({ value, error, onChange }: SearchFilterFieldP
           </Button>
         )}
       </div>
-      <FieldMessages fieldId={SEARCH_FIELD_ID} hint={hint} error={error} />
+      <FieldMessages fieldId={SEARCH_FIELD_ID} hint={displayedHint} error={error} />
     </div>
   )
 }
