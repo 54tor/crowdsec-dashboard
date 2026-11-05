@@ -1,14 +1,11 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -28,7 +25,7 @@ func TestWriteArchiveErrorMapsQueryCancellationToSearchTimeout(testContext *test
 		testContext.Run(caseName, func(subtestContext *testing.T) {
 			recorder := httptest.NewRecorder()
 
-			writeArchiveError(recorder, "list archived alerts", currentCase.archiveError)
+			writeArchiveError(context.Background(), recorder, "list archived alerts", currentCase.archiveError)
 
 			expectError(subtestContext, recorder, http.StatusServiceUnavailable, currentCase.expectedCode)
 		})
@@ -38,14 +35,28 @@ func TestWriteArchiveErrorMapsQueryCancellationToSearchTimeout(testContext *test
 // A client that went away cancels the request context: nothing is written and
 // nothing is logged, since nobody reads the answer.
 func TestWriteArchiveErrorIgnoresAClientCancelledRequest(testContext *testing.T) {
-	var capturedLog bytes.Buffer
-	log.SetOutput(&capturedLog)
-	testContext.Cleanup(func() { log.SetOutput(os.Stderr) })
+	capturedLog := captureLog(testContext)
+	cancelledContext, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
 	recorder := httptest.NewRecorder()
 
-	writeArchiveError(recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled))
+	writeArchiveError(cancelledContext, recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled))
 
 	if recorder.Body.Len() != 0 || capturedLog.Len() != 0 {
 		testContext.Errorf("a cancelled request writes and logs nothing, got body %q log %q", recorder.Body.String(), capturedLog.String())
+	}
+}
+
+// A cancellation that does not come from the client (an internal or pool
+// cancel) is a real failure and must stay visible.
+func TestWriteArchiveErrorReportsACancellationWhileTheClientWaits(testContext *testing.T) {
+	capturedLog := captureLog(testContext)
+	recorder := httptest.NewRecorder()
+
+	writeArchiveError(context.Background(), recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled))
+
+	expectError(testContext, recorder, http.StatusServiceUnavailable, "database_unavailable")
+	if capturedLog.Len() == 0 {
+		testContext.Error("an internal cancellation is logged")
 	}
 }

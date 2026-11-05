@@ -59,7 +59,7 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 	window, liveStatus := handlers.readLiveWindow(requestContext, query)
 	archiveIDsByLiveID, knownError := handlers.archivedLiveDecisionIDs(requestContext, window.Decisions)
 	if knownError != nil {
-		writeArchiveError(responseWriter, "match live decisions with the archive", knownError)
+		writeArchiveError(request.Context(), responseWriter, "match live decisions with the archive", knownError)
 		return
 	}
 	archiveQuery, sinceError := archiveQueryFor(query, time.Now())
@@ -83,7 +83,7 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 	}
 	items, total, mergeError := archive.MergePage(liveDecisionItems(matchingLiveDecisions(window.Decisions, query.Search), archiveIDsByLiveID), readArchivePage, query.Page, query.PerPage)
 	if mergeError != nil {
-		writeArchiveError(responseWriter, "list archived decisions", mergeError)
+		writeArchiveError(request.Context(), responseWriter, "list archived decisions", mergeError)
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, page[decisionItem]{

@@ -41,13 +41,13 @@ func withArchiveWindow(archiveQuery archive.AlertQuery, offset, limit int) archi
 	return archiveQuery
 }
 
-func writeArchiveError(responseWriter http.ResponseWriter, operation string, archiveError error) {
+func writeArchiveError(requestContext context.Context, responseWriter http.ResponseWriter, operation string, archiveError error) {
 	switch {
 	case errors.Is(archiveError, archive.ErrInvalidPagination):
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 	case errors.Is(archiveError, archive.ErrAlertNotFound):
 		writeError(responseWriter, http.StatusNotFound, "not_found")
-	case errors.Is(archiveError, context.Canceled):
+	case errors.Is(archiveError, context.Canceled) && errors.Is(requestContext.Err(), context.Canceled):
 		return
 	case search.IsTimeout(archiveError):
 		log.Printf("%s: %v", operation, archiveError)

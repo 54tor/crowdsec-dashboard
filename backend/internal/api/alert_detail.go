@@ -27,7 +27,7 @@ func (handlers archivedAlertHandlers) detail(responseWriter http.ResponseWriter,
 	}
 	alertDetail, detailError := handlers.archiveReader.AlertDetail(request.Context(), archiveID)
 	if detailError != nil {
-		writeArchiveError(responseWriter, "read archived alert", detailError)
+		writeArchiveError(request.Context(), responseWriter, "read archived alert", detailError)
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, newAlertDetailItem(alertDetail))
@@ -49,7 +49,7 @@ func (handlers archivedAlertHandlers) remove(responseWriter http.ResponseWriter,
 	}
 	deletedAlert, deleteError := handlers.archiveReader.DeleteArchivedAlert(request.Context(), archiveID)
 	if deleteError != nil {
-		writeArchiveError(responseWriter, "delete archived alert", deleteError)
+		writeArchiveError(request.Context(), responseWriter, "delete archived alert", deleteError)
 		return
 	}
 	archiveTarget := archiveAuditTargetPrefix + alertAuditTarget(deletedAlert.Engine, deletedAlert.UpstreamID)

@@ -226,3 +226,20 @@ func TestLiveOnlySearchTimeoutAnswersSearchTimeout(testContext *testing.T) {
 	expectError(testContext, alertRecorder, http.StatusServiceUnavailable, "search_timeout")
 	expectError(testContext, decisionRecorder, http.StatusServiceUnavailable, "search_timeout")
 }
+
+// The real archive query fails with the client's cancellation: the handler
+// answers nothing and logs nothing.
+func TestAlertsListStaysSilentWhenTheClientCancels(testContext *testing.T) {
+	fixture := seedAlertSearchFixture(testContext)
+	capturedLog := captureLog(testContext)
+	alertLists := alertReadHandlers{lister: fixture.alertLister, archiveReader: archive.NewReader(fixture.database)}
+	cancelledContext, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+	recorder := httptest.NewRecorder()
+
+	alertLists.list(recorder, httptest.NewRequest(http.MethodGet, "/api/alerts?q=ssh-bf", nil).WithContext(cancelledContext))
+
+	if recorder.Body.Len() != 0 || capturedLog.Len() != 0 {
+		testContext.Errorf("a cancelled client gets no answer and no log, got body %q log %q", recorder.Body.String(), capturedLog.String())
+	}
+}

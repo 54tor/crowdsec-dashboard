@@ -42,7 +42,7 @@ func (handlers auditReadHandlers) list(responseWriter http.ResponseWriter, reque
 	defer cancelSearch()
 	events, total, totalCapped, listError := handlers.lister.ListEvents(searchRequestContext, eventQuery)
 	if listError != nil {
-		writeArchiveError(responseWriter, "list audit events", listError)
+		writeArchiveError(request.Context(), responseWriter, "list audit events", listError)
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, page[auditEventItem]{
