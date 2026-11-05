@@ -3,6 +3,7 @@ module crowdsec-dashboard
 go 1.26.0
 
 require (
+	aidanwoods.dev/go-paseto v1.6.0
 	code.dny.dev/ssrf v0.3.0
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/cenkalti/backoff/v5 v5.0.3
@@ -27,6 +28,7 @@ require (
 )
 
 require (
+	aidanwoods.dev/go-result v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
