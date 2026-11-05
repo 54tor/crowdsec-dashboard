@@ -142,8 +142,26 @@ func newRealVerifier(testContext *testing.T, signingKey sidecarauth.SigningKey) 
 	})
 }
 
-func (fixture sidecarFixture) client() *Client {
-	return New(Settings{
+func mustNewClient(testContext *testing.T, settings Settings) *Client {
+	testContext.Helper()
+	client, newError := New(settings)
+	if newError != nil {
+		testContext.Fatalf("New: %v", newError)
+	}
+	return client
+}
+
+func mustParsePin(testContext *testing.T, pin string) []byte {
+	testContext.Helper()
+	digest, parseError := ParsePin(pin)
+	if parseError != nil {
+		testContext.Fatalf("ParsePin: %v", parseError)
+	}
+	return digest
+}
+
+func (fixture sidecarFixture) client(testContext *testing.T) *Client {
+	return mustNewClient(testContext, Settings{
 		BaseURL:          fixture.server.URL,
 		PinnedSPKISHA256: fixture.fingerprint,
 		Signer:           fixture.signer,
@@ -167,7 +185,7 @@ func newSignerWithFreshKey(testContext *testing.T) sidecarauth.Signer {
 func startHostileSidecar(testContext *testing.T, handler http.Handler) *Client {
 	testContext.Helper()
 	server, fingerprint := startPinnedTLSServer(testContext, handler)
-	client := New(Settings{
+	client := mustNewClient(testContext, Settings{
 		BaseURL:          server.URL,
 		PinnedSPKISHA256: fingerprint,
 		Signer:           newSignerWithFreshKey(testContext),

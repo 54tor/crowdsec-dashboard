@@ -2,6 +2,7 @@ package sidecarclient
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -25,14 +26,28 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func New(settings Settings) *Client {
+func New(settings Settings) (*Client, error) {
+	if proxyError := refuseTLSProxy(settings.Egress); proxyError != nil {
+		return nil, proxyError
+	}
+	pinnedDigest, pinError := ParsePin(settings.PinnedSPKISHA256)
+	if pinError != nil {
+		return nil, pinError
+	}
 	egressSettings := settings.Egress
-	egressSettings.TLSConfig = pinnedTLSConfig(settings.PinnedSPKISHA256)
+	egressSettings.TLSConfig = pinnedTLSConfig(pinnedDigest)
 	return &Client{
 		baseURL:    settings.BaseURL,
 		signer:     settings.Signer,
 		httpClient: egress.NewClient(egressSettings),
+	}, nil
+}
+
+func refuseTLSProxy(egressSettings egress.Settings) error {
+	if egressSettings.ProxyURL != nil && egressSettings.ProxyURL.Scheme == "https" {
+		return fmt.Errorf("%w: an https proxy is not supported", ErrUnavailable)
 	}
+	return nil
 }
 
 func (client *Client) WithSigner(signer sidecarauth.Signer) *Client {

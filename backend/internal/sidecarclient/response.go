@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 
 	"crowdsec-dashboard/internal/sidecarapi"
@@ -16,11 +17,18 @@ const responseEnvelopeBytes = 1024
 var maxResponseBytes = base64.StdEncoding.EncodedLen(sidecarapi.MaxExecOutputBytes) + responseEnvelopeBytes
 
 func decodeResponse(response *http.Response, destination any) error {
+	if !hasJSONContentType(response) {
+		return ErrInvalidResponse
+	}
+	isRefusal := response.StatusCode >= http.StatusBadRequest && response.StatusCode < 600
+	if response.StatusCode != http.StatusOK && !isRefusal {
+		return ErrInvalidResponse
+	}
 	body, readError := readCappedBody(response.Body)
 	if readError != nil {
 		return readError
 	}
-	if response.StatusCode != http.StatusOK {
+	if isRefusal {
 		return errorOfRefusalBody(body)
 	}
 	if decodeError := decodeStrictly(body, destination); decodeError != nil {
@@ -29,10 +37,15 @@ func decodeResponse(response *http.Response, destination any) error {
 	return nil
 }
 
+func hasJSONContentType(response *http.Response) bool {
+	mediaType, _, parseError := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	return parseError == nil && mediaType == "application/json"
+}
+
 func readCappedBody(responseBody io.Reader) ([]byte, error) {
 	body, readError := io.ReadAll(io.LimitReader(responseBody, int64(maxResponseBytes)+1))
 	if readError != nil {
-		return nil, errorOfTransport(readError)
+		return nil, errorOfTransport(readError, true)
 	}
 	if len(body) > maxResponseBytes {
 		return nil, ErrInvalidResponse

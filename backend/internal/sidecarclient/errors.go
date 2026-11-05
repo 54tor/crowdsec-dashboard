@@ -18,6 +18,7 @@ var (
 	ErrCommandRefused      = errors.New("sidecar refused the command")
 	ErrBusy                = errors.New("sidecar busy")
 	ErrInvalidResponse     = errors.New("sidecar returned an invalid response")
+	ErrInvalidPin          = errors.New("invalid sidecar certificate pin")
 )
 
 var sentinelOfCode = map[string]error{
@@ -57,12 +58,14 @@ func errorOfCode(code string) error {
 	return fmt.Errorf("%w (sidecar code %s)", sentinel, code)
 }
 
-func errorOfTransport(transportError error) error {
+func errorOfTransport(transportError error, requestWritten bool) error {
 	switch {
 	case errors.Is(transportError, ErrFingerprintMismatch):
 		return ErrFingerprintMismatch
-	case errors.Is(transportError, context.DeadlineExceeded):
+	case errors.Is(transportError, context.DeadlineExceeded) && requestWritten:
 		return fmt.Errorf("%w: %w", cscli.ErrTimeout, context.DeadlineExceeded)
+	case errors.Is(transportError, context.DeadlineExceeded):
+		return fmt.Errorf("%w: %w", ErrUnavailable, context.DeadlineExceeded)
 	case errors.Is(transportError, context.Canceled):
 		return fmt.Errorf("%w: %w", ErrUnavailable, context.Canceled)
 	default:

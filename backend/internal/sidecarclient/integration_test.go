@@ -19,7 +19,7 @@ import (
 
 func TestRemoteExecutorRunsOnTheSidecar(testContext *testing.T) {
 	fixture := startSidecar(testContext, []byte("v1.7.0"), passThrough)
-	var remoteExecutor cscli.Executor = fixture.client()
+	var remoteExecutor cscli.Executor = fixture.client(testContext)
 
 	obtainedOutput, executeError := remoteExecutor.Execute(context.Background(), "version", map[string]string{})
 
@@ -37,7 +37,7 @@ func TestRemoteExecutorRunsOnTheSidecar(testContext *testing.T) {
 
 func TestRemoteExecutorRefusesAnotherCertificate(testContext *testing.T) {
 	fixture := startSidecar(testContext, []byte("v1.7.0"), passThrough)
-	client := New(Settings{
+	client := mustNewClient(testContext, Settings{
 		BaseURL:          fixture.server.URL,
 		PinnedSPKISHA256: strings.Repeat("0", 64),
 		Signer:           fixture.signer,
@@ -63,27 +63,22 @@ func TestRemoteExecutorRefusesAnotherCertificate(testContext *testing.T) {
 	}
 }
 
-func TestRemoteExecutorRefusesAMalformedPin(testContext *testing.T) {
+func TestNewRefusesAMalformedPin(testContext *testing.T) {
 	fixture := startSidecar(testContext, []byte("v1.7.0"), passThrough)
 	malformedPins := []string{"", "not-hex", fixture.fingerprint[:62], fixture.fingerprint + "00"}
 
 	for _, malformedPin := range malformedPins {
-		client := New(Settings{BaseURL: fixture.server.URL, PinnedSPKISHA256: malformedPin, Signer: fixture.signer, Egress: loopbackEgress()})
+		client, newError := New(Settings{BaseURL: fixture.server.URL, PinnedSPKISHA256: malformedPin, Signer: fixture.signer, Egress: loopbackEgress()})
 
-		_, executeError := client.Execute(context.Background(), "version", map[string]string{})
-
-		if !errors.Is(executeError, ErrFingerprintMismatch) {
-			testContext.Errorf("pin %q: expected ErrFingerprintMismatch, got %v", malformedPin, executeError)
+		if !errors.Is(newError, ErrInvalidPin) || client != nil {
+			testContext.Errorf("pin %q: expected ErrInvalidPin and no client, got %v and %v", malformedPin, newError, client)
 		}
-	}
-	if authorizedRequests := fixture.authorizedRequests.Load(); authorizedRequests != 0 {
-		testContext.Errorf("expected no request carrying a token to reach the server, got %d", authorizedRequests)
 	}
 }
 
 func TestRemoteExecutorValidatesBeforeSending(testContext *testing.T) {
 	fixture := startSidecar(testContext, []byte("v1.7.0"), passThrough)
-	client := fixture.client()
+	client := fixture.client(testContext)
 
 	_, invalidFieldError := client.Execute(context.Background(), "collections_install", map[string]string{"name": "--help"})
 	_, unknownCommandError := client.Execute(context.Background(), "--help", map[string]string{})
@@ -103,7 +98,7 @@ func TestRemoteExecutorAcceptsTheLargestSidecarOutput(testContext *testing.T) {
 	largestOutput := bytes.Repeat([]byte("a"), sidecarapi.MaxExecOutputBytes)
 	fixture := startSidecar(testContext, largestOutput, passThrough)
 
-	obtainedOutput, executeError := fixture.client().Execute(context.Background(), "version", map[string]string{})
+	obtainedOutput, executeError := fixture.client(testContext).Execute(context.Background(), "version", map[string]string{})
 
 	if executeError != nil || !bytes.Equal(obtainedOutput, largestOutput) {
 		testContext.Fatalf("expected the %d-byte output, got %d bytes and %v", len(largestOutput), len(obtainedOutput), executeError)
@@ -135,7 +130,7 @@ func (captured *capturedRequest) interceptor(next http.Handler) http.Handler {
 func TestRemoteExecutorNeverReusesATokenAndTheSidecarRefusesAReplay(testContext *testing.T) {
 	captured := &capturedRequest{}
 	fixture := startSidecar(testContext, []byte("v1.7.0"), captured.interceptor)
-	client := fixture.client()
+	client := fixture.client(testContext)
 
 	for callNumber := 1; callNumber <= 2; callNumber++ {
 		if _, executeError := client.Execute(context.Background(), "version", map[string]string{}); executeError != nil {
@@ -157,7 +152,7 @@ func TestRemoteExecutorNeverReusesATokenAndTheSidecarRefusesAReplay(testContext 
 func replayCapturedRequest(testContext *testing.T, fixture sidecarFixture, captured *capturedRequest) string {
 	testContext.Helper()
 	egressSettings := loopbackEgress()
-	egressSettings.TLSConfig = pinnedTLSConfig(fixture.fingerprint)
+	egressSettings.TLSConfig = pinnedTLSConfig(mustParsePin(testContext, fixture.fingerprint))
 	replayClient := egress.NewClient(egressSettings)
 	defer replayClient.CloseIdleConnections()
 	replayRequest, requestError := http.NewRequest(http.MethodPost, fixture.server.URL+sidecarapi.PathExec, bytes.NewReader(captured.body))
@@ -194,7 +189,7 @@ func tamperingProxy(next http.Handler) http.Handler {
 func TestRemoteExecutorSignatureBindsTheBody(testContext *testing.T) {
 	fixture := startSidecar(testContext, []byte("v1.7.0"), tamperingProxy)
 
-	obtainedOutput, executeError := fixture.client().Execute(context.Background(), "version", map[string]string{})
+	obtainedOutput, executeError := fixture.client(testContext).Execute(context.Background(), "version", map[string]string{})
 
 	if !errors.Is(executeError, ErrAuthRefused) || obtainedOutput != nil {
 		testContext.Errorf("expected ErrAuthRefused and no output, got %v and %q", executeError, obtainedOutput)
@@ -206,7 +201,7 @@ func TestRemoteExecutorSignatureBindsTheBody(testContext *testing.T) {
 
 func TestRemotePingUsesTheTrustedKeyOnly(testContext *testing.T) {
 	fixture := startSidecar(testContext, nil, passThrough)
-	client := fixture.client()
+	client := fixture.client(testContext)
 
 	trustedPingError := client.Ping(context.Background())
 	untrustedPingError := client.WithSigner(newSignerWithFreshKey(testContext)).Ping(context.Background())

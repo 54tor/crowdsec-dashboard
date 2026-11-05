@@ -5,19 +5,29 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
+	"sync/atomic"
 
 	"crowdsec-dashboard/internal/sidecarauth"
 )
 
 func (client *Client) exchange(ctx context.Context, path string, body []byte, destination any) error {
-	request, requestError := client.signedRequest(ctx, path, body)
+	requestWritten := &atomic.Bool{}
+	tracedContext := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				requestWritten.Store(true)
+			}
+		},
+	})
+	request, requestError := client.signedRequest(tracedContext, path, body)
 	if requestError != nil {
 		return requestError
 	}
 	response, sendError := client.httpClient.Do(request)
 	if sendError != nil {
-		return errorOfTransport(sendError)
+		return errorOfTransport(sendError, requestWritten.Load())
 	}
 	defer response.Body.Close()
 	return decodeResponse(response, destination)

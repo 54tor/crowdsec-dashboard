@@ -4,14 +4,9 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/tls"
-	"encoding/hex"
 )
 
-func pinnedTLSConfig(pinnedSPKISHA256 string) *tls.Config {
-	pinnedDigest, decodeError := hex.DecodeString(pinnedSPKISHA256)
-	if decodeError != nil || len(pinnedDigest) != sha256.Size {
-		pinnedDigest = nil
-	}
+func pinnedTLSConfig(pinnedDigest []byte) *tls.Config {
 	return &tls.Config{
 		MinVersion:         tls.VersionTLS13,
 		InsecureSkipVerify: true,

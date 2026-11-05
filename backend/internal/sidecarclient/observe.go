@@ -23,6 +23,9 @@ func ObserveFingerprint(ctx context.Context, baseURL string, egressSettings egre
 	if endpointError != nil {
 		return "", endpointError
 	}
+	if proxyError := refuseTLSProxy(egressSettings); proxyError != nil {
+		return "", proxyError
+	}
 	egressSettings.TLSConfig = observingTLSConfig()
 	httpClient := egress.NewClient(egressSettings)
 	defer httpClient.CloseIdleConnections()
@@ -35,7 +38,7 @@ func ObserveFingerprint(ctx context.Context, baseURL string, egressSettings egre
 	}
 	response, sendError := httpClient.Do(request)
 	if sendError != nil {
-		return "", errorOfTransport(sendError)
+		return "", errorOfTransport(sendError, false)
 	}
 	defer response.Body.Close()
 	return fingerprintOfHealthResponse(response)
@@ -57,7 +60,7 @@ func observingTLSConfig() *tls.Config {
 func fingerprintOfHealthResponse(response *http.Response) (string, error) {
 	body, readError := io.ReadAll(io.LimitReader(response.Body, maxHealthReadBytes))
 	if readError != nil {
-		return "", errorOfTransport(readError)
+		return "", errorOfTransport(readError, false)
 	}
 	isHealthy := response.StatusCode == http.StatusOK && string(body) == healthBody
 	if !isHealthy || response.TLS == nil {

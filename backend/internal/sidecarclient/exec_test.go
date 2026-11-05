@@ -101,14 +101,12 @@ func TestRemoteExecutorMapsEverySidecarCodeToItsSentinel(testContext *testing.T)
 			if !errors.Is(executeError, codeCase.expectedSentinel) || obtainedOutput != nil {
 				subtestContext.Fatalf("expected %v and no output, got %v and %q", codeCase.expectedSentinel, executeError, obtainedOutput)
 			}
-			// Only the user-input refusal may become a user-facing 400:
-			// policy refusals must never look like an invalid field.
-			isUserInputRefusal := codeCase.code == sidecarapi.CodeInvalidField
-			if !isUserInputRefusal && errors.Is(executeError, cscli.ErrInvalidField) {
-				subtestContext.Errorf("code %s must not map to cscli.ErrInvalidField", codeCase.code)
-			}
-			if !isUserInputRefusal && errors.Is(executeError, cscli.ErrCscliFailed) && codeCase.code != sidecarapi.CodeCscliFailed {
-				subtestContext.Errorf("code %s must not map to cscli.ErrCscliFailed", codeCase.code)
+			// Only the codes that expect these sentinels may carry them: a
+			// policy refusal must never look like a user-facing invalid field.
+			for _, guardedSentinel := range []error{cscli.ErrInvalidField, cscli.ErrCscliFailed} {
+				if codeCase.expectedSentinel != guardedSentinel && errors.Is(executeError, guardedSentinel) {
+					subtestContext.Errorf("code %s must not map to %v", codeCase.code, guardedSentinel)
+				}
 			}
 		})
 	}
@@ -203,7 +201,7 @@ func TestRemoteExecutorRefusesABaseURLThatIsNotAnHTTPSOrigin(testContext *testin
 	invalidBaseURLs := []string{"http://127.0.0.1:8443", "https://127.0.0.1:8443/prefix", "https://127.0.0.1:8443/#fragment", ""}
 
 	for _, invalidBaseURL := range invalidBaseURLs {
-		client := New(Settings{BaseURL: invalidBaseURL, Signer: newSignerWithFreshKey(testContext), Egress: loopbackEgress()})
+		client := mustNewClient(testContext, Settings{BaseURL: invalidBaseURL, PinnedSPKISHA256: strings.Repeat("0", 64), Signer: newSignerWithFreshKey(testContext), Egress: loopbackEgress()})
 
 		_, executeError := executeVersion(client)
 

@@ -16,7 +16,7 @@ import (
 func TestPinIsCheckedOnResumedSessions(testContext *testing.T) {
 	fixture := startSidecar(testContext, nil, passThrough)
 	pinCheckCount := &atomic.Int64{}
-	tlsConfig := pinnedTLSConfig(fixture.fingerprint)
+	tlsConfig := pinnedTLSConfig(mustParsePin(testContext, fixture.fingerprint))
 	pinCheck := tlsConfig.VerifyConnection
 	tlsConfig.VerifyConnection = func(connectionState tls.ConnectionState) error {
 		pinCheckCount.Add(1)
@@ -46,7 +46,7 @@ func TestPinIsCheckedOnResumedSessions(testContext *testing.T) {
 }
 
 func TestPinnedTLSConfigRequiresTLS13(testContext *testing.T) {
-	if minimumVersion := pinnedTLSConfig("").MinVersion; minimumVersion != tls.VersionTLS13 {
+	if minimumVersion := pinnedTLSConfig(nil).MinVersion; minimumVersion != tls.VersionTLS13 {
 		testContext.Errorf("expected TLS 1.3 minimum, got %x", minimumVersion)
 	}
 }
