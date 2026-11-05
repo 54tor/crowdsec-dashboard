@@ -17,6 +17,7 @@ const (
 	roleAdmin          = "admin"
 	timingTolerance    = 3.0
 	firstCallTolerance = 1.6
+	timingSampleCount  = 7
 )
 
 func newRepositoryWithAccount(testContext *testing.T) *Repository {
@@ -32,18 +33,31 @@ func TestFirstUnknownAccountAuthenticateCostsLikeAWrongPassword(testContext *tes
 	repository := newRepositoryWithAccount(testContext)
 	measureAuthenticate(testContext, repository, validAccountName)
 
-	wrongPasswordDuration := measureAuthenticate(testContext, repository, validAccountName)
-	unknownAccountDuration := measureAuthenticate(testContext, repository, "nobody")
+	wrongPasswordDuration := fastestAuthenticate(testContext, repository, validAccountName)
+	firstUnknownAccountDuration := measureAuthenticate(testContext, repository, "nobody")
+	unknownAccountDuration := fastestAuthenticate(testContext, repository, "nobody")
 
 	ratio := float64(unknownAccountDuration) / float64(wrongPasswordDuration)
 	if ratio < 1/timingTolerance || ratio > timingTolerance {
 		testContext.Errorf("unknown account took %v, wrong password %v", unknownAccountDuration, wrongPasswordDuration)
 	}
-	secondUnknownAccountDuration := measureAuthenticate(testContext, repository, "nobody")
-	firstCallOverhead := float64(unknownAccountDuration) / float64(secondUnknownAccountDuration)
+	firstCallOverhead := float64(firstUnknownAccountDuration) / float64(unknownAccountDuration)
 	if firstCallOverhead > firstCallTolerance {
-		testContext.Errorf("first unknown call took %v, second %v", unknownAccountDuration, secondUnknownAccountDuration)
+		testContext.Errorf("first unknown call took %v, next ones %v", firstUnknownAccountDuration, unknownAccountDuration)
 	}
+}
+
+// fastestAuthenticate retourne la mesure la plus courte : le minimum élimine le bruit CPU des runners CI partagés.
+func fastestAuthenticate(testContext *testing.T, repository *Repository, accountName string) time.Duration {
+	testContext.Helper()
+	fastestDuration := measureAuthenticate(testContext, repository, accountName)
+	for measureIndex := 1; measureIndex < timingSampleCount; measureIndex++ {
+		currentDuration := measureAuthenticate(testContext, repository, accountName)
+		if currentDuration < fastestDuration {
+			fastestDuration = currentDuration
+		}
+	}
+	return fastestDuration
 }
 
 func measureAuthenticate(testContext *testing.T, repository *Repository, accountName string) time.Duration {
