@@ -57,6 +57,11 @@ not cover the database code. `test-db.sh` uses its own compose project `csdash-t
 Keep `-p 4` on shared machines. Backend tests use fake services and the frozen CrowdSec outputs under
 `deploy/dev/fixtures`; web tests stub `fetch` (`web/src/test/fetchStub.ts`) and render whole pages.
 
+The search subselects of the archive and audit readers (`= ANY(ARRAY(SELECT ...))` in
+`internal/archive/reader_search.go` and `internal/audit/reader_search.go`) must never carry a
+`LIMIT`: it would drop matches silently and make `total` wrong. Their cost is bounded by the 5 s
+search deadline and the limit of 4 concurrent searches instead.
+
 ### Backup and restore check
 
 `deploy/dev/backup-check.sh` runs the real `deploy/backup.sh` and `deploy/restore.sh` against the
@@ -65,7 +70,9 @@ disposable PostgreSQL of `test-db.sh` (it starts it if needed). It creates its o
 restores it into the other database and compares row counts, then checks that every refusal (empty,
 truncated, header-only or corrupt dump, wrong database name, wrong confirmation, a name over 51
 characters, a leftover temporary database) and a restore that fails midway leave both databases intact,
-and that the restored data opens with the key that sealed it and not with another one.
+and that the restored data opens with the key that sealed it and not with another one. It also
+checks that `pg_trgm` is restored in `public`, that the 12 trigram indexes exist and that an archive
+search answers the seeded count.
 It prints `backup-check: OK` and exits 0 on success.
 
 ```

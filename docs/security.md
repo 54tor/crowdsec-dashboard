@@ -428,6 +428,14 @@ a stable code only, never command output.
 Manual bans go to the LAPI, not through cscli, and refuse ranges wider than /8 (IPv4) or /32 (IPv6),
 so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 
+## SQL parameters
+
+Queries go through bun, which inlines the parameters into the SQL text on the client side instead of
+sending them separately. String literals are quoted with doubled single quotes and backslashes are
+left as they are, which is safe only while `standard_conforming_strings` is `on` (the PostgreSQL
+default since 9.1). Never turn it off, neither in the server configuration nor through
+`DATABASE_URL` (for example `options=-c standard_conforming_strings=off`).
+
 ## Destructive actions and one-time secrets
 
 - Deleting an alert, decision, bouncer, machine, hub item, allowlist or allowlist entry requires a JSON body

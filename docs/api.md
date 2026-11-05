@@ -173,8 +173,9 @@ deleted, `target` and `client_ip` null when not stored; `target` is always null 
 events (it holds what was typed in the account field). Order: newest first, ties by descending `id`.
 Values are returned as stored: render them as text.
 
-Errors: 400 `invalid_request` (any parameter outside the rules above), 503 `search_timeout` (the
-search exceeded its deadline), 503 `database_unavailable`.
+Errors: 400 `invalid_request` (any parameter outside the rules above), 429 `search_busy` (too many
+searches at once, see [Read](#read)), 503 `search_timeout` (the search exceeded its deadline), 503
+`database_unavailable`.
 
 ## Read
 
@@ -210,7 +211,11 @@ ever holds active decisions). Lists never carry alert `events`.
   machine finds archived decisions, never live ones (the archived copy of a live decision stays
   excluded). The live window is read from the LAPI without `q`, then filtered by the same rules:
   `total` counts the matches only, `window_size` and `may_be_truncated` keep the unfiltered window
-  values. A search that runs past 5 s answers 503 `search_timeout`.
+  values. A search that runs past 5 s answers 503 `search_timeout`. At most 4 requests carrying a
+  valid `q` run at once, shared by `/api/alerts`, `/api/decisions` and `/api/audit`: another one
+  answers 429 `search_busy` with `Retry-After: 1` at once, without waiting. Requests without `q` are
+  never limited. Without `q`, a database timeout answers 503 `database_unavailable`, never
+  `search_timeout`.
 - `total` is the live window size (with `q`, its matches) plus the matching archive rows, counted up to 10 000;
   `total_capped:true` means there are more (the client shows the total with a "+"). A page whose archive offset would pass
   10 000 answers 400 `invalid_request`.
@@ -241,6 +246,17 @@ ever holds active decisions). Lists never carry alert `events`.
 - Live decisions carry no machine, so a `q` term matches the machine of archived decisions only. A
   live decision whose archived copy matches only through the parent alert's machine is not listed
   by such a term: the live part does not match it and its archived copy stays excluded.
+- On `/api/decisions`, the scenario and machine branches read the matching alert ids into an array
+  (`decision_alert_id = ANY(ARRAY(SELECT alert_id ...))`). A term common to most alerts (a scenario
+  prefix such as `crowdsec`) on a large archive materialises nearly every alert id, and the
+  subselect runs twice per request (count, then page): such a search can reach the 5 s deadline and
+  answer 503 `search_timeout`. Narrow it with another filter (`since`, `engine`, `scenario`).
+- A term without three consecutive letters or digits (`...`, `a b`, `@@@`) yields no trigram, so
+  each trigram index is read whole: the cost grows with the archive and is bounded only by the 5 s
+  deadline.
+- The archive matches with PostgreSQL `ILIKE` and the live window with a Go helper that lowercases
+  Unicode. On a database whose collation is `C`, `ILIKE` folds only ASCII letters, so the archive and
+  live parts can disagree on a non-ASCII case variant (`É` against `é`).
 
 ### Alert origin (log or AppSec)
 

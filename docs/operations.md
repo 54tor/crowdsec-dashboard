@@ -36,6 +36,8 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `unauthenticated` | 401 | No or expired session. Sign in again. |
 | `invalid_credentials` | 401 | Wrong account name or password (the two are not distinguished). |
 | `database_unavailable` | 503 | PostgreSQL unreachable or failing. Check the `postgres` service and `DATABASE_URL`; the interface keeps the session and recovers when the database is back. |
+| `search_timeout` | 503 | A search (`q` on alerts, decisions or the audit log) ran past its 5 s deadline. Narrow it with another filter or a longer, more specific term ([api.md](api.md#known-limits)). |
+| `search_busy` | 429 | Four searches already run on the server; the response carries `Retry-After: 1`. Retry; requests without a search term are never limited. |
 | `invalid_enrollment_token` | 403 | Wrong enrolment token. Use the one of the latest start ([First start and enrolment](#first-start-and-enrolment)). |
 | `invalid_account_name`, `invalid_password_length` | 400 | Enrolment: name not matching `^[a-z0-9][a-z0-9._-]{0,63}$`, or password outside 12 to 128 characters. |
 | `pending_login_expired` | 401 | The pending login (cookie `pending_login`) is missing, older than 5 minutes, used up (5 attempts, success or lock), already consumed, from another client address, or lost in a restart. Sign in again from the password. |
@@ -154,16 +156,25 @@ after the database is healthy.
   later releases add their migrations after it. A database created by a development build older than
   0.1.0 carries the former migration history and is not upgraded: recreate it (drop the database or
   its volume, then start the dashboard on an empty one).
-- The schema needs the `pg_trgm` extension, bundled with PostgreSQL 13 and later (the `postgres`
-  image included); its trigram indexes back the search. The first migration creates it, which needs a
-  role allowed to create it: since PostgreSQL 13 it is a trusted extension, so the database owner can.
+- The schema needs the `pg_trgm` extension, one of the contrib modules shipped with PostgreSQL for
+  many releases (the `postgres` image included); its trigram indexes back the search. The first
+  migration creates it, which needs a role allowed to create it: since PostgreSQL 13 it is a trusted
+  extension, so the database owner can.
   If the creation fails, startup stops with `pg_trgm extension unavailable`. When the role lacks the
   privilege, run `CREATE EXTENSION pg_trgm;` once in the dashboard database as an owner, then restart.
   When the extension is not available (its control file is missing, as on a server built without the
   contrib modules), running it as an owner is not enough: install the PostgreSQL contrib package
-  first, then run `CREATE EXTENSION pg_trgm;` and restart. A database
+  first, then run `CREATE EXTENSION pg_trgm;` and restart. When `pg_trgm` already exists in a schema
+  outside the `search_path` (some managed hosts install extensions in an `extensions` schema), the
+  `gin_trgm_ops` operator class does not resolve and startup stops with `pg_trgm extension
+  unavailable` and `operator class "gin_trgm_ops" does not exist`: move the extension with
+  `ALTER EXTENSION pg_trgm SET SCHEMA public;` as an owner (or add its schema to the role's
+  `search_path`), then restart. A database
   created before search was added must be recreated, since the single initial migration was edited in
   place.
+- Search cost: on a large archive a common term can reach the 5 s search deadline, and the planner
+  may prefer a sequential scan over the trigram indexes when the archive is huge and the engines few;
+  details in [api.md](api.md#known-limits).
 - If PostgreSQL goes down while the dashboard runs, `/api/healthz` answers 503 and login and
   authenticated routes answer 503 `database_unavailable`. Nobody is signed out: sessions are valid
   again once the database is back.
@@ -775,7 +786,9 @@ database to its name. A failure before the swap leaves the original database unt
 temporary one and restarts the dashboard if it was running. The dashboard is restarted after a
 success too; the next start applies any migration newer than the dump. A failure during the swap
 itself leaves the dashboard stopped and prints the state of both databases: do not restart anything
-before reading it. Objects of the restored database belong to `POSTGRES_USER`.
+before reading it. Objects of the restored database belong to `POSTGRES_USER`. The target server
+needs the same contrib modules as the source (`pg_trgm`): without them `pg_restore` fails on
+`CREATE EXTENSION` and the original database is kept untouched.
 
 After a restore, the dashboard needs the key that sealed the data: a database from another
 installation or from before a rotation needs the matching key (as current or retired key).
