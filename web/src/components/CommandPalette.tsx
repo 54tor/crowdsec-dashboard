@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/useAuth'
 import { PaletteResultGroups } from '@/components/PaletteResultGroups'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { isRecordSearchTermUsable, usePaletteResults, type PaletteResults } from '@/hooks/usePaletteResults'
+import type { SearchNavigationState } from '@/lib/searchNavigation'
 
 interface CommandPaletteProps {
   isOpen: boolean
@@ -60,7 +61,8 @@ export function CommandPalette({ isOpen, onOpenChange, returnFocusElement }: Com
 
   function navigateAndClose(path: string) {
     onOpenChange(false)
-    void navigate(path)
+    const navigationState: SearchNavigationState = { searchNonce: Date.now() }
+    void navigate(path, { state: navigationState })
   }
 
   function returnFocusToOpener(closeEvent: Event) {

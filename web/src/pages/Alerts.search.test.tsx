@@ -125,6 +125,43 @@ describe('alerts search', () => {
     expect(tableUrlsAfterNavigation).toEqual(['/api/alerts?page=1&per_page=20&q=xyz'])
   })
 
+  // The skip link (href="#main-content") changes only the fragment: in the browser that is a
+  // new history entry without state. The typed drafts must survive it.
+  it('keepsTheTypedFiltersOnAHashOnlyNavigation', async () => {
+    stubFetch({
+      ...unfilteredAlertsRoutes(),
+      'GET /api/alerts?page=1&per_page=20&q=abc': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/abc-row' })]) },
+    })
+    const { navigateTo } = renderApp('/alerts?q=abc')
+    expect(await screen.findByText('crowdsecurity/abc-row')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText(SEARCH_LABEL), 'def')
+    await userEvent.type(screen.getByLabelText(en.filters.scenario), 'crowdsecurity/typed')
+
+    await navigateTo('/alerts?q=abc#main-content')
+
+    expect(screen.getByLabelText(SEARCH_LABEL)).toHaveValue('abcdef')
+    expect(screen.getByLabelText(en.filters.scenario)).toHaveValue('crowdsecurity/typed')
+  })
+
+  it('reappliesThePreviousSearchOnBrowserBack', async () => {
+    stubFetch({
+      ...unfilteredAlertsRoutes(),
+      'GET /api/alerts?page=1&per_page=20&q=abc': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/abc-row' })]) },
+      'GET /api/alerts?page=1&per_page=20&q=xyz': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/xyz-row' })]) },
+    })
+    const { navigateTo, navigateBack } = renderApp('/alerts?q=abc')
+    expect(await screen.findByText('crowdsecurity/abc-row')).toBeInTheDocument()
+    await navigateTo('/alerts?q=xyz')
+    expect(await screen.findByText('crowdsecurity/xyz-row')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText(en.filters.scenario), 'crowdsecurity/typed')
+
+    await navigateBack()
+
+    expect(screen.getByLabelText(SEARCH_LABEL)).toHaveValue('abc')
+    expect(screen.getByLabelText(en.filters.scenario)).toHaveValue('')
+    expect(await screen.findByText('crowdsecurity/abc-row')).toBeInTheDocument()
+  })
+
   it('changingAFilterOnALaterPageRequestsOnlyTheFirstFilteredPage', async () => {
     const fetchMock = stubFetch({
       ...unfilteredAlertsRoutes(),

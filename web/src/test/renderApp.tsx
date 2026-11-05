@@ -51,5 +51,11 @@ export function renderApp(initialPath: string) {
       await navigatorHolder.navigate?.(path)
     })
   }
-  return { ...renderResult, queryClient, visitedPaths, visitedLocations, navigateTo, countSessionExpiredNotifications }
+  // Same as the browser back button: the previous history entry comes back with its own state.
+  async function navigateBack(): Promise<void> {
+    await act(async () => {
+      await navigatorHolder.navigate?.(-1)
+    })
+  }
+  return { ...renderResult, queryClient, visitedPaths, visitedLocations, navigateTo, navigateBack, countSessionExpiredNotifications }
 }

@@ -4,6 +4,7 @@ import type { ListFilters } from '@/api/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useKnownEngineNames } from '@/hooks/useKnownEngineNames'
 import { EMPTY_FILTERS } from '@/lib/emptyFilters'
+import { searchNonceOf } from '@/lib/searchNavigation'
 import { validateFilters } from '@/lib/filterValidation'
 
 export const FILTER_DEBOUNCE_MILLISECONDS = 300
@@ -19,13 +20,17 @@ function isEngineKnown(engineName: string, knownEngineNames: string[] | undefine
 
 export function useListControls() {
   const [searchParams] = useSearchParams()
-  const { key: currentLocationKey } = useLocation()
+  const location = useLocation()
+  const currentUrl = location.pathname + location.search
+  const currentSearchNonce = searchNonceOf(location.state)
   const knownEngineNames = useKnownEngineNames()
   const [draftFilters, setDraftFilters] = useState<ListFilters>(() => filtersFromUrl(searchParams))
-  const [appliedLocationKey, setAppliedLocationKey] = useState(currentLocationKey)
+  const [appliedNavigation, setAppliedNavigation] = useState({ url: currentUrl, searchNonce: currentSearchNonce })
 
-  if (appliedLocationKey !== currentLocationKey) {
-    setAppliedLocationKey(currentLocationKey)
+  const hasNewSearchNonce = currentSearchNonce !== undefined && currentSearchNonce !== appliedNavigation.searchNonce
+  const isNewSearchNavigation = appliedNavigation.url !== currentUrl || hasNewSearchNonce
+  if (isNewSearchNavigation) {
+    setAppliedNavigation({ url: currentUrl, searchNonce: currentSearchNonce })
     setDraftFilters(filtersFromUrl(searchParams))
   }
   const isDraftEngineUnknown = knownEngineNames !== undefined && !isEngineKnown(draftFilters.engine, knownEngineNames)

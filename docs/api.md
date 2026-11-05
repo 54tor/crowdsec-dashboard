@@ -256,7 +256,7 @@ ever holds active decisions). Lists never carry alert `events`.
   each trigram index is read whole: the cost grows with the archive and is bounded only by the 5 s
   deadline.
 - The archive matches with PostgreSQL `ILIKE` and the live window with a Go helper that lowercases
-  Unicode. On a database whose collation is `C`, `ILIKE` folds only ASCII letters, so the archive and
+  Unicode. `ILIKE` case folding follows the database's `LC_CTYPE`: when it is `C`, `ILIKE` folds only ASCII letters, so the archive and
   live parts can disagree on a non-ASCII case variant (`É` against `é`).
 
 ### Alert origin (log or AppSec)
