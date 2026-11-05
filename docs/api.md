@@ -280,11 +280,26 @@ applies but the items carry no `source_kind` field.
 | GET | `/api/health` | authenticated | `{"version", "database":"ok"\|"unavailable", "schema_version":<number or null>, "collector":[{engine_name,last_success_at,lag_seconds,errors_total,stale,history_incomplete}], "bouncers":[{name,type,version,ip_address,last_pull,revoked,auth_type}], "machines":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}], "degraded":[...]}`; `self` is true only for the machine whose id equals `LAPI_MACHINE_ID` (always present, false otherwise); `degraded` lists sources that failed (`version`, `bouncers`, `machines`); `collector` has one entry per configured engine, `stale` being true after three `COLLECTOR_INTERVAL` without success or when none happened yet (`last_success_at` and `lag_seconds` null) ([operations.md](operations.md#health-and-metrics)) | none: failures are reported in `degraded` |
 | GET | `/api/prometheus/metrics` | authenticated | Prometheus text format: `csdash_collector_last_success_timestamp_seconds`, `csdash_collector_errors_total`, `csdash_collector_stale`, `csdash_collector_history_incomplete`, labelled by `engine` | 401 `unauthenticated` or `invalid_token`; 403 `token_denied` (token of a locked account or from an address refused by its allowlist) |
 | GET | `/api/metrics` | authenticated | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
-| GET | `/api/config/files` | admin | `{"files":["acquis.yaml", ...]}` | 500 `config_unavailable` |
-| GET | `/api/config/files/{name...}` | admin | `{"name","content"}` with secrets redacted | 403 `forbidden`, 404 `not_found`, 413 `file_too_large`, 500 |
+| GET | `/api/config/files` | admin | `{"files":["acquis.yaml", ...]}`; optional `engine` (see [Remote configuration files](#remote-configuration-files)) | 500 `config_unavailable`; engine and sidecar errors below |
+| GET | `/api/config/files/{name...}` | admin | `{"name","content"}` with secrets redacted; optional `engine` | 403 `forbidden`, 404 `not_found`, 413 `file_too_large`, 500 `config_unavailable`; engine and sidecar errors below |
 | GET | `/api/hub` | authenticated | array of `{type,name,status,local_version,description}` (max 1000) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 | GET | `/api/bouncers` | authenticated | `{"items":[{name,type,version,ip_address,last_pull,revoked,auth_type}]}` (`cscli bouncers list -o json`) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 | GET | `/api/machines` | authenticated | `{"items":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}]}` (`cscli machines list -o json`); `self` marks the machine the dashboard uses on that engine (`LAPI_MACHINE_ID` locally, the engine's `machine_id` on a remote engine) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
+
+### Remote configuration files
+
+`GET /api/config/files` and `GET /api/config/files/{name...}` take the optional `engine` query
+parameter with the same rules as the [engine target](#engine-target) (absent or `engine=local`:
+the local configuration directory, unchanged; 400 `invalid_request`, 404 `engine_not_found`,
+409 `engine_has_no_sidecar`, 409 `engine_target_mismatch`). Any other engine is read through its
+sidecar only, never from the local directory. A name that is not a clean relative path (`..`,
+absolute, backslash, NUL) or that names credentials is refused with 404 `not_found` before any
+call. The sidecar applies the same allow list and masking as the local read, and its masked
+content is returned as is. Sidecar answers map to: 404 `not_found`, 413 `file_too_large`,
+502 `sidecar_unavailable` (unreachable, invalid answer, or its configuration directory is
+unavailable), 502 `sidecar_fingerprint_mismatch`, 502 `sidecar_auth_failed`, 502
+`sidecar_clock_skew`, 503 `sidecar_busy`, 504 `cscli_timeout` (no answer after the request was
+sent).
 
 ## Write
 

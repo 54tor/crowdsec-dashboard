@@ -2,19 +2,30 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfigViewer } from '@/components/ConfigViewer'
 import { EmptyState } from '@/components/EmptyState'
+import { EngineTargetSelect } from '@/components/EngineTargetSelect'
 import { PageHeader } from '@/components/PageHeader'
 import { ErrorNotice } from '@/components/Notice'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { Button } from '@/components/ui/button'
+import { useEngineTarget } from '@/hooks/useEngineTarget'
 import { useConfigFiles } from '@/hooks/useReadResources'
+
+interface FileSelection {
+  engineName: string
+  fileName: string
+}
 
 export function Config() {
   const { t } = useTranslation()
-  const { data, error, isPending } = useConfigFiles()
-  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const [engineName, setEngineName] = useEngineTarget()
+  const { data, error, isPending } = useConfigFiles(engineName)
+  const [fileSelection, setFileSelection] = useState<FileSelection | null>(null)
+  const isSelectionOfThisEngine = fileSelection?.engineName === engineName
+  const selectedFile = isSelectionOfThisEngine ? fileSelection.fileName : null
   return (
     <section className="space-y-4">
       <PageHeader title={t('config.title')} description={t('config.filesNote')} />
+      <EngineTargetSelect id="config-engine" value={engineName} onChange={setEngineName} />
       <p className="text-sm text-muted-foreground">{t('config.redactionNote')}</p>
       {error && <ErrorNotice error={error} />}
       {isPending && <TableSkeleton />}
@@ -32,7 +43,7 @@ export function Config() {
                       size="sm"
                       aria-pressed={fileName === selectedFile}
                       className="w-full justify-start font-mono break-all"
-                      onClick={() => setSelectedFile(fileName)}
+                      onClick={() => setFileSelection({ engineName, fileName })}
                     >
                       {fileName}
                     </Button>
@@ -41,7 +52,7 @@ export function Config() {
               </ul>
             )}
           </nav>
-          <ConfigViewer fileName={selectedFile} />
+          <ConfigViewer engineName={engineName} fileName={selectedFile} />
         </div>
       )}
     </section>

@@ -128,7 +128,7 @@ func allowlistRoutes(loadedConfig config.Config, services Services) []apiRoute {
 func readRoutes(loadedConfig config.Config, services Services, searches searchLimiter) []apiRoute {
 	archivedAlerts := archivedAlertHandlers{archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, targets: services.EngineTargets}
-	configFiles := configFileHandlers{files: services.ConfigFiles}
+	configFiles := configFileHandlers{files: services.ConfigFiles, targets: services.EngineTargets}
 	alertLists := alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
 	decisionLists := decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
 	platformLists := platformListHandlers{platform: services.Platform, selfMachineID: loadedConfig.LAPIMachineID, targets: services.EngineTargets}

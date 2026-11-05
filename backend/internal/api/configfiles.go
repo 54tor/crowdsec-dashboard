@@ -8,37 +8,69 @@ import (
 	"crowdsec-dashboard/internal/confread"
 )
 
-type ConfigFiles interface {
-	List() ([]string, error)
-	Read(name string) ([]byte, error)
+type configFileHandlers struct {
+	files   ConfigFiles
+	targets EngineTargets
 }
 
-type dirConfigFiles struct{ dir string }
+func (handlers configFileHandlers) filesFor(responseWriter http.ResponseWriter, request *http.Request) (ConfigFiles, bool) {
+	target, isRemote, resolved := engineTargetOf(responseWriter, request, handlers.targets)
+	if !resolved {
+		return nil, false
+	}
+	if !isRemote {
+		return handlers.files, true
+	}
+	if target.Sidecar == nil {
+		writeError(responseWriter, http.StatusConflict, "engine_has_no_sidecar")
+		return nil, false
+	}
+	return sidecarConfigFiles{sidecar: target.Sidecar}, true
+}
 
-func (files dirConfigFiles) List() ([]string, error)          { return confread.List(files.dir) }
-func (files dirConfigFiles) Read(name string) ([]byte, error) { return confread.Read(files.dir, name) }
-
-type configFileHandlers struct{ files ConfigFiles }
-
-func (handlers configFileHandlers) list(responseWriter http.ResponseWriter, _ *http.Request) {
-	names, listError := handlers.files.List()
-	if listError != nil {
-		writeError(responseWriter, http.StatusInternalServerError, "config_unavailable")
+func (handlers configFileHandlers) list(responseWriter http.ResponseWriter, request *http.Request) {
+	files, resolved := handlers.filesFor(responseWriter, request)
+	if !resolved {
 		return
 	}
-	writeJSON(responseWriter, http.StatusOK, map[string][]string{"files": names})
+	names, listError := files.List(request.Context())
+	switch {
+	case isSidecarTransportError(listError):
+		writeUpstreamError(responseWriter, listError)
+	case listError != nil:
+		writeError(responseWriter, http.StatusInternalServerError, "config_unavailable")
+	default:
+		writeJSON(responseWriter, http.StatusOK, map[string][]string{"files": names})
+	}
 }
 
 func (handlers configFileHandlers) get(responseWriter http.ResponseWriter, request *http.Request) {
-	content, readError := handlers.files.Read(request.PathValue("name"))
+	files, resolved := handlers.filesFor(responseWriter, request)
+	if !resolved {
+		return
+	}
+	name := request.PathValue("name")
+	if !isRequestableConfigFileName(name) {
+		writeError(responseWriter, http.StatusNotFound, "not_found")
+		return
+	}
+	content, readError := files.Read(request.Context(), name)
+	if readError != nil {
+		writeConfigReadError(responseWriter, readError)
+		return
+	}
+	writeJSON(responseWriter, http.StatusOK, map[string]string{"name": name, "content": string(content)})
+}
+
+func writeConfigReadError(responseWriter http.ResponseWriter, readError error) {
 	switch {
 	case errors.Is(readError, confread.ErrNotAllowed), errors.Is(readError, fs.ErrNotExist):
 		writeError(responseWriter, http.StatusNotFound, "not_found")
 	case errors.Is(readError, confread.ErrTooLarge):
 		writeError(responseWriter, http.StatusRequestEntityTooLarge, "file_too_large")
-	case readError != nil:
-		writeError(responseWriter, http.StatusInternalServerError, "config_unavailable")
+	case isSidecarTransportError(readError):
+		writeUpstreamError(responseWriter, readError)
 	default:
-		writeJSON(responseWriter, http.StatusOK, map[string]string{"name": request.PathValue("name"), "content": string(content)})
+		writeError(responseWriter, http.StatusInternalServerError, "config_unavailable")
 	}
 }

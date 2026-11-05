@@ -41,18 +41,18 @@ export function useMetrics() {
   return useQuery({ queryKey: ['metrics'], queryFn: () => apiFetch<MetricsResponse>('/api/metrics') })
 }
 
-export function useConfigFiles() {
-  return useQuery({ queryKey: ['config-files'], queryFn: () => apiFetch<ConfigFileList>('/api/config/files') })
+export function useConfigFiles(engine: string) {
+  return useQuery({ queryKey: ['config-files', engine], queryFn: () => apiFetch<ConfigFileList>(withEngine('/api/config/files', engine)) })
 }
 
 function encodeFilePath(fileName: string): string {
   return fileName.split('/').map(encodeURIComponent).join('/')
 }
 
-export function useConfigFile(fileName: string | null) {
+export function useConfigFile(engine: string, fileName: string | null) {
   return useQuery({
-    queryKey: ['config-file', fileName],
-    queryFn: () => apiFetch<ConfigFileContent>(`/api/config/files/${encodeFilePath(fileName ?? '')}`),
+    queryKey: ['config-file', engine, fileName],
+    queryFn: () => apiFetch<ConfigFileContent>(withEngine(`/api/config/files/${encodeFilePath(fileName ?? '')}`, engine)),
     enabled: fileName !== null,
   })
 }
