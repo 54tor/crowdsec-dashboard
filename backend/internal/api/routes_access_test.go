@@ -425,6 +425,39 @@ func TestHubRoutesKeepTheirAccessClass(testContext *testing.T) {
 	}
 }
 
+// requiredPlatformListRoutes pins every bouncer and machine route, the two
+// list reads added for remote engines included; any new /api/bouncers or
+// /api/machines route must be added here.
+var requiredPlatformListRoutes = map[string]routeAccess{
+	"GET /api/bouncers":                  accessAuthenticated,
+	"POST /api/bouncers":                 accessAdmin,
+	"DELETE /api/bouncers/{name}":        accessAdmin,
+	"GET /api/machines":                  accessAuthenticated,
+	"POST /api/machines":                 accessAdmin,
+	"POST /api/machines/{name}/validate": accessAdmin,
+	"DELETE /api/machines/{name}":        accessAdmin,
+	"POST /api/crowdsec/reload":          accessAdmin,
+}
+
+func TestPlatformListRoutesKeepTheirAccessClass(testContext *testing.T) {
+	foundAccessByPattern := map[string]routeAccess{}
+	for _, route := range routeTableForTest(newRouteAccessEnvironment(testContext)) {
+		foundAccessByPattern[route.Pattern] = route.Access
+		_, path := splitRoutePattern(route.Pattern)
+		_, isPinned := requiredPlatformListRoutes[route.Pattern]
+		isPlatformPath := strings.HasPrefix(path, "/api/bouncers") || strings.HasPrefix(path, "/api/machines") || strings.HasPrefix(path, "/api/crowdsec/")
+		if isPlatformPath && !isPinned {
+			testContext.Errorf("%s is not pinned in requiredPlatformListRoutes", route.Pattern)
+		}
+	}
+	for pattern, expectedAccess := range requiredPlatformListRoutes {
+		foundAccess, isPresent := foundAccessByPattern[pattern]
+		if !isPresent || foundAccess != expectedAccess {
+			testContext.Errorf("%s: expected access %d, found %d (present=%v)", pattern, expectedAccess, foundAccess, isPresent)
+		}
+	}
+}
+
 // A read-only session is refused before the hub handler runs: no cscli
 // command is executed for any hub mutation.
 func TestReadOnlySessionGets403OnHubMutations(testContext *testing.T) {

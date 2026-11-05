@@ -36,14 +36,35 @@ func (service cscliMachines) Delete(ctx context.Context, name string) error {
 type machineHandlers struct {
 	service       MachineService
 	selfMachineID string
+	targets       EngineTargets
+}
+
+type machineTarget struct {
+	service       MachineService
+	selfMachineID string
+}
+
+func (handlers machineHandlers) targetOf(responseWriter http.ResponseWriter, request *http.Request) (machineTarget, bool) {
+	target, isRemote, resolved := engineTargetOf(responseWriter, request, handlers.targets)
+	if !resolved {
+		return machineTarget{}, false
+	}
+	if !isRemote {
+		return machineTarget{service: handlers.service, selfMachineID: handlers.selfMachineID}, true
+	}
+	return machineTarget{service: remoteMachines(target), selfMachineID: target.Engine.MachineID}, true
 }
 
 func (handlers machineHandlers) create(responseWriter http.ResponseWriter, request *http.Request) {
+	resolvedTarget, resolved := handlers.targetOf(responseWriter, request)
+	if !resolved {
+		return
+	}
 	name, decoded := decodeNamedRequest(responseWriter, request)
 	if !decoded {
 		return
 	}
-	password, createError := handlers.service.Create(request.Context(), name)
+	password, createError := resolvedTarget.service.Create(request.Context(), name)
 	if createError != nil {
 		writeUpstreamError(responseWriter, createError)
 		return
@@ -52,7 +73,11 @@ func (handlers machineHandlers) create(responseWriter http.ResponseWriter, reque
 }
 
 func (handlers machineHandlers) validate(responseWriter http.ResponseWriter, request *http.Request) {
-	if validateError := handlers.service.Validate(request.Context(), request.PathValue("name")); validateError != nil {
+	resolvedTarget, resolved := handlers.targetOf(responseWriter, request)
+	if !resolved {
+		return
+	}
+	if validateError := resolvedTarget.service.Validate(request.Context(), request.PathValue("name")); validateError != nil {
 		writeUpstreamError(responseWriter, validateError)
 		return
 	}
@@ -60,8 +85,12 @@ func (handlers machineHandlers) validate(responseWriter http.ResponseWriter, req
 }
 
 func (handlers machineHandlers) remove(responseWriter http.ResponseWriter, request *http.Request) {
+	resolvedTarget, resolved := handlers.targetOf(responseWriter, request)
+	if !resolved {
+		return
+	}
 	name := request.PathValue("name")
-	if handlers.selfMachineID != "" && name == handlers.selfMachineID {
+	if resolvedTarget.selfMachineID != "" && name == resolvedTarget.selfMachineID {
 		writeError(responseWriter, http.StatusConflict, "self_account")
 		return
 	}
@@ -69,7 +98,7 @@ func (handlers machineHandlers) remove(responseWriter http.ResponseWriter, reque
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
-	if deleteError := handlers.service.Delete(request.Context(), name); deleteError != nil {
+	if deleteError := resolvedTarget.service.Delete(request.Context(), name); deleteError != nil {
 		writeUpstreamError(responseWriter, deleteError)
 		return
 	}

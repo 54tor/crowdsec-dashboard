@@ -282,12 +282,36 @@ applies but the items carry no `source_kind` field.
 | GET | `/api/metrics` | authenticated | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
 | GET | `/api/config/files` | admin | `{"files":["acquis.yaml", ...]}` | 500 `config_unavailable` |
 | GET | `/api/config/files/{name...}` | admin | `{"name","content"}` with secrets redacted | 403 `forbidden`, 404 `not_found`, 413 `file_too_large`, 500 |
-| GET | `/api/hub` | authenticated | array of `{type,name,status,local_version,description}` (max 1000) | 502 `cscli_failed`, 504 `cscli_timeout` |
+| GET | `/api/hub` | authenticated | array of `{type,name,status,local_version,description}` (max 1000) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
+| GET | `/api/bouncers` | authenticated | `{"items":[{name,type,version,ip_address,last_pull,revoked,auth_type}]}` (`cscli bouncers list -o json`) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
+| GET | `/api/machines` | authenticated | `{"items":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}]}` (`cscli machines list -o json`); `self` marks the machine the dashboard uses on that engine (`LAPI_MACHINE_ID` locally, the engine's `machine_id` on a remote engine) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 
 ## Write
 
 Every route of this table is **admin** (an `admin` session or a `write` token of an `admin` account):
 a `read_only` account or a `read` token gets 403 `forbidden`.
+
+### Engine target
+
+`GET /api/hub`, `GET /api/bouncers`, `GET /api/machines` and every bouncer, machine, hub and reload
+route of the table below take an optional `engine` query parameter (an engine name). Absent, or
+`engine=local`, the command runs on the local engine exactly as before. Any other name runs the
+command on that engine through its sidecar (see [Engines](#engines)), and only there: the engine is
+resolved once, before the body is read, and a refusal never falls back to the local engine.
+`/api/health` and `/api/metrics` stay local.
+
+| Answer | When |
+|---|---|
+| 400 `invalid_request` | the name is empty, malformed, or given more than once |
+| 404 `engine_not_found` | no enabled engine has that name |
+| 409 `engine_has_no_sidecar` | the engine exists but has no usable sidecar (it stays read-only) |
+| 409 `sidecar_command_refused` | the sidecar refused the command (`SIDECAR_READ_ONLY`, or a command outside `SIDECAR_ALLOWED_COMMANDS`) |
+| 502 `sidecar_unavailable`, `sidecar_fingerprint_mismatch`, `sidecar_auth_failed`, `sidecar_clock_skew`; 503 `sidecar_busy` | the sidecar could not be reached, presented another certificate, refused the token, reported a clock skew, or is at its concurrency or rate limit |
+
+On a remote engine the machine self-check protects the machine the dashboard uses on that engine
+(its `machine_id`), not `LAPI_MACHINE_ID`. Audit is the same as locally (these routes are not
+audited); a bouncer key or machine password produced by a remote engine is returned once with
+`Cache-Control: no-store` and never logged.
 
 | Method | Path | Access | Body | Success response | Errors |
 |---|---|---|---|---|---|
@@ -334,7 +358,7 @@ there is no override, remove the entry first. The order is: body, target, durati
 `self_ban`, allowlists, then the LAPI write.
 
 Hub `{kind}` is `collections`, `appsec-rules` or `appsec-configs` (the commands `cscli collections`,
-`cscli appsec-rules`, `cscli appsec-configs` on the local engine); any other kind answers 404
+`cscli appsec-rules`, `cscli appsec-configs` on the target engine); any other kind answers 404
 `not_found` before the body is read. `crowdsecurity/appsec-virtual-patching` and
 `crowdsecurity/appsec-generic-rules` are collections: installing them as `appsec-rules` or
 `appsec-configs` fails with 502 `cscli_failed`. A removal answers 409 `hub_item_still_installed`

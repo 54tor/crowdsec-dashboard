@@ -18,10 +18,17 @@ func (service cscliReloader) Reload(ctx context.Context) error {
 	return executeError
 }
 
-type reloadHandlers struct{ service Reloader }
+type reloadHandlers struct {
+	service Reloader
+	targets EngineTargets
+}
 
 func (handlers reloadHandlers) reload(responseWriter http.ResponseWriter, request *http.Request) {
-	if reloadError := handlers.service.Reload(request.Context()); reloadError != nil {
+	service, resolved := serviceFor(responseWriter, request, handlers.targets, handlers.service, remoteReloader)
+	if !resolved {
+		return
+	}
+	if reloadError := service.Reload(request.Context()); reloadError != nil {
 		writeUpstreamError(responseWriter, reloadError)
 		return
 	}

@@ -101,6 +101,7 @@ func main() {
 	}, sessionStore, tokenRepository, newArchivePurgeAdapter(database, loadedConfig), auditRecorder)
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
+	services.EngineTargets = engineRegistry
 	services.Allowlists = allowlists.NewService(engineRepository, engineRegistry, allowlists.LocalOnlyWriters(allowlists.NewCscliWriter(localExecutor)), time.Now)
 	services.CollectorStatus = engineCollector
 	services.SchemaVersion = store.NewVersionReader(database)

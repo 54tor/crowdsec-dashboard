@@ -131,6 +131,7 @@ func readRoutes(loadedConfig config.Config, services Services, searches searchLi
 	configFiles := configFileHandlers{files: services.ConfigFiles}
 	alertLists := alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
 	decisionLists := decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
+	platformLists := platformListHandlers{platform: services.Platform, selfMachineID: loadedConfig.LAPIMachineID, targets: services.EngineTargets}
 	return []apiRoute{
 		{"GET /api/alerts", accessAuthenticated, http.HandlerFunc(alertLists.list)},
 		{"GET /api/decisions", accessAuthenticated, http.HandlerFunc(decisionLists.list)},
@@ -145,15 +146,17 @@ func readRoutes(loadedConfig config.Config, services Services, searches searchLi
 		{"GET /api/metrics", accessAuthenticated, http.HandlerFunc(metricsHandlers{platform: services.Platform}.get)},
 		{"GET /api/config/files", accessAdmin, http.HandlerFunc(configFiles.list)},
 		{"GET /api/config/files/{name...}", accessAdmin, http.HandlerFunc(configFiles.get)},
-		{"GET /api/hub", accessAuthenticated, http.HandlerFunc(hubHandlers{service: services.Hub}.list)},
+		{"GET /api/hub", accessAuthenticated, http.HandlerFunc(hubHandlers{service: services.Hub, targets: services.EngineTargets}.list)},
+		{"GET /api/bouncers", accessAuthenticated, http.HandlerFunc(platformLists.bouncers)},
+		{"GET /api/machines", accessAuthenticated, http.HandlerFunc(platformLists.machines)},
 	}
 }
 
 func crowdsecWriteRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	decisions := decisionHandlers{service: services.Decisions, lister: services.DecisionReader, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, allowlists: services.DecisionAllowlists, now: time.Now}
-	bouncers := bouncerHandlers{service: services.Bouncers}
-	machines := machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID}
-	hub := hubHandlers{service: services.Hub}
+	bouncers := bouncerHandlers{service: services.Bouncers, targets: services.EngineTargets}
+	machines := machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID, targets: services.EngineTargets}
+	hub := hubHandlers{service: services.Hub, targets: services.EngineTargets}
 	return []apiRoute{
 		{"POST /api/decisions", accessAdmin, http.HandlerFunc(decisions.add)},
 		{"DELETE /api/decisions/{id}", accessAdmin, http.HandlerFunc(decisions.remove)},
@@ -166,7 +169,7 @@ func crowdsecWriteRoutes(loadedConfig config.Config, services Services) []apiRou
 		{"POST /api/hub/upgrade", accessAdmin, longWrite(http.HandlerFunc(hub.upgrade))},
 		{"POST /api/hub/{kind}", accessAdmin, longWrite(http.HandlerFunc(hub.install))},
 		{"DELETE /api/hub/{kind}/{name...}", accessAdmin, longWrite(http.HandlerFunc(hub.remove))},
-		{"POST /api/crowdsec/reload", accessAdmin, http.HandlerFunc(reloadHandlers{service: services.Reloader}.reload)},
+		{"POST /api/crowdsec/reload", accessAdmin, http.HandlerFunc(reloadHandlers{service: services.Reloader, targets: services.EngineTargets}.reload)},
 	}
 }
 

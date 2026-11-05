@@ -52,6 +52,7 @@ type Services struct {
 	Machines           MachineService
 	Hub                HubService
 	Reloader           Reloader
+	EngineTargets      EngineTargets
 	Audit              audit.Recorder
 	Geolocator         geo.Geolocator
 	AccessRules        AccessRuleService
