@@ -339,6 +339,7 @@ var requiredSessionOnlyRoutes = map[string]routeAccess{
 	"POST /api/accounts/{name}/sessions/revoke":     accessAdminSessionOnly,
 	"POST /api/accounts/{name}/unlock":              accessAdminSessionOnly,
 	"DELETE /api/accounts/{name}":                   accessAdminSessionOnly,
+	"GET /api/audit":                                accessAdminSessionOnly,
 }
 
 var requiredSyncRoutes = map[string]routeAccess{

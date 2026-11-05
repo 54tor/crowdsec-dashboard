@@ -147,6 +147,34 @@ Admin, session only. Names match `^[a-z0-9][a-z0-9._-]{0,63}$`; see
 Each is audited, target `account:<name>` (`account:<name>:<role>` at creation, `account:<name>:<previous>-><new>` for a role change) ([security.md](security.md#audit-log)). Every route
 answers 403 `forbidden` to a `read_only` session and 403 `session_required` to a token.
 
+### Audit log
+
+`GET /api/audit` lists the audit log ([security.md](security.md#audit-log)), admin and session only
+like the routes above: 401 without a session, 403 `forbidden` to a `read_only` session, 403
+`session_required` to any token. It is read-only: no route writes or deletes an audit event.
+
+Parameters, combined with AND:
+
+- `page` (default 1) and `per_page` (default 50, values above 100 are lowered to 100); a page whose
+  first row lies beyond 10 000 rows (`(page - 1) * per_page > 10000`) is refused.
+- `action`: exact action name, `^[a-z_]{1,64}$` (for example `login_failure`).
+- `account`: exact account name, same pattern as account names; events of a deleted account no
+  longer match it.
+- `since`: a duration such as `24h` or `7d`; only events recorded since then.
+- `q`: free search, 3 to 64 characters after trimming, no control character; a case-insensitive
+  literal substring (`%`, `_` and `\` match themselves) of the action, the account name or the
+  target. It runs under a 5 s deadline.
+
+Success: `200` with the list page shape `{"items","page","per_page","window_size","may_be_truncated","total","total_capped","live_status"}`
+(`window_size` 0, `may_be_truncated` false, `live_status` `ok`, `total` capped at 10 000 with
+`total_capped`). Each item is exactly `{"id","created_at","account","action","target","client_ip"}`:
+`created_at` RFC 3339 in UTC, `account` null for an event without account or whose account was
+deleted, `target` and `client_ip` null when not stored. Order: newest first, ties by descending `id`.
+Values are returned as stored: render them as text.
+
+Errors: 400 `invalid_request` (any parameter outside the rules above), 503 `search_timeout` (the
+search exceeded its deadline), 503 `database_unavailable`.
+
 ## Read
 
 List routes take `page` (1 to 10000, default 1), `per_page` (default 50, capped at 100) and the

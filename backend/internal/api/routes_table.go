@@ -84,6 +84,7 @@ func accountAdminRoutes(loadedConfig config.Config, services Services) []apiRout
 		{"POST /api/accounts/{name}/sessions/revoke", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountSessionsRevoked, AccountManager.RevokeSessionsAndTokens)},
 		{"POST /api/accounts/{name}/unlock", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountUnlocked, AccountManager.Unlock)},
 		{"DELETE /api/accounts/{name}", accessAdminSessionOnly, http.HandlerFunc(managed.remove)},
+		{"GET /api/audit", accessAdminSessionOnly, http.HandlerFunc(auditReadHandlers{lister: services.AuditLog, searchTimeout: search.QueryTimeout}.list)},
 	}
 }
 

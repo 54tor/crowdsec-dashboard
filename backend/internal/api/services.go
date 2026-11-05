@@ -45,6 +45,7 @@ type Services struct {
 	DecisionReader     DecisionLister
 	AlertLookup        AlertLookup
 	Archive            *archive.Reader
+	AuditLog           *audit.Reader
 	Platform           Platform
 	ConfigFiles        ConfigFiles
 	Bouncers           BouncerService

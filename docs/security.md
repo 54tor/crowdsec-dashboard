@@ -323,8 +323,11 @@ configurations included; whether to audit them is an open question), manual bans
 target is whatever was typed in the account name field, so a password typed there by mistake is
 recorded: restrict who can read the table; the target is erased with the client address after
 `AUDIT_IP_RETENTION_DAYS`, and the row after `AUDIT_RETENTION_DAYS`
-([Personal data](#personal-data)). There is no page or API to read the log; query the table
-directly. A failed write is logged by the dashboard and never blocks the login.
+([Personal data](#personal-data)). Administrators read the log with a session from the « Journal
+d'audit » page, through `GET /api/audit` ([api.md](api.md#audit-log)); it is never readable with an
+API token, and a `read_only` account cannot read it. The page and the route are read-only, return
+only the stored columns, and change nothing in the retention above. A failed write is logged by the
+dashboard and never blocks the login.
 
 ## Personal data
 

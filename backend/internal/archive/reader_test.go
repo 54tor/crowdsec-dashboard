@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/store"
 )
 
 const remoteEngineName = "edge-1"
@@ -270,7 +271,7 @@ func TestListRejectsOversizedPagesAndOffsetsBeyondTheCap(testContext *testing.T)
 	if len(zeroLimitAlerts) != 0 || zeroLimitTotal != 150 || zeroLimitAlerts == nil {
 		testContext.Errorf("limit 0 returns an empty page and the total, got %d items total %d", len(zeroLimitAlerts), zeroLimitTotal)
 	}
-	lastAllowedOffset, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Offset: totalCountCap, Limit: 5})
+	lastAllowedOffset, _, _ := fixture.mustListAlerts(testContext, AlertQuery{Offset: store.MaximumCountedRows, Limit: 5})
 	if len(lastAllowedOffset) != 0 {
 		testContext.Errorf("an offset at the cap is allowed and past the 150 rows, got %d items", len(lastAllowedOffset))
 	}
@@ -280,7 +281,7 @@ func TestListRejectsOversizedPagesAndOffsetsBeyondTheCap(testContext *testing.T)
 		{Limit: 1_000_000},
 		{Limit: -1},
 		{Offset: -10, Limit: 5},
-		{Offset: totalCountCap + 1, Limit: 5},
+		{Offset: store.MaximumCountedRows + 1, Limit: 5},
 		{Offset: 1_000_000, Limit: 5},
 	}
 	for _, invalidQuery := range invalidQueries {

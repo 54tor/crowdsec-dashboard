@@ -7,11 +7,12 @@ import (
 
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
+
+	"crowdsec-dashboard/internal/store"
 )
 
 const (
 	MaxQueryLimit  = 100
-	totalCountCap  = 10000
 	alertSelection = `alert_id, engine_name, alert_upstream_id, alert_upstream_uuid, alert_scenario_name,
 		alert_scenario_version, alert_message, alert_machine_id, alert_source_scope, alert_source_value,
 		alert_source_country_code, alert_source_autonomous_system_number, alert_source_autonomous_system_name,
@@ -99,7 +100,7 @@ func (reader *Reader) ListAlerts(ctx context.Context, query AlertQuery) ([]Archi
 	newFilteredQuery := func() *bun.SelectQuery {
 		return reader.alertQuery(query)
 	}
-	total, totalCapped, countError := reader.cappedCount(ctx, newFilteredQuery())
+	total, totalCapped, countError := store.CappedCount(ctx, reader.database, newFilteredQuery())
 	if countError != nil {
 		return nil, 0, false, countError
 	}
@@ -131,7 +132,7 @@ func (reader *Reader) ListDecisions(ctx context.Context, query AlertQuery) ([]Ar
 	newFilteredQuery := func() *bun.SelectQuery {
 		return reader.decisionQuery(query)
 	}
-	total, totalCapped, countError := reader.cappedCount(ctx, newFilteredQuery())
+	total, totalCapped, countError := store.CappedCount(ctx, reader.database, newFilteredQuery())
 	if countError != nil {
 		return nil, 0, false, countError
 	}
@@ -201,19 +202,6 @@ func applyCommonFilters(selectQuery *bun.SelectQuery, query AlertQuery) *bun.Sel
 	return selectQuery
 }
 
-func (reader *Reader) cappedCount(ctx context.Context, filteredQuery *bun.SelectQuery) (int, bool, error) {
-	var cappedRowCount int
-	countError := reader.database.NewSelect().
-		TableExpr("(?) AS capped_rows", filteredQuery.ColumnExpr("1").Limit(totalCountCap+1)).
-		ColumnExpr("count(*)").
-		Scan(ctx, &cappedRowCount)
-	if countError != nil {
-		return 0, false, countError
-	}
-	totalCapped := cappedRowCount > totalCountCap
-	return min(cappedRowCount, totalCountCap), totalCapped, nil
-}
-
 func (reader *Reader) attachDecisions(ctx context.Context, alerts []ArchivedAlert) error {
 	if len(alerts) == 0 {
 		return nil
@@ -256,7 +244,7 @@ func (reader *Reader) decisionsOf(ctx context.Context, alertIDs []int64) (map[in
 
 func isValidWindow(query AlertQuery) bool {
 	isValidLimit := query.Limit >= 0 && query.Limit <= MaxQueryLimit
-	isValidOffset := query.Offset >= 0 && query.Offset <= totalCountCap
+	isValidOffset := query.Offset >= 0 && query.Offset <= store.MaximumCountedRows
 	return isValidLimit && isValidOffset
 }
 

@@ -90,6 +90,7 @@ func main() {
 	services.AccessRules = accessrule.NewRepository(database)
 	services.TokenGate = api.NewTokenGate(services.AccessRules, services.Geolocator, time.Now)
 	services.Archive = archive.NewReader(database)
+	services.AuditLog = audit.NewReader(database)
 	services.WebAuthn = webAuthn
 	purger := retention.NewPurger(database, retention.Policy{
 		AuditRetention:         loadedConfig.AuditRetention,
