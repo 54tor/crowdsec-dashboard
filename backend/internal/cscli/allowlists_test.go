@@ -12,7 +12,7 @@ import (
 func executeAllowlistCommand(testContext *testing.T, commandName string, fields map[string]string) ([]string, error) {
 	testContext.Helper()
 	runner := &recordingRunner{}
-	_, executionError := Execute(context.Background(), runner, commandName, fields)
+	_, executionError := execute(context.Background(), runner, commandName, fields)
 	return runner.receivedArgv, executionError
 }
 

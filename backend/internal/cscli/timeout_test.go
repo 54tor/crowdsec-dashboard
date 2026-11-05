@@ -22,7 +22,7 @@ func TestExecuteMapsDeadlineToErrTimeout(testContext *testing.T) {
 	commands["hub_update"] = shortened
 	testContext.Cleanup(func() { commands["hub_update"] = original })
 
-	_, executeError := Execute(context.Background(), &blockingRunner{}, "hub_update", map[string]string{})
+	_, executeError := execute(context.Background(), &blockingRunner{}, "hub_update", map[string]string{})
 
 	if !errors.Is(executeError, ErrTimeout) {
 		testContext.Fatalf("expected ErrTimeout, got %v", executeError)
@@ -33,7 +33,7 @@ func TestExecuteDoesNotMapCallerCancellationToTimeout(testContext *testing.T) {
 	cancelledContext, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, executeError := Execute(cancelledContext, &blockingRunner{}, "version", map[string]string{})
+	_, executeError := execute(cancelledContext, &blockingRunner{}, "version", map[string]string{})
 
 	if errors.Is(executeError, ErrTimeout) || !errors.Is(executeError, context.Canceled) {
 		testContext.Fatalf("expected plain cancellation, got %v", executeError)

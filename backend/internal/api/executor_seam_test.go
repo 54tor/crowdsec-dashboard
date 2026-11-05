@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,12 +18,13 @@ type recordingExecutor struct {
 	commandNames  []string
 	commandFields []map[string]string
 	output        []byte
+	err           error
 }
 
 func (executor *recordingExecutor) Execute(_ context.Context, name string, fields map[string]string) ([]byte, error) {
 	executor.commandNames = append(executor.commandNames, name)
 	executor.commandFields = append(executor.commandFields, maps.Clone(fields))
-	return executor.output, nil
+	return executor.output, executor.err
 }
 
 type executorSeamCase struct {
@@ -116,6 +118,35 @@ func TestEveryCscliServiceRunsThroughTheInjectedExecutor(testContext *testing.T)
 	}
 }
 
+func TestHubRemoveRunsTheRemovalThenChecksTheHubListThroughTheExecutor(testContext *testing.T) {
+	executor := &recordingExecutor{}
+
+	_ = cscliHub{executor: executor}.Remove(context.Background(), "collections", "crowdsecurity/nginx")
+
+	expectedCommandNames := []string{"collections_remove", "hub_list"}
+	if !slices.Equal(executor.commandNames, expectedCommandNames) {
+		testContext.Fatalf("expected %v, got %v", expectedCommandNames, executor.commandNames)
+	}
+	expectedRemovalFields := map[string]string{"name": "crowdsecurity/nginx"}
+	if !maps.Equal(executor.commandFields[0], expectedRemovalFields) {
+		testContext.Fatalf("expected fields %v, got %v", expectedRemovalFields, executor.commandFields[0])
+	}
+}
+
+func TestEveryCscliServicePropagatesTheExecutorFailure(testContext *testing.T) {
+	for _, seamCase := range executorSeamCases() {
+		testContext.Run(seamCase.description, func(subtestContext *testing.T) {
+			executor := &recordingExecutor{err: cscli.ErrCscliFailed}
+
+			serviceError := seamCase.callService(context.Background(), executor)
+
+			if !errors.Is(serviceError, cscli.ErrCscliFailed) {
+				subtestContext.Fatalf("expected the executor failure to propagate, got %v", serviceError)
+			}
+		})
+	}
+}
+
 type refusedServiceCall struct {
 	description   string
 	callService   func(ctx context.Context, executor cscli.Executor) error
@@ -177,20 +208,10 @@ func TestCscliServicesRefuseInvalidInputWithoutRunningAnything(testContext *test
 	}
 }
 
-func TestLocalExecutorRefusesAnUnknownCommandNameWithoutRunning(testContext *testing.T) {
-	runner := &recordingRunner{}
-
-	_, executeError := cscli.NewLocalExecutor(runner).Execute(context.Background(), "hub_shell", map[string]string{})
-
-	if !errors.Is(executeError, cscli.ErrUnknownCommand) || len(runner.argvCalls) != 0 {
-		testContext.Fatalf("expected ErrUnknownCommand without a run, got %v and %v", executeError, runner.argvCalls)
-	}
-}
-
 // Only the local executor may hand an argv to a cscli.Runner: every other
 // production file must go through cscli.Executor so a remote engine can be swapped in.
 func TestNoProductionCodeOutsideCscliCallsTheRunnerDirectly(testContext *testing.T) {
-	gitGrep := exec.Command("git", "grep", "--untracked", "-nE", `cscli\.Execute\(|cscli\.Runner\b|\.Run\(ctx, argv`, "--", "../..", ":(exclude)*_test.go", ":(exclude)../cscli/")
+	gitGrep := exec.Command("git", "grep", "--untracked", "-nE", `cscli\.Execute\(|cscli\.Runner\b|\.Run\(ctx, argv|NewDockerRunner\(`, "--", "../..", ":(exclude)*_test.go", ":(exclude)../cscli/", ":(exclude)../../cmd/dashboard/main.go")
 	grepOutput, grepError := gitGrep.Output()
 
 	var exitError *exec.ExitError

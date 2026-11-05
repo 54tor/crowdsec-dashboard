@@ -24,7 +24,7 @@ func (runner *recordingRunner) Run(_ context.Context, argv []string) ([]byte, er
 func TestUnknownCommandIsRejected(t *testing.T) {
 	runner := &recordingRunner{}
 
-	_, err := Execute(context.Background(), runner, "bash", map[string]string{"name": "x"})
+	_, err := execute(context.Background(), runner, "bash", map[string]string{"name": "x"})
 
 	if !errors.Is(err, ErrUnknownCommand) {
 		t.Fatalf("expected ErrUnknownCommand, got %v", err)
@@ -47,12 +47,12 @@ func TestAppSecHubCommandsBuildFixedArgv(testContext *testing.T) {
 	for _, testCase := range testCases {
 		runner := &recordingRunner{}
 
-		_, executeError := Execute(context.Background(), runner, testCase.commandName, map[string]string{"name": "crowdsecurity/vpatch-env-access"})
+		_, executeError := execute(context.Background(), runner, testCase.commandName, map[string]string{"name": "crowdsecurity/vpatch-env-access"})
 
 		if executeError != nil || !reflect.DeepEqual(runner.receivedArgv, testCase.expectedArgv) {
 			testContext.Errorf("%s: expected %v, got %v (%v)", testCase.commandName, testCase.expectedArgv, runner.receivedArgv, executeError)
 		}
-		_, refusedError := Execute(context.Background(), &recordingRunner{}, testCase.commandName, map[string]string{"name": "--force"})
+		_, refusedError := execute(context.Background(), &recordingRunner{}, testCase.commandName, map[string]string{"name": "--force"})
 		if refusedError == nil {
 			testContext.Errorf("%s: a flag-like name must be refused", testCase.commandName)
 		}
@@ -85,7 +85,7 @@ func TestExecuteBuildsExpectedArgv(t *testing.T) {
 	for _, testCase := range testCases {
 		runner := &recordingRunner{}
 
-		_, err := Execute(context.Background(), runner, testCase.name, testCase.fields)
+		_, err := execute(context.Background(), runner, testCase.name, testCase.fields)
 
 		if err != nil {
 			t.Fatalf("%s: unexpected error %v", testCase.name, err)
@@ -127,7 +127,7 @@ func TestBanTargetRejectsInvalidInputs(t *testing.T) {
 func TestAlertsDeleteRejectsIPField(t *testing.T) {
 	runner := &recordingRunner{}
 
-	_, err := Execute(context.Background(), runner, "alerts_delete", map[string]string{"ip": "1.2.3.4"})
+	_, err := execute(context.Background(), runner, "alerts_delete", map[string]string{"ip": "1.2.3.4"})
 
 	if !errors.Is(err, ErrInvalidField) {
 		t.Fatalf("expected ErrInvalidField, got %v", err)
@@ -140,7 +140,7 @@ func TestAlertsDeleteRejectsIPField(t *testing.T) {
 func TestCollectionNameRejectsLeadingDash(t *testing.T) {
 	runner := &recordingRunner{}
 
-	_, err := Execute(context.Background(), runner, "collections_install", map[string]string{"name": "--force"})
+	_, err := execute(context.Background(), runner, "collections_install", map[string]string{"name": "--force"})
 
 	if !errors.Is(err, ErrInvalidField) {
 		t.Fatalf("expected ErrInvalidField, got %v", err)
@@ -153,7 +153,7 @@ func TestCollectionNameRejectsLeadingDash(t *testing.T) {
 func TestCollectionNameAcceptsHubIdentifier(t *testing.T) {
 	runner := &recordingRunner{}
 
-	_, err := Execute(context.Background(), runner, "collections_install", map[string]string{"name": "crowdsecurity/linux"})
+	_, err := execute(context.Background(), runner, "collections_install", map[string]string{"name": "crowdsecurity/linux"})
 
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
@@ -183,7 +183,7 @@ func TestInvalidNamesAndIdsAreRejected(t *testing.T) {
 		{"alerts_delete", "id", "1;2"},
 	}
 	for _, testCase := range testCases {
-		_, err := Execute(context.Background(), &recordingRunner{}, testCase.command, map[string]string{testCase.field: testCase.value})
+		_, err := execute(context.Background(), &recordingRunner{}, testCase.command, map[string]string{testCase.field: testCase.value})
 
 		if !errors.Is(err, ErrInvalidField) {
 			t.Fatalf("%s %q: expected ErrInvalidField, got %v", testCase.command, testCase.value, err)
@@ -206,7 +206,7 @@ func TestMissingAndExtraFieldsAreRejected(t *testing.T) {
 	for _, testCase := range testCases {
 		runner := &recordingRunner{}
 
-		_, err := Execute(context.Background(), runner, testCase.command, testCase.fields)
+		_, err := execute(context.Background(), runner, testCase.command, testCase.fields)
 
 		if !errors.Is(err, ErrInvalidField) {
 			t.Fatalf("%s %v: expected ErrInvalidField, got %v", testCase.command, testCase.fields, err)
@@ -266,7 +266,7 @@ func TestDecodeListDecodesItems(t *testing.T) {
 func TestBouncerNameAcceptsAtSignAfterFirstCharacter(t *testing.T) {
 	runner := &recordingRunner{}
 
-	_, err := Execute(context.Background(), runner, "bouncers_delete", map[string]string{"name": "cs-fw@203.0.113.7"})
+	_, err := execute(context.Background(), runner, "bouncers_delete", map[string]string{"name": "cs-fw@203.0.113.7"})
 
 	if err != nil || !reflect.DeepEqual(runner.receivedArgv, []string{"cscli", "bouncers", "delete", "cs-fw@203.0.113.7"}) {
 		t.Fatalf("unexpected result: %v %v", err, runner.receivedArgv)

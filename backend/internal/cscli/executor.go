@@ -13,5 +13,5 @@ func NewLocalExecutor(runner Runner) Executor {
 }
 
 func (executor localExecutor) Execute(ctx context.Context, name string, fields map[string]string) ([]byte, error) {
-	return Execute(ctx, executor.runner, name, fields)
+	return execute(ctx, executor.runner, name, fields)
 }
