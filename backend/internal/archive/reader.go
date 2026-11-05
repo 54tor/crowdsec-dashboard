@@ -181,6 +181,7 @@ func (reader *Reader) decisionQuery(query AlertQuery) *bun.SelectQuery {
 	if !query.IncludeExpired {
 		selectQuery = selectQuery.Where("decision_until > ?", reader.now().UTC())
 	}
+	selectQuery = decisionSearchPredicate(selectQuery, query.Search)
 	if len(query.ExcludedDecisionIDs) > 0 {
 		selectQuery = selectQuery.Where("decision_id <> ALL(?::bigint[])", pgdialect.Array(query.ExcludedDecisionIDs))
 	}
