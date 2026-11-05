@@ -275,6 +275,10 @@ func TestRemoteConfigRefusesUnsafeNamesBeforeAnyCall(testContext *testing.T) {
 		"/api/config/files/acquis.d%5C..%5Cconfig.yaml",
 		"/api/config/files/%2Fetc%2Fcrowdsec%2Fconfig.yaml",
 		"/api/config/files/acquis.d/%00.yaml",
+		// Clean names outside confread's allowlist are refused by the same rule
+		// as the local read, before the sidecar is asked.
+		"/api/config/files/simulation.yaml",
+		"/api/config/files/acquis.d/nginx.conf",
 	}
 	for _, rejectedPath := range rejectedPaths {
 		testContext.Run(rejectedPath, func(caseTest *testing.T) {
@@ -282,10 +286,7 @@ func TestRemoteConfigRefusesUnsafeNamesBeforeAnyCall(testContext *testing.T) {
 
 			response := fixture.get(rejectedPath + "?engine=" + remotePeerBName)
 
-			isRefused := response.Code == http.StatusNotFound || response.Code == http.StatusMovedPermanently || response.Code == http.StatusBadRequest
-			if !isRefused {
-				caseTest.Errorf("expected 404, 400 or redirect, got %d %q", response.Code, response.Body.String())
-			}
+			expectError(caseTest, response, http.StatusNotFound, "not_found")
 			fixture.expectSidecarUntouched(caseTest)
 			fixture.expectLocalUntouched(caseTest)
 		})

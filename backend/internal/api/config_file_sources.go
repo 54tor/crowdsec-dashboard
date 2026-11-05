@@ -2,9 +2,6 @@ package api
 
 import (
 	"context"
-	"io/fs"
-	"path"
-	"strings"
 
 	"crowdsec-dashboard/internal/confread"
 	"crowdsec-dashboard/internal/sidecarclient"
@@ -33,10 +30,4 @@ func (files sidecarConfigFiles) List(ctx context.Context) ([]string, error) {
 
 func (files sidecarConfigFiles) Read(ctx context.Context, name string) ([]byte, error) {
 	return files.sidecar.ReadFile(ctx, name)
-}
-
-func isRequestableConfigFileName(name string) bool {
-	isCleanRelativePath := fs.ValidPath(name) && name != "." && !strings.ContainsAny(name, "\\\x00")
-	namesCredentials := strings.Contains(strings.ToLower(path.Base(name)), "credentials")
-	return isCleanRelativePath && !namesCredentials
 }

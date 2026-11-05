@@ -50,7 +50,7 @@ func (handlers configFileHandlers) get(responseWriter http.ResponseWriter, reque
 		return
 	}
 	name := request.PathValue("name")
-	if !isRequestableConfigFileName(name) {
+	if !confread.IsAllowedName(name) {
 		writeError(responseWriter, http.StatusNotFound, "not_found")
 		return
 	}

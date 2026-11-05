@@ -33,7 +33,7 @@ var allowedPatterns = []string{
 	"postoverflows/*/*whitelist*.yml",
 }
 
-func isAllowedName(name string) bool {
+func IsAllowedName(name string) bool {
 	if !fs.ValidPath(name) || name == "." || strings.ContainsAny(name, "\\\x00") {
 		return false
 	}
@@ -71,7 +71,7 @@ func List(dir string) ([]string, error) {
 		}
 		for _, match := range matches {
 			fileInfo, statError := root.Stat(match)
-			if isAllowedName(match) && !containsSymlink(root, match) && statError == nil && fileInfo.Mode().IsRegular() {
+			if IsAllowedName(match) && !containsSymlink(root, match) && statError == nil && fileInfo.Mode().IsRegular() {
 				names = append(names, match)
 			}
 		}
@@ -89,7 +89,7 @@ func Read(dir, name string) ([]byte, error) {
 }
 
 func ReadUnredacted(dir, name string) ([]byte, error) {
-	if !isAllowedName(name) {
+	if !IsAllowedName(name) {
 		return nil, ErrNotAllowed
 	}
 	root, openError := os.OpenRoot(dir)
