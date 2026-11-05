@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 
 	"crowdsec-dashboard/internal/sidecarapi"
@@ -16,16 +15,17 @@ type bodyBindingContextKey struct{}
 var errMissingBodyBinding = errors.New("sidecar request has no verified body binding")
 var errMissingVerifier = errors.New("sidecar has no token verifier")
 
-func authenticate(verifier *sidecarauth.Verifier, logger *slog.Logger, next http.Handler) http.Handler {
+func authenticate(verifier *sidecarauth.Verifier, refusalLog *throttledRefusalLog, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		binding, verifyError := verifyRequestHeader(verifier, request)
 		if verifyError != nil {
 			refusalCode := refusalCodeOf(verifyError)
-			logRefusal(logger, request, refusalCode)
+			refusalLog.record(request, refusalCode)
 			writeCode(writer, http.StatusUnauthorized, refusalCode)
 			return
 		}
 		boundContext := context.WithValue(request.Context(), bodyBindingContextKey{}, binding)
+		boundContext = withRequestID(boundContext, newRequestID())
 		next.ServeHTTP(writer, request.WithContext(boundContext))
 	})
 }
@@ -60,16 +60,14 @@ func readBoundBody(writer http.ResponseWriter, request *http.Request, limit int6
 	return body, nil
 }
 
-func writeBodyError(writer http.ResponseWriter, bodyError error) {
+func outcomeOfBodyError(bodyError error) execOutcome {
 	var tooLarge *http.MaxBytesError
 	if errors.As(bodyError, &tooLarge) {
-		writeCode(writer, http.StatusRequestEntityTooLarge, sidecarapi.CodeBodyTooLarge)
-		return
+		return execOutcome{http.StatusRequestEntityTooLarge, sidecarapi.CodeBodyTooLarge}
 	}
 	var refusal *sidecarauth.RefusalError
 	if errors.As(bodyError, &refusal) {
-		writeCode(writer, http.StatusUnauthorized, refusal.Code)
-		return
+		return execOutcome{http.StatusUnauthorized, refusal.Code}
 	}
-	writeCode(writer, http.StatusBadRequest, sidecarapi.CodeInvalidRequest)
+	return execOutcome{http.StatusBadRequest, sidecarapi.CodeInvalidRequest}
 }

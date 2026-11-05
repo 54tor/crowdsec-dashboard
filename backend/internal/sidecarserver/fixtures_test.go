@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/sidecarauth"
 )
 
@@ -52,10 +53,17 @@ type authenticatedFixture struct {
 	signingKey sidecarauth.SigningKey
 }
 
-// newAuthenticatedFixture wires the real verifier: a trusted keys file on
-// disk holding one fresh key, the real replay cache and a sidecar started one
-// minute before testNow.
+// newAuthenticatedFixture wires the real verifier with an executor that fails
+// the test when reached and a zero Config (no command allowed).
 func newAuthenticatedFixture(testContext *testing.T) authenticatedFixture {
+	testContext.Helper()
+	return newFixtureServing(testContext, forbiddenExecutor{testContext: testContext}, Config{})
+}
+
+// newFixtureServing wires the real verifier: a trusted keys file on disk
+// holding one fresh key, the real replay cache and a sidecar started one
+// minute before testNow, in front of the given executor and Config.
+func newFixtureServing(testContext *testing.T, executor cscli.Executor, config Config) authenticatedFixture {
 	testContext.Helper()
 	signingKey, generateError := sidecarauth.GenerateSigningKey()
 	if generateError != nil {
@@ -82,7 +90,8 @@ func newAuthenticatedFixture(testContext *testing.T) authenticatedFixture {
 	logOutput := &bytes.Buffer{}
 	handler := NewHandler(Dependencies{
 		Verifier: verifier,
-		Executor: forbiddenExecutor{testContext: testContext},
+		Executor: executor,
+		Config:   config,
 		Logger:   slog.New(slog.NewJSONHandler(logOutput, nil)),
 	})
 	return authenticatedFixture{

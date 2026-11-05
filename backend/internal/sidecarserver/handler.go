@@ -20,8 +20,10 @@ type Dependencies struct {
 func NewHandler(dependencies Dependencies) http.Handler {
 	logger := loggerOrDiscard(dependencies.Logger)
 	authenticatedRoutes := http.NewServeMux()
-	authenticatedRoutes.HandleFunc("POST "+sidecarapi.PathPing, servePing)
-	authenticatedHandler := authenticate(dependencies.Verifier, logger, authenticatedRoutes)
+	authenticatedRoutes.Handle("POST "+sidecarapi.PathPing, pingHandler(logger))
+	authenticatedRoutes.Handle("POST "+sidecarapi.PathExec, newExecHandler(dependencies, logger))
+	rateLimitedRoutes := limitRate(logger, authenticatedRoutes)
+	authenticatedHandler := authenticate(dependencies.Verifier, newThrottledRefusalLog(logger), rateLimitedRoutes)
 
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if isHealthRequest(request) {
