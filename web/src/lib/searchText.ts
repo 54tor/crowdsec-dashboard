@@ -1,7 +1,7 @@
-const DIACRITIC_PATTERN = /\p{Diacritic}/gu
+const COMBINING_MARK_PATTERN = /\p{M}/gu
 
 export function normaliseSearchText(text: string): string {
-  return text.normalize('NFD').replace(DIACRITIC_PATTERN, '').toLowerCase()
+  return text.normalize('NFD').replace(COMBINING_MARK_PATTERN, '').toLowerCase()
 }
 
 export function matchesSearchText(searchTerm: string, candidateTexts: readonly (string | null | undefined)[]): boolean {

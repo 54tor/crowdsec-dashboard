@@ -94,6 +94,11 @@ export function AllowlistEntriesTable({ entries, ...columnProps }: AllowlistEntr
     entry.expired ? t('allowlists.expired') : '',
   ])
   const matchingEntries = entryFilter.visibleRows
+
+  function changeFilterText(filterText: string) {
+    entryFilter.setFilterText(filterText)
+    setPage(1)
+  }
   const totalPages = Math.max(1, Math.ceil(matchingEntries.length / ENTRIES_PER_PAGE))
   const currentPage = Math.min(page, totalPages)
   const visibleEntries = matchingEntries.slice((currentPage - 1) * ENTRIES_PER_PAGE, currentPage * ENTRIES_PER_PAGE)
@@ -104,7 +109,7 @@ export function AllowlistEntriesTable({ entries, ...columnProps }: AllowlistEntr
         id={filterFieldId}
         label={t('allowlists.filterEntries', { name: columnProps.allowlistName })}
         value={entryFilter.filterText}
-        onChange={entryFilter.setFilterText}
+        onChange={changeFilterText}
         visibleCount={matchingEntries.length}
         totalCount={entries.length}
       />

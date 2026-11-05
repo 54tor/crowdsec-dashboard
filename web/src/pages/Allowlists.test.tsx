@@ -328,6 +328,23 @@ describe('allowlists page', () => {
     expect(screen.getByText('Page 2 of 16')).toBeInTheDocument()
   })
 
+  it('returnsToTheFirstPageWhenTheFilterChanges', async () => {
+    const manyEntries = Array.from({ length: 800 }, (_, entryIndex) => makeEntry({ value: `10.${Math.floor(entryIndex / 256)}.${entryIndex % 256}.1` }))
+    stubFetch(allowlistRoutes({ [`GET ${LOCAL_LISTING_URL}`]: makeListing('local', [makeAllowlist('big', manyEntries)]) }))
+    const user = userEvent.setup()
+    renderApp('/allowlists')
+    await screen.findByText('10.0.0.1')
+    await user.click(screen.getByRole('button', { name: en.list.next }))
+    await screen.findByText('Page 2 of 16')
+
+    // 256 entries start with 10.1.: staying on page 2 would show 10.1.50.1 instead of the first match.
+    await user.type(screen.getByLabelText(en.allowlists.filterEntries.replace('{{name}}', 'big')), '10.1.')
+
+    expect(await screen.findByText('Page 1 of 6')).toBeInTheDocument()
+    expect(screen.getByText('10.1.0.1')).toBeInTheDocument()
+    expect(screen.queryByText('10.1.50.1')).toBeNull()
+  })
+
   it('rend une description <b>x</b> comme texte', async () => {
     const hostileAllowlist = { ...makeAllowlist('hostile', [makeEntry({ value: '192.0.2.30', description: '<b>entry</b>' })]), description: '<b>x</b>' }
     stubFetch(allowlistRoutes({ [`GET ${LOCAL_LISTING_URL}`]: makeListing('local', [hostileAllowlist]) }))
