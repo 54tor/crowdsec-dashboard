@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -46,6 +47,8 @@ func writeArchiveError(responseWriter http.ResponseWriter, operation string, arc
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 	case errors.Is(archiveError, archive.ErrAlertNotFound):
 		writeError(responseWriter, http.StatusNotFound, "not_found")
+	case errors.Is(archiveError, context.Canceled):
+		return
 	case search.IsTimeout(archiveError):
 		log.Printf("%s: %v", operation, archiveError)
 		writeError(responseWriter, http.StatusServiceUnavailable, "search_timeout")

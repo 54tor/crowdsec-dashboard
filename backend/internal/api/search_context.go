@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"crowdsec-dashboard/internal/search"
@@ -15,4 +16,12 @@ func searchContext(parent context.Context, term string, timeout time.Duration) (
 		timeout = search.QueryTimeout
 	}
 	return context.WithTimeout(parent, timeout)
+}
+
+func writeLiveOnlyError(responseWriter http.ResponseWriter, term string, listError error) {
+	if term != "" && search.IsTimeout(listError) {
+		writeError(responseWriter, http.StatusServiceUnavailable, "search_timeout")
+		return
+	}
+	writeUpstreamError(responseWriter, listError)
 }

@@ -39,7 +39,7 @@ func (handlers decisionReadHandlers) list(responseWriter http.ResponseWriter, re
 func (handlers decisionReadHandlers) listLiveOnly(responseWriter http.ResponseWriter, request *http.Request, query listQuery) {
 	window, listError := handlers.lister.ListDecisions(request.Context(), liveDecisionFilter(query))
 	if listError != nil {
-		writeUpstreamError(responseWriter, listError)
+		writeLiveOnlyError(responseWriter, query.Search, listError)
 		return
 	}
 	matchingDecisions := matchingLiveDecisions(window.Decisions, query.Search)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -195,4 +196,33 @@ func TestListWithoutSearchIgnoresTheSearchTimeout(testContext *testing.T) {
 	if decodedPage := decodeMergedPage(testContext, recorder); decodedPage.Total != 3 {
 		testContext.Errorf("a list without q runs without the search deadline, got %+v", decodedPage)
 	}
+}
+
+// deadlineAlertLister and deadlineDecisionLister answer like a LAPI client
+// whose request context expired: they return the context error.
+type deadlineAlertLister struct{}
+
+func (deadlineAlertLister) ListAlerts(ctx context.Context, _ lapi.AlertFilter) ([]lapi.Alert, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+type deadlineDecisionLister struct{}
+
+func (deadlineDecisionLister) ListDecisions(ctx context.Context, _ lapi.DecisionFilter) (lapi.DecisionList, error) {
+	<-ctx.Done()
+	return lapi.DecisionList{}, ctx.Err()
+}
+
+func TestLiveOnlySearchTimeoutAnswersSearchTimeout(testContext *testing.T) {
+	expiringAlertHandlers := alertReadHandlers{lister: deadlineAlertLister{}, searchTimeout: time.Nanosecond}
+	expiringDecisionHandlers := decisionReadHandlers{lister: deadlineDecisionLister{}, searchTimeout: time.Nanosecond}
+
+	alertRecorder := httptest.NewRecorder()
+	expiringAlertHandlers.list(alertRecorder, httptest.NewRequest(http.MethodGet, "/api/alerts?q=ssh-bf", nil))
+	decisionRecorder := httptest.NewRecorder()
+	expiringDecisionHandlers.list(decisionRecorder, httptest.NewRequest(http.MethodGet, "/api/decisions?q=ssh-bf", nil))
+
+	expectError(testContext, alertRecorder, http.StatusServiceUnavailable, "search_timeout")
+	expectError(testContext, decisionRecorder, http.StatusServiceUnavailable, "search_timeout")
 }

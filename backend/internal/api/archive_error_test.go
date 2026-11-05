@@ -1,11 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -29,5 +32,20 @@ func TestWriteArchiveErrorMapsQueryCancellationToSearchTimeout(testContext *test
 
 			expectError(subtestContext, recorder, http.StatusServiceUnavailable, currentCase.expectedCode)
 		})
+	}
+}
+
+// A client that went away cancels the request context: nothing is written and
+// nothing is logged, since nobody reads the answer.
+func TestWriteArchiveErrorIgnoresAClientCancelledRequest(testContext *testing.T) {
+	var capturedLog bytes.Buffer
+	log.SetOutput(&capturedLog)
+	testContext.Cleanup(func() { log.SetOutput(os.Stderr) })
+	recorder := httptest.NewRecorder()
+
+	writeArchiveError(recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled))
+
+	if recorder.Body.Len() != 0 || capturedLog.Len() != 0 {
+		testContext.Errorf("a cancelled request writes and logs nothing, got body %q log %q", recorder.Body.String(), capturedLog.String())
 	}
 }

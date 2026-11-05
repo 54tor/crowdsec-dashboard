@@ -236,6 +236,12 @@ ever holds active decisions). Lists never carry alert `events`.
   requests (new alert, or the collector archives in between), an item can repeat or be skipped at a
   page boundary.
 
+#### Known limits
+
+- Live decisions carry no machine, so a `q` term matches the machine of archived decisions only. A
+  live decision whose archived copy matches only through the parent alert's machine is not listed
+  by such a term: the live part does not match it and its archived copy stays excluded.
+
 ### Alert origin (log or AppSec)
 
 Every alert item carries `source_kind`: `appsec` when the alert comes from the AppSec component

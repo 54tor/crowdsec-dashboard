@@ -41,7 +41,7 @@ func (handlers alertReadHandlers) list(responseWriter http.ResponseWriter, reque
 func (handlers alertReadHandlers) listLiveOnly(responseWriter http.ResponseWriter, request *http.Request, query listQuery) {
 	window, listError := handlers.lister.ListAlerts(request.Context(), liveAlertFilter(query))
 	if listError != nil {
-		writeUpstreamError(responseWriter, listError)
+		writeLiveOnlyError(responseWriter, query.Search, listError)
 		return
 	}
 	alertsOfKind := liveAlertsOfKind(matchingLiveAlerts(window, query.Search), query.SourceKind)
