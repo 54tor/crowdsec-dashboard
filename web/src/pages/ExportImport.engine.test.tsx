@@ -5,6 +5,7 @@ import type { ImportPlan } from '@/api/bundleApi'
 import en from '@/i18n/en.json'
 import fr from '@/i18n/fr.json'
 import { stubFetch } from '@/test/fetchStub'
+import { ENGINE_NAMES_QUERY_KEY } from '@/api/enginesApi'
 import { ENGINE_NAMES_WITH_SIDECARS, engineParametersOf, expectNoEngineParameterAnywhere, selectTargetEngine, targetEngineNamedIn } from '@/test/engineTargetHarness'
 import { holdPostRequests, prepareEnglishApp, requestedUrls, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
@@ -274,5 +275,122 @@ describe('export and import page engine target', () => {
     await user.click(within(exportPanel()).getByRole('button', { name: en.bundle.exportButton }))
 
     expect(await within(exportPanel()).findByText(en.errors.remote_secrets_unsupported)).toBeInTheDocument()
+  })
+
+  describe('late response after the selector fell back to local', () => {
+    const NAMES_WITHOUT_PEER = {
+      status: 200,
+      body: { items: [{ name: 'local', is_local: true, enabled: true, has_sidecar: true }] },
+    }
+
+    function switchableEngineNames() {
+      const availability = { isPeerListed: true }
+      const route = () => (availability.isPeerListed ? ENGINE_NAMES_WITH_SIDECARS : NAMES_WITHOUT_PEER)
+      return { availability, route }
+    }
+
+    async function refetchEngineNames(queryClient: ReturnType<typeof renderApp>['queryClient']) {
+      await queryClient.invalidateQueries({ queryKey: ENGINE_NAMES_QUERY_KEY })
+    }
+
+    it('peerPlanSettledAfterTheFallbackIsNotShownUnderLocalAndReturnsWithThePeer', async () => {
+      const { availability, route } = switchableEngineNames()
+      const fetchMock = stubFetch({ 'GET /api/auth/me': SESSION_OK, 'GET /api/engines/names': route })
+      const user = userEvent.setup()
+      const { queryClient } = renderApp(PAGE_PATH)
+      await waitForPanels()
+      await selectTargetEngine(user, 'peer', importPanel())
+      const heldPreview = holdPostRequests(fetchMock)
+      await uploadAndPreview(user)
+
+      availability.isPeerListed = false
+      await refetchEngineNames(queryClient)
+      await waitFor(() => expect(targetEngineNamedIn(importPanel())).toBe('local'))
+      heldPreview.settle(200, makePlan('digest-peer'))
+
+      await waitFor(() => expect(within(importPanel()).getByRole('button', { name: en.bundle.previewButton })).toBeEnabled())
+      expect(screen.queryByRole('table', { name: en.bundle.summaryCaption })).toBeNull()
+      expect(within(importPanel()).queryByRole('button', { name: en.bundle.applyButton })).toBeNull()
+
+      availability.isPeerListed = true
+      await refetchEngineNames(queryClient)
+      expect(await screen.findByRole('table', { name: en.bundle.summaryCaption })).toBeInTheDocument()
+      expect(targetEngineNamedIn(importPanel())).toBe('peer')
+    })
+
+    it('peerPreviewFailureSettledAfterTheFallbackIsNotShownUnderLocal', async () => {
+      const { availability, route } = switchableEngineNames()
+      const fetchMock = stubFetch({ 'GET /api/auth/me': SESSION_OK, 'GET /api/engines/names': route })
+      const user = userEvent.setup()
+      const { queryClient } = renderApp(PAGE_PATH)
+      await waitForPanels()
+      await selectTargetEngine(user, 'peer', importPanel())
+      const heldPreview = holdPostRequests(fetchMock)
+      await uploadAndPreview(user)
+
+      availability.isPeerListed = false
+      await refetchEngineNames(queryClient)
+      await waitFor(() => expect(targetEngineNamedIn(importPanel())).toBe('local'))
+      heldPreview.settle(503, { error: 'sidecar_busy' })
+
+      await waitFor(() => expect(within(importPanel()).getByRole('button', { name: en.bundle.previewButton })).toBeEnabled())
+      expect(within(importPanel()).queryByText(en.errors.sidecar_busy)).toBeNull()
+    })
+
+    it('peerExportOutcomeSettledAfterTheFallbackIsNotShownUnderLocal', async () => {
+      stubDownload()
+      const { availability, route } = switchableEngineNames()
+      const fetchMock = stubFetch({ 'GET /api/auth/me': SESSION_OK, 'GET /api/engines/names': route })
+      const user = userEvent.setup()
+      const { queryClient } = renderApp(PAGE_PATH)
+      await waitForPanels()
+      await selectTargetEngine(user, 'peer', exportPanel())
+      const heldExport = holdPostRequests(fetchMock)
+      await user.click(within(exportPanel()).getByRole('button', { name: en.bundle.exportButton }))
+
+      availability.isPeerListed = false
+      await refetchEngineNames(queryClient)
+      await waitFor(() => expect(targetEngineNamedIn(exportPanel())).toBe('local'))
+      heldExport.settle(409, { error: 'engine_has_no_sidecar' })
+
+      await waitFor(() => expect(within(exportPanel()).getByRole('button', { name: en.bundle.exportButton })).toBeEnabled())
+      expect(within(exportPanel()).queryByText(en.errors.engine_has_no_sidecar)).toBeNull()
+    })
+
+    it('peerSkippedAlertsNoticeSettledAfterTheFallbackIsNotShownUnderLocal', async () => {
+      stubDownload()
+      const { availability, route } = switchableEngineNames()
+      const fetchMock = stubFetch({ 'GET /api/auth/me': SESSION_OK, 'GET /api/engines/names': route })
+      const user = userEvent.setup()
+      const { queryClient } = renderApp(PAGE_PATH)
+      await waitForPanels()
+      await selectTargetEngine(user, 'peer', exportPanel())
+      const heldExport = holdPostRequests(fetchMock)
+      await user.click(within(exportPanel()).getByRole('button', { name: en.bundle.exportButton }))
+
+      availability.isPeerListed = false
+      await refetchEngineNames(queryClient)
+      await waitFor(() => expect(targetEngineNamedIn(exportPanel())).toBe('local'))
+      heldExport.settle(200, { ok: true }, { ...EXPORT_HEADERS, 'X-Bundle-Skipped-Alerts': '3' })
+
+      await waitFor(() => expect(within(exportPanel()).getByRole('button', { name: en.bundle.exportButton })).toBeEnabled())
+      expect(within(exportPanel()).queryByText(en.bundle.skippedAlerts_other.replace('{{count}}', '3'))).toBeNull()
+      expect(within(exportPanel()).queryByRole('status')).toBeNull()
+    })
+  })
+
+  it('secretsUnavailableParagraphIsLinkedToTheDisabledCheckbox', async () => {
+    stubFetch(engineRoutes())
+    const user = userEvent.setup()
+    renderApp(PAGE_PATH)
+    await waitForPanels()
+
+    await selectTargetEngine(user, 'peer', exportPanel())
+
+    const secretsOption = within(exportPanel()).getByLabelText(en.bundle.includeSecrets)
+    const explanation = within(exportPanel()).getByText(en.bundle.secretsRemoteUnavailable)
+    expect(explanation.id).not.toBe('')
+    expect(secretsOption).toHaveAttribute('aria-describedby', explanation.id)
+    expect(secretsOption.closest('label')).toHaveClass('has-[:disabled]:cursor-not-allowed')
   })
 })

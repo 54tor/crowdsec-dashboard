@@ -18,6 +18,11 @@ interface ApplyResult {
   engineName: string
 }
 
+interface TaggedFailure {
+  failure: unknown
+  engineName: string
+}
+
 export function useBundleImport(engineName: string) {
   const [bundle, setBundle] = useState<ParsedBundle | null>(null)
   const [availableSections, setAvailableSections] = useState<BundleSection[]>([])
@@ -25,16 +30,17 @@ export function useBundleImport(engineName: string) {
   const [preparedPlan, setPreparedPlan] = useState<PreparedPlan | null>(null)
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
-  const [failure, setFailure] = useState<unknown>(null)
+  const [taggedFailure, setTaggedFailure] = useState<TaggedFailure | null>(null)
   const [fileErrorCode, setFileErrorCode] = useState<string | null>(null)
 
   const currentPlan = preparedPlan !== null && preparedPlan.engineName === engineName ? preparedPlan : null
+  const currentFailure = taggedFailure !== null && taggedFailure.engineName === engineName ? taggedFailure.failure : null
   const currentApplyResult = applyResult !== null && applyResult.engineName === engineName ? applyResult : null
 
   function discardPlan() {
     setPreparedPlan(null)
     setApplyResult(null)
-    setFailure(null)
+    setTaggedFailure(null)
   }
 
   function reset() {
@@ -70,14 +76,14 @@ export function useBundleImport(engineName: string) {
     const previewEngineName = engineName
     const previewSections = selectedSections
     setPhase('previewing')
-    setFailure(null)
+    setTaggedFailure(null)
     setApplyResult(null)
     try {
       const plan = await previewImport(bundle, previewSections, previewEngineName)
       setPreparedPlan({ plan, sections: previewSections, engineName: previewEngineName })
     } catch (previewFailure) {
       setPreparedPlan(null)
-      setFailure(previewFailure)
+      setTaggedFailure({ failure: previewFailure, engineName: previewEngineName })
     } finally {
       setPhase('idle')
     }
@@ -89,13 +95,13 @@ export function useBundleImport(engineName: string) {
     }
     const { plan, sections, engineName: planEngineName } = currentPlan
     setPhase('applying')
-    setFailure(null)
+    setTaggedFailure(null)
     try {
       const response = await applyImport(bundle, sections, plan.digest, planEngineName)
       setApplyResult({ response, engineName: planEngineName })
       setPreparedPlan(null)
     } catch (applyFailure) {
-      setFailure(applyFailure)
+      setTaggedFailure({ failure: applyFailure, engineName: planEngineName })
       if (applyFailure instanceof ApiError && PLAN_INVALIDATING_CODES.includes(applyFailure.code)) {
         setPreparedPlan(null)
       }
@@ -111,7 +117,7 @@ export function useBundleImport(engineName: string) {
     plan: currentPlan?.plan ?? null,
     applyResponse: currentApplyResult?.response ?? null,
     phase,
-    failure,
+    failure: currentFailure,
     fileErrorCode,
     loadFile,
     toggleSection,

@@ -39,7 +39,7 @@ export function deferredResponse() {
   })
   return {
     promise,
-    settle: (status: number, body: unknown) => resolveResponse(new Response(JSON.stringify(body), { status })),
+    settle: (status: number, body: unknown, headers?: Record<string, string>) => resolveResponse(new Response(JSON.stringify(body), { status, headers })),
   }
 }
 

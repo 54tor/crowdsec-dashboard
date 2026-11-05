@@ -12,22 +12,25 @@ import { Button } from '@/components/ui/button'
 import { useEngineTarget } from '@/hooks/useEngineTarget'
 import { downloadBlob } from '@/lib/downloadBlob'
 
+interface ExportOutcome {
+  engineName: string
+  failure: unknown
+  skippedAlerts: number
+}
+
 export function ExportPanel() {
   const { t } = useTranslation()
   const [engineName, setEngineName] = useEngineTarget()
   const [selectedSections, setSelectedSections] = useState<BundleSection[]>([...BUNDLE_SECTIONS])
   const [isSecretsOptionChecked, setIsSecretsOptionChecked] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [failure, setFailure] = useState<unknown>(null)
-  const [skippedAlerts, setSkippedAlerts] = useState(0)
+  const [exportOutcome, setExportOutcome] = useState<ExportOutcome | null>(null)
 
   const isRemoteEngine = !isLocalEngine(engineName)
   const includeSecrets = isSecretsOptionChecked && !isRemoteEngine
 
   function changeEngine(nextEngineName: string) {
     setIsSecretsOptionChecked(false)
-    setFailure(null)
-    setSkippedAlerts(0)
     setEngineName(nextEngineName)
   }
 
@@ -36,20 +39,21 @@ export function ExportPanel() {
   }
 
   async function runExport(typedWord: string) {
+    const exportEngineName = engineName
     setIsExporting(true)
-    setFailure(null)
-    setSkippedAlerts(0)
+    setExportOutcome(null)
     try {
-      const exported = await exportBundle({ sections: selectedSections, includeSecrets, confirmSecrets: typedWord }, engineName)
+      const exported = await exportBundle({ sections: selectedSections, includeSecrets, confirmSecrets: typedWord }, exportEngineName)
       downloadBlob(exported.blob, exported.fileName)
-      setSkippedAlerts(exported.skippedAlerts)
+      setExportOutcome({ engineName: exportEngineName, failure: null, skippedAlerts: exported.skippedAlerts })
     } catch (exportFailure) {
-      setFailure(exportFailure)
+      setExportOutcome({ engineName: exportEngineName, failure: exportFailure, skippedAlerts: 0 })
     } finally {
       setIsExporting(false)
     }
   }
 
+  const currentOutcome = exportOutcome !== null && exportOutcome.engineName === engineName ? exportOutcome : null
   const hasNoSection = selectedSections.length === 0
   return (
     <section className="space-y-3 bg-card border rounded-md p-4" aria-labelledby="export-heading">
@@ -65,8 +69,9 @@ export function ExportPanel() {
         checked={includeSecrets}
         disabled={isRemoteEngine || isExporting}
         onChange={setIsSecretsOptionChecked}
+        describedBy={isRemoteEngine ? 'export-secrets-unavailable' : undefined}
       />
-      {isRemoteEngine && <p className="text-sm text-muted-foreground">{t('bundle.secretsRemoteUnavailable')}</p>}
+      {isRemoteEngine && <p id="export-secrets-unavailable" className="text-sm text-muted-foreground">{t('bundle.secretsRemoteUnavailable')}</p>}
       {includeSecrets && <WarningNotice title={t('bundle.secretsWarningTitle')}>{t('bundle.secretsWarning')}</WarningNotice>}
       {includeSecrets ? (
         <TypedConfirmDialog
@@ -85,8 +90,8 @@ export function ExportPanel() {
           {isExporting ? t('dialog.working') : t('bundle.exportButton')}
         </Button>
       )}
-      {failure !== null && <ErrorNotice error={failure} />}
-      {skippedAlerts > 0 && <InfoNotice>{t('bundle.skippedAlerts', { count: skippedAlerts })}</InfoNotice>}
+      {currentOutcome !== null && currentOutcome.failure !== null && <ErrorNotice error={currentOutcome.failure} />}
+      {currentOutcome !== null && currentOutcome.skippedAlerts > 0 && <InfoNotice>{t('bundle.skippedAlerts', { count: currentOutcome.skippedAlerts })}</InfoNotice>}
     </section>
   )
 }
