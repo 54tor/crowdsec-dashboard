@@ -56,7 +56,7 @@ func TestRedactSecretsTable(testContext *testing.T) {
 
 func TestRedactSecretsHandlesMaximumSizeInputQuickly(testContext *testing.T) {
 	repeatedBlock := "password: |\n  secret line\nkey: value\nplain: https://user:pass@example.com/path\n"
-	largeInput := []byte(strings.Repeat(repeatedBlock, maxFileBytes/len(repeatedBlock)))
+	largeInput := []byte(strings.Repeat(repeatedBlock, MaxFileBytes/len(repeatedBlock)))
 	startTime := time.Now()
 
 	redactSecrets(largeInput)

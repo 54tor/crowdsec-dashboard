@@ -22,6 +22,7 @@ type AcquisitionState struct {
 type AcquisitionFileResponse struct {
 	Exists    bool   `json:"exists"`
 	Oversized bool   `json:"oversized"`
+	SHA256    string `json:"sha256"`
 	Content   []byte `json:"content"`
 }
 

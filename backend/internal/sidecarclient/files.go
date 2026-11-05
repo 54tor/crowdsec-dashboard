@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"crowdsec-dashboard/internal/confread"
 	"crowdsec-dashboard/internal/sidecarapi"
 )
 
@@ -26,7 +27,8 @@ func (client *Client) ReadFile(ctx context.Context, name string) ([]byte, error)
 	if readError := client.read(ctx, sidecarapi.PathFilePrefix+name, fileSentinelOfCode, &fileResponse); readError != nil {
 		return nil, readError
 	}
-	if fileResponse.Name != name || fileResponse.Content == nil {
+	isWithinCap := len(fileResponse.Content) <= confread.MaxFileBytes
+	if fileResponse.Name != name || fileResponse.Content == nil || !isWithinCap {
 		return nil, ErrInvalidResponse
 	}
 	return fileResponse.Content, nil

@@ -3,6 +3,7 @@ package sidecarserver
 import (
 	"bytes"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -46,6 +47,9 @@ func TestSidecarFileReadsHideEverythingOutsideTheAllowList(testContext *testing.
 	hiddenRequestURIs := []string{
 		sidecarapi.PathFilePrefix + "../secrets",
 		sidecarapi.PathFilePrefix + "%2e%2e/secrets",
+		sidecarapi.PathFilePrefix + "%252e%252e/secrets",
+		sidecarapi.PathFilePrefix + "acquis.d%5c..%5c..%5csecrets",
+		sidecarapi.PathFilePrefix + "CONFIG.YAML",
 		sidecarapi.PathFilePrefix + "..%2fsecrets",
 		sidecarapi.PathFilePrefix + "acquis.d/../../secrets",
 		sidecarapi.PathFilePrefix + "/etc/passwd",
@@ -129,6 +133,28 @@ func TestSidecarConfigRoutesRequireATokenBeforeAnyFileAccess(testContext *testin
 				subtestContext.Errorf("expected nothing to run, got %v", obtainedArgvs)
 			}
 		})
+	}
+}
+
+func TestSidecarUncleanPathWithoutATokenIsRefusedBeforeTheBodyIsRead(testContext *testing.T) {
+	fixture := newConfigFixture(testContext, nil)
+	request := newSignedRequest(http.MethodGet, sidecarapi.PathFilePrefix+"../secrets", "", forbiddenBodyReader{testContext: testContext})
+
+	recorder := fixture.serve(request)
+
+	// Authentication runs before the clean-path check, so an anonymous
+	// caller cannot probe which paths the router would answer 404 to.
+	expectResponse(testContext, recorder, http.StatusUnauthorized, codeBody(sidecarauth.CodeInvalidToken))
+}
+
+func TestSidecarFilesAreUnavailableWhenConfDirIsMissing(testContext *testing.T) {
+	missingConfDir := filepath.Join(testContext.TempDir(), "absent")
+	fixture := newConfigFixture(testContext, func(config *Config) { config.ConfDir = missingConfDir })
+
+	// A missing ConfDir is a broken mount, not a missing file: the dashboard
+	// must report the engine's configuration as unavailable, not as empty.
+	for _, requestURI := range []string{sidecarapi.PathFiles, sidecarapi.PathFilePrefix + "config.yaml"} {
+		expectResponse(testContext, fixture.get(testContext, requestURI), http.StatusServiceUnavailable, codeBody(sidecarapi.CodeConfigUnavailable))
 	}
 }
 

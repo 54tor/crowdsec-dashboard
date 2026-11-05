@@ -56,6 +56,12 @@ func (handler *applyHandler) run(writer http.ResponseWriter, request *http.Reque
 	if refusal, refused := handler.refusal(); refused {
 		return applyOutcome{execOutcome: refusal}
 	}
+	select {
+	case handler.slots <- struct{}{}:
+	default:
+		return applyOutcome{execOutcome: execOutcome{http.StatusServiceUnavailable, sidecarapi.CodeBusy}}
+	}
+	defer func() { <-handler.slots }()
 	body, bodyError := readBoundBody(writer, request, applyBodyLimit)
 	if bodyError != nil {
 		outcome := outcomeOfBodyError(bodyError)
@@ -66,12 +72,6 @@ func (handler *applyHandler) run(writer http.ResponseWriter, request *http.Reque
 	if decodeError != nil {
 		return applyOutcome{execOutcome: execOutcome{http.StatusBadRequest, sidecarapi.CodeInvalidRequest}}
 	}
-	select {
-	case handler.slots <- struct{}{}:
-	default:
-		return applyOutcome{execOutcome: execOutcome{http.StatusServiceUnavailable, sidecarapi.CodeBusy}}
-	}
-	defer func() { <-handler.slots }()
 	return handler.apply(request.Context(), changes)
 }
 

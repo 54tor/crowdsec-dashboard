@@ -340,13 +340,19 @@ func TestSidecarAcquisitionReadsMirrorReadCurrent(testContext *testing.T) {
 		testContext.Errorf("expected the existing file, got %+v", existingFile)
 	}
 	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"absent.yaml"), http.StatusOK,
-		`{"exists":false,"oversized":false,"content":null}`+"\n")
+		`{"exists":false,"oversized":false,"sha256":"","content":null}`+"\n")
 	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+".hidden.yaml"), http.StatusBadRequest,
 		codeBody(sidecarapi.CodeInvalidName))
 	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"linked.yaml"), http.StatusConflict,
 		codeBody(sidecarapi.CodeNotRegularFile))
 	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"..%2f..%2fstolen.yaml"), http.StatusNotFound,
 		codeBody(sidecarapi.CodeNotFound))
+	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"..%5c..%5cstolen.yaml"), http.StatusBadRequest,
+		codeBody(sidecarapi.CodeInvalidName))
+	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"%252e%252e%252fstolen.yaml"), http.StatusBadRequest,
+		codeBody(sidecarapi.CodeInvalidName))
+	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"CONFIG.YAML"), http.StatusBadRequest,
+		codeBody(sidecarapi.CodeInvalidName))
 }
 
 func TestSidecarWithoutAcquisitionDirIsUnavailable(testContext *testing.T) {

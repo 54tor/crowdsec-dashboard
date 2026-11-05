@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"crowdsec-dashboard/internal/confwrite"
 	"crowdsec-dashboard/internal/cscli"
@@ -22,20 +23,16 @@ func (client *Client) AcquisitionState(ctx context.Context) (sidecarapi.Acquisit
 	return state, nil
 }
 
-func (client *Client) ReadAcquisitionFile(ctx context.Context, name string) (confwrite.Current, error) {
+func (client *Client) ReadAcquisitionFile(ctx context.Context, name string) (AcquisitionFile, error) {
 	if nameError := confwrite.ValidateName(name); nameError != nil {
-		return confwrite.Current{}, nameError
+		return AcquisitionFile{}, nameError
 	}
 	var fileResponse sidecarapi.AcquisitionFileResponse
 	readError := client.read(ctx, sidecarapi.PathAcquisitionFilePrefix+name, acquisitionSentinelOfCode, &fileResponse)
 	if readError != nil {
-		return confwrite.Current{}, readError
+		return AcquisitionFile{}, readError
 	}
-	isConsistent := fileResponse.Exists || (!fileResponse.Oversized && len(fileResponse.Content) == 0)
-	if !isConsistent || len(fileResponse.Content) > confwrite.MaxFileBytes {
-		return confwrite.Current{}, ErrInvalidResponse
-	}
-	return confwrite.Current{Exists: fileResponse.Exists, Oversized: fileResponse.Oversized, Content: fileResponse.Content}, nil
+	return acquisitionFileOf(fileResponse)
 }
 
 func (client *Client) ApplyConfig(ctx context.Context, changes []confwrite.FileChange) (confwrite.Result, error) {
@@ -50,6 +47,9 @@ func (client *Client) ApplyConfig(ctx context.Context, changes []confwrite.FileC
 	var applyResult sidecarapi.ApplyResult
 	if exchangeError := client.exchange(applyContext, applyCall, &applyResult); exchangeError != nil {
 		return resultOfApplyFailure(exchangeError)
+	}
+	if !hasValidNames(applyResult, nil) {
+		return confwrite.Result{}, ErrInvalidResponse
 	}
 	return resultOf(applyResult), nil
 }
@@ -67,14 +67,25 @@ func resultOfApplyFailure(exchangeError error) (confwrite.Result, error) {
 	if !errors.As(exchangeError, &refusal) {
 		return confwrite.Result{}, exchangeError
 	}
-	result := confwrite.Result{}
+	partialResult := sidecarapi.ApplyResult{}
 	if refusal.response.Result != nil {
-		result = resultOf(*refusal.response.Result)
+		partialResult = *refusal.response.Result
 	}
+	if !hasValidNames(partialResult, refusal.response.AffectedFiles) {
+		return confwrite.Result{}, ErrInvalidResponse
+	}
+	result := resultOf(partialResult)
 	if errors.Is(exchangeError, confwrite.ErrConfigInconsistent) {
 		return result, &confwrite.InconsistentError{Files: nonNilNames(refusal.response.AffectedFiles)}
 	}
 	return result, exchangeError
+}
+
+func hasValidNames(applyResult sidecarapi.ApplyResult, affectedFiles []string) bool {
+	returnedNames := slices.Concat(applyResult.Created, applyResult.Updated, applyResult.Unchanged, affectedFiles)
+	return !slices.ContainsFunc(returnedNames, func(returnedName string) bool {
+		return confwrite.ValidateName(returnedName) != nil
+	})
 }
 
 func resultOf(applyResult sidecarapi.ApplyResult) confwrite.Result {

@@ -102,7 +102,7 @@ func TestReadRejectsSymlinkLeavingTheDirectory(testContext *testing.T) {
 
 func TestReadRejectsOversizedFile(testContext *testing.T) {
 	confDir := testContext.TempDir()
-	writeConfFile(testContext, confDir, "config.yaml", strings.Repeat("a: b\n", maxFileBytes/5+10))
+	writeConfFile(testContext, confDir, "config.yaml", strings.Repeat("a: b\n", MaxFileBytes/5+10))
 
 	content, readError := Read(confDir, "config.yaml")
 

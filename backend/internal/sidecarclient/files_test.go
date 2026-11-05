@@ -136,11 +136,11 @@ func TestRemoteApplyWritesThroughTheSidecar(testContext *testing.T) {
 		testContext.Fatalf("expected nginx.yaml created, got %+v (%v)", result, applyError)
 	}
 	current, currentError := sidecar.client.ReadAcquisitionFile(ctx, "nginx.yaml")
-	if currentError != nil || !current.Exists || string(current.Content) != nginxAcquisition {
+	if currentError != nil || !current.Exists || string(current.RedactedContent) != nginxAcquisition {
 		testContext.Errorf("expected the written file back, got %+v (%v)", current, currentError)
 	}
 	absent, absentError := sidecar.client.ReadAcquisitionFile(ctx, "absent.yaml")
-	if absentError != nil || absent.Exists || absent.Content != nil {
+	if absentError != nil || absent.Exists || absent.RedactedContent != nil || absent.SHA256 != "" {
 		testContext.Errorf("expected an absent file, got %+v (%v)", absent, absentError)
 	}
 	state, stateError := sidecar.client.AcquisitionState(ctx)

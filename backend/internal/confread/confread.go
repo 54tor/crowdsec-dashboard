@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxFileBytes      = 256 << 10
+	MaxFileBytes      = 256 << 10
 	localOverrideName = "config.yaml.local"
 )
 
@@ -125,11 +125,11 @@ func readRegularFile(root *os.Root, name string) ([]byte, error) {
 	if statError != nil || !fileInfo.Mode().IsRegular() {
 		return nil, ErrNotAllowed
 	}
-	content, readError := io.ReadAll(io.LimitReader(file, maxFileBytes+1))
+	content, readError := io.ReadAll(io.LimitReader(file, MaxFileBytes+1))
 	if readError != nil {
 		return nil, fmt.Errorf("confread: read file: %w", readError)
 	}
-	if len(content) > maxFileBytes {
+	if len(content) > MaxFileBytes {
 		return nil, ErrTooLarge
 	}
 	return content, nil

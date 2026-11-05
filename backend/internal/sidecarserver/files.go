@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"crowdsec-dashboard/internal/confread"
 	"crowdsec-dashboard/internal/sidecarapi"
@@ -31,6 +32,10 @@ func (handlers fileHandlers) list(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (handlers fileHandlers) read(writer http.ResponseWriter, request *http.Request) {
+	if !isDirectory(handlers.confDir) {
+		writeCode(writer, http.StatusServiceUnavailable, sidecarapi.CodeConfigUnavailable)
+		return
+	}
 	name := request.PathValue("name")
 	content, readError := confread.Read(handlers.confDir, name)
 	isHidden := errors.Is(readError, confread.ErrNotAllowed) || errors.Is(readError, fs.ErrNotExist)
@@ -44,6 +49,11 @@ func (handlers fileHandlers) read(writer http.ResponseWriter, request *http.Requ
 	default:
 		writeJSON(writer, http.StatusOK, sidecarapi.FileResponse{Name: name, Content: content})
 	}
+}
+
+func isDirectory(dirPath string) bool {
+	dirInfo, statError := os.Stat(dirPath)
+	return statError == nil && dirInfo.IsDir()
 }
 
 func (handlers fileHandlers) flushMaxItems(writer http.ResponseWriter, _ *http.Request) {

@@ -1,10 +1,13 @@
 package sidecarserver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
 
+	"crowdsec-dashboard/internal/confread"
 	"crowdsec-dashboard/internal/confwrite"
 	"crowdsec-dashboard/internal/sidecarapi"
 )
@@ -46,11 +49,19 @@ func (handlers acquisitionHandlers) readFile(writer http.ResponseWriter, request
 		writeCode(writer, outcome.status, outcome.code)
 		return
 	}
-	writeJSON(writer, http.StatusOK, sidecarapi.AcquisitionFileResponse{
-		Exists:    current.Exists,
-		Oversized: current.Oversized,
-		Content:   current.Content,
-	})
+	writeJSON(writer, http.StatusOK, acquisitionFileResponseOf(current))
+}
+
+func acquisitionFileResponseOf(current confwrite.Current) sidecarapi.AcquisitionFileResponse {
+	fileResponse := sidecarapi.AcquisitionFileResponse{Exists: current.Exists, Oversized: current.Oversized}
+	hasReadableContent := current.Exists && !current.Oversized
+	if !hasReadableContent {
+		return fileResponse
+	}
+	rawSum := sha256.Sum256(current.Content)
+	fileResponse.SHA256 = hex.EncodeToString(rawSum[:])
+	fileResponse.Content = confread.Redact(current.Content)
+	return fileResponse
 }
 
 var confwriteErrorOutcomes = []struct {
