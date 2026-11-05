@@ -4,6 +4,7 @@ import type { FilterErrors } from '@/lib/filterValidation'
 import { EngineFilter } from '@/components/EngineFilter'
 import { FormField } from '@/components/FormField'
 import { OriginFilter } from '@/components/OriginFilter'
+import { SearchFilterField } from '@/components/SearchFilterField'
 
 interface FilterBarProps {
   values: ListFilters
@@ -18,6 +19,7 @@ export function FilterBar({ values, errors, onChange, showOriginFilter = false }
   const { t } = useTranslation()
   return (
     <form role="search" aria-label={t('filters.label')} onSubmit={(submitEvent) => submitEvent.preventDefault()} className="grid gap-3 sm:grid-cols-4">
+      <SearchFilterField value={values.q} error={errors.q ? t(`filters.${errors.q}`) : null} onChange={(searchTerm) => onChange('q', searchTerm)} />
       {FILTER_FIELDS.map((fieldName) => {
         const errorKey = errors[fieldName]
         return (

@@ -31,8 +31,8 @@ function alertRowKey(alertRow: Alert): string {
 export function Alerts() {
   const { t, i18n } = useTranslation()
   const controls = useListControls()
-  const tableQuery = usePagedList<Alert>('alerts', controls.filters, controls.page, PAGE_SIZE, controls.isValid)
-  const chartQuery = usePagedList<Alert>('alerts', controls.filters, 1, CHART_WINDOW_SIZE, controls.isValid)
+  const tableQuery = usePagedList<Alert>('alerts', controls.filters, controls.page, PAGE_SIZE, controls.isReadyToQuery)
+  const chartQuery = usePagedList<Alert>('alerts', controls.filters, 1, CHART_WINDOW_SIZE, controls.isReadyToQuery)
 
   const columns = useMemo<DataTableColumn<Alert>[]>(
     () => [

@@ -205,6 +205,9 @@
     "allowlist_write_failed": "The engine did not apply the change: the allowlist is unchanged."
   },
   "filters": {
+    "q": "Search",
+    "qHint": "Address, scenario, engine, machine… (3 characters minimum)",
+    "qClear": "Clear the search",
     "toggle": "Filters",
     "toggleWithCount": "Filters ({{count}})",
     "label": "Filters",
@@ -215,6 +218,8 @@
     "scenarioInvalid": "Invalid scenario name.",
     "ipInvalid": "Enter a valid IPv4, IPv6 or CIDR.",
     "sinceInvalid": "Use a number followed by s, m, h or d (e.g. 24h).",
+    "searchTooShort": "Enter at least 3 characters.",
+    "searchTooLong": "Enter at most 64 characters.",
     "engine": "Engine",
     "allEngines": "All engines",
     "origin": "Origin",
@@ -239,6 +244,7 @@
     "totalInfo": "{{total}} entries in total",
     "totalCapped": "{{total}}+ entries (only these can be browsed)",
     "invalidRequest": "The server refused this page or these filters: go back to the first page or fix the filters.",
+    "searchTimeout": "The search took longer than 5 seconds. Narrow it down.",
     "density": {
       "label": "Density",
       "comfortable": "Comfortable",

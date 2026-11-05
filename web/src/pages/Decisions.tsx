@@ -35,7 +35,7 @@ export function Decisions() {
   const controls = useListControls()
   const canWrite = useCanWrite()
   const [includeExpired, setIncludeExpired] = useState(false)
-  const query = usePagedList<Decision>('decisions', controls.filters, controls.page, PAGE_SIZE, controls.isValid, includeExpired)
+  const query = usePagedList<Decision>('decisions', controls.filters, controls.page, PAGE_SIZE, controls.isReadyToQuery, includeExpired)
   const includeExpiredFilterCount = includeExpired ? 1 : 0
   const activeFilterCount = controls.activeFilterCount + includeExpiredFilterCount
   const hasRows = (query.data?.items.length ?? 0) > 0

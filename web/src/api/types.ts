@@ -144,6 +144,7 @@ export interface ConfigFileContent {
 }
 
 export interface ListFilters {
+  q: string
   scenario: string
   ip: string
   since: string

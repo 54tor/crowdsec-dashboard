@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateFilters } from '@/lib/filterValidation'
+import { isSearchTermTooShort, validateFilters } from '@/lib/filterValidation'
 
 describe('filter validation', () => {
   it.each(['203.0.113.7', '203.0.113.0/24', '2001:db8::1', '2001:db8::/32', '::1', ''])(
@@ -26,5 +26,20 @@ describe('filter validation', () => {
 
   it('acceptsCrowdsecScenarioAndDuration', () => {
     expect(validateFilters({ scenario: 'crowdsecurity/ssh-bf', ip: '', since: '24h' })).toEqual({})
+  })
+
+  it.each(['ab', ' ab '])('flagsSearchTermsShorterThanThreeCharacters %j', (tooShortTerm) => {
+    expect(isSearchTermTooShort(tooShortTerm)).toBe(true)
+    expect(validateFilters({ scenario: '', ip: '', since: '', q: tooShortTerm })).toEqual({ q: 'searchTooShort' })
+  })
+
+  it.each(['', '   ', 'abc', ' 198.51 '])('acceptsBlankOrLongEnoughSearchTerms %j', (acceptedTerm) => {
+    expect(isSearchTermTooShort(acceptedTerm)).toBe(false)
+    expect(validateFilters({ scenario: '', ip: '', since: '', q: acceptedTerm })).toEqual({})
+  })
+
+  it('flagsSearchTermsLongerThanSixtyFourCharacters', () => {
+    expect(validateFilters({ scenario: '', ip: '', since: '', q: 'a'.repeat(65) })).toEqual({ q: 'searchTooLong' })
+    expect(validateFilters({ scenario: '', ip: '', since: '', q: 'a'.repeat(64) })).toEqual({})
   })
 })

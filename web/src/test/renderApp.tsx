@@ -6,22 +6,28 @@ import { MemoryRouter, useLocation } from 'react-router'
 import { AppRoutes } from '@/AppRoutes'
 import { createQueryClient } from '@/queryClient'
 
-function LocationRecorder({ visitedPaths }: { visitedPaths: string[] }) {
-  const { pathname } = useLocation()
+// visitedPaths records path changes only; visitedLocations also records query-string
+// changes, so a test can prove that typing in a filter never rewrites the URL.
+function LocationRecorder({ visitedPaths, visitedLocations }: { visitedPaths: string[]; visitedLocations: string[] }) {
+  const { pathname, search } = useLocation()
   useEffect(() => {
     visitedPaths.push(pathname)
   }, [pathname, visitedPaths])
+  useEffect(() => {
+    visitedLocations.push(pathname + search)
+  }, [pathname, search, visitedLocations])
   return null
 }
 
 export function renderApp(initialPath: string) {
   const queryClient = createQueryClient()
   const visitedPaths: string[] = []
+  const visitedLocations: string[] = []
   const sessionClearedSpy = vi.spyOn(queryClient, 'setQueryData')
   const renderResult = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
-        <LocationRecorder visitedPaths={visitedPaths} />
+        <LocationRecorder visitedPaths={visitedPaths} visitedLocations={visitedLocations} />
         <AppRoutes />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -31,5 +37,5 @@ export function renderApp(initialPath: string) {
       ([queryKey, newValue]) => queryKey[0] === 'session' && newValue === false,
     ).length
   }
-  return { ...renderResult, queryClient, visitedPaths, countSessionExpiredNotifications }
+  return { ...renderResult, queryClient, visitedPaths, visitedLocations, countSessionExpiredNotifications }
 }

@@ -205,6 +205,9 @@
     "allowlist_write_failed": "Le moteur n'a pas appliqué la modification : la liste d'autorisation est inchangée."
   },
   "filters": {
+    "q": "Rechercher",
+    "qHint": "Adresse, scénario, moteur, machine… (3 caractères minimum)",
+    "qClear": "Effacer la recherche",
     "toggle": "Filtres",
     "toggleWithCount": "Filtres ({{count}})",
     "label": "Filtres",
@@ -215,6 +218,8 @@
     "scenarioInvalid": "Nom de scénario invalide.",
     "ipInvalid": "Saisissez une IPv4, IPv6 ou un CIDR valide.",
     "sinceInvalid": "Utilisez un nombre suivi de s, m, h ou d (ex. 24h).",
+    "searchTooShort": "Saisissez au moins 3 caractères.",
+    "searchTooLong": "Saisissez au plus 64 caractères.",
     "engine": "Moteur",
     "allEngines": "Tous les moteurs",
     "origin": "Origine",
@@ -239,6 +244,7 @@
     "totalInfo": "{{total}} entrées au total",
     "totalCapped": "{{total}}+ entrées (seules celles-ci sont consultables)",
     "invalidRequest": "Le serveur a refusé cette page ou ces filtres : revenez à la première page ou corrigez les filtres.",
+    "searchTimeout": "La recherche a dépassé 5 secondes. Précisez la saisie.",
     "density": {
       "label": "Densité",
       "comfortable": "Confortable",

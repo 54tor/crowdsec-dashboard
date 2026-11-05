@@ -7,7 +7,7 @@ import { ListSummary } from '@/components/ListSummary'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { PaginationBar } from '@/components/PaginationBar'
 import { TableSkeleton } from '@/components/TableSkeleton'
-import { isInvalidRequestError } from '@/lib/apiErrors'
+import { isInvalidRequestError, isSearchTimeoutError } from '@/lib/apiErrors'
 
 interface PagedTableSectionProps<Row> {
   query: UseQueryResult<Page<Row>>
@@ -26,9 +26,20 @@ function totalPagesOf<Row>(data: Page<Row>): number {
   return Math.max(1, Math.ceil(reachableRows / data.per_page))
 }
 
+function listErrorMessageKey(error: unknown): string | undefined {
+  if (isSearchTimeoutError(error)) {
+    return 'list.searchTimeout'
+  }
+  if (isInvalidRequestError(error)) {
+    return 'list.invalidRequest'
+  }
+  return undefined
+}
+
 function ListErrorNotice({ error }: { error: unknown }) {
   const { t } = useTranslation()
-  return <ErrorNotice error={error} message={isInvalidRequestError(error) ? t('list.invalidRequest') : undefined} />
+  const messageKey = listErrorMessageKey(error)
+  return <ErrorNotice error={error} message={messageKey ? t(messageKey) : undefined} />
 }
 
 function useKeepPageInRange(page: number, lastExistingPage: number | undefined, onPageChange: (page: number) => void) {

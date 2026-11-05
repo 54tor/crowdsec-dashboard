@@ -2,6 +2,10 @@ import type { ListFilters } from '@/api/types'
 
 export function buildListUrl(path: string, filters: ListFilters, page: number, perPage: number, includeExpired = false): string {
   const parameters = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+  const searchTerm = filters.q.trim()
+  if (searchTerm !== '') {
+    parameters.set('q', searchTerm)
+  }
   for (const filterName of ['scenario', 'ip', 'since', 'engine', 'source_kind'] as const) {
     if (filters[filterName] !== '') {
       parameters.set(filterName, filters[filterName])
