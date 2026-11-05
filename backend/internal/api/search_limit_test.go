@@ -11,6 +11,7 @@ import (
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/store/storetest"
 )
 
 const searchedAlertsPath = "/api/alerts?q=ssh-bf"
@@ -133,23 +134,60 @@ func TestListWithoutSearchIsNeverLimited(testContext *testing.T) {
 	expectSearchBusy(testContext, searchedRecorder)
 }
 
-// The router builds one limiter for the three searchable routes: searches held
-// on /api/alerts make /api/decisions and /api/audit busy too.
-func TestSearchableRoutesShareOneLimiter(testContext *testing.T) {
-	lister := newBlockingAlertLister()
-	services := Services{AlertReader: lister, DecisionReader: &fakeDecisionLister{}, AuditLog: audit.NewReader(nil)}
+// routedSearchHandlers builds the real routes with a blocking alert lister and
+// the real audit reader on the throwaway database, so the limiter wiring of
+// apiRoutes is the one under test.
+func routedSearchHandlers(testContext *testing.T, lister *blockingAlertLister) map[string]http.Handler {
+	testContext.Helper()
+	services := Services{AlertReader: lister, DecisionReader: &fakeDecisionLister{}, AuditLog: audit.NewReader(storetest.New(testContext))}
 	handlersByPattern := map[string]http.Handler{}
 	for _, route := range apiRoutes(config.Config{SessionTTL: time.Hour}, services, &authHandlers{}) {
 		handlersByPattern[route.Pattern] = route.Handler
 	}
+	return handlersByPattern
+}
+
+// Searches held on /api/alerts fill the list limiter: /api/decisions shares
+// it and is busy, while the admin audit search has its own slots and runs.
+func TestListRoutesShareALimiterThatLeavesTheAuditSearchFree(testContext *testing.T) {
+	lister := newBlockingAlertLister()
+	handlersByPattern := routedSearchHandlers(testContext, lister)
 	runningSearches := startBlockedSearches(testContext, handlersByPattern["GET /api/alerts"].ServeHTTP, lister, maxConcurrentSearches)
 	defer runningSearches.Wait()
 	defer close(lister.releaseCalls)
 
-	searchedPathsByPattern := map[string]string{"GET /api/decisions": "/api/decisions?q=ssh-bf", "GET /api/audit": "/api/audit?q=login"}
-	for routePattern, searchedPath := range searchedPathsByPattern {
-		recorder := httptest.NewRecorder()
-		handlersByPattern[routePattern].ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, searchedPath, nil))
-		expectSearchBusy(testContext, recorder)
+	decisionRecorder := httptest.NewRecorder()
+	handlersByPattern["GET /api/decisions"].ServeHTTP(decisionRecorder, httptest.NewRequest(http.MethodGet, "/api/decisions?q=ssh-bf", nil))
+	auditRecorder := httptest.NewRecorder()
+	handlersByPattern["GET /api/audit"].ServeHTTP(auditRecorder, httptest.NewRequest(http.MethodGet, "/api/audit?q=login", nil))
+
+	expectSearchBusy(testContext, decisionRecorder)
+	if auditRecorder.Code != http.StatusOK {
+		testContext.Errorf("an audit search is admitted while the list slots are full, got %d %q", auditRecorder.Code, auditRecorder.Body.String())
+	}
+}
+
+// With every audit slot held, another audit search is busy while a list
+// search, which draws from the separate list limiter, still runs.
+func TestThirdConcurrentAuditSearchIsBusyWithoutTouchingListSearches(testContext *testing.T) {
+	auditSearches := newSearchLimiter(maxConcurrentAuditSearches)
+	for range maxConcurrentAuditSearches {
+		releaseHeldSlot, slotHeld := auditSearches.tryAcquire()
+		if !slotHeld {
+			testContext.Fatal("the audit slots are free at start")
+		}
+		defer releaseHeldSlot()
+	}
+	auditLists := auditReadHandlers{lister: audit.NewReader(storetest.New(testContext)), searches: auditSearches}
+	alertLists := alertReadHandlers{lister: &fakeAlertLister{}, searches: newSearchLimiter(maxConcurrentSearches)}
+
+	auditRecorder := httptest.NewRecorder()
+	auditLists.list(auditRecorder, httptest.NewRequest(http.MethodGet, "/api/audit?q=login", nil))
+	alertRecorder := httptest.NewRecorder()
+	alertLists.list(alertRecorder, httptest.NewRequest(http.MethodGet, searchedAlertsPath, nil))
+
+	expectSearchBusy(testContext, auditRecorder)
+	if alertRecorder.Code != http.StatusOK {
+		testContext.Errorf("a list search is not limited by the audit slots, got %d %q", alertRecorder.Code, alertRecorder.Body.String())
 	}
 }

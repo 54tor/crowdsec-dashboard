@@ -37,7 +37,7 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `invalid_credentials` | 401 | Wrong account name or password (the two are not distinguished). |
 | `database_unavailable` | 503 | PostgreSQL unreachable or failing. Check the `postgres` service and `DATABASE_URL`; the interface keeps the session and recovers when the database is back. |
 | `search_timeout` | 503 | A search (`q` on alerts, decisions or the audit log) ran past its 5 s deadline. Narrow it with another filter or a longer, more specific term ([api.md](api.md#known-limits)). |
-| `search_busy` | 429 | Four searches already run on the server; the response carries `Retry-After: 1`. Retry; requests without a search term are never limited. |
+| `search_busy` | 429 | The search slots of the server are full: 4 for alerts and decisions together, 2 for the audit log; the response carries `Retry-After: 1`. Retry; requests without a search term are never limited. |
 | `invalid_enrollment_token` | 403 | Wrong enrolment token. Use the one of the latest start ([First start and enrolment](#first-start-and-enrolment)). |
 | `invalid_account_name`, `invalid_password_length` | 400 | Enrolment: name not matching `^[a-z0-9][a-z0-9._-]{0,63}$`, or password outside 12 to 128 characters. |
 | `pending_login_expired` | 401 | The pending login (cookie `pending_login`) is missing, older than 5 minutes, used up (5 attempts, success or lock), already consumed, from another client address, or lost in a restart. Sign in again from the password. |
@@ -172,6 +172,10 @@ after the database is healthy.
   `search_path`), then restart. A database
   created before search was added must be recreated, since the single initial migration was edited in
   place.
+- Search limits are server-wide per route class (alerts and decisions share 4 slots, the audit log
+  has 2 of its own), not per account: one reader running many searches can keep the alert and
+  decision searches of everybody else busy. Per-account fairness is not implemented. The audit
+  slots are apart, so readers cannot take them from administrators.
 - Search cost: on a large archive a common term can reach the 5 s search deadline, and the planner
   may prefer a sequential scan over the trigram indexes when the archive is huge and the engines few;
   details in [api.md](api.md#known-limits).

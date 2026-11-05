@@ -14,11 +14,10 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, authenticationRoutes(loadedConfig, services, authenticationHandlers)...)
 	routes = append(routes, accountRoutes(loadedConfig, services)...)
 	routes = append(routes, tokenRoutes(loadedConfig, services)...)
-	searches := newSearchLimiter(maxConcurrentSearches)
-	routes = append(routes, accountAdminRoutes(loadedConfig, services, searches)...)
+	routes = append(routes, accountAdminRoutes(loadedConfig, services, newSearchLimiter(maxConcurrentAuditSearches))...)
 	routes = append(routes, engineRoutes(loadedConfig, services)...)
 	routes = append(routes, allowlistRoutes(loadedConfig, services)...)
-	routes = append(routes, readRoutes(loadedConfig, services, searches)...)
+	routes = append(routes, readRoutes(loadedConfig, services, newSearchLimiter(maxConcurrentSearches))...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
 	routes = append(routes, syncRoutes(loadedConfig, services)...)
 	routes = append(routes, bundleRoutes(loadedConfig, services)...)
@@ -75,7 +74,7 @@ func tokenRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	}
 }
 
-func accountAdminRoutes(loadedConfig config.Config, services Services, searches searchLimiter) []apiRoute {
+func accountAdminRoutes(loadedConfig config.Config, services Services, auditSearches searchLimiter) []apiRoute {
 	managed := accountHandlers{manager: services.AccountManager, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	return []apiRoute{
 		{"GET /api/accounts", accessAdminSessionOnly, http.HandlerFunc(managed.list)},
@@ -85,7 +84,7 @@ func accountAdminRoutes(loadedConfig config.Config, services Services, searches 
 		{"POST /api/accounts/{name}/sessions/revoke", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountSessionsRevoked, AccountManager.RevokeSessionsAndTokens)},
 		{"POST /api/accounts/{name}/unlock", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountUnlocked, AccountManager.Unlock)},
 		{"DELETE /api/accounts/{name}", accessAdminSessionOnly, http.HandlerFunc(managed.remove)},
-		{"GET /api/audit", accessAdminSessionOnly, http.HandlerFunc(auditReadHandlers{lister: services.AuditLog, searchTimeout: search.QueryTimeout, searches: searches}.list)},
+		{"GET /api/audit", accessAdminSessionOnly, http.HandlerFunc(auditReadHandlers{lister: services.AuditLog, searchTimeout: search.QueryTimeout, searches: auditSearches}.list)},
 	}
 }
 

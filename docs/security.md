@@ -428,6 +428,14 @@ a stable code only, never command output.
 Manual bans go to the LAPI, not through cscli, and refuse ranges wider than /8 (IPv4) or /32 (IPv6),
 so `0.0.0.0/0` and `::/0` cannot be banned from the UI.
 
+## Search concurrency
+
+Searches (`q`) take a slot from a server-wide limiter: 4 shared by `/api/alerts` and
+`/api/decisions`, open to every authenticated reader, and 2 reserved to `/api/audit`, which only
+administrators reach, so a `read_only` account or a `read` token cannot starve the audit search. A
+full limiter answers 429 `search_busy`. The limits are per route class, not per account: one reader
+can still fill the 4 list slots for everybody (known limit, no per-account fairness).
+
 ## SQL parameters
 
 Queries go through bun, which inlines the parameters into the SQL text on the client side instead of

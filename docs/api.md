@@ -212,8 +212,9 @@ ever holds active decisions). Lists never carry alert `events`.
   excluded). The live window is read from the LAPI without `q`, then filtered by the same rules:
   `total` counts the matches only, `window_size` and `may_be_truncated` keep the unfiltered window
   values. A search that runs past 5 s answers 503 `search_timeout`. At most 4 requests carrying a
-  valid `q` run at once, shared by `/api/alerts`, `/api/decisions` and `/api/audit`: another one
-  answers 429 `search_busy` with `Retry-After: 1` at once, without waiting. Requests without `q` are
+  valid `q` run at once on `/api/alerts` and `/api/decisions` together, and at most 2 on
+  `/api/audit`, which has its own slots: another one answers 429 `search_busy` with
+  `Retry-After: 1` at once, without waiting. Requests without `q` are
   never limited. Without `q`, a database timeout answers 503 `database_unavailable`, never
   `search_timeout`.
 - `total` is the live window size (with `q`, its matches) plus the matching archive rows, counted up to 10 000;

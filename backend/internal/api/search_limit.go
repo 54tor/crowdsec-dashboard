@@ -4,6 +4,7 @@ import "net/http"
 
 const (
 	maxConcurrentSearches       = 4
+	maxConcurrentAuditSearches  = 2
 	searchBusyRetryAfterSeconds = "1"
 )
 
