@@ -1,7 +1,7 @@
 import ipaddr from 'ipaddr.js'
 import type { ListFilters } from '@/api/types'
 
-export type FilterErrorKey = 'scenarioInvalid' | 'ipInvalid' | 'sinceInvalid' | 'searchTooShort' | 'searchTooLong'
+export type FilterErrorKey = 'scenarioInvalid' | 'ipInvalid' | 'sinceInvalid' | 'searchTooShort' | 'searchTooLong' | 'searchInvalid'
 
 export type FilterErrors = Partial<Record<keyof ListFilters, FilterErrorKey>>
 
@@ -12,6 +12,7 @@ export const SEARCH_TERM_MAXIMUM_LENGTH = 64
 
 const SCENARIO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/:-]{0,127}$/
 const DURATION_PATTERN = /^[0-9]{1,4}[smhd]$/
+const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u
 const PREFIX_PATTERN = /^[0-9]{1,3}$/
 const IPV4_MAX_PREFIX = 32
 const IPV6_MAX_PREFIX = 128
@@ -53,6 +54,9 @@ export function isValidDuration(duration: string): boolean {
 }
 
 function searchTermError(term: string): FilterErrorKey | undefined {
+  if (CONTROL_CHARACTER_PATTERN.test(term.trim())) {
+    return 'searchInvalid'
+  }
   if (isSearchTermTooShort(term)) {
     return 'searchTooShort'
   }

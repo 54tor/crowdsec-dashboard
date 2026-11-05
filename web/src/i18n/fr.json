@@ -220,6 +220,7 @@
     "sinceInvalid": "Utilisez un nombre suivi de s, m, h ou d (ex. 24h).",
     "searchTooShort": "Saisissez au moins 3 caractères.",
     "searchTooLong": "Saisissez au plus 64 caractères.",
+    "searchInvalid": "La recherche ne peut pas contenir de caractères de contrôle.",
     "engine": "Moteur",
     "allEngines": "Tous les moteurs",
     "origin": "Origine",

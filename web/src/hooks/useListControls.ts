@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import type { ListFilters } from '@/api/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -23,12 +23,10 @@ export function useListControls() {
   const knownEngineNames = useKnownEngineNames()
   const [draftFilters, setDraftFilters] = useState<ListFilters>(() => filtersFromUrl(searchParams))
   const [appliedUrlSearch, setAppliedUrlSearch] = useState(currentUrlSearch)
-  const [page, setPage] = useState(1)
 
   if (appliedUrlSearch !== currentUrlSearch) {
     setAppliedUrlSearch(currentUrlSearch)
     setDraftFilters(filtersFromUrl(searchParams))
-    setPage(1)
   }
   const isDraftEngineUnknown = knownEngineNames !== undefined && !isEngineKnown(draftFilters.engine, knownEngineNames)
   if (isDraftEngineUnknown) {
@@ -37,11 +35,13 @@ export function useListControls() {
 
   const filters = useDebouncedValue(draftFilters, FILTER_DEBOUNCE_MILLISECONDS)
   const errors = useMemo(() => validateFilters(filters), [filters])
+  const [pageSelection, setPageSelection] = useState({ page: 1, selectedWithFilters: filters })
+  const page = pageSelection.selectedWithFilters === filters ? pageSelection.page : 1
+  const setPage = useCallback((selectedPage: number) => setPageSelection({ page: selectedPage, selectedWithFilters: filters }), [filters])
 
   function changeFilter(filterName: keyof ListFilters, value: string) {
     const keptValue = filterName === 'q' ? value : value.trim()
     setDraftFilters((previousFilters) => ({ ...previousFilters, [filterName]: keptValue }))
-    setPage(1)
   }
 
   const isValid = Object.keys(errors).length === 0

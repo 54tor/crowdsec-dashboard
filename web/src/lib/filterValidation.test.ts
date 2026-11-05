@@ -42,4 +42,10 @@ describe('filter validation', () => {
     expect(validateFilters({ scenario: '', ip: '', since: '', q: 'a'.repeat(65) })).toEqual({ q: 'searchTooLong' })
     expect(validateFilters({ scenario: '', ip: '', since: '', q: 'a'.repeat(64) })).toEqual({})
   })
+
+  // Mirrors the backend's unicode.IsControl check (category Cc, C1 controls included).
+  // A tab inside the term is a control character; surrounding whitespace is trimmed first.
+  it.each(['ssh\tbf', 'abc\u0000', '\u007fabc', 'abc\u0085def', 'a\u001bbc'])('flagsSearchTermsContainingAControlCharacter %j', (controlCharacterTerm) => {
+    expect(validateFilters({ scenario: '', ip: '', since: '', q: controlCharacterTerm })).toEqual({ q: 'searchInvalid' })
+  })
 })
