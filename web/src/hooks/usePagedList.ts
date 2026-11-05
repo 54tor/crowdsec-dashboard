@@ -15,7 +15,7 @@ export function usePagedList<Item>(
 ) {
   return useQuery({
     queryKey: [resource, filters, page, perPage, includeExpired],
-    queryFn: () => apiFetch<Page<Item>>(buildListUrl(`/api/${resource}`, filters, page, perPage, includeExpired)),
+    queryFn: ({ signal }) => apiFetch<Page<Item>>(buildListUrl(`/api/${resource}`, filters, page, perPage, includeExpired), { signal }),
     placeholderData: keepPreviousData,
     enabled: isEnabled,
   })

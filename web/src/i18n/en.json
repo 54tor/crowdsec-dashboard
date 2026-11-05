@@ -984,6 +984,7 @@
     "decisions": "Decisions",
     "searching": "Searching…",
     "noResult": "No result",
-    "typeMore": "Type at least 3 characters to search alerts and decisions"
+    "typeMore": "Type at least 3 characters to search alerts and decisions",
+    "searchError": "Alerts and decisions could not be searched."
   }
 }

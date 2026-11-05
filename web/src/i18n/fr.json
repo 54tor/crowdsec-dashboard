@@ -984,6 +984,7 @@
     "decisions": "Décisions",
     "searching": "Recherche en cours…",
     "noResult": "Aucun résultat",
-    "typeMore": "Saisissez au moins 3 caractères pour chercher dans les alertes et décisions"
+    "typeMore": "Saisissez au moins 3 caractères pour chercher dans les alertes et décisions",
+    "searchError": "La recherche dans les alertes et décisions a échoué."
   }
 }

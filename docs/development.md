@@ -299,8 +299,14 @@ that starts failing after a refresh means CrowdSec changed an output shape.
   (`PALETTE_RESULTS_PER_CATEGORY`). Choosing a page opens it, an engine opens
   `/alerts?engine=<name>`, an alert opens `/alerts?q=<typed term>` and a decision
   `/decisions?q=<typed term>` (paths built by `web/src/lib/paletteTargets.ts`); the list pages
-  re-apply `q` and `engine` when the URL changes. Results are rendered as text in `<bdi>`, never
-  kept after closing; closing returns the focus to the element focused before opening.
+  re-apply `q` and `engine` when the URL changes. Results are rendered as text in `<bdi>`. They
+  are kept only in the in-memory TanStack Query cache (default 5 minutes after the last use),
+  never persisted and never logged, nor is the search term. Results of a previous term are hidden
+  while the next one loads, a chosen alert or decision opens with the term its results came from,
+  a request abandoned for a newer term is cancelled, and a failed search shows
+  `palette.searchError`. Ctrl+Shift+K and Ctrl+Alt+K (AltGr) are left to the browser. Closing
+  returns the focus to the element focused before opening, or to `#main-content` when that
+  element left with the previous page.
 - **Mobile**: below 768 px the rail becomes a bottom tab bar and lists rendered with
   `cardsOnMobile` turn into one card per row. Tests drive the viewport with `setViewportWidth`
   from the `matchMedia` stub in `web/src/test/matchMedia.ts`.

@@ -15,6 +15,9 @@ vi.mock('@/components/TimelineChartCanvas', () => ({
 const OPEN_PALETTE_LABEL = 'Search everywhere'
 const PALETTE_INPUT_LABEL = 'Search pages, engines, alerts and decisions'
 const TYPE_MORE_MESSAGE = 'Type at least 3 characters to search alerts and decisions'
+const SEARCHING_MESSAGE = 'Searching…'
+const NO_RESULT_MESSAGE = 'No result'
+const SEARCH_ERROR_MESSAGE = 'Alerts and decisions could not be searched.'
 const ALERTS_GROUP_HEADING = 'Alerts'
 const DECISIONS_GROUP_HEADING = 'Decisions'
 // Existing en.json values used by the pages the palette opens.
@@ -36,9 +39,40 @@ class InertResizeObserver {
   disconnect() {}
 }
 
+// Kept so the prototype is put back as it was found (jsdom: no scrollIntoView at all).
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
+
 function installLayoutStubs() {
   vi.stubGlobal('ResizeObserver', InertResizeObserver)
   Element.prototype.scrollIntoView = () => {}
+}
+
+function removeLayoutStubs() {
+  if (originalScrollIntoView) {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView)
+  } else {
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+  }
+}
+
+type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
+// Holds the answer to one URL until the test settles it. The held request rejects with an
+// AbortError when its signal is aborted, like the real fetch, so a test can see cancellation.
+function holdRequestTo(fetchMock: ReturnType<typeof stubFetch>, heldUrl: string) {
+  const defaultImplementation = fetchMock.getMockImplementation() as FetchImplementation
+  const heldRequest: { signal?: AbortSignal; settle?: (body: unknown) => void } = {}
+  fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) !== heldUrl) {
+      return defaultImplementation(input, init)
+    }
+    return new Promise<Response>((resolve, reject) => {
+      heldRequest.signal = init?.signal ?? undefined
+      heldRequest.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      heldRequest.settle = (body: unknown) => resolve(new Response(JSON.stringify(body), { status: 200 }))
+    })
+  })
+  return heldRequest
 }
 
 function shellRoutes(session = SESSION_OK) {
@@ -82,7 +116,10 @@ describe('command palette', () => {
     installLayoutStubs()
     await prepareEnglishApp()
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    removeLayoutStubs()
+    vi.unstubAllGlobals()
+  })
 
   it('ctrlKOpensThePaletteFromInsideATextField', async () => {
     stubFetch(shellRoutes())
@@ -301,5 +338,147 @@ describe('command palette', () => {
     expect(await screen.findByText('198.51.100.21', { selector: 'td bdi' })).toBeInTheDocument()
     expect(screen.getByLabelText(FILTER_SEARCH_LABEL)).toHaveValue('ssh-bf')
     expect(requestedUrls(fetchMock)).toContain('/api/decisions?page=1&per_page=20&q=ssh-bf')
+  })
+
+  it('ctrlShiftKDoesNotOpenThePalette', async () => {
+    stubFetch(shellRoutes())
+    const user = userEvent.setup()
+    await renderAlertsPage()
+
+    await user.keyboard('{Control>}{Shift>}k{/Shift}{/Control}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('ctrlAltKDoesNotOpenThePalette', async () => {
+    stubFetch(shellRoutes())
+    const user = userEvent.setup()
+    await renderAlertsPage()
+
+    // AltGr reaches the page as Control and Alt together, so this also covers AltGr+K.
+    await user.keyboard('{Control>}{Alt>}k{/Alt}{/Control}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('focusLandsOnTheMainContentWhenTheOpenerLeavesWithThePage', async () => {
+    stubFetch({ ...shellRoutes(), ...paletteRecordRoutes() })
+    const user = userEvent.setup()
+    const { visitedLocations } = await renderAlertsPage()
+    await user.click(screen.getByLabelText(FILTER_SEARCH_LABEL))
+    await openPaletteWithShortcut(user)
+
+    await user.type(paletteInput(), 'ssh-bf')
+    await waitForDebounce()
+    await user.click(await screen.findByRole('option', { name: '198.51.100.20 ban crowdsecurity/ssh-bf' }))
+
+    await waitFor(() => expect(visitedLocations.at(-1)).toBe('/decisions?q=ssh-bf'))
+    await waitFor(() => expect(document.getElementById('main-content')).toHaveFocus())
+  })
+
+  it('previousTermResultsDisappearWhileTheNextTermLoads', async () => {
+    const fetchMock = stubFetch({
+      ...shellRoutes(),
+      ...paletteRecordRoutes(),
+      'GET /api/decisions?page=1&per_page=5&q=nginx': { status: 200, body: makePage([]) },
+    })
+    const heldNginxAlerts = holdRequestTo(fetchMock, '/api/alerts?page=1&per_page=5&q=nginx')
+    const user = userEvent.setup()
+    const { visitedLocations } = await renderAlertsPage()
+    await openPaletteWithShortcut(user)
+    await user.type(paletteInput(), 'ssh-bf')
+    await waitForDebounce()
+    expect(await screen.findByRole('option', { name: 'crowdsecurity/ssh-bf-result 203.0.113.7' })).toBeInTheDocument()
+
+    await user.clear(paletteInput())
+    await user.type(paletteInput(), 'nginx')
+    await waitForDebounce()
+
+    expect(screen.queryByRole('option', { name: 'crowdsecurity/ssh-bf-result 203.0.113.7' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '198.51.100.20 ban crowdsecurity/ssh-bf' })).not.toBeInTheDocument()
+    expect(screen.getByText(SEARCHING_MESSAGE)).toBeInTheDocument()
+    expect(screen.queryByText(NO_RESULT_MESSAGE)).not.toBeInTheDocument()
+    // Nothing is selectable while the second term loads, so Enter goes nowhere.
+    await user.keyboard('{Enter}')
+    expect(visitedLocations.at(-1)).toBe('/alerts')
+
+    heldNginxAlerts.settle?.(makePage([makeAlert({ scenario: 'crowdsecurity/nginx-result' })], { per_page: 5 }))
+    await user.click(await screen.findByRole('option', { name: 'crowdsecurity/nginx-result 203.0.113.7' }))
+    await waitFor(() => expect(visitedLocations.at(-1)).toBe('/alerts?q=nginx'))
+  })
+
+  it('aResultOpensWithTheTermItCameFromWhileTheNextTermIsStillTyped', async () => {
+    stubFetch({ ...shellRoutes(), ...paletteRecordRoutes() })
+    const user = userEvent.setup()
+    const { visitedLocations } = await renderAlertsPage()
+    await openPaletteWithShortcut(user)
+    await user.type(paletteInput(), 'ssh-bf')
+    await waitForDebounce()
+    const shownResult = await screen.findByRole('option', { name: 'crowdsecurity/ssh-bf-result 203.0.113.7' })
+
+    // The extra letter is still inside the 250 ms debounce when the shown result is chosen.
+    await user.type(paletteInput(), 'x')
+    await user.click(shownResult)
+
+    await waitFor(() => expect(visitedLocations.at(-1)).toBe('/alerts?q=ssh-bf'))
+  })
+
+  it('noResultIsNotAnnouncedBeforeTheDebouncedSearchRan', async () => {
+    stubFetch({
+      ...shellRoutes(),
+      'GET /api/alerts?page=1&per_page=5&q=zzz-none': { status: 200, body: makePage([]) },
+      'GET /api/decisions?page=1&per_page=5&q=zzz-none': { status: 200, body: makePage([]) },
+    })
+    const user = userEvent.setup()
+    await renderAlertsPage()
+    await openPaletteWithShortcut(user)
+
+    await user.type(paletteInput(), 'zzz-none')
+
+    expect(screen.queryByText(NO_RESULT_MESSAGE)).not.toBeInTheDocument()
+    expect(screen.getByText(SEARCHING_MESSAGE)).toBeInTheDocument()
+    await waitForDebounce()
+    expect(await screen.findByText(NO_RESULT_MESSAGE)).toBeInTheDocument()
+  })
+
+  it('aFailedRecordSearchShowsAnErrorInsteadOfNoResult', async () => {
+    stubFetch({
+      ...shellRoutes(),
+      [`GET ${PALETTE_ALERTS_URL}`]: { status: 500, body: { error: 'database_unavailable' } },
+      [`GET ${PALETTE_DECISIONS_URL}`]: { status: 200, body: makePage([]) },
+    })
+    const user = userEvent.setup()
+    await renderAlertsPage()
+    await openPaletteWithShortcut(user)
+
+    await user.type(paletteInput(), 'ssh-bf')
+    await waitForDebounce()
+
+    expect(await screen.findByText(SEARCH_ERROR_MESSAGE)).toBeInTheDocument()
+    expect(screen.queryByText(NO_RESULT_MESSAGE)).not.toBeInTheDocument()
+  })
+
+  it('anAbandonedRecordRequestIsCancelledWithoutAnError', async () => {
+    const fetchMock = stubFetch({
+      ...shellRoutes(),
+      [`GET ${PALETTE_DECISIONS_URL}`]: { status: 200, body: makePage([]) },
+      'GET /api/alerts?page=1&per_page=5&q=nginx': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/nginx-result' })], { per_page: 5 }) },
+      'GET /api/decisions?page=1&per_page=5&q=nginx': { status: 200, body: makePage([]) },
+    })
+    const heldSshAlerts = holdRequestTo(fetchMock, PALETTE_ALERTS_URL)
+    const user = userEvent.setup()
+    await renderAlertsPage()
+    await openPaletteWithShortcut(user)
+    await user.type(paletteInput(), 'ssh-bf')
+    await waitForDebounce()
+    expect(heldSshAlerts.signal).toBeDefined()
+
+    await user.clear(paletteInput())
+    await user.type(paletteInput(), 'nginx')
+    await waitForDebounce()
+
+    expect(await screen.findByRole('option', { name: 'crowdsecurity/nginx-result 203.0.113.7' })).toBeInTheDocument()
+    expect(heldSshAlerts.signal?.aborted).toBe(true)
+    expect(screen.queryByText(SEARCH_ERROR_MESSAGE)).not.toBeInTheDocument()
   })
 })

@@ -15,7 +15,6 @@ const ITEM_CLASS_NAME =
 
 interface PaletteResultGroupsProps {
   results: PaletteResults
-  searchTerm: string
   onNavigate: (path: string) => void
 }
 
@@ -43,7 +42,7 @@ function DecisionOptionText({ decision }: { decision: Decision }) {
   )
 }
 
-export function PaletteResultGroups({ results, searchTerm, onNavigate }: PaletteResultGroupsProps) {
+export function PaletteResultGroups({ results, onNavigate }: PaletteResultGroupsProps) {
   const { t } = useTranslation()
   return (
     <>
@@ -69,7 +68,7 @@ export function PaletteResultGroups({ results, searchTerm, onNavigate }: Palette
       {results.alerts.length > 0 && (
         <Command.Group heading={t('palette.alerts')} className={GROUP_CLASS_NAME}>
           {results.alerts.map((alert, alertPosition) => (
-            <PaletteItem key={alertPosition} value={`alert:${alertPosition}`} onSelect={() => onNavigate(alertsSearchPath(searchTerm))}>
+            <PaletteItem key={alertPosition} value={`alert:${alertPosition}`} onSelect={() => onNavigate(alertsSearchPath(results.recordSearchTerm))}>
               <AlertOptionText alert={alert} />
             </PaletteItem>
           ))}
@@ -78,7 +77,7 @@ export function PaletteResultGroups({ results, searchTerm, onNavigate }: Palette
       {results.decisions.length > 0 && (
         <Command.Group heading={t('palette.decisions')} className={GROUP_CLASS_NAME}>
           {results.decisions.map((decision, decisionPosition) => (
-            <PaletteItem key={decisionPosition} value={`decision:${decisionPosition}`} onSelect={() => onNavigate(decisionsSearchPath(searchTerm))}>
+            <PaletteItem key={decisionPosition} value={`decision:${decisionPosition}`} onSelect={() => onNavigate(decisionsSearchPath(results.recordSearchTerm))}>
               <DecisionOptionText decision={decision} />
             </PaletteItem>
           ))}

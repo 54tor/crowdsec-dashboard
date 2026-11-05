@@ -4,7 +4,8 @@ const OPEN_DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]'
 
 function isPaletteShortcut(keyboardEvent: KeyboardEvent): boolean {
   const hasCommandModifier = keyboardEvent.ctrlKey || keyboardEvent.metaKey
-  return hasCommandModifier && keyboardEvent.key.toLowerCase() === 'k'
+  const hasExtraModifier = keyboardEvent.shiftKey || keyboardEvent.altKey
+  return hasCommandModifier && !hasExtraModifier && keyboardEvent.key.toLowerCase() === 'k'
 }
 
 export function useCommandPaletteShortcut(onOpen: () => void): void {
