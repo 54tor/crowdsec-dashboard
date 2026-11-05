@@ -12,10 +12,11 @@ import (
 )
 
 type Dependencies struct {
-	Verifier *sidecarauth.Verifier
-	Executor cscli.Executor
-	Config   Config
-	Logger   *slog.Logger
+	Verifier  *sidecarauth.Verifier
+	Executor  cscli.Executor
+	Config    Config
+	DigestKey DigestKey
+	Logger    *slog.Logger
 }
 
 func NewHandler(dependencies Dependencies) http.Handler {
@@ -25,7 +26,7 @@ func NewHandler(dependencies Dependencies) http.Handler {
 	authenticatedRoutes.Handle("POST "+sidecarapi.PathPing, pingHandler(logger))
 	authenticatedRoutes.Handle("POST "+sidecarapi.PathExec, newExecHandler(dependencies, executionSlots, logger))
 	registerFileRoutes(authenticatedRoutes, dependencies.Config.ConfDir, logger)
-	registerAcquisitionRoutes(authenticatedRoutes, newApplyHandler(dependencies, executionSlots, logger), logger)
+	registerAcquisitionRoutes(authenticatedRoutes, newApplyHandler(dependencies, executionSlots, logger), dependencies.DigestKey, logger)
 	rateLimitedRoutes := limitRate(logger, refuseUncleanPaths(authenticatedRoutes))
 	authenticatedHandler := authenticate(dependencies.Verifier, newThrottledRefusalLog(logger), rateLimitedRoutes)
 

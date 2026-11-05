@@ -69,9 +69,14 @@ func startConfigSidecar(testContext *testing.T, runnerError error) configSidecar
 		testContext.Fatalf("GenerateSigningKey: %v", generateError)
 	}
 	runner := &failingRunner{runnerError: runnerError}
+	digestKey, digestKeyError := sidecarserver.LoadOrCreateDigestKey(ownerOnlyDataDir(testContext))
+	if digestKeyError != nil {
+		testContext.Fatalf("LoadOrCreateDigestKey: %v", digestKeyError)
+	}
 	sidecarHandler := sidecarserver.NewHandler(sidecarserver.Dependencies{
-		Verifier: newRealVerifier(testContext, signingKey),
-		Executor: cscli.NewLocalExecutor(runner),
+		DigestKey: digestKey,
+		Verifier:  newRealVerifier(testContext, signingKey),
+		Executor:  cscli.NewLocalExecutor(runner),
 		Config: sidecarserver.Config{
 			AllowedCommands:         cscli.Names(),
 			MaxConcurrentExecutions: 4,
@@ -140,7 +145,7 @@ func TestRemoteApplyWritesThroughTheSidecar(testContext *testing.T) {
 		testContext.Errorf("expected the written file back, got %+v (%v)", current, currentError)
 	}
 	absent, absentError := sidecar.client.ReadAcquisitionFile(ctx, "absent.yaml")
-	if absentError != nil || absent.Exists || absent.RedactedContent != nil || absent.SHA256 != "" {
+	if absentError != nil || absent.Exists || absent.RedactedContent != nil || absent.Digest != "" {
 		testContext.Errorf("expected an absent file, got %+v (%v)", absent, absentError)
 	}
 	state, stateError := sidecar.client.AcquisitionState(ctx)

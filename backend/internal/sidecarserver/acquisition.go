@@ -1,8 +1,6 @@
 package sidecarserver
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,10 +12,11 @@ import (
 
 type acquisitionHandlers struct {
 	acquisitionDir string
+	digestKey      DigestKey
 }
 
-func registerAcquisitionRoutes(routes *http.ServeMux, apply *applyHandler, logger *slog.Logger) {
-	handlers := acquisitionHandlers{acquisitionDir: apply.acquisitionDir}
+func registerAcquisitionRoutes(routes *http.ServeMux, apply *applyHandler, digestKey DigestKey, logger *slog.Logger) {
+	handlers := acquisitionHandlers{acquisitionDir: apply.acquisitionDir, digestKey: digestKey}
 	routes.Handle("GET "+sidecarapi.PathAcquisitionState, withEmptyBody(logger, handlers.state))
 	routes.Handle("GET "+sidecarapi.PathAcquisitionFilePrefix+"{name}", withEmptyBody(logger, handlers.readFile))
 	routes.Handle("POST "+sidecarapi.PathConfigApply, apply)
@@ -39,7 +38,7 @@ func (handlers acquisitionHandlers) currentState() sidecarapi.AcquisitionState {
 }
 
 func (handlers acquisitionHandlers) readFile(writer http.ResponseWriter, request *http.Request) {
-	if handlers.acquisitionDir == "" {
+	if handlers.acquisitionDir == "" || !handlers.digestKey.isUsable() {
 		writeCode(writer, http.StatusServiceUnavailable, sidecarapi.CodeAcquisitionUnavailable)
 		return
 	}
@@ -49,17 +48,16 @@ func (handlers acquisitionHandlers) readFile(writer http.ResponseWriter, request
 		writeCode(writer, outcome.status, outcome.code)
 		return
 	}
-	writeJSON(writer, http.StatusOK, acquisitionFileResponseOf(current))
+	writeJSON(writer, http.StatusOK, acquisitionFileResponseOf(current, handlers.digestKey))
 }
 
-func acquisitionFileResponseOf(current confwrite.Current) sidecarapi.AcquisitionFileResponse {
+func acquisitionFileResponseOf(current confwrite.Current, digestKey DigestKey) sidecarapi.AcquisitionFileResponse {
 	fileResponse := sidecarapi.AcquisitionFileResponse{Exists: current.Exists, Oversized: current.Oversized}
 	hasReadableContent := current.Exists && !current.Oversized
 	if !hasReadableContent {
 		return fileResponse
 	}
-	rawSum := sha256.Sum256(current.Content)
-	fileResponse.SHA256 = hex.EncodeToString(rawSum[:])
+	fileResponse.Digest = digestKey.digestOf(current.Content)
 	fileResponse.Content = confread.Redact(current.Content)
 	return fileResponse
 }

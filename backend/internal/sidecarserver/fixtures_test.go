@@ -62,8 +62,16 @@ func newAuthenticatedFixture(testContext *testing.T) authenticatedFixture {
 
 // newFixtureServing wires the real verifier: a trusted keys file on disk
 // holding one fresh key, the real replay cache and a sidecar started one
-// minute before testNow, in front of the given executor and Config.
+// minute before testNow, in front of the given executor and Config, with the
+// digest key of a fresh data directory.
 func newFixtureServing(testContext *testing.T, executor cscli.Executor, config Config) authenticatedFixture {
+	testContext.Helper()
+	return newFixtureServingWithDigestKey(testContext, executor, config, loadDigestKeyOrFail(testContext, secureDataDir(testContext)))
+}
+
+// newFixtureServingWithDigestKey is newFixtureServing with a chosen digest
+// key, so a test can stand for a restart (same key) or another sidecar.
+func newFixtureServingWithDigestKey(testContext *testing.T, executor cscli.Executor, config Config, digestKey DigestKey) authenticatedFixture {
 	testContext.Helper()
 	signingKey, generateError := sidecarauth.GenerateSigningKey()
 	if generateError != nil {
@@ -89,10 +97,11 @@ func newFixtureServing(testContext *testing.T, executor cscli.Executor, config C
 	})
 	logOutput := &bytes.Buffer{}
 	handler := NewHandler(Dependencies{
-		Verifier: verifier,
-		Executor: executor,
-		Config:   config,
-		Logger:   slog.New(slog.NewJSONHandler(logOutput, nil)),
+		Verifier:  verifier,
+		Executor:  executor,
+		Config:    config,
+		DigestKey: digestKey,
+		Logger:    slog.New(slog.NewJSONHandler(logOutput, nil)),
 	})
 	return authenticatedFixture{
 		handler:    handler,

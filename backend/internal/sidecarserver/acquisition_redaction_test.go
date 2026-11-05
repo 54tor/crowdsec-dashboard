@@ -49,10 +49,10 @@ func TestSidecarAcquisitionReadNeverReturnsTheRawSecret(testContext *testing.T) 
 	if obtainedContent != expectedContent || !strings.Contains(obtainedContent, confread.RedactedMarker) {
 		testContext.Errorf("expected the confread redaction, got:\n%s", obtainedContent)
 	}
-	// The hash covers the raw bytes so the dashboard can tell an unchanged
-	// file from a changed one without ever seeing the secret.
-	if fileResponse.SHA256 != rawHashOf(acquisitionWithSecret) {
-		testContext.Errorf("expected the hash of the raw bytes, got %q", fileResponse.SHA256)
+	// The digest is keyed: a plain hash of the raw bytes would let anyone
+	// holding the response confirm a guessed secret offline.
+	if fileResponse.Digest == "" || fileResponse.Digest == rawHashOf(acquisitionWithSecret) {
+		testContext.Errorf("expected a keyed digest, got %q", fileResponse.Digest)
 	}
 	if !fileResponse.Exists || fileResponse.Oversized {
 		testContext.Errorf("expected an existing file within the cap, got %+v", fileResponse)
@@ -77,19 +77,21 @@ func TestSidecarAcquisitionRedactionIsIdempotent(testContext *testing.T) {
 	if string(secondResponse.Content) != string(firstResponse.Content) {
 		testContext.Errorf("expected the redaction to be idempotent:\nfirst  %q\nsecond %q", firstResponse.Content, secondResponse.Content)
 	}
-	if secondResponse.SHA256 != rawHashOf(string(firstResponse.Content)) {
-		testContext.Errorf("expected the hash of the rewritten raw bytes, got %q", secondResponse.SHA256)
+	// The raw bytes did change (the secret became the marker), so the digest
+	// of the raw bytes must change even though the redacted text did not.
+	if secondResponse.Digest == firstResponse.Digest {
+		testContext.Errorf("expected the digest to follow the raw bytes, got %q twice", secondResponse.Digest)
 	}
 }
 
-func TestSidecarAcquisitionReadOfAnOversizedFileCarriesNoContentNorHash(testContext *testing.T) {
+func TestSidecarAcquisitionReadOfAnOversizedFileCarriesNoContentNorDigest(testContext *testing.T) {
 	fixture := newConfigFixture(testContext, nil)
 	oversizedContent := "source: file\n#" + strings.Repeat("x", 256<<10) + "\npassword: " + plantedSecret + "\n"
 	writeTestFile(testContext, filepath.Join(fixture.acquisitionDir, "big.yaml"), oversizedContent)
 
 	recorder := fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"big.yaml")
 
-	expectResponse(testContext, recorder, http.StatusOK, `{"exists":true,"oversized":true,"sha256":"","content":null}`+"\n")
+	expectResponse(testContext, recorder, http.StatusOK, `{"exists":true,"oversized":true,"digest":"","content":null}`+"\n")
 }
 
 func TestSidecarApplyAnswersBusyBeforeReadingTheBody(testContext *testing.T) {

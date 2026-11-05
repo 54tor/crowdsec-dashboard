@@ -33,16 +33,23 @@ func loopbackEgress() egress.Settings {
 	return egress.Settings{Guardian: ssrf.New(ssrf.WithAnyPort(), ssrf.WithAllowedV4Prefixes(netip.MustParsePrefix("127.0.0.0/8")))}
 }
 
-// startPinnedTLSServer serves the handler over TLS 1.3 with the certificate a
-// real sidecar would generate in a fresh data dir, and returns the SPKI
-// fingerprint the sidecar would log for the operator to pin.
-func startPinnedTLSServer(testContext *testing.T, handler http.Handler) (*httptest.Server, string) {
+// ownerOnlyDataDir returns a fresh 0700 directory, the mode the sidecar
+// requires of its data volume before it stores keys there.
+func ownerOnlyDataDir(testContext *testing.T) string {
 	testContext.Helper()
 	dataDir := testContext.TempDir()
 	if chmodError := os.Chmod(dataDir, 0o700); chmodError != nil {
 		testContext.Fatalf("chmod data dir: %v", chmodError)
 	}
-	certificate, fingerprint, _, certificateError := sidecarserver.LoadOrCreateCertificate(dataDir, time.Now)
+	return dataDir
+}
+
+// startPinnedTLSServer serves the handler over TLS 1.3 with the certificate a
+// real sidecar would generate in a fresh data dir, and returns the SPKI
+// fingerprint the sidecar would log for the operator to pin.
+func startPinnedTLSServer(testContext *testing.T, handler http.Handler) (*httptest.Server, string) {
+	testContext.Helper()
+	certificate, fingerprint, _, certificateError := sidecarserver.LoadOrCreateCertificate(ownerOnlyDataDir(testContext), time.Now)
 	if certificateError != nil {
 		testContext.Fatalf("LoadOrCreateCertificate: %v", certificateError)
 	}

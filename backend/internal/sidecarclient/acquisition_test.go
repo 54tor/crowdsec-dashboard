@@ -17,11 +17,11 @@ import (
 
 const acquisitionWithSecret = nginxAcquisition + "password: " + plantedSecret + "\n"
 
-// validHash is a well-formed lowercase SHA-256 hex digest the hostile
+// validDigest is a well-formed lowercase HMAC-SHA256 hex digest the hostile
 // sidecars use when only another field is meant to be wrong.
-var validHash = strings.Repeat("ab", sha256.Size)
+var validDigest = strings.Repeat("ab", sha256.Size)
 
-func TestRemoteAcquisitionReadReturnsRedactedContentAndTheRawHash(testContext *testing.T) {
+func TestRemoteAcquisitionReadReturnsRedactedContentAndAKeyedDigest(testContext *testing.T) {
 	sidecar := startConfigSidecar(testContext, nil)
 	writeFixtureFile(testContext, filepath.Join(sidecar.acquisitionDir, "nginx.yaml"), acquisitionWithSecret)
 
@@ -37,9 +37,15 @@ func TestRemoteAcquisitionReadReturnsRedactedContentAndTheRawHash(testContext *t
 	if string(acquisitionFile.RedactedContent) != string(expectedContent) {
 		testContext.Errorf("expected the confread redaction, got:\n%s", acquisitionFile.RedactedContent)
 	}
+	// The digest is opaque: it must not be the plain hash the dashboard could
+	// compute itself, yet the same sidecar gives it again for the same bytes.
 	rawSum := sha256.Sum256([]byte(acquisitionWithSecret))
-	if acquisitionFile.SHA256 != hex.EncodeToString(rawSum[:]) {
-		testContext.Errorf("expected the hash of the raw bytes, got %q", acquisitionFile.SHA256)
+	if len(acquisitionFile.Digest) != 64 || acquisitionFile.Digest == hex.EncodeToString(rawSum[:]) {
+		testContext.Errorf("expected a keyed digest, got %q", acquisitionFile.Digest)
+	}
+	secondRead, secondError := sidecar.client.ReadAcquisitionFile(context.Background(), "nginx.yaml")
+	if secondError != nil || secondRead.Digest != acquisitionFile.Digest {
+		testContext.Errorf("expected the same digest on a second read, got %q (%v)", secondRead.Digest, secondError)
 	}
 }
 
@@ -47,16 +53,19 @@ func TestRemoteAcquisitionReadRefusesInconsistentAnswers(testContext *testing.T)
 	encodedContent := base64.StdEncoding.EncodeToString([]byte(nginxAcquisition))
 	oversizedContent := base64.StdEncoding.EncodeToString(make([]byte, confwrite.MaxFileBytes+1))
 	inconsistentBodies := map[string]string{
-		"oversized with content":   `{"exists":true,"oversized":true,"sha256":"","content":"` + encodedContent + `"}`,
-		"oversized with a hash":    `{"exists":true,"oversized":true,"sha256":"` + validHash + `","content":null}`,
-		"absent with content":      `{"exists":false,"oversized":false,"sha256":"","content":"` + encodedContent + `"}`,
-		"absent with a hash":       `{"exists":false,"oversized":false,"sha256":"` + validHash + `","content":null}`,
-		"absent but oversized":     `{"exists":false,"oversized":true,"sha256":"","content":null}`,
-		"existing without a hash":  `{"exists":true,"oversized":false,"sha256":"","content":"` + encodedContent + `"}`,
-		"uppercase hash":           `{"exists":true,"oversized":false,"sha256":"` + strings.ToUpper(validHash) + `","content":"` + encodedContent + `"}`,
-		"short hash":               `{"exists":true,"oversized":false,"sha256":"abcd","content":"` + encodedContent + `"}`,
-		"content above the cap":    `{"exists":true,"oversized":false,"sha256":"` + validHash + `","content":"` + oversizedContent + `"}`,
-		"existing without content": `{"exists":true,"oversized":false,"sha256":"` + validHash + `","content":null}`,
+		"oversized with content":    `{"exists":true,"oversized":true,"digest":"","content":"` + encodedContent + `"}`,
+		"oversized with a digest":   `{"exists":true,"oversized":true,"digest":"` + validDigest + `","content":null}`,
+		"absent with content":       `{"exists":false,"oversized":false,"digest":"","content":"` + encodedContent + `"}`,
+		"absent with a digest":      `{"exists":false,"oversized":false,"digest":"` + validDigest + `","content":null}`,
+		"absent but oversized":      `{"exists":false,"oversized":true,"digest":"","content":null}`,
+		"existing without a digest": `{"exists":true,"oversized":false,"digest":"","content":"` + encodedContent + `"}`,
+		"uppercase digest":          `{"exists":true,"oversized":false,"digest":"` + strings.ToUpper(validDigest) + `","content":"` + encodedContent + `"}`,
+		"short digest":              `{"exists":true,"oversized":false,"digest":"abcd","content":"` + encodedContent + `"}`,
+		"long digest":               `{"exists":true,"oversized":false,"digest":"` + validDigest + `a","content":"` + encodedContent + `"}`,
+		"legacy plain hash field":   `{"exists":true,"oversized":false,"sha256":"` + validDigest + `","content":"` + encodedContent + `"}`,
+		"non hex digest":            `{"exists":true,"oversized":false,"digest":"` + strings.Repeat("zz", sha256.Size) + `","content":"` + encodedContent + `"}`,
+		"content above the cap":     `{"exists":true,"oversized":false,"digest":"` + validDigest + `","content":"` + oversizedContent + `"}`,
+		"existing without content":  `{"exists":true,"oversized":false,"digest":"` + validDigest + `","content":null}`,
 	}
 	for caseLabel, inconsistentBody := range inconsistentBodies {
 		testContext.Run(caseLabel, func(subtestContext *testing.T) {
@@ -72,13 +81,11 @@ func TestRemoteAcquisitionReadRefusesInconsistentAnswers(testContext *testing.T)
 }
 
 func TestRemoteAcquisitionReadAcceptsAnEmptyExistingFile(testContext *testing.T) {
-	emptySum := sha256.Sum256(nil)
-	emptyHash := hex.EncodeToString(emptySum[:])
-	client := startHostileSidecar(testContext, answering(http.StatusOK, `{"exists":true,"oversized":false,"sha256":"`+emptyHash+`","content":""}`))
+	client := startHostileSidecar(testContext, answering(http.StatusOK, `{"exists":true,"oversized":false,"digest":"`+validDigest+`","content":""}`))
 
 	acquisitionFile, readError := client.ReadAcquisitionFile(context.Background(), "nginx.yaml")
 
-	if readError != nil || !acquisitionFile.Exists || acquisitionFile.SHA256 != emptyHash || len(acquisitionFile.RedactedContent) != 0 {
+	if readError != nil || !acquisitionFile.Exists || acquisitionFile.Digest != validDigest || len(acquisitionFile.RedactedContent) != 0 {
 		testContext.Errorf("expected an existing empty file, got %+v (%v)", acquisitionFile, readError)
 	}
 }

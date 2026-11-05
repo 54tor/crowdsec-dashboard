@@ -340,7 +340,7 @@ func TestSidecarAcquisitionReadsMirrorReadCurrent(testContext *testing.T) {
 		testContext.Errorf("expected the existing file, got %+v", existingFile)
 	}
 	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"absent.yaml"), http.StatusOK,
-		`{"exists":false,"oversized":false,"sha256":"","content":null}`+"\n")
+		`{"exists":false,"oversized":false,"digest":"","content":null}`+"\n")
 	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+".hidden.yaml"), http.StatusBadRequest,
 		codeBody(sidecarapi.CodeInvalidName))
 	expectResponse(testContext, fixture.get(testContext, sidecarapi.PathAcquisitionFilePrefix+"linked.yaml"), http.StatusConflict,

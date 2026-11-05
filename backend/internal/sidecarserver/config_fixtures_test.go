@@ -80,6 +80,12 @@ type configFixture struct {
 // runner. adjustConfig may change the Config before the handler is built.
 func newConfigFixture(testContext *testing.T, adjustConfig func(*Config)) configFixture {
 	testContext.Helper()
+	return newConfigFixtureWithDigestKey(testContext, adjustConfig, loadDigestKeyOrFail(testContext, secureDataDir(testContext)))
+}
+
+// newConfigFixtureWithDigestKey is newConfigFixture with a chosen digest key.
+func newConfigFixtureWithDigestKey(testContext *testing.T, adjustConfig func(*Config), digestKey DigestKey) configFixture {
+	testContext.Helper()
 	confDir := testContext.TempDir()
 	acquisitionDir := testContext.TempDir()
 	outsideDir := testContext.TempDir()
@@ -101,7 +107,7 @@ func newConfigFixture(testContext *testing.T, adjustConfig func(*Config)) config
 	}
 	runner := &recordingTestRunner{}
 	return configFixture{
-		authenticatedFixture: newFixtureServing(testContext, cscli.NewLocalExecutor(runner), config),
+		authenticatedFixture: newFixtureServingWithDigestKey(testContext, cscli.NewLocalExecutor(runner), config, digestKey),
 		confDir:              confDir,
 		acquisitionDir:       acquisitionDir,
 		outsideDir:           outsideDir,
