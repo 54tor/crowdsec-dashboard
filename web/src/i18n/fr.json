@@ -605,11 +605,13 @@
       "url": "URL du sidecar",
       "urlHint": "Par exemple https://sidecar.example.com:8443",
       "fetchFingerprint": "Récupérer l'empreinte",
-      "compareFingerprint": "Comparez cette empreinte, bloc par bloc, avec celle affichée dans les journaux du sidecar.",
+      "compareFingerprint": "Comparez cette empreinte avec la valeur spki_sha256 que le sidecar affiche dans son journal de démarrage (64 caractères hexadécimaux, sans espaces). Le regroupement en blocs ci-dessous ne sert qu'à faciliter la lecture.",
       "fingerprintMatches": "J'ai comparé cette empreinte avec celle affichée par le sidecar",
       "pinAndEnrol": "Épingler et enrôler",
       "enrolledTitle": "Sidecar enrôlé",
       "enrolledDescription": "Configurez le sidecar avec ces valeurs : ajoutez la ligne de clé à son fichier de clés de confiance et définissez les deux variables d'environnement.",
+      "repinnedTitle": "Empreinte du certificat mise à jour",
+      "repinnedDescription": "L'empreinte du certificat du sidecar a été mise à jour. Ses clés sont inchangées : les lignes ci-dessous sont les lignes existantes, affichées à titre de référence.",
       "trustedKeyLine": "Ligne de clé de confiance (SIDECAR_TRUSTED_KEYS_FILE)",
       "issuerLine": "Émetteur",
       "audienceLine": "Audience",
@@ -631,7 +633,7 @@
       "removeAria": "Retirer le sidecar de {{name}}",
       "removeTitle": "Retirer le sidecar de {{name}}",
       "removeDescription": "Le tableau de bord oublie le sidecar de {{name}}, son certificat épinglé et ses clés. Les écritures vers ce moteur échouent jusqu'à un nouvel enrôlement.",
-      "unusable": "La configuration du sidecar de ce moteur est inutilisable (clé illisible, émetteur absent ou client invalide). Retirez le sidecar puis enrôlez-le de nouveau."
+      "unusable": "Ce moteur n'est pas joignable via son sidecar. Soit la clé de signature du sidecar est illisible (retirez le sidecar puis enrôlez-le de nouveau), soit les secrets stockés du moteur ne peuvent pas être déchiffrés (ressaisissez-les dans les réglages du moteur)."
     }
   },
   "alertDetail": {

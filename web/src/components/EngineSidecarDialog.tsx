@@ -12,6 +12,7 @@ import { SidecarKeyLines } from '@/components/SidecarKeyLines'
 import { Button } from '@/components/ui/button'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePendingReport } from '@/hooks/usePendingReport'
+import { errorMessage } from '@/i18n'
 import { sidecarErrorMessage } from '@/lib/sidecarErrors'
 
 const FINGERPRINT_BLOCK_PATTERN = /.{1,4}/g
@@ -27,13 +28,14 @@ interface EnrolmentFormProps {
   reportPending: (isPending: boolean) => void
 }
 
-function EnrolmentResult({ enrolment, onClose }: { enrolment: SidecarEnrolment; onClose: () => void }) {
+function EnrolmentResult({ enrolment, isRepin, onClose }: { enrolment: SidecarEnrolment; isRepin: boolean; onClose: () => void }) {
   const { t } = useTranslation()
+  const resultKeyPrefix = isRepin ? 'engines.sidecar.repinned' : 'engines.sidecar.enrolled'
   return (
     <div className="space-y-4">
       <DialogHeader>
-        <DialogTitle>{t('engines.sidecar.enrolledTitle')}</DialogTitle>
-        <DialogDescription>{t('engines.sidecar.enrolledDescription')}</DialogDescription>
+        <DialogTitle>{t(`${resultKeyPrefix}Title`)}</DialogTitle>
+        <DialogDescription>{t(`${resultKeyPrefix}Description`)}</DialogDescription>
       </DialogHeader>
       <SidecarKeyLines trustedKeyLine={enrolment.trusted_key_line} issuer={enrolment.issuer} audience={enrolment.audience} />
       <DialogFooter>
@@ -65,6 +67,10 @@ function EnrolmentForm({ engine, onEnrolled, onClose, reportPending }: Enrolment
   const [isConfirmed, setIsConfirmed] = useState(false)
   const observation = useMutation({
     mutationFn: () => observeSidecar(engine.name, sidecarUrl),
+    onError: () => {
+      setFingerprint(undefined)
+      setIsConfirmed(false)
+    },
     onSuccess: (observed) => {
       setFingerprint(observed.spki_sha256)
       setIsConfirmed(false)
@@ -78,11 +84,12 @@ function EnrolmentForm({ engine, onEnrolled, onClose, reportPending }: Enrolment
       setIsConfirmed(false)
     },
   })
+  const describeError = engine.sidecar !== null ? sidecarErrorMessage : errorMessage
   const isWorking = observation.isPending || enrolment.isPending
   usePendingReport(isWorking, reportPending)
 
   if (enrolment.isSuccess) {
-    return <EnrolmentResult enrolment={enrolment.data} onClose={onClose} />
+    return <EnrolmentResult enrolment={enrolment.data} isRepin={engine.sidecar !== null} onClose={onClose} />
   }
 
   function changeUrl(nextUrl: string) {
@@ -95,6 +102,8 @@ function EnrolmentForm({ engine, onEnrolled, onClose, reportPending }: Enrolment
     submitEvent.preventDefault()
     if (sidecarUrl.trim() !== '' && !isWorking) {
       enrolment.reset()
+      setFingerprint(undefined)
+      setIsConfirmed(false)
       observation.mutate()
     }
   }
@@ -112,8 +121,8 @@ function EnrolmentForm({ engine, onEnrolled, onClose, reportPending }: Enrolment
         {observation.isPending ? t('dialog.working') : t('engines.sidecar.fetchFingerprint')}
       </Button>
       {fingerprint !== undefined && <FingerprintCheck fingerprint={fingerprint} isConfirmed={isConfirmed} onConfirmedChange={setIsConfirmed} />}
-      {observation.isError && <ErrorNotice error={observation.error} message={sidecarErrorMessage(observation.error)} />}
-      {enrolment.isError && <ErrorNotice error={enrolment.error} message={sidecarErrorMessage(enrolment.error)} />}
+      {observation.isError && <ErrorNotice error={observation.error} message={describeError(observation.error)} />}
+      {enrolment.isError && <ErrorNotice error={enrolment.error} message={describeError(enrolment.error)} />}
       <DialogFooter>
         <Button type="button" variant="outline" disabled={isWorking} onClick={onClose}>
           {t('dialog.cancel')}

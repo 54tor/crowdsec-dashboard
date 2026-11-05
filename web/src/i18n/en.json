@@ -605,11 +605,13 @@
       "url": "Sidecar URL",
       "urlHint": "For example https://sidecar.example.com:8443",
       "fetchFingerprint": "Fetch fingerprint",
-      "compareFingerprint": "Compare this fingerprint, block by block, with the one printed in the sidecar logs.",
+      "compareFingerprint": "Compare this fingerprint with the spki_sha256 value the sidecar prints in its startup log (64 hexadecimal characters, no spaces). The grouping into blocks below is only there to make it easier to read.",
       "fingerprintMatches": "I compared this fingerprint with the one printed by the sidecar",
       "pinAndEnrol": "Pin and enrol",
       "enrolledTitle": "Sidecar enrolled",
       "enrolledDescription": "Configure the sidecar with these values: add the key line to its trusted keys file and set the two environment variables.",
+      "repinnedTitle": "Certificate pin updated",
+      "repinnedDescription": "The pinned certificate of the sidecar was updated. Its keys are unchanged: the lines below are the existing ones, shown for reference.",
       "trustedKeyLine": "Trusted key line (SIDECAR_TRUSTED_KEYS_FILE)",
       "issuerLine": "Issuer",
       "audienceLine": "Audience",
@@ -631,7 +633,7 @@
       "removeAria": "Remove the sidecar of {{name}}",
       "removeTitle": "Remove the sidecar of {{name}}",
       "removeDescription": "The dashboard forgets the sidecar of {{name}}, its pinned certificate and its keys. Writes to this engine stop working until a sidecar is enrolled again.",
-      "unusable": "The sidecar configuration of this engine cannot be used (unreadable key, missing issuer or invalid client). Remove the sidecar and enrol it again."
+      "unusable": "This engine cannot be reached through its sidecar. Either the sidecar signing key cannot be read (remove the sidecar and enrol it again), or the secrets stored for the engine cannot be decrypted (re-enter them in the engine settings)."
     }
   },
   "alertDetail": {

@@ -194,6 +194,63 @@ describe('engines page sidecar management', () => {
     expect(within(dialog).getByRole('button', { name: en.engines.sidecar.pinAndEnrol })).toBeDisabled()
   })
 
+  it('clearsTheFingerprintAndTheConfirmationWhenANewObservationFails', async () => {
+    const observationOutcomes = [
+      { status: 200, body: { spki_sha256: OBSERVED_FINGERPRINT } },
+      { status: 502, body: { error: 'sidecar_unavailable' } },
+    ]
+    let observationCount = 0
+    stubFetch(pageRoutes([ENGINE_WITHOUT_SIDECAR], { 'POST /api/engines/peer/sidecar/observe': () => observationOutcomes[observationCount++] }))
+    const user = userEvent.setup()
+    renderApp('/engines')
+
+    const dialog = await openEnrolmentWithFingerprint(user)
+    await user.click(within(dialog).getByLabelText(en.engines.sidecar.fingerprintMatches))
+    expect(within(dialog).getByRole('button', { name: en.engines.sidecar.pinAndEnrol })).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: en.engines.sidecar.fetchFingerprint }))
+
+    expect(await within(dialog).findByText(en.errors.sidecar_unavailable)).toBeInTheDocument()
+    expect(within(dialog).queryByText(GROUPED_FINGERPRINT)).toBeNull()
+    expect(within(dialog).getByRole('button', { name: en.engines.sidecar.pinAndEnrol })).toBeDisabled()
+  })
+
+  it('namesTheSidecarKeyOnlyWhenTheEngineHasASidecar', async () => {
+    const unreadableSecret = { status: 500, body: { error: 'engine_secret_unreadable' } }
+    stubFetch(pageRoutes([ENGINE_WITHOUT_SIDECAR], { 'POST /api/engines/peer/sidecar/observe': unreadableSecret }))
+    const user = userEvent.setup()
+    const withoutSidecar = renderApp('/engines')
+    await user.click(await screen.findByRole('button', { name: 'Enrol a sidecar for peer' }))
+    const dialogWithoutSidecar = await screen.findByRole('dialog')
+    await user.type(within(dialogWithoutSidecar).getByLabelText(en.engines.sidecar.url), SIDECAR_URL)
+    await user.click(within(dialogWithoutSidecar).getByRole('button', { name: en.engines.sidecar.fetchFingerprint }))
+    expect(await within(dialogWithoutSidecar).findByText(en.errors.engine_secret_unreadable)).toBeInTheDocument()
+    expect(within(dialogWithoutSidecar).queryByText(en.engines.sidecar.unusable)).toBeNull()
+    withoutSidecar.unmount()
+
+    stubFetch(pageRoutes([ENGINE_WITH_SIDECAR], { 'POST /api/engines/peer/sidecar/observe': unreadableSecret }))
+    renderApp('/engines')
+    await user.click(await screen.findByRole('button', { name: 'Re-pin the sidecar certificate of peer' }))
+    const dialogWithSidecar = await screen.findByRole('dialog')
+    await user.click(within(dialogWithSidecar).getByRole('button', { name: en.engines.sidecar.fetchFingerprint }))
+    expect(await within(dialogWithSidecar).findByText(en.engines.sidecar.unusable)).toBeInTheDocument()
+  })
+
+  it('explainsThatARepinLeavesTheKeysUnchanged', async () => {
+    stubFetch(pageRoutes([ENGINE_WITH_SIDECAR], { 'PUT /api/engines/peer/sidecar': ENROLMENT_RESPONSE }))
+    const user = userEvent.setup()
+    renderApp('/engines')
+    await user.click(await screen.findByRole('button', { name: 'Re-pin the sidecar certificate of peer' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: en.engines.sidecar.fetchFingerprint }))
+    await within(dialog).findByText(GROUPED_FINGERPRINT)
+    await user.click(within(dialog).getByLabelText(en.engines.sidecar.fingerprintMatches))
+    await user.click(within(dialog).getByRole('button', { name: en.engines.sidecar.pinAndEnrol }))
+
+    expect(await within(dialog).findByText(en.engines.sidecar.repinnedTitle)).toBeInTheDocument()
+    expect(within(dialog).getByText(en.engines.sidecar.repinnedDescription)).toBeInTheDocument()
+    expect(within(dialog).queryByText(en.engines.sidecar.enrolledTitle)).toBeNull()
+  })
+
   it('promoteIsOfferedOnlyWhenANextKeyIsStaged', async () => {
     stubFetch(pageRoutes([ENGINE_WITH_SIDECAR]))
     const { unmount } = renderApp('/engines')
