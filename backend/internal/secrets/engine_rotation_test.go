@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"crowdsec-dashboard/internal/store/storetest"
 )
 
 const (
@@ -154,6 +156,23 @@ func TestEngineAssociatedDataSeparatesItsParts(testContext *testing.T) {
 	}
 }
 
+// credentialColumnReports keeps the reports of the two engine columns sealed
+// by insertProxiedEngine: the other engine columns (sidecar keys) hold no row
+// in these tests, so they report nothing unreadable.
+func credentialColumnReports(report RotationReport) []ColumnReport {
+	credentialColumnNames := map[string]bool{
+		"engine.engine_machine_password_sealed": true,
+		"engine.engine_proxy_credential_sealed": true,
+	}
+	var credentialReports []ColumnReport
+	for _, columnReport := range report.Columns {
+		if credentialColumnNames[columnReport.Column] {
+			credentialReports = append(credentialReports, columnReport)
+		}
+	}
+	return credentialReports
+}
+
 func TestRotateReportsUnreadableRowsAndContinues(testContext *testing.T) {
 	fixture := newRotationFixture(testContext)
 	ctx := context.Background()
@@ -184,7 +203,7 @@ func TestRotateReportsUnreadableRowsAndContinues(testContext *testing.T) {
 	if !errors.Is(dryRunError, ErrUnreadableRows) {
 		testContext.Errorf("the dry run must report the unreadable rows, got %v", dryRunError)
 	}
-	for _, columnReport := range dryRunReport.Columns[1:] {
+	for _, columnReport := range credentialColumnReports(dryRunReport) {
 		if fmt.Sprint(columnReport.UnreadableIDs) != fmt.Sprint(expectedUnreadable) {
 			testContext.Errorf("dry run %s: expected unreadable %v, got %v", columnReport.Column, expectedUnreadable, columnReport.UnreadableIDs)
 		}
@@ -204,7 +223,7 @@ func TestRotateReportsUnreadableRowsAndContinues(testContext *testing.T) {
 	if report.Rewritten() != 3 || len(report.Columns) != len(EncryptedColumns) {
 		testContext.Errorf("expected the totp and both readable engine secrets rewritten over every column, got %+v", report)
 	}
-	for _, columnReport := range report.Columns[1:] {
+	for _, columnReport := range credentialColumnReports(report) {
 		if fmt.Sprint(columnReport.UnreadableIDs) != fmt.Sprint(expectedUnreadable) {
 			testContext.Errorf("%s: expected unreadable %v, got %v", columnReport.Column, expectedUnreadable, columnReport.UnreadableIDs)
 		}
@@ -240,5 +259,113 @@ func TestRotateNeverBindsToADestinationChangedAfterTheRead(testContext *testing.
 
 	if rewriteError != nil || outcome.rewritten != 0 || outcome.skippedConcurrent != 1 {
 		testContext.Errorf("the rewrite must skip a row whose destination changed, got %+v %v", outcome, rewriteError)
+	}
+}
+
+const (
+	sidecarURL          = "https://sidecar.example.com:8443"
+	currentSigningKeyID = "0123456789abcdef0123456789abcdef"
+	nextSigningKeyID    = "fedcba9876543210fedcba9876543210"
+)
+
+// sealSidecarKeys gives the engine a sidecar whose current and next signing
+// keys are sealed by sealingKeyring under the destination-bound associated
+// data. The secret bytes are opaque to the rotation, so a marker is enough.
+func sealSidecarKeys(testContext *testing.T, fixture rotationFixture, sealingKeyring *Keyring, engineID int64) {
+	testContext.Helper()
+	currentCiphertext, currentKeyringKeyID, _ := sealingKeyring.Seal([]byte("current-signing-secret"),
+		EngineSidecarKeyAssociatedData(engineID, sidecarURL, currentSigningKeyID))
+	nextCiphertext, nextKeyringKeyID, _ := sealingKeyring.Seal([]byte("next-signing-secret"),
+		EngineSidecarKeyAssociatedData(engineID, sidecarURL, nextSigningKeyID))
+	if _, updateError := fixture.database.ExecContext(context.Background(),
+		`UPDATE engine SET engine_sidecar_url = ?, engine_sidecar_spki_sha256 = repeat('ab', 32),
+		 engine_sidecar_signing_key_kid = ?, engine_sidecar_signing_public_key = 'public-current',
+		 engine_sidecar_signing_key_sealed = ?, engine_sidecar_signing_key_key_id = ?,
+		 engine_sidecar_next_signing_key_kid = ?, engine_sidecar_next_signing_public_key = 'public-next',
+		 engine_sidecar_next_signing_key_sealed = ?, engine_sidecar_next_signing_key_key_id = ?
+		 WHERE engine_id = ?`,
+		sidecarURL, currentSigningKeyID, currentCiphertext, currentKeyringKeyID,
+		nextSigningKeyID, nextCiphertext, nextKeyringKeyID, engineID); updateError != nil {
+		testContext.Fatalf("seal sidecar keys: %v", updateError)
+	}
+}
+
+func TestRotateResealsSidecarKeys(testContext *testing.T) {
+	fixture := newRotationFixture(testContext)
+	engineID := insertProxiedEngine(testContext, fixture, fixture.retiredKeyring, "remote",
+		destinationPasswordAssociatedData, destinationCredentialAssociatedData)
+	sealSidecarKeys(testContext, fixture, fixture.retiredKeyring, engineID)
+
+	report, rotateError := Rotate(context.Background(), fixture.database, fixture.rotatingKeyring, false, testBatchSize)
+
+	if rotateError != nil {
+		testContext.Fatalf("rotate: %v", rotateError)
+	}
+	if report.Rewritten() != 4 {
+		testContext.Errorf("expected both credentials and both sidecar keys rewritten, got %+v", report)
+	}
+	var currentCiphertext, nextCiphertext []byte
+	var currentKeyringKeyID, nextKeyringKeyID string
+	if scanError := fixture.database.QueryRowContext(context.Background(),
+		`SELECT engine_sidecar_signing_key_sealed, engine_sidecar_signing_key_key_id,
+		 engine_sidecar_next_signing_key_sealed, engine_sidecar_next_signing_key_key_id FROM engine WHERE engine_id = ?`, engineID).
+		Scan(&currentCiphertext, &currentKeyringKeyID, &nextCiphertext, &nextKeyringKeyID); scanError != nil {
+		testContext.Fatalf("load sidecar keys: %v", scanError)
+	}
+	rotatedKeyID := fixture.rotatingKeyring.CurrentKeyID()
+	if currentKeyringKeyID != rotatedKeyID || nextKeyringKeyID != rotatedKeyID {
+		testContext.Errorf("both sidecar keys must use the current key, got %q and %q", currentKeyringKeyID, nextKeyringKeyID)
+	}
+	currentSecret, currentOpenError := fixture.rotatingKeyring.Open(currentCiphertext, currentKeyringKeyID,
+		EngineSidecarKeyAssociatedData(engineID, sidecarURL, currentSigningKeyID))
+	nextSecret, nextOpenError := fixture.rotatingKeyring.Open(nextCiphertext, nextKeyringKeyID,
+		EngineSidecarKeyAssociatedData(engineID, sidecarURL, nextSigningKeyID))
+	if currentOpenError != nil || string(currentSecret) != "current-signing-secret" || nextOpenError != nil || string(nextSecret) != "next-signing-secret" {
+		testContext.Errorf("the resealed keys must open under their own kid and destination, got %v %v", currentOpenError, nextOpenError)
+	}
+}
+
+func TestEngineSidecarKeyAssociatedDataBindsDestinationAndKeyID(testContext *testing.T) {
+	expectedAssociatedData := "engine.sidecar_signing_key:7:32:https://sidecar.example.com:8443:4:kid1"
+	if obtainedAssociatedData := string(EngineSidecarKeyAssociatedData(7, "https://SIDECAR.example.com:8443", "kid1")); obtainedAssociatedData != expectedAssociatedData {
+		testContext.Errorf("expected %q, got %q", expectedAssociatedData, obtainedAssociatedData)
+	}
+	referenceAssociatedData := EngineSidecarKeyAssociatedData(7, sidecarURL, currentSigningKeyID)
+	for caseName, otherAssociatedData := range map[string][]byte{
+		"other engine":      EngineSidecarKeyAssociatedData(8, sidecarURL, currentSigningKeyID),
+		"other destination": EngineSidecarKeyAssociatedData(7, "https://attacker.example.com:8443", currentSigningKeyID),
+		"other port":        EngineSidecarKeyAssociatedData(7, "https://sidecar.example.com:9443", currentSigningKeyID),
+		"other kid":         EngineSidecarKeyAssociatedData(7, sidecarURL, nextSigningKeyID),
+	} {
+		if bytes.Equal(referenceAssociatedData, otherAssociatedData) {
+			testContext.Errorf("%s must change the associated data", caseName)
+		}
+	}
+}
+
+// TestEncryptedColumnsRegistryCoversEverySealedColumn fails when the schema
+// gains a sealed or ciphertext column that the rotation registry does not
+// list: such a column would be silently left under a retired key.
+func TestEncryptedColumnsRegistryCoversEverySealedColumn(testContext *testing.T) {
+	database := storetest.New(testContext)
+	var sealedColumnNames []string
+	if queryError := database.NewRaw(
+		`SELECT table_name || '.' || column_name FROM information_schema.columns
+		 WHERE table_schema = current_schema() AND data_type = 'bytea'
+		 AND (column_name LIKE '%\_sealed' OR column_name LIKE '%\_ciphertext')`,
+	).Scan(context.Background(), &sealedColumnNames); queryError != nil {
+		testContext.Fatalf("list sealed columns: %v", queryError)
+	}
+	registeredColumnNames := map[string]bool{}
+	for _, registeredColumn := range EncryptedColumns {
+		registeredColumnNames[registeredColumn.Name()] = true
+	}
+	for _, sealedColumnName := range sealedColumnNames {
+		if !registeredColumnNames[sealedColumnName] {
+			testContext.Errorf("sealed column %s is missing from EncryptedColumns", sealedColumnName)
+		}
+	}
+	if len(sealedColumnNames) != len(registeredColumnNames) {
+		testContext.Errorf("the registry lists %d columns, the schema has %d sealed columns: %v", len(registeredColumnNames), len(sealedColumnNames), sealedColumnNames)
 	}
 }

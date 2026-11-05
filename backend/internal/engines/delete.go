@@ -39,7 +39,8 @@ func (repository *Repository) Delete(ctx context.Context, name string) error {
 		}
 		if _, markError := transaction.ExecContext(ctx, `UPDATE engine SET engine_deleting_at = now(),
 			engine_machine_password_sealed = '\x'::bytea, engine_machine_password_key_id = 'deleted',
-			engine_proxy_credential_sealed = NULL, engine_proxy_credential_key_id = NULL
+			engine_proxy_credential_sealed = NULL, engine_proxy_credential_key_id = NULL,
+			`+clearSidecarAssignments+`
 			WHERE engine_name = ?`, name); markError != nil {
 			return fmt.Errorf("mark engine deleting: %w", markError)
 		}

@@ -31,6 +31,7 @@ type Engine struct {
 	LastCollectionError string
 	CursorReset         bool
 	HistoryIncomplete   bool
+	Sidecar             *Sidecar
 }
 
 type Proxy struct {

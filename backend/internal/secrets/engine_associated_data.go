@@ -9,7 +9,16 @@ import (
 const (
 	machinePasswordLabel = "engine.machine_password"
 	proxyCredentialLabel = "engine.proxy_credential"
+	sidecarKeyLabel      = "engine.sidecar_signing_key"
 )
+
+func EngineSidecarKeyAssociatedData(engineID int64, sidecarURL, keyID string) []byte {
+	return engineSidecarKeyAssociatedData(strconv.FormatInt(engineID, 10), sidecarURL, keyID)
+}
+
+func engineSidecarKeyAssociatedData(engineIDText, sidecarURL, keyID string) []byte {
+	return []byte(sidecarKeyLabel + ":" + engineIDText + lengthPrefixed(netparse.DestinationKey(sidecarURL)) + lengthPrefixed(keyID))
+}
 
 func EngineMachinePasswordAssociatedData(engineID int64, lapiURL string) []byte {
 	return engineMachinePasswordAssociatedData(strconv.FormatInt(engineID, 10), lapiURL)

@@ -155,7 +155,10 @@ after the database is healthy.
 - The first release is 0.1.0. Its schema is created by a single initial migration (`00001_initial`);
   later releases add their migrations after it. A database created by a development build older than
   0.1.0 carries the former migration history and is not upgraded: recreate it (drop the database or
-  its volume, then start the dashboard on an empty one).
+  its volume, then start the dashboard on an empty one). The engine sidecar columns (sidecar URL,
+  certificate pin, current and next sealed signing keys) were also added by editing the initial
+  migration in place: a development database created before them lacks these columns and must be
+  recreated the same way.
 - The schema needs the `pg_trgm` extension, one of the contrib modules shipped with PostgreSQL for
   many releases (the `postgres` image included); its trigram indexes back the search. The first
   migration creates it, which needs a role allowed to create it: since PostgreSQL 13 it is a trusted

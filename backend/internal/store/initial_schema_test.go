@@ -55,12 +55,75 @@ func TestInitialSchemaCreatesTheEngineRegistryColumns(testContext *testing.T) {
 		"engine_allow_insecure_http", "engine_public_address_list", "engine_enabled", "engine_sync_enabled",
 		"engine_collection_cursor", "engine_last_collected_at", "engine_last_collection_error",
 		"engine_history_incomplete", "engine_deleting_at",
+		"engine_sidecar_url", "engine_sidecar_spki_sha256",
+		"engine_sidecar_signing_key_kid", "engine_sidecar_signing_public_key",
+		"engine_sidecar_signing_key_sealed", "engine_sidecar_signing_key_key_id",
+		"engine_sidecar_next_signing_key_kid", "engine_sidecar_next_signing_public_key",
+		"engine_sidecar_next_signing_key_sealed", "engine_sidecar_next_signing_key_key_id",
 	}
 	for _, expectedColumn := range expectedEngineColumns {
 		if !engineColumns[expectedColumn] {
 			testContext.Errorf("engine must have column %s", expectedColumn)
 		}
 	}
+}
+
+const (
+	// A complete current sidecar configuration: URL, SPKI pin, and the four
+	// columns of the current signing key (kid, public key, sealed secret,
+	// keyring key id). The sealed bytes are placeholders: only the shape is
+	// checked here, the sealing is covered by the engines tests.
+	completeSidecarAssignments = `engine_sidecar_url = 'https://sidecar.example.com:8443',
+		engine_sidecar_spki_sha256 = repeat('ab', 32),
+		engine_sidecar_signing_key_kid = 'kid-current', engine_sidecar_signing_public_key = 'public-current',
+		engine_sidecar_signing_key_sealed = '\x01', engine_sidecar_signing_key_key_id = 'key1'`
+	completeNextSidecarKeyAssignments = `engine_sidecar_next_signing_key_kid = 'kid-next',
+		engine_sidecar_next_signing_public_key = 'public-next',
+		engine_sidecar_next_signing_key_sealed = '\x02', engine_sidecar_next_signing_key_key_id = 'key1'`
+)
+
+func updateEngineSidecar(database *bun.DB, engineIdentifier int64, assignments string) error {
+	_, updateError := database.ExecContext(context.Background(),
+		"UPDATE engine SET "+assignments+" WHERE engine_id = ?", engineIdentifier)
+	return updateError
+}
+
+func TestEngineSidecarConstraintsRejectPartialConfigurationAndTheLocalEngine(testContext *testing.T) {
+	database := storetest.New(testContext)
+	remoteEngineIdentifier := insertTestEngine(testContext, database, "remote")
+
+	urlOnlyError := updateEngineSidecar(database, remoteEngineIdentifier, "engine_sidecar_url = 'https://sidecar.example.com:8443'")
+	requireSQLState(testContext, urlOnlyError, "23514", "engine_sidecar_complete_check")
+
+	if completeError := updateEngineSidecar(database, remoteEngineIdentifier, completeSidecarAssignments); completeError != nil {
+		testContext.Fatalf("complete sidecar: %v", completeError)
+	}
+	// Dropping only the sealed secret of a complete configuration leaves a
+	// sidecar that could never sign: the row must stay all set or all null.
+	droppedKeyError := updateEngineSidecar(database, remoteEngineIdentifier, "engine_sidecar_signing_key_sealed = NULL")
+	requireSQLState(testContext, droppedKeyError, "23514", "engine_sidecar_complete_check")
+
+	upperCasePinError := updateEngineSidecar(database, remoteEngineIdentifier, "engine_sidecar_spki_sha256 = repeat('AB', 32)")
+	requireSQLState(testContext, upperCasePinError, "23514", "engine_engine_sidecar_spki_sha256_check")
+
+	partialNextKeyError := updateEngineSidecar(database, remoteEngineIdentifier, "engine_sidecar_next_signing_key_kid = 'kid-next'")
+	requireSQLState(testContext, partialNextKeyError, "23514", "engine_sidecar_next_complete_check")
+	if nextKeyError := updateEngineSidecar(database, remoteEngineIdentifier, completeNextSidecarKeyAssignments); nextKeyError != nil {
+		testContext.Fatalf("complete next key: %v", nextKeyError)
+	}
+
+	otherRemoteEngineIdentifier := insertTestEngine(testContext, database, "other")
+	nextKeyWithoutCurrentError := updateEngineSidecar(database, otherRemoteEngineIdentifier, completeNextSidecarKeyAssignments)
+	requireSQLState(testContext, nextKeyWithoutCurrentError, "23514", "engine_sidecar_next_requires_current_check")
+
+	var localEngineIdentifier int64
+	if insertError := database.NewRaw(
+		"INSERT INTO engine (engine_name, engine_is_local, engine_lapi_url, engine_machine_id) VALUES ('local', true, 'http://x', 'm') RETURNING engine_id",
+	).Scan(context.Background(), &localEngineIdentifier); insertError != nil {
+		testContext.Fatalf("insert local engine: %v", insertError)
+	}
+	localSidecarError := updateEngineSidecar(database, localEngineIdentifier, completeSidecarAssignments)
+	requireSQLState(testContext, localSidecarError, "23514", "engine_sidecar_not_local_check")
 }
 
 func TestAlertSourceKindDefaultsToLogAndRefusesUnknownKinds(testContext *testing.T) {
@@ -110,7 +173,7 @@ func TestMigrationDownThenUpRestoresTheWholeSchema(testContext *testing.T) {
 	}
 	accountIdentifier := insertTestAccount(testContext, database, "alice")
 	_, totpError := database.ExecContext(ctx,
-		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_ciphertext, credential_key_id) VALUES (?, 'totp', '\\x01', 'key1')", accountIdentifier)
+		"INSERT INTO credential (credential_account_id, credential_kind, credential_secret_ciphertext, credential_key_id) VALUES (?, 'totp', '\x01', 'key1')", accountIdentifier)
 	if totpError != nil {
 		testContext.Errorf("totp after up: %v", totpError)
 	}

@@ -52,6 +52,16 @@ func ValidateLAPIURL(rawURL string, allowInsecureHTTP bool) error {
 	return nil
 }
 
+func ValidateSidecarURL(rawURL string) error {
+	if lapiURLError := ValidateLAPIURL(rawURL, false); lapiURLError != nil {
+		return lapiURLError
+	}
+	if parsedURL := parseValidatedURL(rawURL); parsedURL.Path != "" || parsedURL.RawPath != "" || parsedURL.Opaque != "" {
+		return errors.New("must not contain a path")
+	}
+	return nil
+}
+
 func ValidateProxyURL(kind, rawURL string) error {
 	expectedScheme, isKnownKind := map[string]string{ProxyKindSOCKS5: "socks5", ProxyKindHTTP: "http"}[kind]
 	if !isKnownKind {

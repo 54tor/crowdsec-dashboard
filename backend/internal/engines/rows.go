@@ -11,7 +11,9 @@ const engineColumns = `engine_id, engine_name, engine_is_local, engine_lapi_url,
 	engine_machine_password_sealed, engine_machine_password_key_id,
 	engine_proxy_kind, engine_proxy_url, engine_proxy_credential_sealed, engine_proxy_credential_key_id,
 	engine_allow_insecure_http, engine_public_address_list, engine_enabled, engine_sync_enabled,
-	engine_collection_cursor, engine_last_collected_at, engine_last_collection_error, engine_history_incomplete`
+	engine_collection_cursor, engine_last_collected_at, engine_last_collection_error, engine_history_incomplete,
+	engine_sidecar_url, engine_sidecar_spki_sha256, engine_sidecar_signing_key_kid, engine_sidecar_signing_public_key,
+	engine_sidecar_next_signing_key_kid, engine_sidecar_next_signing_public_key`
 
 type engineRow struct {
 	ID                   int64      `bun:"engine_id"`
@@ -33,6 +35,12 @@ type engineRow struct {
 	LastCollectedAt      *time.Time `bun:"engine_last_collected_at"`
 	LastCollectionError  *string    `bun:"engine_last_collection_error"`
 	HistoryIncomplete    bool       `bun:"engine_history_incomplete"`
+	SidecarURL           *string    `bun:"engine_sidecar_url"`
+	SidecarSPKISHA256    *string    `bun:"engine_sidecar_spki_sha256"`
+	SidecarKeyID         *string    `bun:"engine_sidecar_signing_key_kid"`
+	SidecarPublicKey     *string    `bun:"engine_sidecar_signing_public_key"`
+	SidecarNextKeyID     *string    `bun:"engine_sidecar_next_signing_key_kid"`
+	SidecarNextPublicKey *string    `bun:"engine_sidecar_next_signing_public_key"`
 }
 
 func (row engineRow) hasProxyCredentials() bool {
@@ -68,5 +76,6 @@ func (row engineRow) toEngine() (Engine, error) {
 	if row.ProxyKind != nil && row.ProxyURL != nil {
 		convertedEngine.Proxy = &Proxy{Kind: *row.ProxyKind, URL: *row.ProxyURL, HasCredentials: row.hasProxyCredentials()}
 	}
+	convertedEngine.Sidecar = row.sidecar()
 	return convertedEngine, nil
 }

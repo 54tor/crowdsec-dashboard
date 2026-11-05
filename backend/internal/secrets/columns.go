@@ -47,6 +47,22 @@ var EncryptedColumns = []EncryptedColumn{
 		},
 		LegacyAssociatedData: labelledAssociatedData(proxyCredentialLabel),
 	},
+	sidecarKeyColumn("engine_sidecar_signing_key_sealed", "engine_sidecar_signing_key_key_id", "engine_sidecar_signing_key_kid"),
+	sidecarKeyColumn("engine_sidecar_next_signing_key_sealed", "engine_sidecar_next_signing_key_key_id", "engine_sidecar_next_signing_key_kid"),
+}
+
+func sidecarKeyColumn(ciphertextColumn, keyIDColumn, signingKeyIDColumn string) EncryptedColumn {
+	return EncryptedColumn{
+		Table:                 "engine",
+		IDColumn:              "engine_id",
+		CiphertextColumn:      ciphertextColumn,
+		KeyIDColumn:           keyIDColumn,
+		Filter:                deletingEngineFilter,
+		AssociatedDataColumns: []string{"engine_id", "engine_sidecar_url", signingKeyIDColumn},
+		AssociatedData: func(values []string) []byte {
+			return engineSidecarKeyAssociatedData(values[0], values[1], values[2])
+		},
+	}
 }
 
 func labelledAssociatedData(label string) func(values []string) []byte {
