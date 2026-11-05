@@ -7,7 +7,7 @@ import { validateFilters } from '@/lib/filterValidation'
 
 export const FILTER_DEBOUNCE_MILLISECONDS = 300
 const LOCAL_ENGINE_NAME = 'local'
-const EMPTY_FILTERS: ListFilters = { q: '', scenario: '', ip: '', since: '', engine: '', source_kind: '' }
+export const EMPTY_FILTERS: ListFilters = { q: '', scenario: '', ip: '', since: '', engine: '', source_kind: '' }
 
 function filtersFromUrl(searchParams: URLSearchParams): ListFilters {
   return { ...EMPTY_FILTERS, q: searchParams.get('q') ?? '', engine: searchParams.get('engine') ?? '' }

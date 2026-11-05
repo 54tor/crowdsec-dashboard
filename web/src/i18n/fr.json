@@ -973,5 +973,16 @@
       "account": "Compte",
       "accountInvalid": "Nom de compte invalide."
     }
+  },
+  "palette": {
+    "open": "Rechercher partout",
+    "inputLabel": "Rechercher des pages, moteurs, alertes et décisions",
+    "pages": "Pages",
+    "engines": "Moteurs",
+    "alerts": "Alertes",
+    "decisions": "Décisions",
+    "searching": "Recherche en cours…",
+    "noResult": "Aucun résultat",
+    "typeMore": "Saisissez au moins 3 caractères pour chercher dans les alertes et décisions"
   }
 }

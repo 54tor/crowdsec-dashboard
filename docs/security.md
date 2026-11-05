@@ -51,6 +51,13 @@ session-only route gets 403 `session_required`, whatever its scope. The interfac
 the role cannot perform, but the server is the control. Configuration files are readable by
 administrators only, since redaction is best effort ([Configuration files](#configuration-files)).
 
+The command palette (Ctrl+K) offers only the pages of the current role (the same
+`visibleNavItems` as the navigation, so an admin-only page is absent for `read_only`), and reaches
+records only through the existing list routes (`GET /api/alerts` and `GET /api/decisions` with `q`
+and `per_page=5`) and `GET /api/engines/names`: it adds no route. An engine result opens the alert
+list filtered on that engine, never the admin Engines page. Result text is rendered as text, and
+navigation targets are built from encoded URL parameters, never from a link in the data.
+
 **A `write` token of an administrator can mint LAPI credentials.** Bouncer and machine creation,
 hub changes, reload, configuration files and engine reads are admin routes, not session-only: a
 stolen `write` token can create a bouncer key or a machine password. The routes that change who can

@@ -973,5 +973,16 @@
       "account": "Account",
       "accountInvalid": "Invalid account name."
     }
+  },
+  "palette": {
+    "open": "Search everywhere",
+    "inputLabel": "Search pages, engines, alerts and decisions",
+    "pages": "Pages",
+    "engines": "Engines",
+    "alerts": "Alerts",
+    "decisions": "Decisions",
+    "searching": "Searching…",
+    "noResult": "No result",
+    "typeMore": "Type at least 3 characters to search alerts and decisions"
   }
 }

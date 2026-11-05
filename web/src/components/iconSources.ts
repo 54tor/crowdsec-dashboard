@@ -28,6 +28,7 @@ import lockSvg from '@material-symbols/svg-400/outlined/lock.svg?raw'
 import logoutSvg from '@material-symbols/svg-400/outlined/logout.svg?raw'
 import moreHorizSvg from '@material-symbols/svg-400/outlined/more_horiz.svg?raw'
 import progressActivitySvg from '@material-symbols/svg-400/outlined/progress_activity.svg?raw'
+import searchSvg from '@material-symbols/svg-400/outlined/search.svg?raw'
 import shieldSvg from '@material-symbols/svg-400/outlined/shield.svg?raw'
 import swapHorizSvg from '@material-symbols/svg-400/outlined/swap_horiz.svg?raw'
 import syncSvg from '@material-symbols/svg-400/outlined/sync.svg?raw'
@@ -67,6 +68,7 @@ export type IconName =
   | 'logout'
   | 'more_horiz'
   | 'progress_activity'
+  | 'search'
   | 'shield'
   | 'swap_horiz'
   | 'sync'
@@ -106,6 +108,7 @@ export const ICON_SOURCES: Record<IconName, string> = {
   logout: logoutSvg,
   more_horiz: moreHorizSvg,
   progress_activity: progressActivitySvg,
+  search: searchSvg,
   shield: shieldSvg,
   swap_horiz: swapHorizSvg,
   sync: syncSvg,

@@ -287,6 +287,20 @@ that starts failing after a refresh means CrowdSec changed an output shape.
   the `clientFilter.count` text (« 2 sur 5 ») in a polite live region 300 ms after the last change.
   `ClientFilterResults` shows `clientFilter.noMatch` instead of the list when the filter hides
   every row, so the list keeps its own empty message for a truly empty list.
+- **Command palette** (`web/src/components/CommandPalette.tsx`, built on `cmdk` inside the shared
+  Radix `Dialog`): Ctrl+K or Cmd+K opens it from anywhere, text fields included, and the shortcut's
+  default action is prevented; it does nothing while another dialog or alert dialog is open. The
+  « Rechercher partout » button in the header opens it too, on phones as well (44 px target).
+  Pages come from `visibleNavItems(accountRole)` and engines from `GET /api/engines/names`, both
+  filtered in the browser on every keystroke with `matchesSearchText`. Alerts and decisions come
+  from the existing list routes with `q` and `per_page=5`, 250 ms after the last keystroke
+  (`PALETTE_DEBOUNCE_MILLISECONDS`) and only for a trimmed term of 3 to 64 characters; a shorter
+  term shows a hint and sends nothing. Each category shows at most 5 results
+  (`PALETTE_RESULTS_PER_CATEGORY`). Choosing a page opens it, an engine opens
+  `/alerts?engine=<name>`, an alert opens `/alerts?q=<typed term>` and a decision
+  `/decisions?q=<typed term>` (paths built by `web/src/lib/paletteTargets.ts`); the list pages
+  re-apply `q` and `engine` when the URL changes. Results are rendered as text in `<bdi>`, never
+  kept after closing; closing returns the focus to the element focused before opening.
 - **Mobile**: below 768 px the rail becomes a bottom tab bar and lists rendered with
   `cardsOnMobile` turn into one card per row. Tests drive the viewport with `setViewportWidth`
   from the `matchMedia` stub in `web/src/test/matchMedia.ts`.
