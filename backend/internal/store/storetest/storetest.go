@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/url"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/uptrace/bun"
 
 	"crowdsec-dashboard/internal/store"
@@ -50,6 +52,7 @@ func NewUnmigrated(testContext *testing.T) *bun.DB {
 	}
 	defer adminDatabase.Close()
 
+	createSharedTrigramExtension(testContext, ctx, adminDatabase)
 	if _, createError := adminDatabase.ExecContext(ctx, "CREATE SCHEMA "+schemaName); createError != nil {
 		testContext.Fatalf("create schema: %v", createError)
 	}
@@ -73,13 +76,36 @@ func randomSchemaName(testContext *testing.T) string {
 	return "t_" + hex.EncodeToString(randomBytes)
 }
 
+// The pg_trgm extension lives once in public, shared by every test schema: the
+// migration's gin_trgm_ops operator class must resolve while each test owns its
+// schema, and dropping a test schema must not drop the shared extension. That is
+// why withSearchPath appends public after the test schema.
+//
+// Several test processes may create it at the same time; the loser of that race
+// gets a unique violation (23505) or a duplicate object (42710), both harmless.
+func createSharedTrigramExtension(testContext *testing.T, ctx context.Context, adminDatabase *bun.DB) {
+	_, createError := adminDatabase.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public")
+	if createError == nil || isConcurrentExtensionCreation(createError) {
+		return
+	}
+	testContext.Fatalf("create pg_trgm extension: %v", createError)
+}
+
+func isConcurrentExtensionCreation(createError error) bool {
+	var postgresError *pgconn.PgError
+	if !errors.As(createError, &postgresError) {
+		return false
+	}
+	return postgresError.Code == "23505" || postgresError.Code == "42710"
+}
+
 func withSearchPath(testContext *testing.T, baseURL string, schemaName string) string {
 	parsedURL, parseError := url.Parse(baseURL)
 	if parseError != nil {
 		testContext.Fatalf("parse %s", databaseURLVariable)
 	}
 	queryValues := parsedURL.Query()
-	queryValues.Set("search_path", schemaName)
+	queryValues.Set("search_path", schemaName+",public")
 	parsedURL.RawQuery = queryValues.Encode()
 	return parsedURL.String()
 }

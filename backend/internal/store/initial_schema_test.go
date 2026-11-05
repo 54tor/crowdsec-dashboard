@@ -116,3 +116,51 @@ func TestMigrationDownThenUpRestoresTheWholeSchema(testContext *testing.T) {
 	}
 	insertTestEngine(testContext, database, "remote")
 }
+
+// The search feature relies on pg_trgm GIN indexes; the existing btree indexes
+// must stay beside them because equality filters and sorting still use them.
+func TestInitialSchemaCreatesTheTrigramSearchIndexes(testContext *testing.T) {
+	database := storetest.New(testContext)
+
+	var schemaIndexes []struct {
+		IndexName       string `bun:"indexname"`
+		IndexDefinition string `bun:"indexdef"`
+	}
+	queryError := database.NewRaw(
+		"SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema()",
+	).Scan(context.Background(), &schemaIndexes)
+	if queryError != nil {
+		testContext.Fatalf("list indexes: %v", queryError)
+	}
+	definitionByIndexName := map[string]string{}
+	for _, schemaIndex := range schemaIndexes {
+		definitionByIndexName[schemaIndex.IndexName] = schemaIndex.IndexDefinition
+	}
+
+	expectedTrigramIndexes := []string{
+		"alert_source_value_trigram_index", "alert_scenario_name_trigram_index",
+		"alert_message_trigram_index", "alert_machine_id_trigram_index",
+		"decision_value_trigram_index", "decision_scenario_trigram_index",
+		"decision_type_trigram_index", "decision_origin_trigram_index",
+		"engine_name_trigram_index", "audit_event_action_trigram_index",
+		"audit_event_target_trigram_index", "account_name_trigram_index",
+	}
+	for _, expectedIndexName := range expectedTrigramIndexes {
+		indexDefinition, isPresent := definitionByIndexName[expectedIndexName]
+		if !isPresent {
+			testContext.Errorf("missing trigram index %s", expectedIndexName)
+			continue
+		}
+		isTrigramGinIndex := strings.Contains(indexDefinition, "USING gin") && strings.Contains(indexDefinition, "gin_trgm_ops")
+		if !isTrigramGinIndex {
+			testContext.Errorf("index %s = %q, want a gin gin_trgm_ops index", expectedIndexName, indexDefinition)
+		}
+	}
+
+	expectedBtreeIndexes := []string{"alert_source_value_index", "alert_scenario_name_index", "decision_value_index"}
+	for _, expectedIndexName := range expectedBtreeIndexes {
+		if _, isPresent := definitionByIndexName[expectedIndexName]; !isPresent {
+			testContext.Errorf("missing btree index %s", expectedIndexName)
+		}
+	}
+}

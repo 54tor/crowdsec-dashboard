@@ -154,6 +154,13 @@ after the database is healthy.
   later releases add their migrations after it. A database created by a development build older than
   0.1.0 carries the former migration history and is not upgraded: recreate it (drop the database or
   its volume, then start the dashboard on an empty one).
+- The schema needs the `pg_trgm` extension, bundled with PostgreSQL 13 and later (the `postgres`
+  image included); its trigram indexes back the search. The first migration creates it, which needs a
+  role allowed to create it: since PostgreSQL 13 it is a trusted extension, so the database owner can.
+  If the creation is refused, startup stops with `pg_trgm extension unavailable`: run
+  `CREATE EXTENSION pg_trgm;` once in the dashboard database as an owner, then restart. A database
+  created before search was added must be recreated, since the single initial migration was edited in
+  place.
 - If PostgreSQL goes down while the dashboard runs, `/api/healthz` answers 503 and login and
   authenticated routes answer 503 `database_unavailable`. Nobody is signed out: sessions are valid
   again once the database is back.

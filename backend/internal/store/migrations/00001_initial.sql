@@ -1,4 +1,6 @@
 -- +goose Up
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE account (
     account_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     account_name text NOT NULL UNIQUE CHECK (account_name ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
@@ -10,6 +12,8 @@ CREATE TABLE account (
     account_locked_until timestamptz,
     account_second_factor_setup_until timestamptz
 );
+
+CREATE INDEX account_name_trigram_index ON account USING gin (account_name gin_trgm_ops);
 
 CREATE TABLE credential (
     credential_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -64,6 +68,8 @@ CREATE TABLE audit_event (
 
 CREATE INDEX audit_event_account_id_index ON audit_event (audit_event_account_id);
 CREATE INDEX audit_event_created_at_index ON audit_event (audit_event_created_at);
+CREATE INDEX audit_event_action_trigram_index ON audit_event USING gin (audit_event_action gin_trgm_ops);
+CREATE INDEX audit_event_target_trigram_index ON audit_event USING gin (audit_event_target gin_trgm_ops);
 
 CREATE TABLE api_token (
     api_token_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -141,6 +147,7 @@ CREATE TABLE engine (
 );
 
 CREATE UNIQUE INDEX engine_one_local_index ON engine (engine_is_local) WHERE engine_is_local;
+CREATE INDEX engine_name_trigram_index ON engine USING gin (engine_name gin_trgm_ops);
 
 CREATE TABLE alert (
     alert_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -173,6 +180,10 @@ CREATE INDEX alert_source_kind_created_at_index ON alert (alert_source_kind, ale
 CREATE INDEX alert_collected_at_index ON alert (alert_collected_at);
 CREATE INDEX alert_source_value_index ON alert (alert_source_value);
 CREATE INDEX alert_scenario_name_index ON alert (alert_scenario_name);
+CREATE INDEX alert_source_value_trigram_index ON alert USING gin (alert_source_value gin_trgm_ops);
+CREATE INDEX alert_scenario_name_trigram_index ON alert USING gin (alert_scenario_name gin_trgm_ops);
+CREATE INDEX alert_message_trigram_index ON alert USING gin (alert_message gin_trgm_ops);
+CREATE INDEX alert_machine_id_trigram_index ON alert USING gin (alert_machine_id gin_trgm_ops);
 
 CREATE TABLE event (
     event_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -202,6 +213,10 @@ CREATE TABLE decision (
 
 CREATE INDEX decision_value_index ON decision (decision_value);
 CREATE INDEX decision_until_index ON decision (decision_until);
+CREATE INDEX decision_value_trigram_index ON decision USING gin (decision_value gin_trgm_ops);
+CREATE INDEX decision_scenario_trigram_index ON decision USING gin (decision_scenario gin_trgm_ops);
+CREATE INDEX decision_type_trigram_index ON decision USING gin (decision_type gin_trgm_ops);
+CREATE INDEX decision_origin_trigram_index ON decision USING gin (decision_origin gin_trgm_ops);
 
 -- +goose Down
 DROP TABLE decision;

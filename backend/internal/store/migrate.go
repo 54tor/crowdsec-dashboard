@@ -25,7 +25,7 @@ func Migrate(ctx context.Context, database *bun.DB) error {
 	}
 
 	if _, upError := provider.Up(ctx); upError != nil {
-		return fmt.Errorf("apply migrations: %w", upError)
+		return fmt.Errorf("apply migrations: %w", describeMigrationError(upError))
 	}
 	return nil
 }
