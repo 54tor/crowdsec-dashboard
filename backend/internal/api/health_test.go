@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"crowdsec-dashboard/internal/collector"
+	"crowdsec-dashboard/internal/cscli"
 )
 
 type fakePinger struct{ failure error }
@@ -61,9 +62,9 @@ func (source fakeSchemaVersion) SchemaVersion(_ context.Context) (int64, error) 
 
 func healthReportBody(testContext *testing.T, services Services) map[string]any {
 	testContext.Helper()
-	services.Platform = cscliPlatform{runner: scriptedRunner{outputsByCommand: map[string]string{
+	services.Platform = cscliPlatform{executor: cscli.NewLocalExecutor(scriptedRunner{outputsByCommand: map[string]string{
 		"version": "version: v1.6.4\n", "bouncers list -o json": "[]", "machines list -o json": "[]",
-	}}}
+	}})}
 	recorder := newReadFixture(testContext, services).get("/api/health", true)
 	var decoded map[string]any
 	if decodeError := json.Unmarshal(recorder.Body.Bytes(), &decoded); decodeError != nil {

@@ -17,7 +17,7 @@ func (runner *deadlineRunner) Run(_ context.Context, argv []string) ([]byte, err
 }
 
 func TestSlowCscliCallMapsTo504Timeout(testContext *testing.T) {
-	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, &deadlineRunner{}, ""), "")
+	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, cscli.NewLocalExecutor(&deadlineRunner{}), ""), "")
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	fixture := writeFixture{handler: handler, cookie: cookie}
 
@@ -48,7 +48,7 @@ func TestEveryCommandTimeoutIsBelowItsRouteWriteDeadline(testContext *testing.T)
 
 func TestSelfMachineCannotBeDeleted(testContext *testing.T) {
 	runner := &outputRunner{}
-	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, runner, ""), "dashboard-self")
+	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, cscli.NewLocalExecutor(runner), ""), "dashboard-self")
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	fixture := writeFixture{handler: handler, cookie: cookie}
 

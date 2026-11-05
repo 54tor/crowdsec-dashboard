@@ -78,7 +78,7 @@ func newWriteFixtureWithReader(testContext *testing.T, allowlistReader Allowlist
 		decisionLister.decisions = append(decisionLister.decisions, lapi.Decision{ID: decisionID, Scope: "Ip", Value: fmt.Sprintf("203.0.113.%d", decisionID)})
 	}
 	auditRecorder := &fakeAuditRecorder{}
-	services := Services{Decisions: decisions, Alerts: cscliAlerts{runner: runner}, AlertLookup: alertLookup, DecisionReader: decisionLister, Audit: auditRecorder, DecisionAllowlists: allowlistReader}
+	services := Services{Decisions: decisions, Alerts: cscliAlerts{executor: cscli.NewLocalExecutor(runner)}, AlertLookup: alertLookup, DecisionReader: decisionLister, Audit: auditRecorder, DecisionAllowlists: allowlistReader}
 	handler, sessions := newTestHandlerAndSessions(testContext, services, "")
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return writeFixture{handler: handler, cookie: cookie, decisions: decisions, runner: runner, audit: auditRecorder}

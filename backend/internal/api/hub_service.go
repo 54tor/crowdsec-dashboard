@@ -41,7 +41,7 @@ type HubService interface {
 	Remove(ctx context.Context, kind, name string) error
 }
 
-type cscliHub struct{ runner cscli.Runner }
+type cscliHub struct{ executor cscli.Executor }
 
 func projectHubItems(output []byte) ([]HubItem, error) {
 	trimmed := bytes.TrimSpace(output)
@@ -70,7 +70,7 @@ func projectHubItems(output []byte) ([]HubItem, error) {
 }
 
 func (service cscliHub) List(ctx context.Context) ([]HubItem, error) {
-	output, executeError := cscli.Execute(ctx, service.runner, "hub_list", map[string]string{})
+	output, executeError := service.executor.Execute(ctx, "hub_list", map[string]string{})
 	if executeError != nil {
 		return nil, executeError
 	}
@@ -78,12 +78,12 @@ func (service cscliHub) List(ctx context.Context) ([]HubItem, error) {
 }
 
 func (service cscliHub) Update(ctx context.Context) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "hub_update", map[string]string{})
+	_, executeError := service.executor.Execute(ctx, "hub_update", map[string]string{})
 	return executeError
 }
 
 func (service cscliHub) Upgrade(ctx context.Context) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "hub_upgrade", map[string]string{})
+	_, executeError := service.executor.Execute(ctx, "hub_upgrade", map[string]string{})
 	return executeError
 }
 
@@ -105,7 +105,7 @@ func (service cscliHub) Install(ctx context.Context, kind, name string) error {
 	if !isKnown {
 		return ErrUnknownHubKind
 	}
-	_, executeError := cscli.Execute(ctx, service.runner, kindCommands.install, map[string]string{"name": name})
+	_, executeError := service.executor.Execute(ctx, kindCommands.install, map[string]string{"name": name})
 	return executeError
 }
 
@@ -114,7 +114,7 @@ func (service cscliHub) Remove(ctx context.Context, kind, name string) error {
 	if !isKnown {
 		return ErrUnknownHubKind
 	}
-	if _, executeError := cscli.Execute(ctx, service.runner, kindCommands.remove, map[string]string{"name": name}); executeError != nil {
+	if _, executeError := service.executor.Execute(ctx, kindCommands.remove, map[string]string{"name": name}); executeError != nil {
 		return executeError
 	}
 	if service.isStillInstalled(ctx, kind, name) {

@@ -9,19 +9,19 @@ import (
 	"crowdsec-dashboard/internal/lapi"
 )
 
-func localBundleExportDeps(localClient *lapi.Client, runner cscli.Runner, confDir string) bundle.ExportDeps {
+func localBundleExportDeps(localClient *lapi.Client, executor cscli.Executor, confDir string) bundle.ExportDeps {
 	return bundle.ExportDeps{
-		ReadHub:       cscliHub{runner: runner}.bundleHubItems,
+		ReadHub:       cscliHub{executor: executor}.bundleHubItems,
 		ReadBans:      localClient.ReadNativeBans,
 		ReadAlerts:    localClient.ReadAlertsForArchive,
-		EngineVersion: cscliPlatform{runner: runner}.Version,
+		EngineVersion: cscliPlatform{executor: executor}.Version,
 		ConfigDir:     confDir,
 		Now:           time.Now,
 	}
 }
 
-func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner, confDir string) bundle.ImportDeps {
-	hub := cscliHub{runner: runner}
+func localBundleImportDeps(localClient *lapi.Client, executor cscli.Executor, confDir string) bundle.ImportDeps {
+	hub := cscliHub{executor: executor}
 	return bundle.ImportDeps{
 		ReadHub:           hub.bundleHubItems,
 		InstallCollection: hub.installCollection,
@@ -36,7 +36,7 @@ func localBundleImportDeps(localClient *lapi.Client, runner cscli.Runner, confDi
 		ConfigDir:         confDir,
 		LocalMachineID:    localClient.MachineID(),
 		TestConfig: func(ctx context.Context) error {
-			return cscli.ConfigTest(ctx, runner)
+			return cscli.ConfigTest(ctx, executor)
 		},
 	}
 }

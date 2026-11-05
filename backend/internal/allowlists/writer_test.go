@@ -14,7 +14,7 @@ import (
 
 func TestCscliWriterBuildsTaskTwoCommands(testContext *testing.T) {
 	runner := &recordingRunner{}
-	writer := NewCscliWriter(runner)
+	writer := NewCscliWriter(cscli.NewLocalExecutor(runner))
 	backgroundContext := context.Background()
 
 	writeErrors := []error{
@@ -44,7 +44,7 @@ func TestCscliWriterBuildsTaskTwoCommands(testContext *testing.T) {
 
 func TestCscliWriterRefusesInvalidFieldsBeforeRunning(testContext *testing.T) {
 	runner := &recordingRunner{}
-	writer := NewCscliWriter(runner)
+	writer := NewCscliWriter(cscli.NewLocalExecutor(runner))
 
 	nameError := writer.Create(context.Background(), "Bad Name", "trusted hosts")
 	expirationError := writer.Add(context.Background(), "trusted", netip.MustParsePrefix("203.0.113.7/32"), "0d", "")
@@ -63,7 +63,7 @@ func TestAddEntryReportsWriteFailureWithoutOutput(testContext *testing.T) {
 		output:  []byte(outputMarker),
 		failure: fmt.Errorf("%w: %s", cscli.ErrCscliFailed, outputMarker),
 	}
-	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(runner))
+	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
 
 	_, addError := fixture.service.AddEntry(context.Background(), localEngineName, "trusted", EntryInput{Value: "203.0.113.7"})
 
@@ -76,7 +76,7 @@ func TestAddEntryReportsWriteFailureWithoutOutput(testContext *testing.T) {
 
 func TestCscliWriterHidesRunnerErrorDetails(testContext *testing.T) {
 	runner := &recordingRunner{failure: errors.New("docker exec: context deadline exceeded")}
-	writer := NewCscliWriter(runner)
+	writer := NewCscliWriter(cscli.NewLocalExecutor(runner))
 
 	deleteError := writer.Delete(context.Background(), "trusted")
 

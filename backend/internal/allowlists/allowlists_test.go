@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/lapi"
 )
@@ -110,7 +111,7 @@ func TestDisabledEngineIsNotFound(testContext *testing.T) {
 func TestRemoteEngineIsReadOnly(testContext *testing.T) {
 	fixture := newServiceFixture(testContext, trustedAllowlist())
 	runner := &recordingRunner{}
-	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(runner))
+	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
 
 	_, addError := fixture.service.AddEntry(context.Background(), remoteEngineName, "trusted", EntryInput{Value: "203.0.113.7"})
 
@@ -169,7 +170,7 @@ func TestAddEntryRefusesInternetWideRanges(testContext *testing.T) {
 func TestAddEntryWiderThanConfirmFloorNeedsRetypedValue(testContext *testing.T) {
 	fixture := newServiceFixture(testContext, trustedAllowlist())
 	runner := &recordingRunner{afterRun: func(argv []string) { fixture.localLAPI.addItem("trusted", argv[4]) }}
-	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(runner))
+	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
 
 	_, unconfirmedError := fixture.service.AddEntry(context.Background(), localEngineName, "trusted", EntryInput{Value: "198.51.100.0/23"})
 	requireErrorIs(testContext, unconfirmedError, ErrConfirmationRequired)

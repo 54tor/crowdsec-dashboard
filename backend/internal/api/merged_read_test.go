@@ -96,7 +96,7 @@ func newMergedFixture(testContext *testing.T, accountRole string) *mergedFixture
 		AlertReader:    fixture.alertLister,
 		DecisionReader: fixture.decisionLister,
 		AlertLookup:    fixture.alertLookup,
-		Alerts:         cscliAlerts{runner: fixture.runner},
+		Alerts:         cscliAlerts{executor: cscli.NewLocalExecutor(fixture.runner)},
 		Decisions:      fixture.decisions,
 		Archive:        archive.NewReader(database),
 		Audit:          fixture.recorder,

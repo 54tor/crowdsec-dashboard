@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"crowdsec-dashboard/internal/cscli"
 )
 
 const frozenFixturesDirectory = "../../../deploy/dev/fixtures"
@@ -26,12 +28,12 @@ func (runner fixtureRunner) Run(_ context.Context, argv []string) ([]byte, error
 }
 
 func frozenPlatform(testContext *testing.T) cscliPlatform {
-	return cscliPlatform{runner: fixtureRunner{
+	return cscliPlatform{executor: cscli.NewLocalExecutor(fixtureRunner{
 		"cscli bouncers list -o json": readFrozenFixture(testContext, "bouncers-list.json"),
 		"cscli machines list -o json": readFrozenFixture(testContext, "machines-list.json"),
 		"cscli version":               readFrozenFixture(testContext, "version.txt"),
 		"cscli metrics -o json":       readFrozenFixture(testContext, "metrics.json"),
-	}}
+	})}
 }
 
 func TestPlatformProjectsFrozenBouncerList(testContext *testing.T) {

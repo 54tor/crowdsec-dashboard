@@ -9,8 +9,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-
-	"crowdsec-dashboard/internal/cscli"
 )
 
 type AcquisitionMetric struct {
@@ -56,7 +54,7 @@ func projectMetrics(raw rawMetrics) Metrics {
 }
 
 func (platform cscliPlatform) Metrics(ctx context.Context) (Metrics, error) {
-	output, executeError := cscli.Execute(ctx, platform.runner, "metrics", map[string]string{})
+	output, executeError := platform.executor.Execute(ctx, "metrics", map[string]string{})
 	if executeError != nil {
 		return Metrics{}, executeError
 	}

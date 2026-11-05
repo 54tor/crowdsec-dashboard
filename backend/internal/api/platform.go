@@ -53,7 +53,7 @@ type Platform interface {
 	Metrics(ctx context.Context) (Metrics, error)
 }
 
-type cscliPlatform struct{ runner cscli.Runner }
+type cscliPlatform struct{ executor cscli.Executor }
 
 var versionLinePattern = regexp.MustCompile(`(?m)^[ \t]*version:[ \t]*(\S+)`)
 
@@ -66,7 +66,7 @@ func parseVersion(output []byte) string {
 }
 
 func (platform cscliPlatform) Version(ctx context.Context) (string, error) {
-	output, executeError := cscli.Execute(ctx, platform.runner, "version", map[string]string{})
+	output, executeError := platform.executor.Execute(ctx, "version", map[string]string{})
 	if executeError != nil {
 		return "", executeError
 	}
@@ -74,7 +74,7 @@ func (platform cscliPlatform) Version(ctx context.Context) (string, error) {
 }
 
 func (platform cscliPlatform) Bouncers(ctx context.Context) ([]Bouncer, error) {
-	output, executeError := cscli.Execute(ctx, platform.runner, "bouncers_list", map[string]string{})
+	output, executeError := platform.executor.Execute(ctx, "bouncers_list", map[string]string{})
 	if executeError != nil {
 		return nil, executeError
 	}
@@ -90,7 +90,7 @@ func (platform cscliPlatform) Bouncers(ctx context.Context) ([]Bouncer, error) {
 }
 
 func (platform cscliPlatform) Machines(ctx context.Context) ([]Machine, error) {
-	output, executeError := cscli.Execute(ctx, platform.runner, "machines_list", map[string]string{})
+	output, executeError := platform.executor.Execute(ctx, "machines_list", map[string]string{})
 	if executeError != nil {
 		return nil, executeError
 	}

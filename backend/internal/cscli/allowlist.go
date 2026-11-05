@@ -14,12 +14,15 @@ const (
 	HubMutationTimeout = 120 * time.Second
 )
 
+var readOnlyCommands = []string{"bouncers_list", "machines_list", "hub_list", "metrics", "version", "config_test"}
+
 var hubMutationCommands = []string{"hub_update", "hub_upgrade", "collections_install", "collections_remove", "appsec_rules_install", "appsec_rules_remove", "appsec_configs_install", "appsec_configs_remove"}
 
 type Command struct {
-	Name    string
-	Build   func(fields map[string]string) ([]string, error)
-	Timeout time.Duration
+	Name     string
+	Build    func(fields map[string]string) ([]string, error)
+	Timeout  time.Duration
+	ReadOnly bool
 }
 
 func exactFields(fields map[string]string, allowed ...string) error {
@@ -109,6 +112,7 @@ func buildCommands() map[string]Command {
 	byName := make(map[string]Command, len(definitions))
 	for _, definition := range definitions {
 		definition.Timeout = DefaultTimeout
+		definition.ReadOnly = slices.Contains(readOnlyCommands, definition.Name)
 		if slices.Contains(hubMutationCommands, definition.Name) {
 			definition.Timeout = HubMutationTimeout
 		}

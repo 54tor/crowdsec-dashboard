@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
 )
 
@@ -235,7 +236,7 @@ func TestSlicePageIsOverflowProof(testContext *testing.T) {
 }
 
 func newPlatformServices(outputsByCommand map[string]string, failingCommands map[string]bool) Services {
-	return Services{Platform: cscliPlatform{runner: scriptedRunner{outputsByCommand: outputsByCommand, failingCommands: failingCommands}}}
+	return Services{Platform: cscliPlatform{executor: cscli.NewLocalExecutor(scriptedRunner{outputsByCommand: outputsByCommand, failingCommands: failingCommands})}}
 }
 
 func TestHealthReturnsEmptyListsWhenCscliPrintsNull(testContext *testing.T) {

@@ -13,10 +13,10 @@ type MachineService interface {
 	Delete(ctx context.Context, name string) error
 }
 
-type cscliMachines struct{ runner cscli.Runner }
+type cscliMachines struct{ executor cscli.Executor }
 
 func (service cscliMachines) Create(ctx context.Context, name string) (string, error) {
-	output, executeError := cscli.Execute(ctx, service.runner, "machines_add", map[string]string{"name": name})
+	output, executeError := service.executor.Execute(ctx, "machines_add", map[string]string{"name": name})
 	if executeError != nil {
 		return "", executeError
 	}
@@ -24,12 +24,12 @@ func (service cscliMachines) Create(ctx context.Context, name string) (string, e
 }
 
 func (service cscliMachines) Validate(ctx context.Context, name string) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "machines_validate", map[string]string{"name": name})
+	_, executeError := service.executor.Execute(ctx, "machines_validate", map[string]string{"name": name})
 	return executeError
 }
 
 func (service cscliMachines) Delete(ctx context.Context, name string) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "machines_delete", map[string]string{"name": name})
+	_, executeError := service.executor.Execute(ctx, "machines_delete", map[string]string{"name": name})
 	return executeError
 }
 

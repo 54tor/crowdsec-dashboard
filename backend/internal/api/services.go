@@ -69,22 +69,22 @@ type Services struct {
 	LifecycleContext   context.Context
 }
 
-func NewServices(lapiClient *lapi.Client, runner cscli.Runner, confDir string) Services {
+func NewServices(lapiClient *lapi.Client, executor cscli.Executor, confDir string) Services {
 	return Services{
 		Decisions:          lapiDecisions{client: lapiClient},
 		DecisionAllowlists: lapiClient,
-		Alerts:             cscliAlerts{runner: runner},
+		Alerts:             cscliAlerts{executor: executor},
 		AlertReader:        lapiClient,
 		DecisionReader:     lapiClient,
 		AlertLookup:        lapiClient,
-		Platform:           cscliPlatform{runner: runner},
+		Platform:           cscliPlatform{executor: executor},
 		ConfigFiles:        dirConfigFiles{dir: confDir},
-		Bouncers:           cscliBouncers{runner: runner},
-		Machines:           cscliMachines{runner: runner},
-		Hub:                cscliHub{runner: runner},
-		Reloader:           cscliReloader{runner: runner},
-		BundleExport:       localBundleExportDeps(lapiClient, runner, confDir),
-		BundleImport:       localBundleImportDeps(lapiClient, runner, confDir),
+		Bouncers:           cscliBouncers{executor: executor},
+		Machines:           cscliMachines{executor: executor},
+		Hub:                cscliHub{executor: executor},
+		Reloader:           cscliReloader{executor: executor},
+		BundleExport:       localBundleExportDeps(lapiClient, executor, confDir),
+		BundleImport:       localBundleImportDeps(lapiClient, executor, confDir),
 	}
 }
 
@@ -98,9 +98,9 @@ func (service lapiDecisions) Delete(ctx context.Context, decisionID int64) error
 	return service.client.DeleteDecision(ctx, decisionID)
 }
 
-type cscliAlerts struct{ runner cscli.Runner }
+type cscliAlerts struct{ executor cscli.Executor }
 
 func (service cscliAlerts) Delete(ctx context.Context, alertID string) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "alerts_delete", map[string]string{"id": alertID})
+	_, executeError := service.executor.Execute(ctx, "alerts_delete", map[string]string{"id": alertID})
 	return executeError
 }

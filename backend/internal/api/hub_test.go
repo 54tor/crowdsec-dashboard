@@ -13,6 +13,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"crowdsec-dashboard/internal/cscli"
 )
 
 const (
@@ -43,7 +45,7 @@ type adminFixture struct {
 func newAdminFixture(testContext *testing.T, outputs map[string]string, failing map[string]bool) adminFixture {
 	testContext.Helper()
 	runner := &outputRunner{outputsByCommand: outputs, failingCommands: failing}
-	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, runner, ""), "")
+	handler, sessions := newTestHandlerAndSessions(testContext, NewServices(nil, cscli.NewLocalExecutor(runner), ""), "")
 	cookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
 	return adminFixture{writeFixture: writeFixture{handler: handler, cookie: cookie}, runner: runner}
 }

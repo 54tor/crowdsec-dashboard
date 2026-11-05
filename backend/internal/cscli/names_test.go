@@ -42,3 +42,23 @@ func TestNamesIsExactlyThePinnedCommandList(testContext *testing.T) {
 		testContext.Fatalf("cscli command list changed:\nexpected %v\ngot      %v", pinnedNames, listedNames)
 	}
 }
+
+// ReadOnly decides what a read-only sidecar may still run: only commands that
+// change nothing on the engine may carry it.
+func TestEveryCommandDeclaresWhetherItIsReadOnly(testContext *testing.T) {
+	expectedReadOnly := []string{"bouncers_list", "config_test", "hub_list", "machines_list", "metrics", "version"}
+	const expectedCommandCount = 25
+
+	listedNames := Names()
+
+	if len(listedNames) != expectedCommandCount {
+		testContext.Fatalf("expected %d commands, got %d", expectedCommandCount, len(listedNames))
+	}
+	for _, commandName := range listedNames {
+		command, _ := Lookup(commandName)
+		expectedFlag := slices.Contains(expectedReadOnly, commandName)
+		if command.ReadOnly != expectedFlag {
+			testContext.Errorf("command %q: expected ReadOnly %v, got %v", commandName, expectedFlag, command.ReadOnly)
+		}
+	}
+}

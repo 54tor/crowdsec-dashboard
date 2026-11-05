@@ -12,10 +12,10 @@ type BouncerService interface {
 	Delete(ctx context.Context, name string) error
 }
 
-type cscliBouncers struct{ runner cscli.Runner }
+type cscliBouncers struct{ executor cscli.Executor }
 
 func (service cscliBouncers) Create(ctx context.Context, name string) (string, error) {
-	output, executeError := cscli.Execute(ctx, service.runner, "bouncers_add", map[string]string{"name": name})
+	output, executeError := service.executor.Execute(ctx, "bouncers_add", map[string]string{"name": name})
 	if executeError != nil {
 		return "", executeError
 	}
@@ -23,7 +23,7 @@ func (service cscliBouncers) Create(ctx context.Context, name string) (string, e
 }
 
 func (service cscliBouncers) Delete(ctx context.Context, name string) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "bouncers_delete", map[string]string{"name": name})
+	_, executeError := service.executor.Execute(ctx, "bouncers_delete", map[string]string{"name": name})
 	return executeError
 }
 

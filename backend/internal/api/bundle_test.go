@@ -13,6 +13,7 @@ import (
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/bundle"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/oplock"
@@ -242,7 +243,7 @@ func TestExportOnlyReadsFromTheLocalEngine(testContext *testing.T) {
 		"cscli hub list -o json": readFrozenFixture(testContext, "hub-list.json"),
 		"cscli version":          readFrozenFixture(testContext, "version.txt"),
 	}
-	services := NewServices(lapi.NewClient(localServer.URL, "dashboard", "test-password", nil), runner, testContext.TempDir())
+	services := NewServices(lapi.NewClient(localServer.URL, "dashboard", "test-password", nil), cscli.NewLocalExecutor(runner), testContext.TempDir())
 	environment := newRouteAccessEnvironment(testContext)
 	services.Sessions, services.Tokens, services.TokenGate = environment.sessions, environment.tokens, allowEveryTokenGate{}
 	services.OperationLock = oplock.New()

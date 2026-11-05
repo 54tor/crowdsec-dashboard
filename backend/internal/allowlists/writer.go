@@ -12,11 +12,11 @@ import (
 )
 
 type cscliWriter struct {
-	runner cscli.Runner
+	executor cscli.Executor
 }
 
-func NewCscliWriter(runner cscli.Runner) Writer {
-	return &cscliWriter{runner: runner}
+func NewCscliWriter(executor cscli.Executor) Writer {
+	return &cscliWriter{executor: executor}
 }
 
 func (writer *cscliWriter) Create(ctx context.Context, allowlistName, description string) error {
@@ -43,7 +43,7 @@ func (writer *cscliWriter) Remove(ctx context.Context, allowlistName string, val
 }
 
 func (writer *cscliWriter) execute(ctx context.Context, commandName string, fields map[string]string) error {
-	_, executeError := cscli.Execute(ctx, writer.runner, commandName, fields)
+	_, executeError := writer.executor.Execute(ctx, commandName, fields)
 	return classifyCscliError(executeError)
 }
 

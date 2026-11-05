@@ -74,8 +74,8 @@ func main() {
 	accountServices.geolocator = openGeolocator(loadedConfig.GeoIPDatabaseFile, time.Now, log.Printf)
 	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
 
-	cscliRunner := cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer)
-	services := api.NewServices(localLAPIClient, cscliRunner, loadedConfig.ConfDir)
+	localExecutor := cscli.NewLocalExecutor(cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer))
+	services := api.NewServices(localLAPIClient, localExecutor, loadedConfig.ConfDir)
 	auditRecorder := audit.NewPostgresRecorder(database)
 	services.Login = newLoginService(database, accountServices, sessionStore, webAuthn, auditRecorder)
 	services.Enrollment = accountServices.enrollment
@@ -99,7 +99,7 @@ func main() {
 	}, sessionStore, tokenRepository, newArchivePurgeAdapter(database, loadedConfig), auditRecorder)
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
-	services.Allowlists = allowlists.NewService(engineRepository, engineRegistry, allowlists.LocalOnlyWriters(allowlists.NewCscliWriter(cscliRunner)), time.Now)
+	services.Allowlists = allowlists.NewService(engineRepository, engineRegistry, allowlists.LocalOnlyWriters(allowlists.NewCscliWriter(localExecutor)), time.Now)
 	services.CollectorStatus = engineCollector
 	services.SchemaVersion = store.NewVersionReader(database)
 	operationLock := oplock.New()

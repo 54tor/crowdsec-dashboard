@@ -275,7 +275,7 @@ func TestBouncerNameAcceptsAtSignAfterFirstCharacter(t *testing.T) {
 
 func TestConfigTestRunsCrowdsecValidationAndFailsClosed(t *testing.T) {
 	passingRunner := &recordingRunner{}
-	if testError := ConfigTest(context.Background(), passingRunner); testError != nil {
+	if testError := ConfigTest(context.Background(), NewLocalExecutor(passingRunner)); testError != nil {
 		t.Fatalf("unexpected error %v", testError)
 	}
 	if !reflect.DeepEqual(passingRunner.receivedArgv, []string{"crowdsec", "-t"}) {
@@ -283,7 +283,7 @@ func TestConfigTestRunsCrowdsecValidationAndFailsClosed(t *testing.T) {
 	}
 	// Exit status 1 (invalid configuration) and a missing binary both surface as errors.
 	failingRunner := &recordingRunner{err: ErrCscliFailed}
-	if testError := ConfigTest(context.Background(), failingRunner); testError == nil {
+	if testError := ConfigTest(context.Background(), NewLocalExecutor(failingRunner)); testError == nil {
 		t.Fatal("a failing crowdsec -t must return an error")
 	}
 }

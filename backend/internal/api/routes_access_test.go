@@ -17,6 +17,7 @@ import (
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/auth/authtest"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/cscli"
 )
 
 const (
@@ -391,7 +392,7 @@ func TestReadOnlySessionGets403OnHubMutations(testContext *testing.T) {
 	environment := newRouteAccessEnvironment(testContext)
 	runner := &outputRunner{}
 	services := environment.services()
-	services.Hub = cscliHub{runner: runner}
+	services.Hub = cscliHub{executor: cscli.NewLocalExecutor(runner)}
 	realHandler := newHandler(config.Config{SessionTTL: time.Hour}, http.NotFoundHandler(), 0, services)
 	checkedRoutes := 0
 	for _, route := range routeTableForTest(environment) {

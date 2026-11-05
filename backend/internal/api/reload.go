@@ -11,10 +11,10 @@ type Reloader interface {
 	Reload(ctx context.Context) error
 }
 
-type cscliReloader struct{ runner cscli.Runner }
+type cscliReloader struct{ executor cscli.Executor }
 
 func (service cscliReloader) Reload(ctx context.Context) error {
-	_, executeError := cscli.Execute(ctx, service.runner, "reload", map[string]string{})
+	_, executeError := service.executor.Execute(ctx, "reload", map[string]string{})
 	return executeError
 }
 
