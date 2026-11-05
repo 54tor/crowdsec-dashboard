@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"crowdsec-dashboard/internal/allowlists"
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/engines"
 )
 
@@ -31,12 +32,20 @@ var allowlistErrorCodes = []allowlistErrorCode{
 }
 
 func classifyAllowlistError(serviceError error) (int, string) {
+	if isAllowlistSidecarError(serviceError) {
+		return classifyUpstreamError(serviceError)
+	}
 	for _, knownError := range allowlistErrorCodes {
 		if errors.Is(serviceError, knownError.sentinel) {
 			return knownError.status, knownError.code
 		}
 	}
 	return http.StatusBadGateway, engines.ErrorCode(serviceError)
+}
+
+func isAllowlistSidecarError(serviceError error) bool {
+	isTimeout := errors.Is(serviceError, cscli.ErrTimeout)
+	return !isTimeout && isSidecarTransportError(serviceError)
 }
 
 func writeAllowlistError(responseWriter http.ResponseWriter, serviceError error) {

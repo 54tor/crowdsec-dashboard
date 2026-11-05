@@ -197,6 +197,12 @@ func (source fixedWriters) Writer(engine engines.Engine) (Writer, bool) {
 	return source.writer, true
 }
 
+// localOnlyTestWriters serves the given writer for the local engine only, so
+// that tests written before sidecars keep a read-only remote engine.
+func localOnlyTestWriters(writer Writer) WriterSource {
+	return fixedWriters{writer: writer, engineOK: func(engine engines.Engine) bool { return engine.IsLocal }}
+}
+
 // recordingRunner stands in for the docker exec runner of cscli: it records
 // each argv and returns the configured output and error.
 type recordingRunner struct {
@@ -229,7 +235,7 @@ func permanentItem(value string) lapi.AllowlistItem {
 	return lapi.AllowlistItem{Value: value, Expiration: permanentRaw}
 }
 
-// newServiceFixture wires a local engine (writable through LocalOnlyWriters)
+// newServiceFixture wires a local engine (writable through localOnlyTestWriters)
 // and a remote engine (read only) that both serve the given allowlists.
 func newServiceFixture(testContext *testing.T, allowlists ...lapi.Allowlist) serviceFixture {
 	testContext.Helper()
@@ -241,7 +247,7 @@ func newServiceFixture(testContext *testing.T, allowlists ...lapi.Allowlist) ser
 		remoteEngineName: {Name: remoteEngineName, Enabled: true},
 	}
 	clients := fakeClients{localEngineName: localClient, remoteEngineName: remoteClient}
-	service := NewService(knownEngines, clients, LocalOnlyWriters(writer), func() time.Time { return referenceNow })
+	service := NewService(knownEngines, clients, localOnlyTestWriters(writer), func() time.Time { return referenceNow })
 	return serviceFixture{service: service, localLAPI: localLAPI, remoteLAPI: remoteLAPI, writer: writer}
 }
 

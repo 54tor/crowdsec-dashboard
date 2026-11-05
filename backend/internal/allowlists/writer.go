@@ -7,8 +7,8 @@ import (
 	"net/netip"
 
 	"crowdsec-dashboard/internal/cscli"
-	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/netparse"
+	"crowdsec-dashboard/internal/sidecarclient"
 )
 
 type cscliWriter struct {
@@ -55,22 +55,28 @@ func classifyCscliError(executeError error) error {
 		return fmt.Errorf("%w: %w", ErrInvalid, executeError)
 	case errors.Is(executeError, cscli.ErrTimeout):
 		return fmt.Errorf("%w: %w", ErrWriteFailed, cscli.ErrTimeout)
+	case isSidecarFailure(executeError):
+		return fmt.Errorf("%w: %w", ErrWriteFailed, executeError)
 	default:
 		return fmt.Errorf("%w: %w", ErrWriteFailed, cscli.ErrCscliFailed)
 	}
 }
 
-type localOnlyWriters struct {
-	local Writer
+var sidecarFailures = []error{
+	sidecarclient.ErrUnavailable,
+	sidecarclient.ErrFingerprintMismatch,
+	sidecarclient.ErrAuthRefused,
+	sidecarclient.ErrClockSkew,
+	sidecarclient.ErrCommandRefused,
+	sidecarclient.ErrBusy,
+	sidecarclient.ErrInvalidResponse,
 }
 
-func LocalOnlyWriters(local Writer) WriterSource {
-	return localOnlyWriters{local: local}
-}
-
-func (source localOnlyWriters) Writer(engine engines.Engine) (Writer, bool) {
-	if !engine.IsLocal {
-		return nil, false
+func isSidecarFailure(executeError error) bool {
+	for _, sidecarFailure := range sidecarFailures {
+		if errors.Is(executeError, sidecarFailure) {
+			return true
+		}
 	}
-	return source.local, true
+	return false
 }

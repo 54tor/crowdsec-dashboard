@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"crowdsec-dashboard/internal/allowlists"
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/egress"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/sidecarclient"
 )
 
 func TestServiceErrorsMapToStableCodes(testContext *testing.T) {
@@ -54,5 +56,30 @@ func TestNoAllowlistsUnsupportedCode(testContext *testing.T) {
 	_, notFoundCode := classifyAllowlistError(fmt.Errorf("lapi status 404: %w", lapi.ErrAllowlistsUnreadable))
 	if notFoundCode != "engine_unreachable" {
 		testContext.Errorf("a 404 on /v1/allowlists must map to engine_unreachable, got %q", notFoundCode)
+	}
+}
+
+// A sidecar failure behind an allowlist write keeps its own class: a read-only
+// sidecar is a 409, never the 400 of invalid input nor the generic 502.
+func TestAllowlistSidecarFailuresKeepTheirSidecarCodes(testContext *testing.T) {
+	errorCases := []struct {
+		sidecarError   error
+		expectedStatus int
+		expectedCode   string
+	}{
+		{sidecarError: fmt.Errorf("%w (sidecar code read_only)", sidecarclient.ErrCommandRefused), expectedStatus: http.StatusConflict, expectedCode: "sidecar_command_refused"},
+		{sidecarError: fmt.Errorf("%w (sidecar code command_not_allowed)", sidecarclient.ErrCommandRefused), expectedStatus: http.StatusConflict, expectedCode: "sidecar_command_refused"},
+		{sidecarError: sidecarclient.ErrUnavailable, expectedStatus: http.StatusBadGateway, expectedCode: "sidecar_unavailable"},
+		{sidecarError: sidecarclient.ErrFingerprintMismatch, expectedStatus: http.StatusBadGateway, expectedCode: "sidecar_fingerprint_mismatch"},
+		{sidecarError: sidecarclient.ErrBusy, expectedStatus: http.StatusServiceUnavailable, expectedCode: "sidecar_busy"},
+		{sidecarError: cscli.ErrTimeout, expectedStatus: http.StatusBadGateway, expectedCode: "allowlist_write_failed"},
+	}
+	for _, errorCase := range errorCases {
+		fixture := newAllowlistFixture(testContext)
+		fixture.service.failure = fmt.Errorf("%w: %w", allowlists.ErrWriteFailed, errorCase.sidecarError)
+
+		writeResponse := fixture.asAdmin(http.MethodPost, "/api/engines/peer-b/allowlists/office/entries", `{"value":"203.0.113.7"}`)
+
+		expectError(testContext, writeResponse, errorCase.expectedStatus, errorCase.expectedCode)
 	}
 }

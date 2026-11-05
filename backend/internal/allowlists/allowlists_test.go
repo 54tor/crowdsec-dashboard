@@ -96,7 +96,7 @@ func TestDisabledEngineIsNotFound(testContext *testing.T) {
 	_, client := startFakeLAPI(testContext)
 	writer := &recordingWriter{}
 	knownEngines := fakeEngines{"paused": {Name: "paused", IsLocal: true, Enabled: false}}
-	service := NewService(knownEngines, fakeClients{"paused": client}, LocalOnlyWriters(writer), func() time.Time { return referenceNow })
+	service := NewService(knownEngines, fakeClients{"paused": client}, localOnlyTestWriters(writer), func() time.Time { return referenceNow })
 
 	_, listError := service.List(context.Background(), "paused")
 	_, createError := service.Create(context.Background(), "paused", "trusted", "trusted hosts")
@@ -111,7 +111,7 @@ func TestDisabledEngineIsNotFound(testContext *testing.T) {
 func TestRemoteEngineIsReadOnly(testContext *testing.T) {
 	fixture := newServiceFixture(testContext, trustedAllowlist())
 	runner := &recordingRunner{}
-	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
+	fixture.service.writers = localOnlyTestWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
 
 	_, addError := fixture.service.AddEntry(context.Background(), remoteEngineName, "trusted", EntryInput{Value: "203.0.113.7"})
 
@@ -170,7 +170,7 @@ func TestAddEntryRefusesInternetWideRanges(testContext *testing.T) {
 func TestAddEntryWiderThanConfirmFloorNeedsRetypedValue(testContext *testing.T) {
 	fixture := newServiceFixture(testContext, trustedAllowlist())
 	runner := &recordingRunner{afterRun: func(argv []string) { fixture.localLAPI.addItem("trusted", argv[4]) }}
-	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
+	fixture.service.writers = localOnlyTestWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
 
 	_, unconfirmedError := fixture.service.AddEntry(context.Background(), localEngineName, "trusted", EntryInput{Value: "198.51.100.0/23"})
 	requireErrorIs(testContext, unconfirmedError, ErrConfirmationRequired)
@@ -399,7 +399,7 @@ func TestWritesOnOversizedReadAreUnreadableNotNotFound(testContext *testing.T) {
 }
 
 func TestNewServiceDefaultsNilClockToNow(testContext *testing.T) {
-	service := NewService(fakeEngines{}, fakeClients{}, LocalOnlyWriters(&recordingWriter{}), nil)
+	service := NewService(fakeEngines{}, fakeClients{}, localOnlyTestWriters(&recordingWriter{}), nil)
 
 	if service.now == nil || time.Since(service.now()) > time.Minute {
 		testContext.Fatal("a nil clock must default to time.Now")
@@ -416,7 +416,7 @@ func (lookup failingEngineLookup) Get(_ context.Context, _ string) (engines.Engi
 func TestEngineLookupFailureIsWrappedAndNeverWrites(testContext *testing.T) {
 	databaseFailure := errors.New("database connection refused")
 	writer := &recordingWriter{}
-	service := NewService(failingEngineLookup{failure: databaseFailure}, fakeClients{}, LocalOnlyWriters(writer), func() time.Time { return referenceNow })
+	service := NewService(failingEngineLookup{failure: databaseFailure}, fakeClients{}, localOnlyTestWriters(writer), func() time.Time { return referenceNow })
 
 	_, listError := service.List(context.Background(), "local")
 	_, addError := service.AddEntry(context.Background(), "local", "trusted", EntryInput{Value: "203.0.113.7"})

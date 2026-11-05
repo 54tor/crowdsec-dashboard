@@ -502,11 +502,16 @@ admin; all but the test are session only (403 `session_required` for a token). B
 
 CrowdSec allowlists (centralised allowlists, `cscli allowlists`) of each engine
 ([security.md](security.md#allowlists-of-the-engines)). Reading is open to every role; the four
-writes are admin (an `admin` session or a `write` token of an `admin` account) and act on the
-**local** engine only: the LAPI has no route to write an allowlist, so the dashboard writes with
-`cscli` in the local CrowdSec container, and every remote engine is read-only (409
-`allowlist_engine_readonly`, nothing read or written). Bodies are capped at 2 KiB and unknown
-fields are refused (400 `invalid_request`).
+writes are admin (an `admin` session or a `write` token of an `admin` account). The LAPI has no
+route to write an allowlist, so the dashboard writes with `cscli`: in the local CrowdSec container
+for the local engine, and through the engine's sidecar for a remote engine that has a
+usable one. The read before the write and the verification re-read go to the LAPI of that same
+engine. A remote engine without a usable sidecar is read-only (409 `allowlist_engine_readonly`,
+nothing read or written). A sidecar failure keeps its own code: 409 `sidecar_command_refused` (for
+example `SIDECAR_READ_ONLY=true`), 502 `sidecar_unavailable`, `sidecar_fingerprint_mismatch`,
+`sidecar_auth_failed`, `sidecar_clock_skew`, 503 `sidecar_busy`; a timeout stays 502
+`allowlist_write_failed`. Bodies are capped at 2 KiB and unknown fields are refused (400
+`invalid_request`).
 
 | Method | Path | Access | Body | Success response |
 |---|---|---|---|---|
@@ -526,7 +531,7 @@ The listing is:
      "created_at": "2026-11-03T15:47:44Z", "expires_at": null, "expired": false}]}]}
 ```
 
-- `writable` is true for the local engine only. `truncated` is true when the LAPI answer was over
+- `writable` is true for the local engine and for remote engines with a usable sidecar. `truncated` is true when the LAPI answer was over
   4 MiB (the listing is then empty) or held more than 10 000 entries in total (the entries beyond
   are not shown); the page shows a banner, and the manual ban and the sync refuse every target on
   that engine.
@@ -577,7 +582,7 @@ that engine covered by any of its allowlists**, not only by the new value.
 | `allowlist_not_found`, `allowlist_entry_not_found` | 404 | No such allowlist or value on the engine |
 | `allowlist_exists`, `allowlist_entry_exists` | 409 | Name or value already present |
 | `allowlist_console_managed` | 409 | The allowlist is managed by the CrowdSec console: change it there |
-| `allowlist_engine_readonly` | 409 | Write on a remote engine |
+| `allowlist_engine_readonly` | 409 | Write on a remote engine without a usable sidecar |
 | `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address` | 502 | The allowlists could not be read: no answer, login refused, forbidden address. Any 404 on `/v1/allowlists` (a CrowdSec without allowlists, a wrong URL or a proxy) and an undecodable answer count as `engine_unreachable`, as does a delete or an entry write when the LAPI answer is over 4 MiB |
 | `allowlist_write_failed` | 502 | `cscli` failed or timed out, or the re-read does not show the change; the output of `cscli` is never returned |
 | `database_unavailable` | 503 | The engine table could not be read |

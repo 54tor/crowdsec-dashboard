@@ -63,7 +63,7 @@ func TestAddEntryReportsWriteFailureWithoutOutput(testContext *testing.T) {
 		output:  []byte(outputMarker),
 		failure: fmt.Errorf("%w: %s", cscli.ErrCscliFailed, outputMarker),
 	}
-	fixture.service.writers = LocalOnlyWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
+	fixture.service.writers = localOnlyTestWriters(NewCscliWriter(cscli.NewLocalExecutor(runner)))
 
 	_, addError := fixture.service.AddEntry(context.Background(), localEngineName, "trusted", EntryInput{Value: "203.0.113.7"})
 

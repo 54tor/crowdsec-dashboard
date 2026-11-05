@@ -102,7 +102,7 @@ func main() {
 	engineCollector := newEngineCollector(database, engineRepository, engineRegistry, loadedConfig)
 	services.Engines = api.NewEngineService(engineRepository, engineRegistry, engineCollector)
 	services.EngineTargets = engineRegistry
-	services.Allowlists = allowlists.NewService(engineRepository, engineRegistry, allowlists.LocalOnlyWriters(allowlists.NewCscliWriter(localExecutor)), time.Now)
+	services.Allowlists = allowlists.NewService(engineRepository, engineRegistry, allowlists.SidecarWriters(engineRegistry), time.Now)
 	services.CollectorStatus = engineCollector
 	services.SchemaVersion = store.NewVersionReader(database)
 	operationLock := oplock.New()
