@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { SelectField } from '@/components/SelectField'
 import { useWritableEngineNames } from '@/hooks/useEngineTarget'
+import { useIsEngineWritePending } from '@/hooks/useEngineWritePending'
 
 interface EngineTargetSelectProps {
   id: string
@@ -12,6 +13,7 @@ interface EngineTargetSelectProps {
 export function EngineTargetSelect({ id, value, onChange, disabled }: EngineTargetSelectProps) {
   const { t } = useTranslation()
   const writableEngineNames = useWritableEngineNames()
+  const isEngineWritePending = useIsEngineWritePending()
   if (writableEngineNames === undefined) {
     return null
   }
@@ -22,7 +24,7 @@ export function EngineTargetSelect({ id, value, onChange, disabled }: EngineTarg
         label={t('engineTarget.label')}
         hint={t('engineTarget.hint')}
         value={value}
-        disabled={disabled}
+        disabled={disabled || isEngineWritePending}
         options={writableEngineNames.map((engineName) => ({ value: engineName, label: engineName }))}
         onChange={onChange}
       />

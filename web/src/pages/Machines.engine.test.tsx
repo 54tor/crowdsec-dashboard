@@ -11,7 +11,7 @@ import {
   selectTargetEngine,
   targetEngineNamedIn,
 } from '@/test/engineTargetHarness'
-import { prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
+import { holdPostRequests, prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const FAKE_PASSWORD = 'fake-machine-password-for-tests'
@@ -71,5 +71,20 @@ describe('machines page engine target', () => {
 
     expect(requestsTo(fetchMock, 'POST', '/api/machines')).toHaveLength(0)
     expectEveryWriteToTarget(fetchMock, 'peer')
+  })
+
+  it('engineSelectorIsLockedWhileAValidationIsPending', async () => {
+    const fetchMock = stubFetch(machineEngineRoutes())
+    const user = userEvent.setup()
+    renderApp('/machines')
+
+    await selectTargetEngine(user, 'peer')
+    const heldValidation = holdPostRequests(fetchMock)
+    await user.click(await screen.findByRole('button', { name: 'Validate peer-agent' }))
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/machines/peer-agent/validate?engine=peer')).toHaveLength(1))
+    expect(screen.getByLabelText(en.engineTarget.label)).toBeDisabled()
+
+    heldValidation.settle(200, { status: 'validated' })
+    await waitFor(() => expect(screen.getByLabelText(en.engineTarget.label)).toBeEnabled())
   })
 })

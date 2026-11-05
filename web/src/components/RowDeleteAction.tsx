@@ -23,22 +23,20 @@ interface RowDeleteActionProps {
 export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, engineName, request, invalidates, onDeleted, onFailed, disabledReason, iconOnly = false }: RowDeleteActionProps) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const hasDeletedRef = useRef(false)
+  const pendingDeletedNotificationRef = useRef<(() => void) | null>(null)
 
   function finishDeletion() {
-    hasDeletedRef.current = true
+    pendingDeletedNotificationRef.current = onDeleted ?? null
     setIsDialogOpen(false)
     invalidates.forEach((queryKey) => void queryClient.invalidateQueries({ queryKey }))
   }
 
   function notifyDeletionOnceClosed(closeFocusEvent: Event) {
-    if (!hasDeletedRef.current) {
-      return
-    }
-    hasDeletedRef.current = false
-    if (onDeleted) {
+    const notifyDeleted = pendingDeletedNotificationRef.current
+    pendingDeletedNotificationRef.current = null
+    if (notifyDeleted) {
       closeFocusEvent.preventDefault()
-      onDeleted()
+      notifyDeleted()
     }
   }
 

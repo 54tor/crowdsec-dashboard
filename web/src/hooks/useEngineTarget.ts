@@ -13,7 +13,10 @@ function sidecarEngineNamesOf(engineNames: EngineName[]): string[] {
 }
 
 export function useEngineTarget(): [string, (engineName: string) => void] {
-  return useState(LOCAL_ENGINE_NAME)
+  const [selectedEngineName, setSelectedEngineName] = useState(LOCAL_ENGINE_NAME)
+  const writableEngineNames = useWritableEngineNames()
+  const isSelectionWritable = writableEngineNames?.includes(selectedEngineName) ?? false
+  return [isSelectionWritable ? selectedEngineName : LOCAL_ENGINE_NAME, setSelectedEngineName]
 }
 
 export function useWritableEngineNames(): string[] | undefined {

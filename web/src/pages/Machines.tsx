@@ -17,12 +17,13 @@ import { useEngineTarget } from '@/hooks/useEngineTarget'
 import { HEALTH_QUERY_KEY, MACHINES_QUERY_KEY, useMachines } from '@/hooks/useReadResources'
 
 interface FilteredMachinesProps {
+  engineName: string
   machines: Machine[]
   now: number
   actions?: RowActions<Machine>
 }
 
-function FilteredMachines({ machines, now, actions }: FilteredMachinesProps) {
+function FilteredMachines({ engineName, machines, now, actions }: FilteredMachinesProps) {
   const { t } = useTranslation()
   const machineFilter = useClientFilter(machines, (machine) => [
     machine.machine_id,
@@ -43,7 +44,7 @@ function FilteredMachines({ machines, now, actions }: FilteredMachinesProps) {
         totalCount={machines.length}
       />
       <ClientFilterResults visibleCount={machineFilter.visibleRows.length} totalCount={machines.length}>
-        <MachinesTable machines={machineFilter.visibleRows} now={now} actions={actions} cardsOnMobile />
+        <MachinesTable engineName={engineName} machines={machineFilter.visibleRows} now={now} actions={actions} cardsOnMobile />
       </ClientFilterResults>
     </>
   )
@@ -119,7 +120,7 @@ export function Machines() {
         </WriteOnly>
       }
     >
-      {(machines, now) => <FilteredMachines machines={machines} now={now} actions={actions} />}
+      {(machines, now) => <FilteredMachines engineName={engineName} machines={machines} now={now} actions={actions} />}
     </EngineListSection>
   )
 }

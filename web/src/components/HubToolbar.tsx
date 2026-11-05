@@ -4,12 +4,12 @@ import { Icon } from '@/components/Icon'
 import { InstallHubItemDialog } from '@/components/InstallHubItemDialog'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
-import { useHubMutation } from '@/hooks/useHubMutation'
+import { useHubMutation, type EngineBoundVariables } from '@/hooks/useHubMutation'
 
 export function HubToolbar({ engineName }: { engineName: string }) {
   const { t } = useTranslation()
-  const update = useHubMutation(engineName, () => updateHub(engineName))
-  const upgrade = useHubMutation(engineName, () => upgradeHub(engineName))
+  const update = useHubMutation((updateTarget: EngineBoundVariables) => updateHub(updateTarget.engineName))
+  const upgrade = useHubMutation((upgradeTarget: EngineBoundVariables) => upgradeHub(upgradeTarget.engineName))
   const isBusy = update.isPending || upgrade.isPending
   const failure = update.error ?? upgrade.error
 
@@ -25,10 +25,10 @@ export function HubToolbar({ engineName }: { engineName: string }) {
   return (
     <div className="space-y-2" aria-busy={isBusy}>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" disabled={isBusy} onClick={() => update.mutate()}>
+        <Button type="button" variant="outline" disabled={isBusy} onClick={() => update.mutate({ engineName })}>
           {labelOf(update.isPending, t('hub.update'))}
         </Button>
-        <Button type="button" variant="outline" disabled={isBusy} onClick={() => upgrade.mutate()}>
+        <Button type="button" variant="outline" disabled={isBusy} onClick={() => upgrade.mutate({ engineName })}>
           {labelOf(upgrade.isPending, t('hub.upgrade'))}
         </Button>
         <InstallHubItemDialog engineName={engineName} />

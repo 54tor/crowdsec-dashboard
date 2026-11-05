@@ -5,12 +5,17 @@ import { EngineTargetNote } from '@/components/EngineTargetNote'
 import { Icon } from '@/components/Icon'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
+import { ENGINE_WRITE_MUTATION_KEY } from '@/hooks/useEngineWritePending'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
 
 export function ReloadBanner({ engineName }: { engineName: string }) {
   const { t } = useTranslation()
   const { isReloadRequired, clearReloadRequired } = useReloadRequired()
-  const reload = useMutation({ mutationFn: () => reloadCrowdsec(engineName), onSuccess: () => clearReloadRequired(engineName) })
+  const reload = useMutation({
+    mutationKey: ENGINE_WRITE_MUTATION_KEY,
+    mutationFn: (reloadedEngineName: string) => reloadCrowdsec(reloadedEngineName),
+    onSuccess: (_result, reloadedEngineName) => clearReloadRequired(reloadedEngineName),
+  })
   if (!isReloadRequired(engineName)) {
     return null
   }
@@ -19,7 +24,7 @@ export function ReloadBanner({ engineName }: { engineName: string }) {
       <WarningNotice title={t('hub.reloadRequired')}>
         <p>{t('hub.reloadHint')}</p>
         <EngineTargetNote engineName={engineName} />
-        <Button type="button" size="sm" className="mt-2" disabled={reload.isPending} onClick={() => reload.mutate()}>
+        <Button type="button" size="sm" className="mt-2" disabled={reload.isPending} onClick={() => reload.mutate(engineName)}>
           {reload.isPending && <Icon name="progress_activity" className="size-4 motion-safe:animate-spin" />}
           {reload.isPending ? t('dialog.working') : t('hub.reload')}
         </Button>

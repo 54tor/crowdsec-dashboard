@@ -26,17 +26,28 @@ export interface ConfirmDeleteDialogProps {
   onCloseAutoFocus?: (closeFocusEvent: Event) => void
 }
 
+interface DeletionRequest {
+  confirm: string
+  request: (confirm: string) => Promise<unknown>
+  onDeleted: () => void
+  onFailed?: (failure: unknown) => void
+}
+
 function ConfirmDeleteForm({ title, description, target, confirmValue, engineName, submitLabel, request, onDeleted, onFailed, onClose, reportPending }: Omit<ConfirmDeleteDialogProps, 'open' | 'trigger' | 'onOpen' | 'onCloseAutoFocus'> & { reportPending: (isPending: boolean) => void }) {
   const { t } = useTranslation()
   const [typedTarget, setTypedTarget] = useState('')
-  const deletion = useMutation({ mutationFn: request, onSuccess: onDeleted, onError: onFailed })
+  const deletion = useMutation({
+    mutationFn: (deletionRequest: DeletionRequest) => deletionRequest.request(deletionRequest.confirm),
+    onSuccess: (_result, deletionRequest) => deletionRequest.onDeleted(),
+    onError: (failure, deletionRequest) => deletionRequest.onFailed?.(failure),
+  })
   usePendingReport(deletion.isPending, reportPending)
   const isMatching = typedTarget === target
 
   function submit(submitEvent: FormEvent) {
     submitEvent.preventDefault()
     if (isMatching && !deletion.isPending) {
-      deletion.mutate(confirmValue ?? typedTarget)
+      deletion.mutate({ confirm: confirmValue ?? typedTarget, request, onDeleted, onFailed })
     }
   }
 

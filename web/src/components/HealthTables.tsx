@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { LOCAL_ENGINE_NAME } from '@/api/engineQuery'
 import type { Bouncer, Machine } from '@/api/types'
 import { AgeCell } from '@/components/AgeCell'
 import { ContactStatus } from '@/components/ContactStatus'
@@ -23,6 +24,7 @@ interface MachinesTableProps {
   now: number
   actions?: RowActions<Machine>
   cardsOnMobile?: boolean
+  engineName?: string
 }
 
 export function BouncersTable({ bouncers, now, actions, cardsOnMobile = false }: BouncersTableProps) {
@@ -52,7 +54,7 @@ export function BouncersTable({ bouncers, now, actions, cardsOnMobile = false }:
   )
 }
 
-export function MachinesTable({ machines, now, actions, cardsOnMobile = false }: MachinesTableProps) {
+export function MachinesTable({ machines, now, actions, cardsOnMobile = false, engineName = LOCAL_ENGINE_NAME }: MachinesTableProps) {
   const { t } = useTranslation()
   const columns = useMemo<DataTableColumn<Machine>[]>(
     () => [
@@ -92,7 +94,7 @@ export function MachinesTable({ machines, now, actions, cardsOnMobile = false }:
       caption={t('health.machinesCaption')}
       columns={columns}
       rows={machines}
-      rowKey={(machine) => machine.machine_id}
+      rowKey={(machine) => `${engineName}/${machine.machine_id}`}
       cardsOnMobile={cardsOnMobile}
       emptyMessage={t('health.noMachines')}
     />

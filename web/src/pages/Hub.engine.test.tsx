@@ -12,7 +12,8 @@ import {
   selectTargetEngine,
   targetEngineNamedIn,
 } from '@/test/engineTargetHarness'
-import { prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
+import { ENGINE_NAMES_QUERY_KEY } from '@/api/enginesApi'
+import { holdPostRequests, prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
 
 const READ_ONLY_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'bob', account_role: 'read_only' } }
@@ -136,6 +137,66 @@ describe('hub page engine target', () => {
     await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/crowdsec/reload?engine=peer')).toHaveLength(1))
     expect(requestsTo(fetchMock, 'POST', '/api/crowdsec/reload')).toHaveLength(0)
     expectEveryWriteToTarget(fetchMock, 'peer')
+  })
+
+  it('engineSelectorIsLockedWhileAHubWriteIsPending', async () => {
+    const fetchMock = stubFetch(hubEngineRoutes())
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    await selectTargetEngine(user, 'peer')
+    const heldUpdate = holdPostRequests(fetchMock)
+    await user.click(await screen.findByRole('button', { name: en.hub.update }))
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/hub/update?engine=peer')).toHaveLength(1))
+    expect(screen.getByLabelText(en.engineTarget.label)).toBeDisabled()
+
+    heldUpdate.settle(200, { status: 'updated' })
+    await waitFor(() => expect(screen.getByLabelText(en.engineTarget.label)).toBeEnabled())
+    const banner = (await screen.findByText(en.hub.reloadRequired)).closest('[role="status"]') as HTMLElement
+    expect(targetEngineNamedIn(banner)).toBe('peer')
+  })
+
+  it('engineSelectorIsLockedWhileAReloadIsPending', async () => {
+    const fetchMock = stubFetch(hubEngineRoutes({ 'POST /api/hub/update?engine=peer': { status: 200, body: { status: 'updated' } } }))
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    await selectTargetEngine(user, 'peer')
+    await user.click(await screen.findByRole('button', { name: en.hub.update }))
+    await screen.findByText(en.hub.reloadRequired)
+    const heldReload = holdPostRequests(fetchMock)
+    await user.click(screen.getByRole('button', { name: en.hub.reload }))
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/crowdsec/reload?engine=peer')).toHaveLength(1))
+    expect(screen.getByLabelText(en.engineTarget.label)).toBeDisabled()
+
+    heldReload.settle(200, { status: 'reloaded' })
+    await waitFor(() => expect(screen.queryByText(en.hub.reloadRequired)).toBeNull())
+    expect(screen.getByLabelText(en.engineTarget.label)).toBeEnabled()
+  })
+
+  // The selected engine loses its sidecar while selected: the page falls back to
+  // the local engine, and the selector and the dialogs both name it.
+  it('selectionFallsBackToLocalWhenTheEngineStopsBeingWritable', async () => {
+    let engineNamesResponse = ENGINE_NAMES_WITH_SIDECARS
+    const fetchMock = stubFetch(hubEngineRoutes({ 'GET /api/engines/names': () => engineNamesResponse }))
+    const user = userEvent.setup()
+    const { queryClient } = renderApp('/hub')
+
+    await selectTargetEngine(user, 'peer')
+    await screen.findByText(PEER_ITEM_NAME, { selector: 'td' })
+    engineNamesResponse = {
+      status: 200,
+      body: { items: ENGINE_NAMES_WITH_SIDECARS.body.items.map((engineName) => (engineName.name === 'peer' ? { ...engineName, has_sidecar: false } : engineName)) },
+    }
+    await queryClient.invalidateQueries({ queryKey: ENGINE_NAMES_QUERY_KEY })
+
+    await waitFor(() => expect(offeredEngineNames()).toEqual(['local']))
+    expect((screen.getByLabelText(en.engineTarget.label) as HTMLSelectElement).value).toBe('local')
+    expect(await screen.findByText(LOCAL_ITEM_NAME, { selector: 'td' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: en.hub.install }))
+    const dialog = await screen.findByRole('dialog', { name: en.hub.installTitle })
+    expect(targetEngineNamedIn(dialog)).toBe('local')
+    expect(requestsTo(fetchMock, 'GET', '/api/hub').length).toBeGreaterThan(0)
   })
 
   it('readOnlyAccountSeesNoWriteActionOnASelectedEngine', async () => {

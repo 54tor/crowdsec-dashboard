@@ -25,14 +25,18 @@ const DECISIONS_URL = 'GET /api/decisions?page=1&per_page=20'
 
 // Remote rows come from the archive (live:false); the local row is from the live window.
 const LOCAL_DECISION = makeDecision({ id: 10, value: '203.0.113.7' })
-const PEER_DECISION = makeDecision({ id: 20, value: '198.51.100.20', engine: 'peer', live: false, archive_decision_id: 200 })
+// The fixture's default until is already past: remote rows that can still be unbanned need a future one.
+const FUTURE_UNTIL = '2099-01-01T00:00:00Z'
+const PAST_UNTIL = '2000-01-01T00:00:00Z'
+const PEER_DECISION = makeDecision({ id: 20, value: '198.51.100.20', engine: 'peer', live: false, archive_decision_id: 200, until: FUTURE_UNTIL })
+const EXPIRED_PEER_DECISION = makeDecision({ id: 21, value: '198.51.100.21', engine: 'peer', live: false, archive_decision_id: 210, until: PAST_UNTIL })
 const BARE_DECISION = makeDecision({ id: 30, value: '192.0.2.30', engine: 'bare', live: false, archive_decision_id: 300 })
 
 function decisionEngineRoutes(extraRoutes = {}) {
   return {
     'GET /api/auth/me': SESSION_OK,
     'GET /api/engines/names': ENGINE_NAMES_WITH_SIDECARS,
-    [DECISIONS_URL]: { status: 200, body: makePage([LOCAL_DECISION, PEER_DECISION, BARE_DECISION]) },
+    [DECISIONS_URL]: { status: 200, body: makePage([LOCAL_DECISION, PEER_DECISION, BARE_DECISION, EXPIRED_PEER_DECISION]) },
     ...extraRoutes,
   }
 }
@@ -98,6 +102,18 @@ describe('decisions page engine target', () => {
 
     expect(screen.getByRole('button', { name: `Unban ${LOCAL_DECISION.value}` })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: `Unban ${BARE_DECISION.value}` })).toBeNull()
+  })
+
+  // An archived remote row past its until no longer exists on the engine's LAPI:
+  // offering Unban would only end in 404 not_found.
+  it('expiredRemoteRowOffersNoUnban', async () => {
+    stubFetch(decisionEngineRoutes())
+    renderApp('/decisions')
+
+    await screen.findByRole('button', { name: `Unban ${PEER_DECISION.value}` })
+
+    expect(screen.getByText(EXPIRED_PEER_DECISION.value)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: `Unban ${EXPIRED_PEER_DECISION.value}` })).toBeNull()
   })
 
   // Until the engine names arrive, only the local engine is known to be writable.

@@ -21,6 +21,7 @@ import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
 import { formatDateTimeToMinute } from '@/lib/format'
 import { useIsWritableEngine } from '@/hooks/useEngineTarget'
+import { isLocalEngine } from '@/api/engineQuery'
 import { engineOfRow, isRowWritableOnItsEngine } from '@/lib/liveRow'
 
 function decisionRowKey(decision: Decision): string {
@@ -29,6 +30,17 @@ function decisionRowKey(decision: Decision): string {
     return `archive/${archiveDecisionId}`
   }
   return `live/${decision.engine}/${decision.id}`
+}
+
+function hasExpiredOnRemoteEngine(decision: Decision, now: number): boolean {
+  if (isLocalEngine(engineOfRow(decision)) || decision.live || !decision.until) {
+    return false
+  }
+  return Date.parse(decision.until) <= now
+}
+
+function isUnbannable(decision: Decision, isWritableEngine: (engineName: string) => boolean): boolean {
+  return isRowWritableOnItsEngine(decision, isWritableEngine) && !hasExpiredOnRemoteEngine(decision, Date.now())
 }
 
 export function Decisions() {
@@ -90,7 +102,7 @@ export function Decisions() {
         header: t('decisions.actions'),
         mobile: 'actions',
         cell: (decision) =>
-          isRowWritableOnItsEngine(decision, isWritableEngine) ? (
+          isUnbannable(decision, isWritableEngine) ? (
             <RowDeleteAction
               buttonLabel={t('decisions.unban')}
               ariaLabel={t('decisions.unbanAria', { target: decision.value })}

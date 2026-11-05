@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button'
 import { PendingLockDialog } from '@/components/PendingLockDialog'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePendingReport } from '@/hooks/usePendingReport'
-import { useHubMutation } from '@/hooks/useHubMutation'
+import { useHubMutation, type EngineBoundVariables } from '@/hooks/useHubMutation'
 import { validateHubName } from '@/lib/nameValidation'
 
-interface HubInstallRequest {
+interface HubInstallRequest extends EngineBoundVariables {
   kind: HubItemKind
   name: string
 }
@@ -38,7 +38,7 @@ function InstallForm({ engineName, onDone, onClose, reportPending }: InstallForm
   const { t } = useTranslation()
   const [kind, setKind] = useState<HubItemKind>('collections')
   const [name, setName] = useState('')
-  const installation = useHubMutation(engineName, ({ kind, name }: HubInstallRequest) => installHubItem(kind, name, engineName), onDone)
+  const installation = useHubMutation((installRequest: HubInstallRequest) => installHubItem(installRequest.kind, installRequest.name, installRequest.engineName), onDone)
   usePendingReport(installation.isPending, reportPending)
   const nameError = name === '' ? null : validateHubName(name)
   const isValid = name !== '' && !nameError
@@ -46,7 +46,7 @@ function InstallForm({ engineName, onDone, onClose, reportPending }: InstallForm
   function submit(submitEvent: FormEvent) {
     submitEvent.preventDefault()
     if (isValid && !installation.isPending) {
-      installation.mutate({ kind, name })
+      installation.mutate({ kind, name, engineName })
     }
   }
 
