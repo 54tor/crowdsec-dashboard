@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"crowdsec-dashboard/internal/cscli"
@@ -27,7 +28,7 @@ func (client *Client) Execute(ctx context.Context, name string, fields map[strin
 	execContext, cancel := context.WithTimeout(ctx, command.Timeout+remoteTimeoutMargin)
 	defer cancel()
 	var execResponse sidecarapi.ExecResponse
-	if exchangeError := client.exchange(execContext, sidecarapi.PathExec, body, &execResponse); exchangeError != nil {
+	if exchangeError := client.exchange(execContext, call{method: http.MethodPost, path: sidecarapi.PathExec, body: body}, &execResponse); exchangeError != nil {
 		return nil, exchangeError
 	}
 	return checkedOutput(execResponse.Output)

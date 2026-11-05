@@ -4,11 +4,15 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"crowdsec-dashboard/internal/sidecarapi"
 )
 
 const (
 	pingBodyLimit     = 1024
 	execBodyLimit     = 16 * 1024
+	emptyBodyLimit    = 0
+	applyBodyLimit    = sidecarapi.MaxApplyBodyBytes
 	readHeaderTimeout = 5 * time.Second
 	readTimeout       = 30 * time.Second
 	writeTimeout      = 150 * time.Second

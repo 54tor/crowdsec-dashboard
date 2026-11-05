@@ -3,7 +3,9 @@ package sidecarapi
 const PingStatusOK = "ok"
 
 type ErrorResponse struct {
-	Code string `json:"code"`
+	Code          string       `json:"code"`
+	Result        *ApplyResult `json:"result,omitempty"`
+	AffectedFiles []string     `json:"affected_files,omitempty"`
 }
 
 type PingResponse struct {

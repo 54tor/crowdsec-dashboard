@@ -12,7 +12,14 @@ import (
 	"crowdsec-dashboard/internal/sidecarauth"
 )
 
-func (client *Client) exchange(ctx context.Context, path string, body []byte, destination any) error {
+type call struct {
+	method     string
+	path       string
+	body       []byte
+	routeCodes map[string]error
+}
+
+func (client *Client) exchange(ctx context.Context, sidecarCall call, destination any) error {
 	requestWritten := &atomic.Bool{}
 	tracedContext := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		WroteRequest: func(info httptrace.WroteRequestInfo) {
@@ -21,7 +28,7 @@ func (client *Client) exchange(ctx context.Context, path string, body []byte, de
 			}
 		},
 	})
-	request, requestError := client.signedRequest(tracedContext, path, body)
+	request, requestError := client.signedRequest(tracedContext, sidecarCall)
 	if requestError != nil {
 		return requestError
 	}
@@ -30,19 +37,19 @@ func (client *Client) exchange(ctx context.Context, path string, body []byte, de
 		return errorOfTransport(sendError, requestWritten.Load())
 	}
 	defer response.Body.Close()
-	return decodeResponse(response, destination)
+	return decodeResponse(response, sidecarCall.routeCodes, destination)
 }
 
-func (client *Client) signedRequest(ctx context.Context, path string, body []byte) (*http.Request, error) {
-	endpoint, endpointError := endpointURL(client.baseURL, path)
+func (client *Client) signedRequest(ctx context.Context, sidecarCall call) (*http.Request, error) {
+	endpoint, endpointError := endpointURL(client.baseURL, sidecarCall.path)
 	if endpointError != nil {
 		return nil, endpointError
 	}
-	request, requestError := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	request, requestError := http.NewRequestWithContext(ctx, sidecarCall.method, endpoint, bytes.NewReader(sidecarCall.body))
 	if requestError != nil {
 		return nil, fmt.Errorf("%w: build request", ErrUnavailable)
 	}
-	token, signError := client.signer.Sign(http.MethodPost, request.URL.RequestURI(), body)
+	token, signError := client.signer.Sign(sidecarCall.method, request.URL.RequestURI(), sidecarCall.body)
 	if signError != nil {
 		return nil, fmt.Errorf("%w: sign request", ErrUnavailable)
 	}

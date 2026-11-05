@@ -62,8 +62,11 @@ var sentinelOfCode = map[string]error{
 	sidecarauth.CodeBodyMismatch:       ErrAuthRefused,
 }
 
-func errorOfCode(code string) error {
-	sentinel, known := sentinelOfCode[code]
+func errorOfCode(code string, routeCodes map[string]error) error {
+	sentinel, known := routeCodes[code]
+	if !known {
+		sentinel, known = sentinelOfCode[code]
+	}
 	if !known {
 		return ErrUnavailable
 	}

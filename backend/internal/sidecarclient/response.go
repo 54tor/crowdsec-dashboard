@@ -16,7 +16,20 @@ const responseEnvelopeBytes = 1024
 
 var maxResponseBytes = base64.StdEncoding.EncodedLen(sidecarapi.MaxExecOutputBytes) + responseEnvelopeBytes
 
-func decodeResponse(response *http.Response, destination any) error {
+type refusalError struct {
+	cause    error
+	response sidecarapi.ErrorResponse
+}
+
+func (refusal *refusalError) Error() string {
+	return refusal.cause.Error()
+}
+
+func (refusal *refusalError) Unwrap() error {
+	return refusal.cause
+}
+
+func decodeResponse(response *http.Response, routeCodes map[string]error, destination any) error {
 	if !hasJSONContentType(response) {
 		return ErrInvalidResponse
 	}
@@ -29,7 +42,7 @@ func decodeResponse(response *http.Response, destination any) error {
 		return readError
 	}
 	if isRefusal {
-		return errorOfRefusalBody(body)
+		return errorOfRefusalBody(body, routeCodes)
 	}
 	if decodeError := decodeStrictly(body, destination); decodeError != nil {
 		return ErrInvalidResponse
@@ -53,12 +66,12 @@ func readCappedBody(responseBody io.Reader) ([]byte, error) {
 	return body, nil
 }
 
-func errorOfRefusalBody(body []byte) error {
+func errorOfRefusalBody(body []byte, routeCodes map[string]error) error {
 	var refusal sidecarapi.ErrorResponse
 	if decodeError := decodeStrictly(body, &refusal); decodeError != nil || refusal.Code == "" {
 		return ErrInvalidResponse
 	}
-	return errorOfCode(refusal.Code)
+	return &refusalError{cause: errorOfCode(refusal.Code, routeCodes), response: refusal}
 }
 
 func decodeStrictly(body []byte, destination any) error {

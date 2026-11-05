@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"log/slog"
 	"net/http"
+	"path"
 
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/sidecarapi"
@@ -19,10 +20,13 @@ type Dependencies struct {
 
 func NewHandler(dependencies Dependencies) http.Handler {
 	logger := loggerOrDiscard(dependencies.Logger)
+	executionSlots := make(chan struct{}, max(dependencies.Config.MaxConcurrentExecutions, 0))
 	authenticatedRoutes := http.NewServeMux()
 	authenticatedRoutes.Handle("POST "+sidecarapi.PathPing, pingHandler(logger))
-	authenticatedRoutes.Handle("POST "+sidecarapi.PathExec, newExecHandler(dependencies, logger))
-	rateLimitedRoutes := limitRate(logger, authenticatedRoutes)
+	authenticatedRoutes.Handle("POST "+sidecarapi.PathExec, newExecHandler(dependencies, executionSlots, logger))
+	registerFileRoutes(authenticatedRoutes, dependencies.Config.ConfDir, logger)
+	registerAcquisitionRoutes(authenticatedRoutes, newApplyHandler(dependencies, executionSlots, logger), logger)
+	rateLimitedRoutes := limitRate(logger, refuseUncleanPaths(authenticatedRoutes))
 	authenticatedHandler := authenticate(dependencies.Verifier, newThrottledRefusalLog(logger), rateLimitedRoutes)
 
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -31,6 +35,16 @@ func NewHandler(dependencies Dependencies) http.Handler {
 			return
 		}
 		authenticatedHandler.ServeHTTP(writer, request)
+	})
+}
+
+func refuseUncleanPaths(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if path.Clean(request.URL.Path) != request.URL.Path {
+			writeCode(writer, http.StatusNotFound, sidecarapi.CodeNotFound)
+			return
+		}
+		next.ServeHTTP(writer, request)
 	})
 }
 

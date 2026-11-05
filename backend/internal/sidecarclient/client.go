@@ -62,7 +62,7 @@ func (client *Client) Ping(ctx context.Context) error {
 	pingContext, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 	var pingResponse sidecarapi.PingResponse
-	if exchangeError := client.exchange(pingContext, sidecarapi.PathPing, []byte{}, &pingResponse); exchangeError != nil {
+	if exchangeError := client.exchange(pingContext, call{method: http.MethodPost, path: sidecarapi.PathPing, body: []byte{}}, &pingResponse); exchangeError != nil {
 		return exchangeError
 	}
 	if pingResponse.Status != sidecarapi.PingStatusOK {

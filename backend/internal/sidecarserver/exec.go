@@ -20,12 +20,12 @@ type execHandler struct {
 	logger          *slog.Logger
 }
 
-func newExecHandler(dependencies Dependencies, logger *slog.Logger) *execHandler {
+func newExecHandler(dependencies Dependencies, slots chan struct{}, logger *slog.Logger) *execHandler {
 	return &execHandler{
 		executor:        dependencies.Executor,
 		allowedCommands: slices.Clone(dependencies.Config.AllowedCommands),
 		readOnly:        dependencies.Config.ReadOnly,
-		slots:           make(chan struct{}, max(dependencies.Config.MaxConcurrentExecutions, 0)),
+		slots:           slots,
 		logger:          logger,
 	}
 }
