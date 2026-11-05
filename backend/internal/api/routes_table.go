@@ -14,10 +14,11 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, authenticationRoutes(loadedConfig, services, authenticationHandlers)...)
 	routes = append(routes, accountRoutes(loadedConfig, services)...)
 	routes = append(routes, tokenRoutes(loadedConfig, services)...)
-	routes = append(routes, accountAdminRoutes(loadedConfig, services)...)
+	searches := newSearchLimiter(maxConcurrentSearches)
+	routes = append(routes, accountAdminRoutes(loadedConfig, services, searches)...)
 	routes = append(routes, engineRoutes(loadedConfig, services)...)
 	routes = append(routes, allowlistRoutes(loadedConfig, services)...)
-	routes = append(routes, readRoutes(loadedConfig, services)...)
+	routes = append(routes, readRoutes(loadedConfig, services, searches)...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
 	routes = append(routes, syncRoutes(loadedConfig, services)...)
 	routes = append(routes, bundleRoutes(loadedConfig, services)...)
@@ -74,7 +75,7 @@ func tokenRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	}
 }
 
-func accountAdminRoutes(loadedConfig config.Config, services Services) []apiRoute {
+func accountAdminRoutes(loadedConfig config.Config, services Services, searches searchLimiter) []apiRoute {
 	managed := accountHandlers{manager: services.AccountManager, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	return []apiRoute{
 		{"GET /api/accounts", accessAdminSessionOnly, http.HandlerFunc(managed.list)},
@@ -84,7 +85,7 @@ func accountAdminRoutes(loadedConfig config.Config, services Services) []apiRout
 		{"POST /api/accounts/{name}/sessions/revoke", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountSessionsRevoked, AccountManager.RevokeSessionsAndTokens)},
 		{"POST /api/accounts/{name}/unlock", accessAdminSessionOnly, managed.simpleAction(audit.ActionAccountUnlocked, AccountManager.Unlock)},
 		{"DELETE /api/accounts/{name}", accessAdminSessionOnly, http.HandlerFunc(managed.remove)},
-		{"GET /api/audit", accessAdminSessionOnly, http.HandlerFunc(auditReadHandlers{lister: services.AuditLog, searchTimeout: search.QueryTimeout}.list)},
+		{"GET /api/audit", accessAdminSessionOnly, http.HandlerFunc(auditReadHandlers{lister: services.AuditLog, searchTimeout: search.QueryTimeout, searches: searches}.list)},
 	}
 }
 
@@ -111,12 +112,12 @@ func allowlistRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	}
 }
 
-func readRoutes(loadedConfig config.Config, services Services) []apiRoute {
+func readRoutes(loadedConfig config.Config, services Services, searches searchLimiter) []apiRoute {
 	archivedAlerts := archivedAlertHandlers{archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	configFiles := configFileHandlers{files: services.ConfigFiles}
-	alertLists := alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout}
-	decisionLists := decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout}
+	alertLists := alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
+	decisionLists := decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
 	return []apiRoute{
 		{"GET /api/alerts", accessAuthenticated, http.HandlerFunc(alertLists.list)},
 		{"GET /api/decisions", accessAuthenticated, http.HandlerFunc(decisionLists.list)},

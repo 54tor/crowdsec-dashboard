@@ -18,7 +18,10 @@ func searchContext(parent context.Context, term string, timeout time.Duration) (
 	return context.WithTimeout(parent, timeout)
 }
 
-func writeLiveOnlyError(responseWriter http.ResponseWriter, term string, listError error) {
+func writeLiveOnlyError(requestContext context.Context, responseWriter http.ResponseWriter, term string, listError error) {
+	if clientCancelled(requestContext, listError) {
+		return
+	}
 	if term != "" && search.IsTimeout(listError) {
 		writeError(responseWriter, http.StatusServiceUnavailable, "search_timeout")
 		return

@@ -41,21 +41,32 @@ func withArchiveWindow(archiveQuery archive.AlertQuery, offset, limit int) archi
 	return archiveQuery
 }
 
-func writeArchiveError(requestContext context.Context, responseWriter http.ResponseWriter, operation string, archiveError error) {
+func writeArchiveError(requestContext context.Context, responseWriter http.ResponseWriter, operation string, archiveError error, searchRequested bool) {
 	switch {
 	case errors.Is(archiveError, archive.ErrInvalidPagination):
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 	case errors.Is(archiveError, archive.ErrAlertNotFound):
 		writeError(responseWriter, http.StatusNotFound, "not_found")
-	case errors.Is(archiveError, context.Canceled) && errors.Is(requestContext.Err(), context.Canceled):
+	case clientCancelled(requestContext, archiveError):
 		return
-	case search.IsTimeout(archiveError):
+	case searchRequested && search.IsTimeout(archiveError):
 		log.Printf("%s: %v", operation, archiveError)
 		writeError(responseWriter, http.StatusServiceUnavailable, "search_timeout")
 	default:
 		log.Printf("%s: %v", operation, archiveError)
 		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
 	}
+}
+
+func clientCancelled(requestContext context.Context, requestError error) bool {
+	return errors.Is(requestError, context.Canceled) && errors.Is(requestContext.Err(), context.Canceled)
+}
+
+func logLiveUnavailableUnlessCancelled(requestContext context.Context, operation string, liveError error) {
+	if clientCancelled(requestContext, liveError) {
+		return
+	}
+	logLiveUnavailable(operation, liveError)
 }
 
 func logLiveUnavailable(operation string, liveError error) {

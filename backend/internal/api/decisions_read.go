@@ -18,6 +18,7 @@ type decisionReadHandlers struct {
 	lister        DecisionLister
 	archiveReader *archive.Reader
 	searchTimeout time.Duration
+	searches      searchLimiter
 }
 
 func (handlers decisionReadHandlers) list(responseWriter http.ResponseWriter, request *http.Request) {
@@ -26,6 +27,11 @@ func (handlers decisionReadHandlers) list(responseWriter http.ResponseWriter, re
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	releaseSearchSlot, searchAdmitted := handlers.searches.admitSearch(responseWriter, query.Search)
+	if !searchAdmitted {
+		return
+	}
+	defer releaseSearchSlot()
 	searchRequestContext, cancelSearch := searchContext(request.Context(), query.Search, handlers.searchTimeout)
 	defer cancelSearch()
 	request = request.WithContext(searchRequestContext)
@@ -39,7 +45,7 @@ func (handlers decisionReadHandlers) list(responseWriter http.ResponseWriter, re
 func (handlers decisionReadHandlers) listLiveOnly(responseWriter http.ResponseWriter, request *http.Request, query listQuery) {
 	window, listError := handlers.lister.ListDecisions(request.Context(), liveDecisionFilter(query))
 	if listError != nil {
-		writeLiveOnlyError(responseWriter, query.Search, listError)
+		writeLiveOnlyError(request.Context(), responseWriter, query.Search, listError)
 		return
 	}
 	matchingDecisions := matchingLiveDecisions(window.Decisions, query.Search)
@@ -59,7 +65,7 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 	window, liveStatus := handlers.readLiveWindow(requestContext, query)
 	archiveIDsByLiveID, knownError := handlers.archivedLiveDecisionIDs(requestContext, window.Decisions)
 	if knownError != nil {
-		writeArchiveError(request.Context(), responseWriter, "match live decisions with the archive", knownError)
+		writeArchiveError(request.Context(), responseWriter, "match live decisions with the archive", knownError, query.Search != "")
 		return
 	}
 	archiveQuery, sinceError := archiveQueryFor(query, time.Now())
@@ -83,7 +89,7 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 	}
 	items, total, mergeError := archive.MergePage(liveDecisionItems(matchingLiveDecisions(window.Decisions, query.Search), archiveIDsByLiveID), readArchivePage, query.Page, query.PerPage)
 	if mergeError != nil {
-		writeArchiveError(request.Context(), responseWriter, "list archived decisions", mergeError)
+		writeArchiveError(request.Context(), responseWriter, "list archived decisions", mergeError, query.Search != "")
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, page[decisionItem]{
@@ -105,7 +111,7 @@ func (handlers decisionReadHandlers) readLiveWindow(ctx context.Context, query l
 	}
 	window, listError := handlers.lister.ListDecisions(ctx, liveDecisionFilter(query))
 	if listError != nil {
-		logLiveUnavailable("list live decisions", listError)
+		logLiveUnavailableUnlessCancelled(ctx, "list live decisions", listError)
 		return emptyWindow, liveStatusUnavailable
 	}
 	return window, liveStatusOK

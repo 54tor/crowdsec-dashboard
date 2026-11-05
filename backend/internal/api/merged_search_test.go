@@ -243,3 +243,35 @@ func TestAlertsListStaysSilentWhenTheClientCancels(testContext *testing.T) {
 		testContext.Errorf("a cancelled client gets no answer and no log, got body %q log %q", recorder.Body.String(), capturedLog.String())
 	}
 }
+
+// The LAPI client fails with the client's cancellation on the live-only path:
+// the handler answers nothing and logs nothing.
+func TestLiveOnlySearchStaysSilentWhenTheClientCancels(testContext *testing.T) {
+	capturedLog := captureLog(testContext)
+	cancelledContext, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+	alertRecorder := httptest.NewRecorder()
+	decisionRecorder := httptest.NewRecorder()
+
+	alertReadHandlers{lister: deadlineAlertLister{}}.list(alertRecorder, httptest.NewRequest(http.MethodGet, "/api/alerts?q=ssh-bf", nil).WithContext(cancelledContext))
+	decisionReadHandlers{lister: deadlineDecisionLister{}}.list(decisionRecorder, httptest.NewRequest(http.MethodGet, "/api/decisions?q=ssh-bf", nil).WithContext(cancelledContext))
+
+	if alertRecorder.Body.Len() != 0 || decisionRecorder.Body.Len() != 0 || capturedLog.Len() != 0 {
+		testContext.Errorf("a cancelled client gets no answer and no log, got alerts %q decisions %q log %q", alertRecorder.Body.String(), decisionRecorder.Body.String(), capturedLog.String())
+	}
+}
+
+// The live window of the merged read fails with the client's cancellation:
+// nothing is logged as an unavailable live part.
+func TestMergedLiveWindowStaysSilentWhenTheClientCancels(testContext *testing.T) {
+	capturedLog := captureLog(testContext)
+	cancelledContext, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+
+	alertReadHandlers{lister: deadlineAlertLister{}}.readLiveWindow(cancelledContext, listQuery{Search: "ssh-bf"})
+	decisionReadHandlers{lister: deadlineDecisionLister{}}.readLiveWindow(cancelledContext, listQuery{Search: "ssh-bf"})
+
+	if capturedLog.Len() != 0 {
+		testContext.Errorf("a cancelled client leaves no live-part log, got %q", capturedLog.String())
+	}
+}

@@ -25,7 +25,7 @@ func TestWriteArchiveErrorMapsQueryCancellationToSearchTimeout(testContext *test
 		testContext.Run(caseName, func(subtestContext *testing.T) {
 			recorder := httptest.NewRecorder()
 
-			writeArchiveError(context.Background(), recorder, "list archived alerts", currentCase.archiveError)
+			writeArchiveError(context.Background(), recorder, "list archived alerts", currentCase.archiveError, true)
 
 			expectError(subtestContext, recorder, http.StatusServiceUnavailable, currentCase.expectedCode)
 		})
@@ -40,7 +40,7 @@ func TestWriteArchiveErrorIgnoresAClientCancelledRequest(testContext *testing.T)
 	cancelRequest()
 	recorder := httptest.NewRecorder()
 
-	writeArchiveError(cancelledContext, recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled))
+	writeArchiveError(cancelledContext, recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled), true)
 
 	if recorder.Body.Len() != 0 || capturedLog.Len() != 0 {
 		testContext.Errorf("a cancelled request writes and logs nothing, got body %q log %q", recorder.Body.String(), capturedLog.String())
@@ -53,10 +53,24 @@ func TestWriteArchiveErrorReportsACancellationWhileTheClientWaits(testContext *t
 	capturedLog := captureLog(testContext)
 	recorder := httptest.NewRecorder()
 
-	writeArchiveError(context.Background(), recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled))
+	writeArchiveError(context.Background(), recorder, "list archived alerts", fmt.Errorf("list: %w", context.Canceled), true)
 
 	expectError(testContext, recorder, http.StatusServiceUnavailable, "database_unavailable")
 	if capturedLog.Len() == 0 {
 		testContext.Error("an internal cancellation is logged")
+	}
+}
+
+// Without q no search deadline exists: a cancelled statement or an expired
+// context is a database failure, never a search timeout.
+func TestWriteArchiveErrorReportsATimeoutWithoutSearchAsDatabaseUnavailable(testContext *testing.T) {
+	timeoutErrors := []error{fmt.Errorf("list: %w", context.DeadlineExceeded), fmt.Errorf("list: %w", &pgconn.PgError{Code: "57014"})}
+
+	for _, timeoutError := range timeoutErrors {
+		recorder := httptest.NewRecorder()
+
+		writeArchiveError(context.Background(), recorder, "list archived alerts", timeoutError, false)
+
+		expectError(testContext, recorder, http.StatusServiceUnavailable, "database_unavailable")
 	}
 }

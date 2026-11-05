@@ -21,6 +21,7 @@ type auditEventItem struct {
 type auditReadHandlers struct {
 	lister        *audit.Reader
 	searchTimeout time.Duration
+	searches      searchLimiter
 }
 
 func (handlers auditReadHandlers) list(responseWriter http.ResponseWriter, request *http.Request) {
@@ -38,11 +39,16 @@ func (handlers auditReadHandlers) list(responseWriter http.ResponseWriter, reque
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	releaseSearchSlot, searchAdmitted := handlers.searches.admitSearch(responseWriter, query.Search)
+	if !searchAdmitted {
+		return
+	}
+	defer releaseSearchSlot()
 	searchRequestContext, cancelSearch := searchContext(request.Context(), query.Search, handlers.searchTimeout)
 	defer cancelSearch()
 	events, total, totalCapped, listError := handlers.lister.ListEvents(searchRequestContext, eventQuery)
 	if listError != nil {
-		writeArchiveError(request.Context(), responseWriter, "list audit events", listError)
+		writeArchiveError(request.Context(), responseWriter, "list audit events", listError, query.Search != "")
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, page[auditEventItem]{
