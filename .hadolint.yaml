@@ -1,0 +1,8 @@
+# The project uses floating base image tags and unpinned packages on purpose
+# (docs/development.md, Conventions).
+ignored:
+  - DL3007
+  - DL3018
+  - DL3062
+  # HEALTHCHECK CMD in shell form is intended; the rule targets CMD and ENTRYPOINT.
+  - DL3025
