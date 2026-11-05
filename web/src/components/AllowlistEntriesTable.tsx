@@ -1,12 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { removeAllowlistEntry } from '@/api/allowlistsApi'
 import type { AllowlistEntry, AllowlistMutation } from '@/api/types'
+import { ClientFilterField } from '@/components/ClientFilterField'
+import { ClientFilterResults } from '@/components/ClientFilterResults'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { PaginationBar } from '@/components/PaginationBar'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { UntrustedText } from '@/components/UntrustedText'
 import { Badge } from '@/components/ui/badge'
+import { useClientFilter } from '@/hooks/useClientFilter'
 import { formatDateTime } from '@/lib/format'
 
 const ENTRIES_PER_PAGE = 50
@@ -79,23 +82,42 @@ function useEntryColumns(props: Omit<AllowlistEntriesTableProps, 'entries'>): Da
 }
 
 export function AllowlistEntriesTable({ entries, ...columnProps }: AllowlistEntriesTableProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const filterFieldId = useId()
   const [page, setPage] = useState(1)
   const columns = useEntryColumns(columnProps)
-  const totalPages = Math.max(1, Math.ceil(entries.length / ENTRIES_PER_PAGE))
+  const entryFilter = useClientFilter(entries, (entry) => [
+    entry.value,
+    entry.description,
+    formatDateTime(entry.created_at, i18n.language),
+    entry.expires_at === null ? t('allowlists.noExpiry') : formatDateTime(entry.expires_at, i18n.language),
+    entry.expired ? t('allowlists.expired') : '',
+  ])
+  const matchingEntries = entryFilter.visibleRows
+  const totalPages = Math.max(1, Math.ceil(matchingEntries.length / ENTRIES_PER_PAGE))
   const currentPage = Math.min(page, totalPages)
-  const visibleEntries = entries.slice((currentPage - 1) * ENTRIES_PER_PAGE, currentPage * ENTRIES_PER_PAGE)
+  const visibleEntries = matchingEntries.slice((currentPage - 1) * ENTRIES_PER_PAGE, currentPage * ENTRIES_PER_PAGE)
 
   return (
     <div className="space-y-2">
-      <DataTable
-        caption={t('allowlists.caption', { name: columnProps.allowlistName })}
-        columns={columns}
-        rows={visibleEntries}
-        rowKey={(entry) => entry.value}
-        cardsOnMobile
-        emptyMessage={t('allowlists.noEntries')}
+      <ClientFilterField
+        id={filterFieldId}
+        label={t('allowlists.filterEntries', { name: columnProps.allowlistName })}
+        value={entryFilter.filterText}
+        onChange={entryFilter.setFilterText}
+        visibleCount={matchingEntries.length}
+        totalCount={entries.length}
       />
+      <ClientFilterResults visibleCount={matchingEntries.length} totalCount={entries.length}>
+        <DataTable
+          caption={t('allowlists.caption', { name: columnProps.allowlistName })}
+          columns={columns}
+          rows={visibleEntries}
+          rowKey={(entry) => entry.value}
+          cardsOnMobile
+          emptyMessage={t('allowlists.noEntries')}
+        />
+      </ClientFilterResults>
       {totalPages > 1 && <PaginationBar page={currentPage} totalPages={totalPages} onPageChange={setPage} />}
     </div>
   )

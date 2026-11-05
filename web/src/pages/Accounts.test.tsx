@@ -42,6 +42,26 @@ describe('accounts page', () => {
     expect(screen.queryByRole('heading', { name: en.accounts.title })).not.toBeInTheDocument()
   })
 
+  it('filtersAccountsByAnyDisplayedText', async () => {
+    stubFetch(accountRoutes())
+    const user = userEvent.setup()
+    renderApp('/accounts')
+    await screen.findByText('carol', { selector: 'td' })
+
+    // Only carol is locked; the lock column shows the translated label.
+    await user.type(screen.getByLabelText(en.clientFilter.label), en.accounts.lockedYes)
+
+    expect(screen.queryByText('alice', { selector: 'td' })).toBeNull()
+    expect(screen.getByText('carol', { selector: 'td' })).toBeInTheDocument()
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(en.clientFilter.label))
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'no-such-account')
+
+    expect(screen.getByText(en.clientFilter.noMatch)).toBeInTheDocument()
+    expect(screen.queryByText(en.accounts.empty)).toBeNull()
+  })
+
   it('showsTheAccountsEntryToAnAdministrator', async () => {
     stubFetch(accountRoutes())
     renderApp('/accounts')

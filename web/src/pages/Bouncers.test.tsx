@@ -42,6 +42,26 @@ describe('bouncers page', () => {
     expect(await screen.findByText('firewall-one', { selector: 'td' })).toBeInTheDocument()
   })
 
+  it('filtersBouncersByAnyDisplayedText', async () => {
+    const bouncers = [makeBouncer({ name: 'firewall-one' }), makeBouncer({ name: 'nginx-one', type: 'crowdsec-nginx-bouncer', ip_address: '203.0.113.31' })]
+    stubFetch(bouncerRoutes({ 'GET /api/health': { status: 200, body: makeHealth({ bouncers }) } }))
+    const user = userEvent.setup()
+    renderApp('/bouncers')
+    await screen.findByText('nginx-one', { selector: 'td' })
+
+    await user.type(screen.getByLabelText(en.clientFilter.label), '113.31')
+
+    expect(screen.queryByText('firewall-one', { selector: 'td' })).toBeNull()
+    expect(screen.getByText('nginx-one', { selector: 'td' })).toBeInTheDocument()
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(en.clientFilter.label))
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'no-such-bouncer')
+
+    expect(screen.getByText(en.clientFilter.noMatch)).toBeInTheDocument()
+    expect(screen.queryByText(en.health.noBouncers)).toBeNull()
+  })
+
   it('densityToggleSitsInThePageHeaderWhenBouncersExist', async () => {
     stubFetch(bouncerRoutes())
     renderApp('/bouncers')

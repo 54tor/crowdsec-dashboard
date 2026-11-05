@@ -63,6 +63,26 @@ describe('engines page', () => {
     }
   })
 
+  it('filtersEnginesByAnyDisplayedText', async () => {
+    stubFetch(engineRoutes())
+    const user = userEvent.setup()
+    renderApp('/engines')
+    await screen.findByText('remote-one', { selector: 'td' })
+
+    // The proxy kind is only shown in the destination column of the remote engine.
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'SOCKS5')
+
+    expect(screen.queryByText('local', { selector: 'td' })).toBeNull()
+    expect(screen.getByText('remote-one', { selector: 'td' })).toBeInTheDocument()
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(en.clientFilter.label))
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'no-such-engine')
+
+    expect(screen.getByText(en.clientFilter.noMatch)).toBeInTheDocument()
+    expect(screen.queryByText(en.engines.empty)).toBeNull()
+  })
+
   it("masque la navigation Moteurs pour un compte read_only", async () => {
     stubFetch(engineRoutes({ 'GET /api/auth/me': READ_ONLY_SESSION, 'GET /api/alerts': { status: 200, body: { items: [], total: 0 } } }))
     renderApp('/alerts')

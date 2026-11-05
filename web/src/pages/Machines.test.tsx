@@ -34,6 +34,26 @@ describe('machines page', () => {
     await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/health').length).toBeGreaterThan(1))
   })
 
+  it('filtersMachinesByAnyDisplayedText', async () => {
+    stubFetch(machineRoutes())
+    const user = userEvent.setup()
+    renderApp('/machines')
+    await screen.findByText('machine-two', { selector: 'td span' })
+
+    // Only machine-two shows the translated "Not validated" badge.
+    await user.type(screen.getByLabelText(en.clientFilter.label), en.health.notValidated.toUpperCase())
+
+    expect(screen.queryByText('machine-one', { selector: 'td span' })).toBeNull()
+    expect(screen.getByText('machine-two', { selector: 'td span' })).toBeInTheDocument()
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(en.clientFilter.label))
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'no-such-machine')
+
+    expect(screen.getByText(en.clientFilter.noMatch)).toBeInTheDocument()
+    expect(screen.queryByText(en.health.noMachines)).toBeNull()
+  })
+
   it('machinePasswordIsShownOnceThenClearedWhenDialogCloses', async () => {
     stubFetch(machineRoutes({ 'POST /api/machines': { status: 200, body: { name: 'new-machine', password: FAKE_PASSWORD } } }))
     const user = userEvent.setup()

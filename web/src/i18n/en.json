@@ -443,11 +443,16 @@
     "selfDeleteReason": "This is the dashboard's own account, protected against deletion.",
     "deleteDescription": "The machine {{name}} will lose access to the CrowdSec local API."
   },
+  "clientFilter": {
+    "label": "Filter the list",
+    "clear": "Clear the filter",
+    "count": "{{visible}} of {{total}}",
+    "noMatch": "No item matches the filter."
+  },
   "hub": {
     "title": "Hub",
     "caption": "Hub items",
     "filterType": "Type",
-    "filterName": "Name",
     "allTypes": "All types",
     "update": "Update",
     "upgrade": "Upgrade",
@@ -473,7 +478,6 @@
     "reloadRequired": "CrowdSec must be reloaded",
     "reloadHint": "The hub changed. Reload CrowdSec for the changes to take effect.",
     "reload": "Reload CrowdSec",
-    "empty": "No hub item matches these filters.",
     "noItems": "The hub list is empty.",
     "columns": {
       "type": "Type",
@@ -885,6 +889,7 @@
     "refreshFailed": "The change was written, but the allowlists could not be read again or the list is too large to verify: reload the page to see the current state.",
     "empty": "No allowlist on this engine.",
     "noEntries": "No entry in this allowlist.",
+    "filterEntries": "Filter the entries of {{name}}",
     "consoleManaged": "Managed by the console",
     "expired": "Expired",
     "noExpiry": "No expiry",

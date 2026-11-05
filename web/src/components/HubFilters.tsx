@@ -1,17 +1,18 @@
 import { useTranslation } from 'react-i18next'
+import { ClientFilterField } from '@/components/ClientFilterField'
 import { SelectField } from '@/components/SelectField'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 
 interface HubFiltersProps {
   types: string[]
   selectedType: string
-  nameQuery: string
+  filterText: string
+  visibleCount: number
+  totalCount: number
   onTypeChange: (type: string) => void
-  onNameChange: (nameQuery: string) => void
+  onFilterTextChange: (filterText: string) => void
 }
 
-export function HubFilters({ types, selectedType, nameQuery, onTypeChange, onNameChange }: HubFiltersProps) {
+export function HubFilters({ types, selectedType, filterText, visibleCount, totalCount, onTypeChange, onFilterTextChange }: HubFiltersProps) {
   const { t } = useTranslation()
   const typeOptions = types.map((type) => ({ value: type, label: type }))
   return (
@@ -23,10 +24,14 @@ export function HubFilters({ types, selectedType, nameQuery, onTypeChange, onNam
         options={[{ value: '', label: t('hub.allTypes') }, ...typeOptions]}
         onChange={onTypeChange}
       />
-      <div className="space-y-1">
-        <Label htmlFor="hub-filter-name">{t('hub.filterName')}</Label>
-        <Input id="hub-filter-name" value={nameQuery} onChange={(changeEvent) => onNameChange(changeEvent.target.value)} maxLength={128} autoComplete="off" spellCheck={false} />
-      </div>
+      <ClientFilterField
+        id="hub-filter-text"
+        label={t('clientFilter.label')}
+        value={filterText}
+        onChange={onFilterTextChange}
+        visibleCount={visibleCount}
+        totalCount={totalCount}
+      />
     </div>
   )
 }

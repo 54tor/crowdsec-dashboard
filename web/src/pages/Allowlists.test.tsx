@@ -122,6 +122,31 @@ describe('allowlists page', () => {
     expect(requestsTo(fetchMock, 'GET', REMOTE_LISTING_URL)).toHaveLength(1)
   })
 
+  it('filtersAllowlistEntriesByAnyDisplayedText', async () => {
+    const twoEntryAllowlist = makeAllowlist('trusted', [
+      makeEntry({ value: '192.0.2.10', description: 'office' }),
+      makeEntry({ value: '198.51.100.7', description: 'Équipe VPN' }),
+    ])
+    stubFetch(allowlistRoutes({ [`GET ${LOCAL_LISTING_URL}`]: makeListing('local', [twoEntryAllowlist]) }))
+    const user = userEvent.setup()
+    renderApp('/allowlists')
+    await screen.findByText('198.51.100.7')
+    const filterLabel = en.allowlists.filterEntries.replace('{{name}}', 'trusted')
+
+    // Accents and case are ignored: "equipe" finds the "Équipe VPN" description.
+    await user.type(screen.getByLabelText(filterLabel), 'equipe')
+
+    expect(screen.queryByText('192.0.2.10')).toBeNull()
+    expect(screen.getByText('198.51.100.7')).toBeInTheDocument()
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(filterLabel))
+    await user.type(screen.getByLabelText(filterLabel), 'no-such-entry')
+
+    expect(screen.getByText(en.clientFilter.noMatch)).toBeInTheDocument()
+    expect(screen.queryByText(en.allowlists.noEntries)).toBeNull()
+  })
+
   it('un compte read_only voit les allowlists du moteur local', async () => {
     const fetchMock = stubFetch(allowlistRoutes({ 'GET /api/auth/me': READ_ONLY_SESSION }))
     renderApp('/allowlists')

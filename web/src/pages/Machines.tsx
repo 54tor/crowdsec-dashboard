@@ -2,15 +2,51 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Machine } from '@/api/types'
 import { createMachine, deleteMachine } from '@/api/writeApi'
+import { ClientFilterField } from '@/components/ClientFilterField'
+import { ClientFilterResults } from '@/components/ClientFilterResults'
 import { CreateSecretDialog } from '@/components/CreateSecretDialog'
 import { HealthPageSection } from '@/components/HealthPageSection'
-import { MachinesTable } from '@/components/HealthTables'
+import { MachinesTable, type RowActions } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { Button } from '@/components/ui/button'
 import { ValidateMachineButton } from '@/components/ValidateMachineButton'
 import { WriteOnly } from '@/components/WriteOnly'
 import { useCanWrite } from '@/hooks/useCanWrite'
+import { useClientFilter } from '@/hooks/useClientFilter'
 import { HEALTH_QUERY_KEY } from '@/hooks/useReadResources'
+
+interface FilteredMachinesProps {
+  machines: Machine[]
+  now: number
+  actions?: RowActions<Machine>
+}
+
+function FilteredMachines({ machines, now, actions }: FilteredMachinesProps) {
+  const { t } = useTranslation()
+  const machineFilter = useClientFilter(machines, (machine) => [
+    machine.machine_id,
+    machine.self ? t('health.self') : '',
+    machine.version,
+    machine.ip_address,
+    machine.is_validated ? t('health.validated') : t('health.notValidated'),
+    machine.auth_type,
+  ])
+  return (
+    <>
+      <ClientFilterField
+        id="machines-filter"
+        label={t('clientFilter.label')}
+        value={machineFilter.filterText}
+        onChange={machineFilter.setFilterText}
+        visibleCount={machineFilter.visibleRows.length}
+        totalCount={machines.length}
+      />
+      <ClientFilterResults visibleCount={machineFilter.visibleRows.length} totalCount={machines.length}>
+        <MachinesTable machines={machineFilter.visibleRows} now={now} actions={actions} cardsOnMobile />
+      </ClientFilterResults>
+    </>
+  )
+}
 
 export function Machines() {
   const { t } = useTranslation()
@@ -74,7 +110,7 @@ export function Machines() {
         </WriteOnly>
       }
     >
-      {(report, now) => <MachinesTable machines={report.machines} now={now} actions={actions} cardsOnMobile />}
+      {(report, now) => <FilteredMachines machines={report.machines} now={now} actions={actions} />}
     </HealthPageSection>
   )
 }

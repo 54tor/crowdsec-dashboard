@@ -53,6 +53,27 @@ describe('api tokens page', () => {
     expect(document.body.innerHTML).not.toContain('csd_')
   })
 
+  it('filtersTokensByAnyDisplayedText', async () => {
+    const writerToken = { ...EXISTING_TOKEN, token_id: 8, name: 'deploy-writer', scope: 'write' }
+    stubFetch(tokenRoutes({ [`GET ${TOKENS_URL}`]: { status: 200, body: [EXISTING_TOKEN, writerToken] } }))
+    const user = userEvent.setup()
+    renderApp('/tokens')
+    await screen.findByText('deploy-writer', { selector: 'td' })
+
+    // The scope is matched on its translated label, as shown in the table.
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'and write')
+
+    expect(screen.queryByText('ci-reader', { selector: 'td' })).toBeNull()
+    expect(screen.getByText('deploy-writer', { selector: 'td' })).toBeInTheDocument()
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(en.clientFilter.label))
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'no-such-token')
+
+    expect(screen.getByText(en.clientFilter.noMatch)).toBeInTheDocument()
+    expect(screen.queryByText(en.tokens.empty)).toBeNull()
+  })
+
   it('showsTheTokenOnceThenRemovesItWhenTheDialogCloses', async () => {
     const fetchMock = stubFetch(
       tokenRoutes({

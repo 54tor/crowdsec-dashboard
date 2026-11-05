@@ -276,6 +276,17 @@ that starts failing after a refresh means CrowdSec changed an output shape.
   `web/src/components/iconSources.ts`, then use `<Icon name="…" />`.
 - **Contrast** of text, field borders and focus ring in both themes is pinned by
   `web/src/theme.contrast.test.ts` (WCAG AA: 4.5:1 for text, 3:1 for borders and focus ring).
+- **Small-list filter**: engines, bouncers, machines, API tokens, accounts, allowlist entries and
+  the hub are filtered in the browser, without any request. `useClientFilter(rows,
+  searchableTextsOf)` keeps the filter text in local component state (never in the URL) and returns
+  the rows whose displayed text contains it: `searchableTextsOf` returns the same text the table
+  shows (translated labels and formatted dates included), never raw objects. `normaliseSearchText`
+  in `web/src/lib/searchText.ts` applies `NFD`, removes diacritics and lowercases, so `equipe`
+  finds `Équipe`; the term is a literal substring, not a pattern. `ClientFilterField` is the
+  labelled `type="search"` field with a clear button; it is hidden on an empty list and announces
+  the `clientFilter.count` text (« 2 sur 5 ») in a polite live region 300 ms after the last change.
+  `ClientFilterResults` shows `clientFilter.noMatch` instead of the list when the filter hides
+  every row, so the list keeps its own empty message for a truly empty list.
 - **Mobile**: below 768 px the rail becomes a bottom tab bar and lists rendered with
   `cardsOnMobile` turn into one card per row. Tests drive the viewport with `setViewportWidth`
   from the `matchMedia` stub in `web/src/test/matchMedia.ts`.

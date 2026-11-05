@@ -55,9 +55,28 @@ describe('hub page', () => {
     expect(screen.queryByText('crowdsecurity/linux', { selector: 'td' })).not.toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText(en.hub.filterType), '')
-    await user.type(screen.getByLabelText(en.hub.filterName), 'LINUX')
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'LINUX')
     expect(screen.getByText('crowdsecurity/linux', { selector: 'td' })).toBeInTheDocument()
     expect(screen.queryByText('crowdsecurity/sshd-logs', { selector: 'td' })).not.toBeInTheDocument()
+  })
+
+  it('filtersHubItemsByNameOrType', async () => {
+    stubFetch(hubRoutes())
+    const user = userEvent.setup()
+    renderApp('/hub')
+    await screen.findByText('crowdsecurity/sshd-logs', { selector: 'td' })
+
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'PARSERS')
+
+    expect(screen.queryByText('crowdsecurity/linux', { selector: 'td' })).toBeNull()
+    expect(screen.getByText('crowdsecurity/sshd-logs', { selector: 'td' })).toBeInTheDocument()
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText(en.clientFilter.label))
+    await user.type(screen.getByLabelText(en.clientFilter.label), 'no-such-item')
+
+    expect(screen.getByText(en.clientFilter.noMatch)).toBeInTheDocument()
+    expect(screen.queryByText(en.hub.noItems)).toBeNull()
   })
 
   // The status column printed the raw cscli word: it is now a status badge.

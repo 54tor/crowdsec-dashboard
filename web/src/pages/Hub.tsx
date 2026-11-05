@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { HubItem } from '@/api/types'
+import { ClientFilterResults } from '@/components/ClientFilterResults'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { ErrorNotice } from '@/components/Notice'
@@ -9,21 +11,28 @@ import { HubToolbar } from '@/components/HubToolbar'
 import { WriteOnly } from '@/components/WriteOnly'
 import { ReloadBanner } from '@/components/ReloadBanner'
 import { TableSkeleton } from '@/components/TableSkeleton'
+import { useClientFilter } from '@/hooks/useClientFilter'
 import { useHub } from '@/hooks/useReadResources'
+
+const NO_HUB_ITEMS: HubItem[] = []
+
+function hubItemSearchTexts(hubItem: HubItem): string[] {
+  return [hubItem.type, hubItem.name, hubItem.status, hubItem.local_version, hubItem.description]
+}
 
 export function Hub() {
   const { t } = useTranslation()
   const { data, error, isPending } = useHub()
   const [selectedType, setSelectedType] = useState('')
-  const [nameQuery, setNameQuery] = useState('')
+  const hubItems = data ?? NO_HUB_ITEMS
 
-  const types = useMemo(() => [...new Set((data ?? []).map((hubItem) => hubItem.type))].sort(), [data])
-  const visibleItems = useMemo(() => {
-    const lowerCaseQuery = nameQuery.toLowerCase()
-    return (data ?? []).filter(
-      (hubItem) => (selectedType === '' || hubItem.type === selectedType) && hubItem.name.toLowerCase().includes(lowerCaseQuery),
-    )
-  }, [data, selectedType, nameQuery])
+  const types = useMemo(() => [...new Set(hubItems.map((hubItem) => hubItem.type))].sort(), [hubItems])
+  const itemsOfSelectedType = useMemo(
+    () => hubItems.filter((hubItem) => selectedType === '' || hubItem.type === selectedType),
+    [hubItems, selectedType],
+  )
+  const hubFilter = useClientFilter(itemsOfSelectedType, hubItemSearchTexts)
+  const visibleItems = hubFilter.visibleRows
 
   return (
     <section className="space-y-4">
@@ -32,13 +41,23 @@ export function Hub() {
         <ReloadBanner />
         <HubToolbar />
       </WriteOnly>
-      <HubFilters types={types} selectedType={selectedType} nameQuery={nameQuery} onTypeChange={setSelectedType} onNameChange={setNameQuery} />
+      <HubFilters
+        types={types}
+        selectedType={selectedType}
+        filterText={hubFilter.filterText}
+        visibleCount={visibleItems.length}
+        totalCount={hubItems.length}
+        onTypeChange={setSelectedType}
+        onFilterTextChange={hubFilter.setFilterText}
+      />
       {error && <ErrorNotice error={error} />}
       {isPending && !error && <TableSkeleton />}
-      {data && visibleItems.length === 0 && (
-        <EmptyState message={t(data.length === 0 ? 'hub.noItems' : 'hub.empty')} />
+      {data && data.length === 0 && <EmptyState message={t('hub.noItems')} />}
+      {data && data.length > 0 && (
+        <ClientFilterResults visibleCount={visibleItems.length} totalCount={data.length}>
+          <HubTable items={visibleItems} />
+        </ClientFilterResults>
       )}
-      {data && visibleItems.length > 0 && <HubTable items={visibleItems} />}
     </section>
   )
 }

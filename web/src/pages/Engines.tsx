@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { ENGINES_QUERY_KEY, listEngines } from '@/api/enginesApi'
 import type { EngineView } from '@/api/types'
+import { ClientFilterField } from '@/components/ClientFilterField'
+import { ClientFilterResults } from '@/components/ClientFilterResults'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
 import { EngineCollectionStatus } from '@/components/EngineCollectionStatus'
 import { EngineFormDialog } from '@/components/EngineFormDialog'
@@ -12,7 +15,19 @@ import { ErrorNotice, InfoNotice, WarningNotice } from '@/components/Notice'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useClientFilter } from '@/hooks/useClientFilter'
 import { errorMessage } from '@/i18n'
+
+const NO_ENGINES: EngineView[] = []
+
+function engineSearchTexts(engine: EngineView, t: TFunction): string[] {
+  const stateLabels = [
+    engine.is_local ? t('engines.local') : '',
+    engine.enabled ? t('engines.enabled') : t('engines.disabled'),
+    engine.sync_enabled ? t('engines.syncEnabled') : '',
+  ]
+  return [engine.name, engine.lapi_url, engine.machine_id, engine.proxy?.kind ?? '', engine.proxy?.url ?? '', ...stateLabels]
+}
 
 function EngineDestination({ engine }: { engine: EngineView }) {
   const { t } = useTranslation()
@@ -56,6 +71,8 @@ export function Engines() {
     ],
     [t, dataUpdatedAt],
   )
+  const engineFilter = useClientFilter(engineList ?? NO_ENGINES, (engine) => engineSearchTexts(engine, t))
+  const totalEngineCount = engineList?.length ?? 0
   return (
     <section className="space-y-4">
       <PageHeader
@@ -71,7 +88,19 @@ export function Engines() {
       {warningCode && <WarningNotice>{errorMessage({ code: warningCode })}</WarningNotice>}
       {error && <ErrorNotice error={error} />}
       {isPending && <TableSkeleton />}
-      {engineList && <DataTable caption={t('engines.caption')} columns={columns} rows={engineList} rowKey={(engine) => engine.name} cardsOnMobile emptyMessage={t('engines.empty')} />}
+      <ClientFilterField
+        id="engines-filter"
+        label={t('clientFilter.label')}
+        value={engineFilter.filterText}
+        onChange={engineFilter.setFilterText}
+        visibleCount={engineFilter.visibleRows.length}
+        totalCount={totalEngineCount}
+      />
+      {engineList && (
+        <ClientFilterResults visibleCount={engineFilter.visibleRows.length} totalCount={totalEngineCount}>
+          <DataTable caption={t('engines.caption')} columns={columns} rows={engineFilter.visibleRows} rowKey={(engine) => engine.name} cardsOnMobile emptyMessage={t('engines.empty')} />
+        </ClientFilterResults>
+      )}
     </section>
   )
 }
