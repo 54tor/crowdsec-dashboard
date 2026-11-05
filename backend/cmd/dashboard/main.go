@@ -61,8 +61,11 @@ func main() {
 		log.Fatalf("startup: %v", accountsError)
 	}
 	localLAPIClient := lapi.NewClient(loadedConfig.LAPIURL, loadedConfig.LAPIMachineID, loadedConfig.LAPIMachinePassword, nil)
-	engineRepository, engineRegistry, enginesError := initialiseEngines(startupContext, database, keyring,
-		localEngineSettings{lapiURL: loadedConfig.LAPIURL, machineID: loadedConfig.LAPIMachineID, client: localLAPIClient}, log.Printf)
+	localExecutor := cscli.NewLocalExecutor(cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer))
+	engineRepository, engineRegistry, enginesError := initialiseEngines(startupContext, database, keyring, localEngineSettings{
+		lapiURL: loadedConfig.LAPIURL, machineID: loadedConfig.LAPIMachineID, client: localLAPIClient,
+		executor: localExecutor, issuer: loadedConfig.WebAuthnRPID,
+	}, log.Printf)
 	cancelStartup()
 	if enginesError != nil {
 		log.Fatalf("startup: %v", enginesError)
@@ -74,7 +77,6 @@ func main() {
 	accountServices.geolocator = openGeolocator(loadedConfig.GeoIPDatabaseFile, time.Now, log.Printf)
 	sessionStore := sessions.NewPostgresStore(database, loadedConfig.SessionTTL, time.Now)
 
-	localExecutor := cscli.NewLocalExecutor(cscli.NewDockerRunner(loadedConfig.DockerHost, loadedConfig.CrowdSecContainer))
 	services := api.NewServices(localLAPIClient, localExecutor, loadedConfig.ConfDir)
 	auditRecorder := audit.NewPostgresRecorder(database)
 	services.Login = newLoginService(database, accountServices, sessionStore, webAuthn, auditRecorder)

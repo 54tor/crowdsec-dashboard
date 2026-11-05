@@ -53,7 +53,7 @@ func newStoredEngineFixture(testContext *testing.T, guardian *ssrf.Guardian) sto
 		testContext.Fatalf("keyring: %v", keyringError)
 	}
 	repository := engines.NewRepository(database, keyring)
-	registry := engines.NewRegistry(repository, nil, guardian)
+	registry := engines.NewRegistry(repository, nil, nil, guardian, "dashboard.example.com")
 	engineCollector := collector.New(registry, repository, archive.NewWriter(database, archive.DefaultBounds), repository,
 		collector.DefaultSettings(time.Minute, 100), time.Now, func(string, ...any) {})
 	service := &reloadCountingEngineService{EngineService: NewEngineService(repository, registry, engineCollector)}

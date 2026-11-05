@@ -15,6 +15,7 @@ import (
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/collector"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/engines"
 	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
@@ -97,7 +98,7 @@ func initialiseEngines(ctx context.Context, database *bun.DB, keyring *secrets.K
 	}
 	resealLegacyEngineSecrets(ctx, repository, logLine)
 	repository.ResumeDeletions(ctx)
-	registry := engines.NewRegistry(repository, localSettings.client, nil)
+	registry := engines.NewRegistry(repository, localSettings.client, localSettings.executor, nil, localSettings.issuer)
 	if reloadError := registry.Reload(ctx); reloadError != nil {
 		logLine("engine registry: %v", reloadError)
 		if publishError := registry.PublishLocalOnly(ctx); publishError != nil {
@@ -128,6 +129,8 @@ type localEngineSettings struct {
 	lapiURL   string
 	machineID string
 	client    *lapi.Client
+	executor  cscli.Executor
+	issuer    string
 }
 
 func newLoginService(database *bun.DB, services accountServices, sessionStore auth.SessionStore, webAuthn *secondfactor.WebAuthn, recorder audit.Recorder) *login.Service {

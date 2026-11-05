@@ -12,8 +12,10 @@ import (
 
 	"code.dny.dev/ssrf"
 
+	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/egress"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/sidecarclient"
 )
 
 var errUnusableEngine = errors.New("engine stored settings cannot be used")
@@ -27,24 +29,38 @@ type Handle struct {
 type registrySnapshot struct {
 	handles           []Handle
 	clientsByName     map[string]*lapi.Client
+	targetsByName     map[string]Target
+	egressByName      map[string]egress.Settings
 	unavailableByName map[string]string
 }
 
 type Registry struct {
-	repository    *Repository
-	localClient   *lapi.Client
-	guardian      *ssrf.Guardian
-	reloadMutex   sync.Mutex
-	current       atomic.Pointer[registrySnapshot]
-	remoteClients []*lapi.Client
-	afterList     func()
-	complete      atomic.Bool
+	repository     *Repository
+	localClient    *lapi.Client
+	localExecutor  cscli.Executor
+	guardian       *ssrf.Guardian
+	issuer         string
+	reloadMutex    sync.Mutex
+	current        atomic.Pointer[registrySnapshot]
+	remoteClients  []*lapi.Client
+	sidecarClients []*sidecarclient.Client
+	afterList      func()
+	complete       atomic.Bool
 }
 
-func NewRegistry(repository *Repository, localClient *lapi.Client, guardian *ssrf.Guardian) *Registry {
-	registry := &Registry{repository: repository, localClient: localClient, guardian: guardian}
-	registry.current.Store(&registrySnapshot{clientsByName: map[string]*lapi.Client{}})
+func NewRegistry(repository *Repository, localClient *lapi.Client, localExecutor cscli.Executor, guardian *ssrf.Guardian, issuer string) *Registry {
+	registry := &Registry{repository: repository, localClient: localClient, localExecutor: localExecutor, guardian: guardian, issuer: issuer}
+	registry.current.Store(newRegistrySnapshot())
 	return registry
+}
+
+func newRegistrySnapshot() *registrySnapshot {
+	return &registrySnapshot{
+		clientsByName:     map[string]*lapi.Client{},
+		targetsByName:     map[string]Target{},
+		egressByName:      map[string]egress.Settings{},
+		unavailableByName: map[string]string{},
+	}
 }
 
 func (registry *Registry) Handles() []Handle {
@@ -70,15 +86,16 @@ func (registry *Registry) Reload(ctx context.Context) error {
 	if registry.afterList != nil {
 		registry.afterList()
 	}
-	nextSnapshot := &registrySnapshot{clientsByName: map[string]*lapi.Client{}, unavailableByName: map[string]string{}}
+	nextSnapshot := newRegistrySnapshot()
 	builtRemoteClients := []*lapi.Client{}
+	builtSidecarClients := []*sidecarclient.Client{}
 	for _, listedEngine := range engineList {
 		if !listedEngine.Enabled {
 			continue
 		}
-		engineClient := registry.localClient
+		engineTarget := registry.localTarget(listedEngine)
 		if !listedEngine.IsLocal {
-			currentEngine, remoteClient, buildError := registry.buildRemoteHandle(ctx, listedEngine.ID)
+			remoteTarget, buildError := registry.buildRemoteTarget(ctx, listedEngine.ID)
 			if errors.Is(buildError, ErrEngineNotFound) {
 				continue
 			}
@@ -89,23 +106,35 @@ func (registry *Registry) Reload(ctx context.Context) error {
 			}
 			if buildError != nil {
 				closeAll(builtRemoteClients)
+				closeSidecars(builtSidecarClients)
 				return buildError
 			}
-			builtRemoteClients = append(builtRemoteClients, remoteClient)
-			listedEngine, engineClient = currentEngine, remoteClient
+			builtRemoteClients = append(builtRemoteClients, remoteTarget.target.Client)
+			if remoteTarget.target.Sidecar != nil {
+				builtSidecarClients = append(builtSidecarClients, remoteTarget.target.Sidecar)
+			}
+			engineTarget = remoteTarget.target
+			nextSnapshot.egressByName[listedEngine.Name] = remoteTarget.egress
 		}
-		if !listedEngine.Enabled {
+		if !engineTarget.Engine.Enabled {
 			continue
 		}
-		listedEngine.CollectionCursor = 0
-		nextSnapshot.handles = append(nextSnapshot.handles, Handle{Engine: listedEngine, Client: engineClient})
-		nextSnapshot.clientsByName[listedEngine.Name] = engineClient
+		engineTarget.Engine.CollectionCursor = 0
+		nextSnapshot.publish(engineTarget)
 	}
 	registry.current.Store(nextSnapshot)
 	closeAll(registry.remoteClients)
+	closeSidecars(registry.sidecarClients)
 	registry.remoteClients = builtRemoteClients
+	registry.sidecarClients = builtSidecarClients
 	registry.complete.Store(true)
 	return nil
+}
+
+func (snapshot *registrySnapshot) publish(engineTarget Target) {
+	snapshot.handles = append(snapshot.handles, Handle{Engine: engineTarget.Engine, Client: engineTarget.Client})
+	snapshot.clientsByName[engineTarget.Engine.Name] = engineTarget.Client
+	snapshot.targetsByName[engineTarget.Engine.Name] = engineTarget
 }
 
 func (registry *Registry) Complete() bool {
@@ -126,38 +155,51 @@ func (registry *Registry) PublishLocalOnly(ctx context.Context) error {
 		return nil
 	}
 	localEngine.CollectionCursor = 0
-	registry.current.Store(&registrySnapshot{
-		handles:           []Handle{{Engine: localEngine, Client: registry.localClient}},
-		clientsByName:     map[string]*lapi.Client{localEngine.Name: registry.localClient},
-		unavailableByName: map[string]string{},
-	})
+	localOnlySnapshot := newRegistrySnapshot()
+	localOnlySnapshot.publish(registry.localTarget(localEngine))
+	registry.current.Store(localOnlySnapshot)
 	return nil
 }
 
-func (registry *Registry) buildRemoteHandle(ctx context.Context, engineID int64) (Engine, *lapi.Client, error) {
+func (registry *Registry) buildRemoteHandle(ctx context.Context, engineID int64) (Engine, *lapi.Client, egress.Settings, error) {
 	remoteEngine, credentials, loadError := registry.repository.engineWithCredentials(ctx, engineID)
 	if errors.Is(loadError, ErrEngineNotFound) {
-		return Engine{}, nil, loadError
+		return Engine{}, nil, egress.Settings{}, loadError
 	}
 	if loadError != nil {
-		return Engine{}, nil, fmt.Errorf("engine %d credentials: %w", engineID, loadError)
+		return Engine{}, nil, egress.Settings{}, fmt.Errorf("engine %d credentials: %w", engineID, loadError)
 	}
-	settings := egress.Settings{Guardian: registry.guardian}
-	if remoteEngine.Proxy != nil {
-		proxyURL, parseError := url.Parse(remoteEngine.Proxy.URL)
-		if parseError != nil {
-			return Engine{}, nil, fmt.Errorf("engine %s: invalid stored proxy url: %w", remoteEngine.Name, errUnusableEngine)
-		}
-		if credentials.ProxyUsername != "" || credentials.ProxyPassword != "" {
-			proxyURL.User = url.UserPassword(credentials.ProxyUsername, credentials.ProxyPassword)
-		}
-		settings.ProxyURL = proxyURL
+	settings, settingsError := registry.remoteEgressSettings(remoteEngine, credentials)
+	if settingsError != nil {
+		return Engine{}, nil, egress.Settings{}, settingsError
 	}
 	engineClient := lapi.NewClient(remoteEngine.LAPIURL, remoteEngine.MachineID, credentials.MachinePassword, egress.NewClient(settings))
-	return remoteEngine, engineClient, nil
+	return remoteEngine, engineClient, settings, nil
+}
+
+func (registry *Registry) remoteEgressSettings(remoteEngine Engine, credentials Credentials) (egress.Settings, error) {
+	settings := egress.Settings{Guardian: registry.guardian}
+	if remoteEngine.Proxy == nil {
+		return settings, nil
+	}
+	proxyURL, parseError := url.Parse(remoteEngine.Proxy.URL)
+	if parseError != nil {
+		return egress.Settings{}, fmt.Errorf("engine %s: invalid stored proxy url: %w", remoteEngine.Name, errUnusableEngine)
+	}
+	if credentials.ProxyUsername != "" || credentials.ProxyPassword != "" {
+		proxyURL.User = url.UserPassword(credentials.ProxyUsername, credentials.ProxyPassword)
+	}
+	settings.ProxyURL = proxyURL
+	return settings, nil
 }
 
 func closeAll(clients []*lapi.Client) {
+	for _, replacedClient := range clients {
+		replacedClient.CloseIdleConnections()
+	}
+}
+
+func closeSidecars(clients []*sidecarclient.Client) {
 	for _, replacedClient := range clients {
 		replacedClient.CloseIdleConnections()
 	}

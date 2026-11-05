@@ -15,7 +15,7 @@ func (registry *Registry) Probe(ctx context.Context, name string) (string, error
 	}
 	engineClient := registry.localClient
 	if !probedEngine.IsLocal {
-		_, remoteClient, buildError := registry.buildRemoteHandle(ctx, probedEngine.ID)
+		_, remoteClient, _, buildError := registry.buildRemoteHandle(ctx, probedEngine.ID)
 		if errors.Is(buildError, errUnusableEngine) {
 			return ErrorCodeSecretUnreadable, nil
 		}

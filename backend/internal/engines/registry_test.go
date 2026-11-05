@@ -90,7 +90,7 @@ func boolPointer(value bool) *bool { return &value }
 
 func newTestRegistry(testContext *testing.T, fixture testFixture, localClient *lapi.Client) *Registry {
 	testContext.Helper()
-	return NewRegistry(fixture.repository, localClient, loopbackTestGuardian())
+	return NewRegistry(fixture.repository, localClient, nil, loopbackTestGuardian(), testSidecarIssuer)
 }
 
 func mustReload(testContext *testing.T, registry *Registry) {
@@ -220,7 +220,7 @@ func TestRegistryKeepsLocalClient(testContext *testing.T) {
 		testContext.Fatalf("ensure local: %v", ensureError)
 	}
 	localClient := lapi.NewClient("http://127.0.0.1:8080", "dashboard", "local-password", nil)
-	registry := NewRegistry(fixture.repository, localClient, nil)
+	registry := NewRegistry(fixture.repository, localClient, nil, nil, testSidecarIssuer)
 
 	mustReload(testContext, registry)
 	mustReload(testContext, registry)
@@ -241,7 +241,7 @@ func TestRegistryGuardsRemoteEnginesByDefault(testContext *testing.T) {
 	fixture := newFixture(testContext)
 	fake, server := startFakeEngine(testContext)
 	mustCreate(testContext, fixture, insecureInput("edge-loopback", server.URL))
-	registry := NewRegistry(fixture.repository, nil, nil)
+	registry := NewRegistry(fixture.repository, nil, nil, nil, testSidecarIssuer)
 	mustReload(testContext, registry)
 
 	engineClient, _ := registry.Client("edge-loopback")
@@ -498,7 +498,7 @@ func TestHandlesReturnsACopy(testContext *testing.T) {
 }
 
 func TestEmptyRegistryBeforeFirstReload(testContext *testing.T) {
-	registry := NewRegistry(nil, nil, nil)
+	registry := NewRegistry(nil, nil, nil, nil, testSidecarIssuer)
 	if len(registry.Handles()) != 0 {
 		testContext.Fatal("expected no handle before the first Reload")
 	}
@@ -620,7 +620,7 @@ func TestPublishLocalOnlyKeepsLocalAvailableAfterAFailedReload(testContext *test
 	_, server := startFakeEngine(testContext)
 	mustCreate(testContext, fixture, insecureInput("edge-late", server.URL))
 	localClient := lapi.NewClient("http://127.0.0.1:8080", "dashboard", "local-password", nil)
-	registry := NewRegistry(fixture.repository, localClient, loopbackTestGuardian())
+	registry := NewRegistry(fixture.repository, localClient, nil, loopbackTestGuardian(), testSidecarIssuer)
 	cancelledContext, cancelReload := context.WithCancel(context.Background())
 	cancelReload()
 
