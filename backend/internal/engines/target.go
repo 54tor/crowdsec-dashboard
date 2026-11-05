@@ -13,6 +13,8 @@ import (
 	"crowdsec-dashboard/internal/sidecarclient"
 )
 
+var errEmptySidecarIssuer = errors.New("sidecar issuer is empty")
+
 type Target struct {
 	Engine   Engine
 	Client   *lapi.Client
@@ -41,28 +43,44 @@ func (registry *Registry) localTarget(localEngine Engine) Target {
 	return Target{Engine: localEngine, Client: registry.localClient, Executor: registry.localExecutor}
 }
 
+func (registry *Registry) targetFor(ctx context.Context, listedEngine Engine) (remoteTargetBuild, error) {
+	if listedEngine.IsLocal {
+		return remoteTargetBuild{target: registry.localTarget(listedEngine)}, nil
+	}
+	return registry.buildRemoteTarget(ctx, listedEngine.ID)
+}
+
 func (registry *Registry) buildRemoteTarget(ctx context.Context, engineID int64) (remoteTargetBuild, error) {
 	remoteEngine, remoteClient, egressSettings, buildError := registry.buildRemoteHandle(ctx, engineID)
 	if buildError != nil {
 		return remoteTargetBuild{}, buildError
+	}
+	if registry.afterEngineLoad != nil {
+		registry.afterEngineLoad()
 	}
 	sidecarClient, sidecarError := registry.buildSidecarClient(ctx, remoteEngine, egressSettings)
 	if sidecarError != nil {
 		remoteClient.CloseIdleConnections()
 		return remoteTargetBuild{}, sidecarError
 	}
-	remoteTarget := Target{Engine: remoteEngine, Client: remoteClient}
-	if sidecarClient != nil {
-		remoteTarget.Executor, remoteTarget.Sidecar = sidecarClient, sidecarClient
+	if sidecarClient == nil {
+		return remoteTargetBuild{target: Target{Engine: remoteEngine, Client: remoteClient}, egress: egressSettings}, nil
 	}
-	return remoteTargetBuild{target: remoteTarget, egress: egressSettings}, nil
+	sidecarTarget := Target{Engine: remoteEngine, Client: remoteClient, Executor: sidecarClient, Sidecar: sidecarClient}
+	return remoteTargetBuild{target: sidecarTarget, egress: egressSettings}, nil
 }
 
 func (registry *Registry) buildSidecarClient(ctx context.Context, remoteEngine Engine, egressSettings egress.Settings) (*sidecarclient.Client, error) {
 	if remoteEngine.Sidecar == nil {
 		return nil, nil
 	}
+	if registry.issuer == "" {
+		return nil, errors.Join(errUnusableEngine, errEmptySidecarIssuer)
+	}
 	currentKey, _, keysError := registry.repository.sidecarSigningKeys(ctx, remoteEngine.ID)
+	if errors.Is(keysError, ErrEngineHasNoSidecar) {
+		return nil, nil
+	}
 	if isUnreadableSecret(keysError) {
 		return nil, errors.Join(errUnusableEngine, keysError)
 	}

@@ -341,3 +341,57 @@ func TestRegistryTargetStaysOnItsEngineAcrossConcurrentReloads(testContext *test
 	expectArgvCount(testContext, "sidecar B", scenario.sidecarB.runner, executionsPerEngine+1)
 	expectArgvCount(testContext, "local runner", scenario.localRunner, 0)
 }
+
+func TestRegistryWithAnEmptyIssuerLeavesSidecarEnginesUnusable(testContext *testing.T) {
+	capturedLog := captureDefaultLog(testContext)
+	scenario := startTwoSidecarEngines(testContext)
+	mustCreate(testContext, scenario.fixture, remoteInput("peer-plain", "https://plain.example.com"))
+	registryWithoutIssuer := NewRegistry(scenario.fixture.repository, nil, cscli.NewLocalExecutor(scenario.localRunner), loopbackTestGuardian(), "")
+
+	mustReload(testContext, registryWithoutIssuer)
+
+	for _, sidecarEngineName := range []string{"peer-a", "peer-b"} {
+		unusableTarget, targetError := registryWithoutIssuer.Target(sidecarEngineName)
+		if !errors.Is(targetError, ErrEngineNotFound) || unusableTarget.Executor != nil || unusableTarget.Sidecar != nil {
+			testContext.Errorf("%s: expected ErrEngineNotFound and an empty target, got %v and %+v", sidecarEngineName, targetError, unusableTarget)
+		}
+		if obtainedCode := registryWithoutIssuer.UnavailableEngines()[sidecarEngineName]; obtainedCode != ErrorCodeSecretUnreadable {
+			testContext.Errorf("%s: expected %s, got %q", sidecarEngineName, ErrorCodeSecretUnreadable, obtainedCode)
+		}
+	}
+	if _, plainError := registryWithoutIssuer.Target("peer-plain"); !errors.Is(plainError, ErrEngineHasNoSidecar) {
+		testContext.Errorf("a remote engine without sidecar stays published read-only, got %v", plainError)
+	}
+	if !strings.Contains(capturedLog.String(), "engine_skipped") {
+		testContext.Error("the skipped engines must be logged")
+	}
+}
+
+func TestReloadPublishesAnEngineWithoutExecutorWhenItsSidecarIsRemovedMidReload(testContext *testing.T) {
+	scenario := startTwoSidecarEngines(testContext)
+	sidecarAlreadyRemoved := false
+	scenario.registry.afterEngineLoad = func() {
+		if sidecarAlreadyRemoved {
+			return
+		}
+		sidecarAlreadyRemoved = true
+		if removeError := scenario.fixture.repository.RemoveSidecar(context.Background(), "peer-a"); removeError != nil {
+			testContext.Errorf("remove sidecar during reload: %v", removeError)
+		}
+	}
+
+	reloadError := scenario.registry.Reload(context.Background())
+	scenario.registry.afterEngineLoad = nil
+
+	if reloadError != nil {
+		testContext.Fatalf("the race must not fail the whole reload: %v", reloadError)
+	}
+	racedTarget, racedError := scenario.registry.Target("peer-a")
+	if !errors.Is(racedError, ErrEngineHasNoSidecar) || racedTarget.Executor != nil {
+		testContext.Errorf("expected ErrEngineHasNoSidecar and no executor, got %v and %v", racedError, racedTarget.Executor)
+	}
+	if _, readable := scenario.registry.Client("peer-a"); !readable {
+		testContext.Error("the engine must stay readable through its LAPI client")
+	}
+	mustTarget(testContext, scenario.registry, "peer-b")
+}

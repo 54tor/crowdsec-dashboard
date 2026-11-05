@@ -35,17 +35,18 @@ type registrySnapshot struct {
 }
 
 type Registry struct {
-	repository     *Repository
-	localClient    *lapi.Client
-	localExecutor  cscli.Executor
-	guardian       *ssrf.Guardian
-	issuer         string
-	reloadMutex    sync.Mutex
-	current        atomic.Pointer[registrySnapshot]
-	remoteClients  []*lapi.Client
-	sidecarClients []*sidecarclient.Client
-	afterList      func()
-	complete       atomic.Bool
+	repository      *Repository
+	localClient     *lapi.Client
+	localExecutor   cscli.Executor
+	guardian        *ssrf.Guardian
+	issuer          string
+	reloadMutex     sync.Mutex
+	current         atomic.Pointer[registrySnapshot]
+	remoteClients   []*lapi.Client
+	sidecarClients  []*sidecarclient.Client
+	afterList       func()
+	afterEngineLoad func()
+	complete        atomic.Bool
 }
 
 func NewRegistry(repository *Repository, localClient *lapi.Client, localExecutor cscli.Executor, guardian *ssrf.Guardian, issuer string) *Registry {
@@ -93,28 +94,27 @@ func (registry *Registry) Reload(ctx context.Context) error {
 		if !listedEngine.Enabled {
 			continue
 		}
-		engineTarget := registry.localTarget(listedEngine)
+		builtTarget, buildError := registry.targetFor(ctx, listedEngine)
+		if errors.Is(buildError, ErrEngineNotFound) {
+			continue
+		}
+		if errors.Is(buildError, errUnusableEngine) {
+			nextSnapshot.unavailableByName[listedEngine.Name] = ErrorCodeSecretUnreadable
+			slog.Warn("engine_skipped", "engine", listedEngine.Name, "error_code", ErrorCodeSecretUnreadable)
+			continue
+		}
+		if buildError != nil {
+			closeAll(builtRemoteClients)
+			closeSidecars(builtSidecarClients)
+			return buildError
+		}
+		engineTarget := builtTarget.target
 		if !listedEngine.IsLocal {
-			remoteTarget, buildError := registry.buildRemoteTarget(ctx, listedEngine.ID)
-			if errors.Is(buildError, ErrEngineNotFound) {
-				continue
+			builtRemoteClients = append(builtRemoteClients, engineTarget.Client)
+			if engineTarget.Sidecar != nil {
+				builtSidecarClients = append(builtSidecarClients, engineTarget.Sidecar)
 			}
-			if errors.Is(buildError, errUnusableEngine) {
-				nextSnapshot.unavailableByName[listedEngine.Name] = ErrorCodeSecretUnreadable
-				slog.Warn("engine_skipped", "engine", listedEngine.Name, "error_code", ErrorCodeSecretUnreadable)
-				continue
-			}
-			if buildError != nil {
-				closeAll(builtRemoteClients)
-				closeSidecars(builtSidecarClients)
-				return buildError
-			}
-			builtRemoteClients = append(builtRemoteClients, remoteTarget.target.Client)
-			if remoteTarget.target.Sidecar != nil {
-				builtSidecarClients = append(builtSidecarClients, remoteTarget.target.Sidecar)
-			}
-			engineTarget = remoteTarget.target
-			nextSnapshot.egressByName[listedEngine.Name] = remoteTarget.egress
+			nextSnapshot.egressByName[listedEngine.Name] = builtTarget.egress
 		}
 		if !engineTarget.Engine.Enabled {
 			continue
