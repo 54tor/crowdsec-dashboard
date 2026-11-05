@@ -21,6 +21,18 @@ var (
 	ErrInvalidPin          = errors.New("invalid sidecar certificate pin")
 )
 
+func TransportSentinels() []error {
+	return []error{
+		ErrUnavailable,
+		ErrFingerprintMismatch,
+		ErrAuthRefused,
+		ErrClockSkew,
+		ErrCommandRefused,
+		ErrBusy,
+		ErrInvalidResponse,
+	}
+}
+
 var sentinelOfCode = map[string]error{
 	sidecarapi.CodeInvalidField:        cscli.ErrInvalidField,
 	sidecarapi.CodeUnknownCommand:      cscli.ErrUnknownCommand,

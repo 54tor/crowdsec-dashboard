@@ -432,3 +432,43 @@ func TestEngineLookupFailureIsWrappedAndNeverWrites(testContext *testing.T) {
 		testContext.Fatalf("a failed engine lookup must not write, got %v", writer.calls)
 	}
 }
+
+// flippingClients answers the first lookup with firstClient and every later
+// one with laterClient, like a registry whose snapshot changes between calls.
+type flippingClients struct {
+	firstClient *lapi.Client
+	laterClient *lapi.Client
+	lookups     int
+}
+
+func (source *flippingClients) Client(_ string) (*lapi.Client, bool) {
+	source.lookups++
+	if source.lookups == 1 {
+		return source.firstClient, true
+	}
+	return source.laterClient, true
+}
+
+func TestWriteReadsStayOnTheClientOfTheWriteTarget(testContext *testing.T) {
+	targetLAPI, targetClient := startFakeLAPI(testContext, trustedAllowlist())
+	otherLAPI, otherClient := startFakeLAPI(testContext, trustedAllowlist())
+	writer := &recordingWriter{applyTo: targetLAPI}
+	knownEngines := fakeEngines{localEngineName: {Name: localEngineName, IsLocal: true, Enabled: true}}
+	clients := &flippingClients{firstClient: targetClient, laterClient: otherClient}
+	service := NewService(knownEngines, clients, localOnlyTestWriters(writer), func() time.Time { return referenceNow })
+
+	result, addError := service.AddEntry(context.Background(), localEngineName, "trusted", EntryInput{Value: "203.0.113.7"})
+
+	if addError != nil {
+		testContext.Fatal(addError)
+	}
+	if !result.Refreshed {
+		testContext.Fatalf("expected a verified write, got %+v", result)
+	}
+	if targetLAPI.reads() != 2 {
+		testContext.Fatalf("expected the read and the re-read on the target client, got %d reads", targetLAPI.reads())
+	}
+	if otherLAPI.reads() != 0 {
+		testContext.Fatalf("the client returned by a later lookup must not be read, got %d reads", otherLAPI.reads())
+	}
+}

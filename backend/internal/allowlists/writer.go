@@ -62,15 +62,7 @@ func classifyCscliError(executeError error) error {
 	}
 }
 
-var sidecarFailures = []error{
-	sidecarclient.ErrUnavailable,
-	sidecarclient.ErrFingerprintMismatch,
-	sidecarclient.ErrAuthRefused,
-	sidecarclient.ErrClockSkew,
-	sidecarclient.ErrCommandRefused,
-	sidecarclient.ErrBusy,
-	sidecarclient.ErrInvalidResponse,
-}
+var sidecarFailures = sidecarclient.TransportSentinels()
 
 func isSidecarFailure(executeError error) bool {
 	for _, sidecarFailure := range sidecarFailures {

@@ -29,7 +29,11 @@ func (service *Service) List(ctx context.Context, engineName string) (Listing, e
 	if engineError != nil {
 		return Listing{}, engineError
 	}
-	read, readError := service.readAllowlists(ctx, engine.Name)
+	client, clientError := service.clientOf(engine.Name)
+	if clientError != nil {
+		return Listing{}, clientError
+	}
+	read, readError := client.ListAllowlists(ctx)
 	if readError != nil {
 		return Listing{}, readError
 	}
@@ -51,10 +55,10 @@ func (service *Service) enabledEngine(ctx context.Context, engineName string) (e
 	return engine, nil
 }
 
-func (service *Service) readAllowlists(ctx context.Context, engineName string) (lapi.AllowlistRead, error) {
+func (service *Service) clientOf(engineName string) (*lapi.Client, error) {
 	client, found := service.clients.Client(engineName)
 	if !found {
-		return lapi.AllowlistRead{}, lapi.ErrAllowlistsUnreadable
+		return nil, lapi.ErrAllowlistsUnreadable
 	}
-	return client.ListAllowlists(ctx)
+	return client, nil
 }

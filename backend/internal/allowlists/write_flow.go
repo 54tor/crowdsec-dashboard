@@ -9,6 +9,7 @@ import (
 
 type writeTarget struct {
 	engine engines.Engine
+	client *lapi.Client
 	writer Writer
 	read   lapi.AllowlistRead
 }
@@ -24,15 +25,19 @@ func (service *Service) prepareWrite(ctx context.Context, engineName string) (wr
 	if !writable {
 		return writeTarget{}, ErrEngineReadOnly
 	}
-	read, readError := service.readAllowlists(ctx, engine.Name)
+	client, clientError := service.clientOf(engine.Name)
+	if clientError != nil {
+		return writeTarget{}, clientError
+	}
+	read, readError := client.ListAllowlists(ctx)
 	if readError != nil {
 		return writeTarget{}, readError
 	}
-	return writeTarget{engine: engine, writer: writer, read: read}, nil
+	return writeTarget{engine: engine, client: client, writer: writer, read: read}, nil
 }
 
 func (service *Service) confirmWrite(ctx context.Context, target writeTarget, changeIsVisible changeCheck) (MutationResult, error) {
-	refreshedRead, refreshError := service.readAllowlists(ctx, target.engine.Name)
+	refreshedRead, refreshError := target.client.ListAllowlists(ctx)
 	if refreshError != nil {
 		return MutationResult{Refreshed: false}, nil
 	}

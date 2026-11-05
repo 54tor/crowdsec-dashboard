@@ -10,16 +10,7 @@ import (
 	"crowdsec-dashboard/internal/sidecarclient"
 )
 
-var sidecarTransportSentinels = []error{
-	sidecarclient.ErrUnavailable,
-	sidecarclient.ErrFingerprintMismatch,
-	sidecarclient.ErrAuthRefused,
-	sidecarclient.ErrClockSkew,
-	sidecarclient.ErrCommandRefused,
-	sidecarclient.ErrBusy,
-	sidecarclient.ErrInvalidResponse,
-	cscli.ErrTimeout,
-}
+var sidecarTransportSentinels = append(sidecarclient.TransportSentinels(), cscli.ErrTimeout)
 
 func (handlers sidecarHandlers) writeSidecarError(responseWriter http.ResponseWriter, engineName, operation string, operationError error) {
 	switch {

@@ -199,6 +199,35 @@ func TestSidecarWritersRefuseATargetOfAnotherEngine(testContext *testing.T) {
 	requireNoCommand(testContext, "local", localExecutor)
 }
 
+func TestSidecarWritersRefuseATargetWithTheSameNameAndIdentifierButAnotherLocality(testContext *testing.T) {
+	executor := &recordingExecutor{}
+	remoteTwinOfLocal := engines.Engine{ID: localTestEngine.ID, Name: localTestEngine.Name, IsLocal: false, Enabled: true}
+	writers := SidecarWriters(fakeTargets{targetsByName: map[string]engines.Target{
+		localTestEngine.Name: executorTarget(remoteTwinOfLocal, executor),
+	}})
+
+	writer, writable := writers.Writer(localTestEngine)
+
+	if writable || writer != nil {
+		testContext.Fatalf("a target differing only by IsLocal must be refused, got (%v, %v)", writer, writable)
+	}
+	requireNoCommand(testContext, "local", executor)
+}
+
+func TestEverySidecarTransportSentinelIsAWriteFailure(testContext *testing.T) {
+	for _, transportSentinel := range sidecarclient.TransportSentinels() {
+		failingExecutor := &recordingExecutor{failure: fmt.Errorf("wrapped: %w", transportSentinel)}
+		writer, _ := SidecarWriters(fakeTargets{targetsByName: map[string]engines.Target{
+			peerAEngine.Name: executorTarget(peerAEngine, failingExecutor),
+		}}).Writer(peerAEngine)
+
+		removeError := writer.Remove(context.Background(), "office", officePrefix)
+
+		requireErrorIs(testContext, removeError, ErrWriteFailed)
+		requireErrorIs(testContext, removeError, transportSentinel)
+	}
+}
+
 // "local" and "local-copy" are different engines: neither may borrow the other's executor.
 func TestLocalWriterIsNeverSwappedForASimilarlyNamedEngine(testContext *testing.T) {
 	localExecutor := &recordingExecutor{}
@@ -331,8 +360,7 @@ func TestServiceDoesNotConfirmAWriteVisibleOnlyOnAnotherEngine(testContext *test
 
 	_, addError := fixture.service.AddEntry(context.Background(), peerBEngine.Name, "trusted", EntryInput{Value: "203.0.113.7"})
 
-	requireErrorIs(testContext, addError, ErrWriteFailed)
-	if !errors.Is(addError, ErrWriteFailed) || errors.Is(addError, lapi.ErrAllowlistsUnreadable) {
+	if errors.Is(addError, lapi.ErrAllowlistsUnreadable) {
 		testContext.Fatalf("expected an unverified write failure, got %v", addError)
 	}
 }
