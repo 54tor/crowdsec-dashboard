@@ -5,7 +5,7 @@ import { EngineTargetNote } from '@/components/EngineTargetNote'
 import { Icon } from '@/components/Icon'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
-import { ENGINE_WRITE_MUTATION_KEY } from '@/hooks/useEngineWritePending'
+import { ENGINE_WRITE_MUTATION_KEY } from '@/hooks/useIsEngineWritePending'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
 
 export function ReloadBanner({ engineName }: { engineName: string }) {

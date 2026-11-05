@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { SelectField } from '@/components/SelectField'
 import { useWritableEngineNames } from '@/hooks/useEngineTarget'
-import { useIsEngineWritePending } from '@/hooks/useEngineWritePending'
+import { useIsEngineWritePending } from '@/hooks/useIsEngineWritePending'
 
 interface EngineTargetSelectProps {
   id: string

@@ -21,7 +21,7 @@ export function useEngineTarget(): [string, (engineName: string) => void] {
 
 export function useWritableEngineNames(): string[] | undefined {
   const engineNamesQuery = useQuery({ queryKey: ENGINE_NAMES_QUERY_KEY, queryFn: listEngineNames, retry: false })
-  const loadedEngineNames = engineNamesQuery.isError ? NO_ENGINE_NAMES : engineNamesQuery.data
+  const loadedEngineNames = engineNamesQuery.data ?? (engineNamesQuery.isError ? NO_ENGINE_NAMES : undefined)
   return useMemo(
     () => (loadedEngineNames === undefined ? undefined : [LOCAL_ENGINE_NAME, ...sidecarEngineNamesOf(loadedEngineNames)]),
     [loadedEngineNames],

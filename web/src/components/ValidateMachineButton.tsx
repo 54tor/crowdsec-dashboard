@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { validateMachine } from '@/api/writeApi'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
-import { ENGINE_WRITE_MUTATION_KEY } from '@/hooks/useEngineWritePending'
+import { ENGINE_WRITE_MUTATION_KEY } from '@/hooks/useIsEngineWritePending'
 import { HEALTH_QUERY_KEY, MACHINES_QUERY_KEY } from '@/hooks/useReadResources'
 
 interface MachineValidation {
