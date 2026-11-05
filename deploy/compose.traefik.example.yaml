@@ -1,0 +1,15 @@
+# Override of compose.example.yaml for a host that already runs Traefik and pulls the published image:
+#   docker compose -f compose.example.yaml -f compose.traefik.example.yaml up -d
+# Replace OWNER, the host name, the entrypoint and the certificate resolver with yours.
+services:
+  dashboard:
+    build: !reset null
+    image: ghcr.io/OWNER/crowdsec-dashboard:latest
+    pull_policy: always
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: reverse-proxy-net
+      traefik.http.routers.crowdsec-dashboard.rule: Host(`dashboard.example.com`)
+      traefik.http.routers.crowdsec-dashboard.entrypoints: websecure
+      traefik.http.routers.crowdsec-dashboard.tls.certresolver: letsencrypt
+      traefik.http.services.crowdsec-dashboard.loadbalancer.server.port: "8080"
