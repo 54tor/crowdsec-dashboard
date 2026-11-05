@@ -206,13 +206,24 @@ export interface EngineView {
   enabled: boolean
   sync_enabled: boolean
   collection: EngineCollection
+  sidecar: EngineSidecarView | null
   warning?: string
+}
+
+export interface EngineSidecarView {
+  url: string
+  spki_sha256: string
+  key_id: string
+  public_key: string
+  next_key_id: string
+  next_public_key: string
 }
 
 export interface EngineName {
   name: string
   is_local: boolean
   enabled: boolean
+  has_sidecar: boolean
 }
 
 export interface EngineProxyInput {

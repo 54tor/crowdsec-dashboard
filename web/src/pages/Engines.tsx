@@ -13,6 +13,7 @@ import { EngineRowActions } from '@/components/EngineRowActions'
 import { PageHeader } from '@/components/PageHeader'
 import { ErrorNotice, InfoNotice, WarningNotice } from '@/components/Notice'
 import { TableSkeleton } from '@/components/TableSkeleton'
+import { UntrustedText } from '@/components/UntrustedText'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useClientFilter } from '@/hooks/useClientFilter'
@@ -26,7 +27,7 @@ function engineSearchTexts(engine: EngineView, t: TFunction): string[] {
     engine.enabled ? t('engines.enabled') : t('engines.disabled'),
     engine.sync_enabled ? t('engines.syncEnabled') : '',
   ]
-  return [engine.name, engine.lapi_url, engine.machine_id, engine.proxy?.kind ?? '', engine.proxy?.url ?? '', ...stateLabels]
+  return [engine.name, engine.lapi_url, engine.machine_id, engine.proxy?.kind ?? '', engine.proxy?.url ?? '', engine.sidecar?.url ?? '', ...stateLabels]
 }
 
 function EngineDestination({ engine }: { engine: EngineView }) {
@@ -41,8 +42,21 @@ function EngineDestination({ engine }: { engine: EngineView }) {
           {engine.has_proxy_credentials && ` (${t('engines.proxyCredentials')})`}
         </p>
       )}
+      {engine.sidecar && (
+        <p className="text-muted-foreground">
+          {t('engines.sidecar.urlLabel')} <UntrustedText value={engine.sidecar.url} />
+        </p>
+      )}
     </div>
   )
+}
+
+function SidecarBadge({ hasSidecar }: { hasSidecar: boolean }) {
+  const { t } = useTranslation()
+  if (hasSidecar) {
+    return <Badge variant="info">{t('engines.sidecar.badgeConfigured')}</Badge>
+  }
+  return <Badge variant="outline">{t('engines.sidecar.badgeNone')}</Badge>
 }
 
 function EngineState({ engine }: { engine: EngineView }) {
@@ -52,6 +66,7 @@ function EngineState({ engine }: { engine: EngineView }) {
       {engine.is_local && <Badge variant="neutral">{t('engines.local')}</Badge>}
       <Badge variant={engine.enabled ? 'nominal' : 'outline'}>{engine.enabled ? t('engines.enabled') : t('engines.disabled')}</Badge>
       {engine.sync_enabled && <Badge variant="info">{t('engines.syncEnabled')}</Badge>}
+      {!engine.is_local && <SidecarBadge hasSidecar={engine.sidecar !== null} />}
     </div>
   )
 }

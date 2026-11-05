@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 
 type CopyOutcome = 'idle' | 'copied' | 'failed'
 
-export function SecretReveal({ label, secret }: { label: string; secret: string }) {
+export function SecretReveal({ label, secret, copyAriaLabel }: { label: string; secret: string; copyAriaLabel?: string }) {
   const { t } = useTranslation()
   const [copyOutcome, setCopyOutcome] = useState<CopyOutcome>('idle')
 
@@ -23,7 +23,7 @@ export function SecretReveal({ label, secret }: { label: string; secret: string 
       <p className="text-sm font-medium">{label}</p>
       <code className="block rounded-md border bg-secondary p-2 font-mono text-sm text-foreground break-all select-all">{secret}</code>
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" size="sm" onClick={copySecret}>
+        <Button type="button" variant="outline" size="sm" aria-label={copyAriaLabel} onClick={copySecret}>
           <Icon name="content_copy" className="size-3.5" />
           {t('secret.copy')}
         </Button>

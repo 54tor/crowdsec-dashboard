@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { deleteEngine, ENGINE_NAMES_QUERY_KEY, ENGINES_QUERY_KEY } from '@/api/enginesApi'
 import type { EngineView } from '@/api/types'
 import { EngineFormDialog } from '@/components/EngineFormDialog'
+import { EngineSidecarActions } from '@/components/EngineSidecarActions'
 import { EngineTestButton } from '@/components/EngineTestButton'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { Button } from '@/components/ui/button'
@@ -41,6 +42,7 @@ export function EngineRowActions({ engine, onWarning, onDeleting }: EngineRowAct
             }}
             invalidates={[ENGINES_QUERY_KEY, ENGINE_NAMES_QUERY_KEY]}
           />
+          <EngineSidecarActions engine={engine} />
         </>
       )}
     </div>

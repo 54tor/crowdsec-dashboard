@@ -136,6 +136,7 @@ export function makeEngine(overrides: Partial<EngineView> = {}): EngineView {
       gaps: 0,
       resets: 0,
     },
+    sidecar: null,
     ...overrides,
   }
 }
