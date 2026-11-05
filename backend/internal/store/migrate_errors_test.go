@@ -11,8 +11,9 @@ import (
 
 // A refused or missing pg_trgm extension must stop startup with a message an
 // operator can act on: a privilege refusal only needs an owner to run CREATE
-// EXTENSION, while a missing control file (0A000, 58P01) needs the contrib
-// package installed first.
+// EXTENSION, a missing control file (0A000, 58P01) needs the contrib package
+// installed first, and an unknown gin_trgm_ops operator class (42704) means the
+// extension lives in a schema outside the search_path.
 func TestMigrateExplainsARefusedTrigramExtension(testContext *testing.T) {
 	describedCases := []struct {
 		caseName          string
@@ -33,6 +34,11 @@ func TestMigrateExplainsARefusedTrigramExtension(testContext *testing.T) {
 			caseName:          "control file missing",
 			postgresError:     &pgconn.PgError{Code: "58P01", Message: `could not open extension control file "/usr/share/postgresql/extension/pg_trgm.control"`},
 			expectedFragments: []string{"pg_trgm", "docs/operations.md", "contrib package"},
+		},
+		{
+			caseName:          "extension outside the search path",
+			postgresError:     &pgconn.PgError{Code: "42704", Message: `operator class "gin_trgm_ops" does not exist for access method "gin"`},
+			expectedFragments: []string{"pg_trgm", "docs/operations.md", "search_path", "public"},
 		},
 	}
 	for _, describedCase := range describedCases {
@@ -60,6 +66,7 @@ func TestMigrateKeepsUnrelatedErrorsUnchanged(testContext *testing.T) {
 	}{
 		{caseName: "relation already exists", postgresError: &pgconn.PgError{Code: "42P07", Message: "relation already exists"}},
 		{caseName: "privilege refused elsewhere", postgresError: &pgconn.PgError{Code: "42501", Message: "permission denied for schema public"}},
+		{caseName: "other undefined object", postgresError: &pgconn.PgError{Code: "42704", Message: `type "citext" does not exist`}},
 	}
 	for _, unrelatedCase := range unrelatedCases {
 		testContext.Run(unrelatedCase.caseName, func(caseContext *testing.T) {
