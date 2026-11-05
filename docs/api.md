@@ -301,6 +301,10 @@ the request finishes on what was resolved then, and a refusal never falls back t
 `cscli` commands go through the engine's sidecar (see [Engines](#engines)); a ban, a decision
 removal and the alert lookup go through the engine's LAPI with the machine credentials the dashboard
 holds for it, but still require a usable sidecar (an engine without one stays read-only).
+`SIDECAR_READ_ONLY` and `SIDECAR_ALLOWED_COMMANDS` do not stop manual bans or decision removals on a
+sidecar engine: those writes go through the engine's LAPI with the dashboard's machine credentials,
+not through the sidecar. Only `DELETE /api/alerts/{id}` (`alerts_delete`) is refused by a read-only
+sidecar.
 `/api/health` and `/api/metrics` stay local.
 
 | Answer | When |
@@ -322,7 +326,7 @@ deletion is audited `alert_deleted` with target `<engine>/<upstream id>`.
 A remote ban checks the allowlists of the **target** engine (read from its LAPI), never the local
 ones, with the same target normalisation as locally: 409 `target_allowlisted` when the target
 overlaps one of its active entries, 503 `allowlist_unavailable` when they cannot be read (any error,
-a 404 included), and nothing is written on any engine. `self_ban` still compares the target with the
+a 404 included), when the read is truncated or when an active entry is corrupt, and nothing is written on any engine. `self_ban` still compares the target with the
 caller's client address. A remote alert deletion reads the alert and its uuid from the target
 engine's LAPI, deletes it with `cscli alerts delete` through its sidecar, and removes the archived
 copy of that engine only.
@@ -368,7 +372,7 @@ target `<engine>/<upstream id>` for the live delete and `archive/<engine>/<upstr
 
 The manual ban checks the allowlists of the target engine just before the write, with the same
 filter as the sync and the bundle import ([security.md](security.md#allowlist-check-before-writes)):
-there is no override, remove the entry first. The order is: body, target, duration, reason,
+there is no override, remove the entry first. The order is: engine, body, target, duration, reason,
 `self_ban`, allowlists, then the LAPI write.
 
 Hub `{kind}` is `collections`, `appsec-rules` or `appsec-configs` (the commands `cscli collections`,

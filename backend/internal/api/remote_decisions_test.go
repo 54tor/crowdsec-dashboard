@@ -343,6 +343,43 @@ func remoteWriteRequests() []remoteWriteRequest {
 	}
 }
 
+func TestRemoteWritesRefuseATargetOfAnotherEngine(testContext *testing.T) {
+	for _, writeRequest := range remoteWriteRequests() {
+		testContext.Run(writeRequest.description, func(caseTest *testing.T) {
+			fixture := newRemoteDecisionFixture(caseTest)
+			peerTarget := fixture.engineFixture.targets.targetsByName[remoteDecisionPeerName]
+			peerTarget.Engine.Name = "another-engine"
+			fixture.engineFixture.targets.targetsByName[remoteDecisionPeerName] = peerTarget
+			separator := "?"
+			if strings.Contains(writeRequest.path, "?") {
+				separator = "&"
+			}
+
+			response := fixture.send(writeRequest.method, writeRequest.path+separator+"engine="+remoteDecisionPeerName, writeRequest.body)
+
+			expectError(caseTest, response, http.StatusConflict, "engine_target_mismatch")
+			expectNoLAPIRequest(caseTest, "local", fixture.localLAPI)
+			expectNoLAPIRequest(caseTest, "peer", fixture.peerLAPI)
+		})
+	}
+}
+
+func TestRemoteBanIsRefusedWhenTheTargetAllowlistReadIsTruncated(testContext *testing.T) {
+	const entriesBeyondTheReadCap = 10001
+	fixture := newRemoteDecisionFixture(testContext)
+	oversizedAllowlist := make([]string, entriesBeyondTheReadCap)
+	for entryIndex := range oversizedAllowlist {
+		oversizedAllowlist[entryIndex] = "198.51.100.1"
+	}
+	fixture.peerLAPI.setAllowlists(http.StatusOK, oversizedAllowlist...)
+
+	response := fixture.banOnPeer(remoteBanTarget)
+
+	expectError(testContext, response, http.StatusServiceUnavailable, "allowlist_unavailable")
+	expectNoLAPIWrite(testContext, "peer", fixture.peerLAPI)
+	expectNoLAPIRequest(testContext, "local", fixture.localLAPI)
+}
+
 func TestRefusedEngineWritesNoDecisionOrAlertAnywhere(testContext *testing.T) {
 	for _, writeRequest := range remoteWriteRequests() {
 		for _, refusedCase := range refusedEngineCases() {
