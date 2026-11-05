@@ -88,13 +88,13 @@ func (handler *execHandler) executeWithinBounds(requestContext context.Context, 
 	}
 	defer func() { <-handler.slots }()
 
-	execContext, cancel := context.WithTimeout(requestContext, command.Timeout+execTimeoutMargin)
+	execContext, cancel := context.WithTimeout(context.WithoutCancel(requestContext), command.Timeout+execTimeoutMargin)
 	defer cancel()
 	output, executeError := executeRecoveringPanics(execContext, handler.executor, command.Name, fields)
 	if executeError != nil {
 		return nil, outcomeOfExecutorError(executeError)
 	}
-	if len(output) > maxExecOutputBytes {
+	if len(output) > sidecarapi.MaxExecOutputBytes {
 		return nil, execOutcome{http.StatusBadGateway, sidecarapi.CodeOutputTooLarge}
 	}
 	if output == nil {

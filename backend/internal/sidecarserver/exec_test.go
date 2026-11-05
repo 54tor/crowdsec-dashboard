@@ -3,6 +3,7 @@ package sidecarserver
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -158,7 +159,7 @@ func TestExecRefusesCommandsOutsideAllowedList(testContext *testing.T) {
 	}
 
 	// An unknown name gets its own code, and the body never echoes it back.
-	for _, unknownName := range []string{"not_a_command", "version;id", "<script>"} {
+	for _, unknownName := range []string{"not_a_command", "version;id", "<script>", "Version", " version", "version\u200b", "version\n"} {
 		executor := newRecordingExecutor([]byte("must not run"))
 		fixture := newFixtureServing(testContext, executor, allowedOnlyVersion)
 
@@ -218,14 +219,16 @@ func TestExecRefusesBeyondConcurrencyLimit(testContext *testing.T) {
 	})
 	singleSlotConfig := Config{AllowedCommands: cscli.Names(), MaxConcurrentExecutions: 1}
 	fixture := newFixtureServing(testContext, blockingExecutor, singleSlotConfig)
+	versionBody := execBody(testContext, "version", nil)
+	firstRequest := fixture.signedExecRequest(testContext, context.Background(), versionBody)
 
 	firstRecorderReady := make(chan *httptest.ResponseRecorder)
 	go func() {
-		firstRecorderReady <- fixture.postExec(testContext, execBody(testContext, "version", nil))
+		firstRecorderReady <- fixture.serve(firstRequest)
 	}()
 	<-executionStarted
 
-	busyRecorder := fixture.postExec(testContext, execBody(testContext, "version", nil))
+	busyRecorder := fixture.postExec(testContext, versionBody)
 	expectResponse(testContext, busyRecorder, http.StatusServiceUnavailable, codeBody(sidecarapi.CodeBusy))
 
 	close(releaseExecution)
@@ -235,36 +238,72 @@ func TestExecRefusesBeyondConcurrencyLimit(testContext *testing.T) {
 	}
 }
 
-func TestExecBoundsTheExecutorContextAndCancelsOnDisconnect(testContext *testing.T) {
+func TestExecKeepsTheSlotHeldUntilTheCommandEndsAfterDisconnect(testContext *testing.T) {
 	executionStarted := make(chan struct{})
+	releaseExecution := make(chan struct{})
+	contextErrorAfterRelease := make(chan error, 1)
+	uncancellableExecutor := executorFunc(func(ctx context.Context, _ string, _ map[string]string) ([]byte, error) {
+		close(executionStarted)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-releaseExecution:
+			contextErrorAfterRelease <- ctx.Err()
+			return []byte("done"), nil
+		}
+	})
+	singleSlotConfig := Config{AllowedCommands: cscli.Names(), MaxConcurrentExecutions: 1}
+	fixture := newFixtureServing(testContext, uncancellableExecutor, singleSlotConfig)
+	versionBody := execBody(testContext, "version", nil)
+	requestContext, disconnectClient := context.WithCancel(context.Background())
+	firstRequest := fixture.signedExecRequest(testContext, requestContext, versionBody)
+
+	firstRecorderReady := make(chan *httptest.ResponseRecorder)
+	go func() {
+		firstRecorderReady <- fixture.serve(firstRequest)
+	}()
+	<-executionStarted
+	disconnectClient()
+
+	busyRecorder := fixture.postExec(testContext, versionBody)
+	expectResponse(testContext, busyRecorder, http.StatusServiceUnavailable, codeBody(sidecarapi.CodeBusy))
+
+	close(releaseExecution)
+	firstRecorder := <-firstRecorderReady
+	if obtainedOutput := decodeExecOutput(testContext, firstRecorder); string(obtainedOutput) != "done" {
+		testContext.Errorf("expected the command to finish with done, got %q", obtainedOutput)
+	}
+	if obtainedContextError := <-contextErrorAfterRelease; obtainedContextError != nil {
+		testContext.Errorf("executor context was cancelled by the disconnect: %v", obtainedContextError)
+	}
+}
+
+func TestExecBoundsTheExecutorContextWithTimeoutPlusMargin(testContext *testing.T) {
 	observedDeadline := make(chan time.Time, 1)
-	waitingExecutor := executorFunc(func(ctx context.Context, _ string, _ map[string]string) ([]byte, error) {
+	deadlineRecordingExecutor := executorFunc(func(ctx context.Context, _ string, _ map[string]string) ([]byte, error) {
 		deadline, hasDeadline := ctx.Deadline()
 		if !hasDeadline {
 			testContext.Error("executor context has no deadline")
 		}
 		observedDeadline <- deadline
-		close(executionStarted)
-		<-ctx.Done()
-		return nil, ctx.Err()
+		return []byte("done"), nil
 	})
-	fixture := newFixtureServing(testContext, waitingExecutor, execConfigAllowingEveryCommand())
-	requestContext, disconnectClient := context.WithCancel(context.Background())
+	fixture := newFixtureServing(testContext, deadlineRecordingExecutor, execConfigAllowingEveryCommand())
 	versionCommand, _ := cscli.Lookup("version")
-	latestAcceptedDeadline := time.Now().Add(versionCommand.Timeout + execTimeoutMargin)
+	versionBody := execBody(testContext, "version", nil)
 
-	recorderReady := make(chan *httptest.ResponseRecorder)
-	go func() {
-		recorderReady <- fixture.postExecWithContext(testContext, requestContext, execBody(testContext, "version", nil))
-	}()
-	<-executionStarted
-	disconnectClient()
+	startedAt := time.Now()
+	recorder := fixture.postExec(testContext, versionBody)
+	finishedAt := time.Now()
 
-	// The executor returned only because the request context was cancelled.
-	recorder := <-recorderReady
-	expectResponse(testContext, recorder, http.StatusBadGateway, codeBody(sidecarapi.CodeExecutorUnavailable))
-	if deadline := <-observedDeadline; deadline.After(latestAcceptedDeadline.Add(time.Second)) {
-		testContext.Errorf("executor deadline %s is later than timeout plus margin %s", deadline, latestAcceptedDeadline)
+	decodeExecOutput(testContext, recorder)
+	expectedDeadline := startedAt.Add(versionCommand.Timeout + execTimeoutMargin)
+	obtainedDeadline := <-observedDeadline
+	if obtainedDeadline.Before(expectedDeadline.Add(-time.Second)) {
+		testContext.Errorf("executor deadline %s is earlier than timeout plus margin %s", obtainedDeadline, expectedDeadline)
+	}
+	if obtainedDeadline.After(finishedAt.Add(versionCommand.Timeout + execTimeoutMargin)) {
+		testContext.Errorf("executor deadline %s is later than timeout plus margin %s", obtainedDeadline, expectedDeadline)
 	}
 }
 
@@ -331,8 +370,8 @@ func TestExecRefusesOutputAboveTheCap(testContext *testing.T) {
 		outputLength int
 		expectRefuse bool
 	}{
-		{"exactly the cap", maxExecOutputBytes, false},
-		{"one byte above the cap", maxExecOutputBytes + 1, true},
+		{"exactly the cap", sidecarapi.MaxExecOutputBytes, false},
+		{"one byte above the cap", sidecarapi.MaxExecOutputBytes + 1, true},
 	}
 	for _, outputCase := range outputCases {
 		testContext.Run(outputCase.caseName, func(caseContext *testing.T) {
@@ -382,5 +421,23 @@ func TestExecRefusesWhenRateLimited(testContext *testing.T) {
 	}
 	if executedCount := len(executor.calls()); executedCount+rateLimitedCount != requestBurst*2 {
 		testContext.Errorf("expected every request to run or be rate limited, got %d runs and %d refusals", executedCount, rateLimitedCount)
+	}
+}
+
+func TestExecResponseForMaximumOutputStaysWithinTheClientCap(testContext *testing.T) {
+	maximumOutput := bytes.Repeat([]byte{0xff}, sidecarapi.MaxExecOutputBytes)
+	maximumOutputExecutor := executorFunc(func(context.Context, string, map[string]string) ([]byte, error) {
+		return maximumOutput, nil
+	})
+	fixture := newFixtureServing(testContext, maximumOutputExecutor, execConfigAllowingEveryCommand())
+
+	recorder := fixture.postExec(testContext, execBody(testContext, "version", nil))
+
+	if recorder.Code != http.StatusOK {
+		testContext.Fatalf("expected status 200, got %d", recorder.Code)
+	}
+	clientCap := base64.StdEncoding.EncodedLen(sidecarapi.MaxExecOutputBytes) + 1024
+	if encodedSize := recorder.Body.Len(); encodedSize >= clientCap {
+		testContext.Errorf("encoded response is %d bytes, expected below %d", encodedSize, clientCap)
 	}
 }

@@ -98,9 +98,15 @@ func (fixture authenticatedFixture) postExec(testContext *testing.T, body []byte
 
 func (fixture authenticatedFixture) postExecWithContext(testContext *testing.T, requestContext context.Context, body []byte) *httptest.ResponseRecorder {
 	testContext.Helper()
+	return fixture.serve(fixture.signedExecRequest(testContext, requestContext, body))
+}
+
+// signedExecRequest signs on the calling test goroutine, so concurrent tests
+// can build their requests before starting any other goroutine.
+func (fixture authenticatedFixture) signedExecRequest(testContext *testing.T, requestContext context.Context, body []byte) *http.Request {
+	testContext.Helper()
 	token := fixture.sign(testContext, http.MethodPost, sidecarapi.PathExec, body)
-	request := newSignedRequest(http.MethodPost, sidecarapi.PathExec, token, bytes.NewReader(body)).WithContext(requestContext)
-	return fixture.serve(request)
+	return newSignedRequest(http.MethodPost, sidecarapi.PathExec, token, bytes.NewReader(body)).WithContext(requestContext)
 }
 
 func decodeExecOutput(testContext *testing.T, recorder *httptest.ResponseRecorder) []byte {

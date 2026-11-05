@@ -18,7 +18,6 @@ const (
 	maxExecFieldCount      = 8
 	maxExecFieldNameBytes  = 32
 	maxExecFieldValueBytes = 1024
-	maxExecOutputBytes     = 8 << 20
 	execTimeoutMargin      = 5 * time.Second
 
 	requestsPerSecond    rate.Limit = 10
