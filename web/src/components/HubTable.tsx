@@ -10,7 +10,7 @@ import { HUB_QUERY_KEY } from '@/hooks/useReadResources'
 import { isTimeoutError } from '@/lib/apiErrors'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
 
-export function HubTable({ items }: { items: HubItem[] }) {
+export function HubTable({ items, engineName }: { items: HubItem[]; engineName: string }) {
   const { t } = useTranslation()
   const { markReloadRequired } = useReloadRequired()
   const canWrite = useCanWrite()
@@ -41,16 +41,17 @@ export function HubTable({ items }: { items: HubItem[] }) {
               title={t('hub.removeTitle', { name: hubItem.name })}
               description={`${t('hub.removeDescription', { name: hubItem.name })} ${t('hub.removeAppSecWarning')}`}
               target={hubItem.name}
-              request={(confirm) => removeHubItem(kind, hubItem.name, confirm)}
-              invalidates={[HUB_QUERY_KEY]}
-              onDeleted={markReloadRequired}
-              onFailed={(failure) => isTimeoutError(failure) && markReloadRequired()}
+              engineName={engineName}
+              request={(confirm) => removeHubItem(kind, hubItem.name, confirm, engineName)}
+              invalidates={[[...HUB_QUERY_KEY, engineName]]}
+              onDeleted={() => markReloadRequired(engineName)}
+              onFailed={(failure) => isTimeoutError(failure) && markReloadRequired(engineName)}
             />
           )
         },
       }] satisfies DataTableColumn<HubItem>[]) : []),
     ],
-    [t, markReloadRequired, canWrite],
+    [t, markReloadRequired, canWrite, engineName],
   )
   return <DataTable caption={t('hub.caption')} columns={columns} rows={items} rowKey={(hubItem) => `${hubItem.type}/${hubItem.name}`} />
 }

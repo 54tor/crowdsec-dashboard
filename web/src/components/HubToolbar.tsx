@@ -6,10 +6,10 @@ import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
 import { useHubMutation } from '@/hooks/useHubMutation'
 
-export function HubToolbar() {
+export function HubToolbar({ engineName }: { engineName: string }) {
   const { t } = useTranslation()
-  const update = useHubMutation(updateHub)
-  const upgrade = useHubMutation(upgradeHub)
+  const update = useHubMutation(engineName, () => updateHub(engineName))
+  const upgrade = useHubMutation(engineName, () => upgradeHub(engineName))
   const isBusy = update.isPending || upgrade.isPending
   const failure = update.error ?? upgrade.error
 
@@ -31,7 +31,7 @@ export function HubToolbar() {
         <Button type="button" variant="outline" disabled={isBusy} onClick={() => upgrade.mutate()}>
           {labelOf(upgrade.isPending, t('hub.upgrade'))}
         </Button>
-        <InstallHubItemDialog />
+        <InstallHubItemDialog engineName={engineName} />
       </div>
       <p className="text-sm text-muted-foreground">{t('hub.slowNote')}</p>
       {failure && <ErrorNotice error={failure} />}

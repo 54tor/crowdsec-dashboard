@@ -1,11 +1,15 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { BanRequest } from '@/api/types'
 import { banIp } from '@/api/writeApi'
+import { EngineTargetNote } from '@/components/EngineTargetNote'
+import { EngineTargetSelect } from '@/components/EngineTargetSelect'
 import { FormField } from '@/components/FormField'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useEngineTarget } from '@/hooks/useEngineTarget'
 import { usePendingReport } from '@/hooks/usePendingReport'
 import { validateBanDuration, validateBanReason, validateBanTarget } from '@/lib/banValidation'
 
@@ -23,7 +27,8 @@ export function BanForm({ onBanned, onClose, reportPending }: BanFormProps) {
   const [target, setTarget] = useState('')
   const [duration, setDuration] = useState(DEFAULT_DURATION)
   const [reason, setReason] = useState('')
-  const ban = useMutation({ mutationFn: banIp, onSuccess: () => onBanned(target) })
+  const [engineName, setEngineName] = useEngineTarget()
+  const ban = useMutation({ mutationFn: (banRequest: BanRequest) => banIp(banRequest, engineName), onSuccess: () => onBanned(target) })
   usePendingReport(ban.isPending, reportPending)
 
   const targetError = target === '' ? null : validateBanTarget(target)
@@ -44,6 +49,8 @@ export function BanForm({ onBanned, onClose, reportPending }: BanFormProps) {
         <DialogTitle>{t('ban.title')}</DialogTitle>
         <DialogDescription>{t('ban.description')}</DialogDescription>
       </DialogHeader>
+      <EngineTargetSelect id="ban-engine" value={engineName} disabled={ban.isPending} onChange={setEngineName} />
+      <EngineTargetNote engineName={engineName} />
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField
           id="ban-ip"

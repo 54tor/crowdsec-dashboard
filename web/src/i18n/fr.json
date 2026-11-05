@@ -216,8 +216,9 @@
     "sidecar_clock_skew": "Les horloges du tableau de bord et du sidecar sont trop décalées.",
     "sidecar_command_refused": "Le sidecar a refusé cette commande.",
     "sidecar_no_next_key": "Aucune clé suivante n'est en attente.",
-    "engine_has_no_sidecar": "Ce moteur n'a pas de sidecar.",
-    "sidecar_busy": "Le sidecar est occupé. Réessayez dans un instant."
+    "engine_has_no_sidecar": "Ce moteur n'a pas de sidecar utilisable : il reste en lecture seule.",
+    "sidecar_busy": "Le sidecar est occupé. Réessayez dans un instant.",
+    "engine_target_mismatch": "Le tableau de bord a résolu un autre moteur que celui demandé : rien n'a été exécuté."
   },
   "filters": {
     "q": "Rechercher",
@@ -415,7 +416,7 @@
   "ban": {
     "open": "Bannir une IP",
     "title": "Bannir une adresse IP",
-    "description": "Crée une décision de bannissement manuelle sur l'API locale CrowdSec.",
+    "description": "Crée une décision de bannissement manuelle sur le moteur cible.",
     "ip": "Adresse IP ou CIDR",
     "duration": "Durée",
     "durationHint": "Un nombre suivi de s, m, h ou d (ex. 24h).",
@@ -943,7 +944,7 @@
     "intro": "Listes d'autorisation des moteurs : le moteur ignore les adresses et plages listées. Le ban manuel et la synchronisation refusent toute cible en liste d'autorisation.",
     "configNote": "Les whitelists de parseurs et de postoverflow du moteur local sont affichées en lecture seule sur la <configLink>page Configuration</configLink>.",
     "engine": "Moteur",
-    "readOnly": "Lecture seule : le tableau de bord n'écrit que les listes d'autorisation du moteur local, la LAPI d'un moteur distant ne permet pas de les écrire.",
+    "readOnly": "Lecture seule : ce moteur n'a pas de sidecar utilisable ; le moteur local et les moteurs dotés d'un sidecar peuvent être modifiés",
     "truncated": "Plus de 10 000 entrées ou réponse de plus de 4 Mio (rien n'est listé) : ban manuel et synchronisation refusés sur ce moteur par sécurité.",
     "refreshFailed": "La modification est écrite, mais les listes d'autorisation n'ont pas pu être relues ou la liste est trop grande pour être vérifiée : rechargez la page pour voir l'état actuel.",
     "empty": "Aucune liste d'autorisation sur ce moteur.",
@@ -1043,5 +1044,10 @@
     "noResult": "Aucun résultat",
     "typeMore": "Saisissez au moins 3 caractères pour chercher dans les alertes et décisions",
     "searchError": "La recherche dans les alertes et décisions a échoué."
+  },
+  "engineTarget": {
+    "label": "Moteur cible",
+    "hint": "Le moteur local et les moteurs dotés d'un sidecar.",
+    "note": "Moteur cible :"
   }
 }

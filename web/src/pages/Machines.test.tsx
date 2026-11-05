@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
-import { makeHealth, makeMachine } from '@/test/fixtures'
+import { makeMachine } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
 import { prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
@@ -13,7 +13,7 @@ function machineRoutes(extraRoutes = {}) {
   const machines = [makeMachine({ machine_id: 'machine-one' }), makeMachine({ machine_id: 'machine-two', is_validated: false })]
   return {
     'GET /api/auth/me': SESSION_OK,
-    'GET /api/health': { status: 200, body: makeHealth({ machines }) },
+    'GET /api/machines': { status: 200, body: { items: machines } },
     ...extraRoutes,
   }
 }
@@ -31,7 +31,7 @@ describe('machines page', () => {
     await user.click(screen.getByRole('button', { name: 'Validate machine-two' }))
 
     await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/machines/machine-two/validate')).toHaveLength(1))
-    await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/health').length).toBeGreaterThan(1))
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/machines').length).toBeGreaterThan(1))
   })
 
   it('filtersMachinesByAnyDisplayedText', async () => {
@@ -73,7 +73,7 @@ describe('machines page', () => {
 
   it('selfMachineShowsBadgeNoStaleAndDisabledDelete', async () => {
     const machines = [makeMachine({ machine_id: 'dashboard-machine', last_heartbeat: null, self: true }), makeMachine({ machine_id: 'machine-two' })]
-    stubFetch(machineRoutes({ 'GET /api/health': { status: 200, body: makeHealth({ machines }) } }))
+    stubFetch(machineRoutes({ 'GET /api/machines': { status: 200, body: { items: machines } } }))
     renderApp('/machines')
 
     const selfRow = (await screen.findByText('dashboard-machine')).closest('tr') as HTMLElement

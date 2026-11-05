@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
-import { makeAlert, makeBouncer, makeDecision, makeHealth, makeHubItem, makeMachine, makePage } from '@/test/fixtures'
+import { makeAlert, makeBouncer, makeDecision, makeHubItem, makeMachine, makePage } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
 import { prepareEnglishApp } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
@@ -14,10 +14,8 @@ const ADMIN_SESSION = { status: 200, body: { status: 'authenticated', account_na
 const UNKNOWN_ROLE_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'carol' } }
 const READ_ONLY_SESSION = { status: 200, body: { status: 'authenticated', account_name: 'bob', account_role: 'read_only' } }
 
-const HEALTH = makeHealth({
-  bouncers: [makeBouncer({ name: 'firewall-one' })],
-  machines: [makeMachine({ machine_id: 'machine-one', self: false, is_validated: false })],
-})
+const BOUNCERS = [makeBouncer({ name: 'firewall-one' })]
+const MACHINES = [makeMachine({ machine_id: 'machine-one', self: false, is_validated: false })]
 
 function readRoutes(session: { status: number; body: object }) {
   return {
@@ -25,7 +23,8 @@ function readRoutes(session: { status: number; body: object }) {
     'GET /api/decisions?page=1&per_page=20': { status: 200, body: makePage([makeDecision({ id: 10, alert_id: 1 })]) },
     'GET /api/alerts?page=1&per_page=20': { status: 200, body: makePage([makeAlert({ id: 42, uuid: 'UUID-42' })]) },
     'GET /api/alerts?page=1&per_page=100': { status: 200, body: makePage([makeAlert({ id: 42, uuid: 'UUID-42' })], { per_page: 100 }) },
-    'GET /api/health': { status: 200, body: HEALTH },
+    'GET /api/bouncers': { status: 200, body: { items: BOUNCERS } },
+    'GET /api/machines': { status: 200, body: { items: MACHINES } },
     'GET /api/hub': { status: 200, body: [makeHubItem({ type: 'collections', name: 'crowdsecurity/linux' })] },
   }
 }

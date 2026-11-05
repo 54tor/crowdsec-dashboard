@@ -5,13 +5,14 @@ import { createBouncer, deleteBouncer } from '@/api/writeApi'
 import { ClientFilterField } from '@/components/ClientFilterField'
 import { ClientFilterResults } from '@/components/ClientFilterResults'
 import { CreateSecretDialog } from '@/components/CreateSecretDialog'
-import { HealthPageSection } from '@/components/HealthPageSection'
+import { EngineListSection } from '@/components/EngineListSection'
 import { BouncersTable, type RowActions } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { WriteOnly } from '@/components/WriteOnly'
 import { useCanWrite } from '@/hooks/useCanWrite'
 import { useClientFilter } from '@/hooks/useClientFilter'
-import { HEALTH_QUERY_KEY } from '@/hooks/useReadResources'
+import { useEngineTarget } from '@/hooks/useEngineTarget'
+import { BOUNCERS_QUERY_KEY, HEALTH_QUERY_KEY, useBouncers } from '@/hooks/useReadResources'
 
 interface FilteredBouncersProps {
   bouncers: Bouncer[]
@@ -46,6 +47,9 @@ function FilteredBouncers({ bouncers, now, actions }: FilteredBouncersProps) {
 export function Bouncers() {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
+  const [engineName, setEngineName] = useEngineTarget()
+  const bouncersQuery = useBouncers(engineName)
+  const invalidatedKeys = useMemo(() => [[...BOUNCERS_QUERY_KEY, engineName], HEALTH_QUERY_KEY], [engineName])
   const actions = useMemo(
     () => canWrite ? ({
       header: t('bouncers.actions'),
@@ -56,12 +60,13 @@ export function Bouncers() {
           title={t('bouncers.deleteTitle', { name: bouncer.name })}
           description={t('bouncers.deleteDescription', { name: bouncer.name })}
           target={bouncer.name}
-          request={(confirm) => deleteBouncer(bouncer.name, confirm)}
-          invalidates={[HEALTH_QUERY_KEY]}
+          engineName={engineName}
+          request={(confirm) => deleteBouncer(bouncer.name, confirm, engineName)}
+          invalidates={invalidatedKeys}
         />
       ),
     }) : undefined,
-    [t, canWrite],
+    [t, canWrite, engineName, invalidatedKeys],
   )
   const labels = {
     title: t('bouncers.addTitle'),
@@ -70,21 +75,25 @@ export function Bouncers() {
     secretLabel: t('bouncers.secretLabel'),
   }
   return (
-    <HealthPageSection
-      titleKey="bouncers.title"
-      degradedPart="bouncers"
-      hasRows={(report) => report.bouncers.length > 0}
+    <EngineListSection
+      title={t('bouncers.title')}
+      selectId="bouncers-engine"
+      engineName={engineName}
+      onEngineChange={setEngineName}
+      query={bouncersQuery}
       toolbar={
         <WriteOnly>
           <CreateSecretDialog
             triggerLabel={t('bouncers.add')}
             labels={labels}
-            createSecret={async (name) => (await createBouncer(name)).key}
+            engineName={engineName}
+            invalidates={invalidatedKeys}
+            createSecret={async (name) => (await createBouncer(name, engineName)).key}
           />
         </WriteOnly>
       }
     >
-      {(report, now) => <FilteredBouncers bouncers={report.bouncers} now={now} actions={actions} />}
-    </HealthPageSection>
+      {(bouncers, now) => <FilteredBouncers bouncers={bouncers} now={now} actions={actions} />}
+    </EngineListSection>
   )
 }

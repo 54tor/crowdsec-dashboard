@@ -180,6 +180,20 @@ describe('allowlists page', () => {
     expect(screen.queryByRole('button', { name: en.allowlists.addEntryLabel.replace('{{name}}', 'trusted') })).not.toBeInTheDocument()
   })
 
+  // A remote engine with a sidecar answers writable:true: the page shows the write controls there.
+  it("affiche les actions d'écriture pour un moteur distant doté d'un sidecar", async () => {
+    stubFetch(allowlistRoutes({ [`GET ${REMOTE_LISTING_URL}`]: makeListing('remote-one', [TRUSTED_ALLOWLIST]) }))
+    const user = userEvent.setup()
+    renderApp('/allowlists')
+
+    await screen.findByRole('option', { name: 'remote-one' })
+    await user.selectOptions(screen.getByLabelText(en.allowlists.engine), 'remote-one')
+
+    expect(await screen.findByRole('button', { name: en.allowlists.addEntryLabel.replace('{{name}}', 'trusted') })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: en.allowlists.create })).toBeInTheDocument()
+    expect(screen.queryByText(en.allowlists.readOnly)).not.toBeInTheDocument()
+  })
+
   it('affiche le bandeau de troncature', async () => {
     stubFetch(allowlistRoutes({ [`GET ${LOCAL_LISTING_URL}`]: makeListing('local', [TRUSTED_ALLOWLIST], { truncated: true }) }))
     renderApp('/allowlists')

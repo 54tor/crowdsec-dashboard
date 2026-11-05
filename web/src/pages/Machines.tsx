@@ -5,7 +5,7 @@ import { createMachine, deleteMachine } from '@/api/writeApi'
 import { ClientFilterField } from '@/components/ClientFilterField'
 import { ClientFilterResults } from '@/components/ClientFilterResults'
 import { CreateSecretDialog } from '@/components/CreateSecretDialog'
-import { HealthPageSection } from '@/components/HealthPageSection'
+import { EngineListSection } from '@/components/EngineListSection'
 import { MachinesTable, type RowActions } from '@/components/HealthTables'
 import { RowDeleteAction } from '@/components/RowDeleteAction'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,8 @@ import { ValidateMachineButton } from '@/components/ValidateMachineButton'
 import { WriteOnly } from '@/components/WriteOnly'
 import { useCanWrite } from '@/hooks/useCanWrite'
 import { useClientFilter } from '@/hooks/useClientFilter'
-import { HEALTH_QUERY_KEY } from '@/hooks/useReadResources'
+import { useEngineTarget } from '@/hooks/useEngineTarget'
+import { HEALTH_QUERY_KEY, MACHINES_QUERY_KEY, useMachines } from '@/hooks/useReadResources'
 
 interface FilteredMachinesProps {
   machines: Machine[]
@@ -51,12 +52,15 @@ function FilteredMachines({ machines, now, actions }: FilteredMachinesProps) {
 export function Machines() {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
+  const [engineName, setEngineName] = useEngineTarget()
+  const machinesQuery = useMachines(engineName)
+  const invalidatedKeys = useMemo(() => [[...MACHINES_QUERY_KEY, engineName], HEALTH_QUERY_KEY], [engineName])
   const actions = useMemo(
     () => canWrite ? ({
       header: t('machines.actions'),
       cell: (machine: Machine) => (
         <div className="flex flex-wrap items-start gap-2">
-          {!machine.is_validated && <ValidateMachineButton machineId={machine.machine_id} />}
+          {!machine.is_validated && <ValidateMachineButton machineId={machine.machine_id} engineName={engineName} />}
           {machine.self ? (
             <div className="flex flex-col gap-1">
               <Button
@@ -80,14 +84,15 @@ export function Machines() {
               title={t('machines.deleteTitle', { name: machine.machine_id })}
               description={t('machines.deleteDescription', { name: machine.machine_id })}
               target={machine.machine_id}
-              request={(confirm) => deleteMachine(machine.machine_id, confirm)}
-              invalidates={[HEALTH_QUERY_KEY]}
+              engineName={engineName}
+              request={(confirm) => deleteMachine(machine.machine_id, confirm, engineName)}
+              invalidates={invalidatedKeys}
             />
           )}
         </div>
       ),
     }) : undefined,
-    [t, canWrite],
+    [t, canWrite, engineName, invalidatedKeys],
   )
   const labels = {
     title: t('machines.addTitle'),
@@ -96,21 +101,25 @@ export function Machines() {
     secretLabel: t('machines.secretLabel'),
   }
   return (
-    <HealthPageSection
-      titleKey="machines.title"
-      degradedPart="machines"
-      hasRows={(report) => report.machines.length > 0}
+    <EngineListSection
+      title={t('machines.title')}
+      selectId="machines-engine"
+      engineName={engineName}
+      onEngineChange={setEngineName}
+      query={machinesQuery}
       toolbar={
         <WriteOnly>
           <CreateSecretDialog
             triggerLabel={t('machines.add')}
             labels={labels}
-            createSecret={async (name) => (await createMachine(name)).password}
+            engineName={engineName}
+            invalidates={invalidatedKeys}
+            createSecret={async (name) => (await createMachine(name, engineName)).password}
           />
         </WriteOnly>
       }
     >
-      {(report, now) => <FilteredMachines machines={report.machines} now={now} actions={actions} />}
-    </HealthPageSection>
+      {(machines, now) => <FilteredMachines machines={machines} now={now} actions={actions} />}
+    </EngineListSection>
   )
 }

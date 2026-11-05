@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
-import { makeBouncer, makeHealth, makeMachine } from '@/test/fixtures'
+import { makeBouncer, makeMachine } from '@/test/fixtures'
 import { stubFetch, type RouteTable } from '@/test/fetchStub'
 import { setViewportWidth } from '@/test/matchMedia'
 import { prepareEnglishApp } from '@/test/pageHarness'
@@ -57,13 +57,8 @@ function makeAllowlistListing(consoleManaged: boolean) {
 function managementRoutes(extraRoutes: RouteTable = {}): RouteTable {
   return {
     'GET /api/auth/me': ADMIN_SESSION,
-    'GET /api/health': {
-      status: 200,
-      body: makeHealth({
-        bouncers: [makeBouncer({ name: 'firewall-one' })],
-        machines: [makeMachine({ machine_id: 'remote-agent' }), makeMachine({ machine_id: 'dashboard-self', self: true })],
-      }),
-    },
+    'GET /api/bouncers': { status: 200, body: { items: [makeBouncer({ name: 'firewall-one' })] } },
+    'GET /api/machines': { status: 200, body: { items: [makeMachine({ machine_id: 'remote-agent' }), makeMachine({ machine_id: 'dashboard-self', self: true })] } },
     'GET /api/tokens': { status: 200, body: [EXISTING_TOKEN] },
     'GET /api/accounts': { status: 200, body: [EXISTING_ACCOUNT] },
     'GET /api/account/access-rules': ACCESS_RULES_WITH_ONE_RULE,

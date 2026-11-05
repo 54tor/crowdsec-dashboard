@@ -1,22 +1,24 @@
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { reloadCrowdsec } from '@/api/writeApi'
+import { EngineTargetNote } from '@/components/EngineTargetNote'
 import { Icon } from '@/components/Icon'
 import { ErrorNotice, WarningNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
 
-export function ReloadBanner() {
+export function ReloadBanner({ engineName }: { engineName: string }) {
   const { t } = useTranslation()
   const { isReloadRequired, clearReloadRequired } = useReloadRequired()
-  const reload = useMutation({ mutationFn: reloadCrowdsec, onSuccess: clearReloadRequired })
-  if (!isReloadRequired) {
+  const reload = useMutation({ mutationFn: () => reloadCrowdsec(engineName), onSuccess: () => clearReloadRequired(engineName) })
+  if (!isReloadRequired(engineName)) {
     return null
   }
   return (
     <div className="space-y-2">
       <WarningNotice title={t('hub.reloadRequired')}>
         <p>{t('hub.reloadHint')}</p>
+        <EngineTargetNote engineName={engineName} />
         <Button type="button" size="sm" className="mt-2" disabled={reload.isPending} onClick={() => reload.mutate()}>
           {reload.isPending && <Icon name="progress_activity" className="size-4 motion-safe:animate-spin" />}
           {reload.isPending ? t('dialog.working') : t('hub.reload')}

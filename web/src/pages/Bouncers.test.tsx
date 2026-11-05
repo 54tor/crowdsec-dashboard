@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import en from '@/i18n/en.json'
-import { makeBouncer, makeHealth } from '@/test/fixtures'
+import { makeBouncer } from '@/test/fixtures'
 import { stubFetch } from '@/test/fetchStub'
 import { holdPostRequests, prepareEnglishApp, requestsTo, SESSION_OK } from '@/test/pageHarness'
 import { renderApp } from '@/test/renderApp'
@@ -12,7 +12,7 @@ const FAKE_KEY = 'fake-bouncer-key-for-tests'
 function bouncerRoutes(extraRoutes = {}) {
   return {
     'GET /api/auth/me': SESSION_OK,
-    'GET /api/health': { status: 200, body: makeHealth({ bouncers: [makeBouncer({ name: 'firewall-one' })] }) },
+    'GET /api/bouncers': { status: 200, body: { items: [makeBouncer({ name: 'firewall-one' })] } },
     ...extraRoutes,
   }
 }
@@ -35,7 +35,7 @@ describe('bouncers page', () => {
   beforeEach(prepareEnglishApp)
   afterEach(() => vi.unstubAllGlobals())
 
-  it('listsBouncersFromHealth', async () => {
+  it('listsBouncersOfTheLocalEngine', async () => {
     stubFetch(bouncerRoutes())
     renderApp('/bouncers')
 
@@ -44,7 +44,7 @@ describe('bouncers page', () => {
 
   it('filtersBouncersByAnyDisplayedText', async () => {
     const bouncers = [makeBouncer({ name: 'firewall-one' }), makeBouncer({ name: 'nginx-one', type: 'crowdsec-nginx-bouncer', ip_address: '203.0.113.31' })]
-    stubFetch(bouncerRoutes({ 'GET /api/health': { status: 200, body: makeHealth({ bouncers }) } }))
+    stubFetch(bouncerRoutes({ 'GET /api/bouncers': { status: 200, body: { items: bouncers } } }))
     const user = userEvent.setup()
     renderApp('/bouncers')
     await screen.findByText('nginx-one', { selector: 'td' })
@@ -74,7 +74,7 @@ describe('bouncers page', () => {
 
   // An empty list has nothing to make denser.
   it('densityToggleHiddenWithoutBouncers', async () => {
-    stubFetch(bouncerRoutes({ 'GET /api/health': { status: 200, body: makeHealth() } }))
+    stubFetch(bouncerRoutes({ 'GET /api/bouncers': { status: 200, body: { items: [] } } }))
     renderApp('/bouncers')
 
     await screen.findByText(en.health.noBouncers)
@@ -99,7 +99,7 @@ describe('bouncers page', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(document.body.innerHTML).not.toContain(FAKE_KEY)
     expect(everythingStoredInBrowser(queryClient)).not.toContain(FAKE_KEY)
-    await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/health').length).toBeGreaterThan(1))
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/bouncers').length).toBeGreaterThan(1))
   })
 
   it('createSecretDialogCannotBeClosedWhilePending', async () => {
@@ -187,6 +187,6 @@ describe('bouncers page', () => {
 
     await waitFor(() => expect(requestsTo(fetchMock, 'DELETE', '/api/bouncers/firewall-one')).toHaveLength(1))
     expect(requestsTo(fetchMock, 'DELETE', '/api/bouncers/firewall-one')[0].body).toBe('{"confirm":"firewall-one"}')
-    await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/health').length).toBeGreaterThan(1))
+    await waitFor(() => expect(requestsTo(fetchMock, 'GET', '/api/bouncers').length).toBeGreaterThan(1))
   })
 })

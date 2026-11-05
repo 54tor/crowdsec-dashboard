@@ -24,15 +24,15 @@ describe('health, metrics, config and hub layout', () => {
     const recentContact = new Date(Date.now() - ONE_MINUTE_MILLISECONDS).toISOString()
     stubFetch({
       'GET /api/auth/me': SESSION_OK,
-      'GET /api/health': {
+      'GET /api/bouncers': {
         status: 200,
-        body: makeHealth({
-          bouncers: [
+        body: {
+          items: [
             makeBouncer({ name: 'fresh-bouncer', last_pull: recentContact }),
             makeBouncer({ name: 'stale-bouncer', last_pull: '2020-01-01T00:00:00Z' }),
             makeBouncer({ name: 'revoked-bouncer', last_pull: recentContact, revoked: true }),
           ],
-        }),
+        },
       },
     })
     renderApp('/bouncers')

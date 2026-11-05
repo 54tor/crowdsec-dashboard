@@ -20,7 +20,8 @@ import { deleteDecision } from '@/api/writeApi'
 import { PAGE_SIZE, usePagedList } from '@/hooks/usePagedList'
 import { useListControls } from '@/hooks/useListControls'
 import { formatDateTimeToMinute } from '@/lib/format'
-import { isLiveLocalRow } from '@/lib/liveRow'
+import { useIsWritableEngine } from '@/hooks/useEngineTarget'
+import { engineOfRow, isRowWritableOnItsEngine } from '@/lib/liveRow'
 
 function decisionRowKey(decision: Decision): string {
   const archiveDecisionId = decision.archive_decision_id ?? null
@@ -34,6 +35,7 @@ export function Decisions() {
   const { t, i18n } = useTranslation()
   const controls = useListControls()
   const canWrite = useCanWrite()
+  const isWritableEngine = useIsWritableEngine()
   const [includeExpired, setIncludeExpired] = useState(false)
   const query = usePagedList<Decision>('decisions', controls.filters, controls.page, PAGE_SIZE, controls.isReadyToQuery, includeExpired)
   const includeExpiredFilterCount = includeExpired ? 1 : 0
@@ -88,7 +90,7 @@ export function Decisions() {
         header: t('decisions.actions'),
         mobile: 'actions',
         cell: (decision) =>
-          isLiveLocalRow(decision) ? (
+          isRowWritableOnItsEngine(decision, isWritableEngine) ? (
             <RowDeleteAction
               buttonLabel={t('decisions.unban')}
               ariaLabel={t('decisions.unbanAria', { target: decision.value })}
@@ -96,13 +98,14 @@ export function Decisions() {
               description={t('decisions.unbanDescription', { id: decision.id, target: decision.value })}
               target={decision.value}
               confirmValue={String(decision.id)}
-              request={(confirm) => deleteDecision(String(decision.id), decision.scope, decision.value, confirm)}
+              engineName={engineOfRow(decision)}
+              request={(confirm) => deleteDecision(String(decision.id), decision.scope, decision.value, confirm, engineOfRow(decision))}
               invalidates={[['decisions'], ['alerts']]}
             />
           ) : null,
       }] satisfies DataTableColumn<Decision>[]) : []),
     ],
-    [t, i18n.language, canWrite],
+    [t, i18n.language, canWrite, isWritableEngine],
   )
 
   return (

@@ -3,19 +3,19 @@ import { HUB_QUERY_KEY } from '@/hooks/useReadResources'
 import { isTimeoutError } from '@/lib/apiErrors'
 import { useReloadRequired } from '@/hooks/useReloadRequired'
 
-export function useHubMutation<Variables = void>(mutationFn: (variables: Variables) => Promise<unknown>, onDone?: () => void) {
+export function useHubMutation<Variables = void>(engineName: string, mutationFn: (variables: Variables) => Promise<unknown>, onDone?: () => void) {
   const queryClient = useQueryClient()
   const { markReloadRequired } = useReloadRequired()
   return useMutation({
     mutationFn,
     onSuccess: () => {
-      markReloadRequired()
-      void queryClient.invalidateQueries({ queryKey: HUB_QUERY_KEY })
+      markReloadRequired(engineName)
+      void queryClient.invalidateQueries({ queryKey: [...HUB_QUERY_KEY, engineName] })
       onDone?.()
     },
     onError: (failure) => {
       if (isTimeoutError(failure)) {
-        markReloadRequired()
+        markReloadRequired(engineName)
       }
     },
   })

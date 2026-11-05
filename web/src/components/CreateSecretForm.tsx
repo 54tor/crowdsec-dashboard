@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { EngineTargetNote } from '@/components/EngineTargetNote'
 import { FormField } from '@/components/FormField'
 import { ErrorNotice } from '@/components/Notice'
 import { SecretReveal } from '@/components/SecretReveal'
@@ -17,13 +18,14 @@ export interface CreateSecretLabels {
 
 interface CreateSecretFormProps {
   labels: CreateSecretLabels
+  engineName: string
   createSecret: (name: string) => Promise<string>
   onCreated: () => void
   onClose: () => void
   reportPending: (isPending: boolean) => void
 }
 
-export function CreateSecretForm({ labels, createSecret, onCreated, onClose, reportPending }: CreateSecretFormProps) {
+export function CreateSecretForm({ labels, engineName, createSecret, onCreated, onClose, reportPending }: CreateSecretFormProps) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [secret, setSecret] = useState<string | null>(null)
@@ -64,6 +66,7 @@ export function CreateSecretForm({ labels, createSecret, onCreated, onClose, rep
         <DialogTitle>{labels.title}</DialogTitle>
         <DialogDescription>{labels.description}</DialogDescription>
       </DialogHeader>
+      <EngineTargetNote engineName={engineName} />
       {secret === null ? (
         <FormField
           id="create-secret-name"

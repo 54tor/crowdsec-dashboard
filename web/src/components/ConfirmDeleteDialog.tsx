@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { EngineTargetNote } from '@/components/EngineTargetNote'
 import { FormField } from '@/components/FormField'
 import { ErrorNotice } from '@/components/Notice'
 import { PendingLockDialog } from '@/components/PendingLockDialog'
@@ -15,6 +16,7 @@ export interface ConfirmDeleteDialogProps {
   description: string
   target: string
   confirmValue?: string
+  engineName?: string
   submitLabel: string
   request: (confirm: string) => Promise<unknown>
   onDeleted: () => void
@@ -24,7 +26,7 @@ export interface ConfirmDeleteDialogProps {
   onCloseAutoFocus?: (closeFocusEvent: Event) => void
 }
 
-function ConfirmDeleteForm({ title, description, target, confirmValue, submitLabel, request, onDeleted, onFailed, onClose, reportPending }: Omit<ConfirmDeleteDialogProps, 'open' | 'trigger' | 'onOpen' | 'onCloseAutoFocus'> & { reportPending: (isPending: boolean) => void }) {
+function ConfirmDeleteForm({ title, description, target, confirmValue, engineName, submitLabel, request, onDeleted, onFailed, onClose, reportPending }: Omit<ConfirmDeleteDialogProps, 'open' | 'trigger' | 'onOpen' | 'onCloseAutoFocus'> & { reportPending: (isPending: boolean) => void }) {
   const { t } = useTranslation()
   const [typedTarget, setTypedTarget] = useState('')
   const deletion = useMutation({ mutationFn: request, onSuccess: onDeleted, onError: onFailed })
@@ -44,6 +46,7 @@ function ConfirmDeleteForm({ title, description, target, confirmValue, submitLab
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
+      {engineName !== undefined && <EngineTargetNote engineName={engineName} />}
       <FormField
         id="confirm-delete-target"
         label={t('confirmDelete.label', { target })}
@@ -78,6 +81,7 @@ export function ConfirmDeleteDialog(props: ConfirmDeleteDialogProps) {
           description={props.description}
           target={props.target}
           confirmValue={props.confirmValue}
+          engineName={props.engineName}
           submitLabel={props.submitLabel}
           request={props.request}
           onDeleted={props.onDeleted}

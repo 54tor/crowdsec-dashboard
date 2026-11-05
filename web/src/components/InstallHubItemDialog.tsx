@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { installHubItem, type HubItemKind } from '@/api/writeApi'
 import { FormField } from '@/components/FormField'
 import { HubKindSelect } from '@/components/HubKindSelect'
+import { EngineTargetNote } from '@/components/EngineTargetNote'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
 import { PendingLockDialog } from '@/components/PendingLockDialog'
@@ -16,8 +17,6 @@ interface HubInstallRequest {
   name: string
 }
 
-const installRequested = ({ kind, name }: HubInstallRequest) => installHubItem(kind, name)
-
 function AppSecHelp() {
   const { t } = useTranslation()
   return (
@@ -28,11 +27,18 @@ function AppSecHelp() {
   )
 }
 
-function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; onClose: () => void; reportPending: (isPending: boolean) => void }) {
+interface InstallFormProps {
+  engineName: string
+  onDone: () => void
+  onClose: () => void
+  reportPending: (isPending: boolean) => void
+}
+
+function InstallForm({ engineName, onDone, onClose, reportPending }: InstallFormProps) {
   const { t } = useTranslation()
   const [kind, setKind] = useState<HubItemKind>('collections')
   const [name, setName] = useState('')
-  const installation = useHubMutation(installRequested, onDone)
+  const installation = useHubMutation(engineName, ({ kind, name }: HubInstallRequest) => installHubItem(kind, name, engineName), onDone)
   usePendingReport(installation.isPending, reportPending)
   const nameError = name === '' ? null : validateHubName(name)
   const isValid = name !== '' && !nameError
@@ -50,6 +56,7 @@ function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; o
         <DialogTitle>{t('hub.installTitle')}</DialogTitle>
         <DialogDescription>{t('hub.installDescription')}</DialogDescription>
       </DialogHeader>
+      <EngineTargetNote engineName={engineName} />
       <HubKindSelect value={kind} disabled={installation.isPending} onChange={setKind} />
       <FormField
         id="install-hub-item-name"
@@ -72,12 +79,12 @@ function InstallForm({ onDone, onClose, reportPending }: { onDone: () => void; o
   )
 }
 
-export function InstallHubItemDialog() {
+export function InstallHubItemDialog({ engineName }: { engineName: string }) {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   return (
     <PendingLockDialog open={isOpen} onOpenChange={setIsOpen} trigger={<Button type="button">{t('hub.install')}</Button>}>
-      {(reportPending) => <InstallForm onDone={() => setIsOpen(false)} onClose={() => setIsOpen(false)} reportPending={reportPending} />}
+      {(reportPending) => <InstallForm engineName={engineName} onDone={() => setIsOpen(false)} onClose={() => setIsOpen(false)} reportPending={reportPending} />}
     </PendingLockDialog>
   )
 }

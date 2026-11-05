@@ -216,8 +216,9 @@
     "sidecar_clock_skew": "The clocks of the dashboard and the sidecar differ too much.",
     "sidecar_command_refused": "The sidecar refused this command.",
     "sidecar_no_next_key": "No next key is staged.",
-    "engine_has_no_sidecar": "This engine has no sidecar.",
-    "sidecar_busy": "The sidecar is busy. Try again in a moment."
+    "engine_has_no_sidecar": "This engine has no usable sidecar: it stays read-only.",
+    "sidecar_busy": "The sidecar is busy. Try again in a moment.",
+    "engine_target_mismatch": "The dashboard resolved another engine than the one requested: nothing was run."
   },
   "filters": {
     "q": "Search",
@@ -415,7 +416,7 @@
   "ban": {
     "open": "Ban IP",
     "title": "Ban an IP address",
-    "description": "Create a manual ban decision on the CrowdSec local API.",
+    "description": "Create a manual ban decision on the target engine.",
     "ip": "IP address or CIDR",
     "duration": "Duration",
     "durationHint": "A number followed by s, m, h or d (e.g. 24h).",
@@ -943,7 +944,7 @@
     "intro": "Engine allowlists: the engine ignores the listed addresses and ranges. Manual bans and synchronization refuse every allowlisted target.",
     "configNote": "Parser and postoverflow whitelists of the local engine are shown read-only on the <configLink>Config page</configLink>.",
     "engine": "Engine",
-    "readOnly": "Read-only: the dashboard can only write the allowlists of the local engine, the LAPI of a remote engine does not allow writing them.",
+    "readOnly": "Read-only: this engine has no usable sidecar; the local engine and engines with a sidecar can be written",
     "truncated": "More than 10,000 entries or an answer larger than 4 MiB (nothing listed): manual bans and synchronization are refused on this engine as a precaution.",
     "refreshFailed": "The change was written, but the allowlists could not be read again or the list is too large to verify: reload the page to see the current state.",
     "empty": "No allowlist on this engine.",
@@ -1043,5 +1044,10 @@
     "noResult": "No result",
     "typeMore": "Type at least 3 characters to search alerts and decisions",
     "searchError": "Alerts and decisions could not be searched."
+  },
+  "engineTarget": {
+    "label": "Target engine",
+    "hint": "The local engine and the engines with a sidecar.",
+    "note": "Target engine:"
   }
 }

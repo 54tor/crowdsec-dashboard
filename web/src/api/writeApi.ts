@@ -1,4 +1,5 @@
 import { ApiError, apiFetch } from '@/api/client'
+import { withEngine } from '@/api/engineQuery'
 import type { BanRequest, CreatedBouncer, CreatedMachine } from '@/api/types'
 
 interface StatusResponse {
@@ -23,26 +24,30 @@ function encodeSegments(name: string): string {
   return segments.map(encodeURIComponent).join('/')
 }
 
-export const banIp = (ban: BanRequest) => sendJson<StatusResponse>('POST', '/api/decisions', ban)
-export const deleteDecision = (decisionId: string, scope: string, value: string, confirm: string) =>
-  deleteConfirmed(`/api/decisions/${encodeURIComponent(decisionId)}?${new URLSearchParams({ scope, value })}`, confirm)
-export const deleteAlert = (alertId: string, uuid: string, confirm: string) =>
-  deleteConfirmed(`/api/alerts/${encodeURIComponent(alertId)}?${new URLSearchParams({ uuid: uuid.toLowerCase() })}`, confirm)
+export const banIp = (ban: BanRequest, engine?: string) => sendJson<StatusResponse>('POST', withEngine('/api/decisions', engine), ban)
+export const deleteDecision = (decisionId: string, scope: string, value: string, confirm: string, engine?: string) =>
+  deleteConfirmed(withEngine(`/api/decisions/${encodeURIComponent(decisionId)}?${new URLSearchParams({ scope, value })}`, engine), confirm)
+export const deleteAlert = (alertId: string, uuid: string, confirm: string, engine?: string) =>
+  deleteConfirmed(withEngine(`/api/alerts/${encodeURIComponent(alertId)}?${new URLSearchParams({ uuid: uuid.toLowerCase() })}`, engine), confirm)
 
-export const createBouncer = (name: string) => sendJson<CreatedBouncer>('POST', '/api/bouncers', { name })
-export const deleteBouncer = (name: string, confirm: string) => deleteConfirmed(`/api/bouncers/${encodeURIComponent(name)}`, confirm)
+export const createBouncer = (name: string, engine?: string) => sendJson<CreatedBouncer>('POST', withEngine('/api/bouncers', engine), { name })
+export const deleteBouncer = (name: string, confirm: string, engine?: string) =>
+  deleteConfirmed(withEngine(`/api/bouncers/${encodeURIComponent(name)}`, engine), confirm)
 
-export const createMachine = (name: string) => sendJson<CreatedMachine>('POST', '/api/machines', { name })
-export const validateMachine = (name: string) => sendJson<StatusResponse>('POST', `/api/machines/${encodeURIComponent(name)}/validate`)
-export const deleteMachine = (name: string, confirm: string) => deleteConfirmed(`/api/machines/${encodeURIComponent(name)}`, confirm)
+export const createMachine = (name: string, engine?: string) => sendJson<CreatedMachine>('POST', withEngine('/api/machines', engine), { name })
+export const validateMachine = (name: string, engine?: string) =>
+  sendJson<StatusResponse>('POST', withEngine(`/api/machines/${encodeURIComponent(name)}/validate`, engine))
+export const deleteMachine = (name: string, confirm: string, engine?: string) =>
+  deleteConfirmed(withEngine(`/api/machines/${encodeURIComponent(name)}`, engine), confirm)
 
-export const updateHub = () => sendJson<StatusResponse>('POST', '/api/hub/update')
-export const upgradeHub = () => sendJson<StatusResponse>('POST', '/api/hub/upgrade')
+export const updateHub = (engine?: string) => sendJson<StatusResponse>('POST', withEngine('/api/hub/update', engine))
+export const upgradeHub = (engine?: string) => sendJson<StatusResponse>('POST', withEngine('/api/hub/upgrade', engine))
 export const HUB_ITEM_KINDS = ['collections', 'appsec-rules', 'appsec-configs'] as const
 export type HubItemKind = (typeof HUB_ITEM_KINDS)[number]
 export const isHubItemKind = (type: string): type is HubItemKind => (HUB_ITEM_KINDS as readonly string[]).includes(type)
-export const installHubItem = (kind: HubItemKind, name: string) => sendJson<StatusResponse>('POST', `/api/hub/${kind}`, { name })
-export const removeHubItem = async (kind: HubItemKind, name: string, confirm: string) =>
-  deleteConfirmed(`/api/hub/${kind}/${encodeSegments(name)}`, confirm)
+export const installHubItem = (kind: HubItemKind, name: string, engine?: string) =>
+  sendJson<StatusResponse>('POST', withEngine(`/api/hub/${kind}`, engine), { name })
+export const removeHubItem = async (kind: HubItemKind, name: string, confirm: string, engine?: string) =>
+  deleteConfirmed(withEngine(`/api/hub/${kind}/${encodeSegments(name)}`, engine), confirm)
 
-export const reloadCrowdsec = () => sendJson<StatusResponse>('POST', '/api/crowdsec/reload')
+export const reloadCrowdsec = (engine?: string) => sendJson<StatusResponse>('POST', withEngine('/api/crowdsec/reload', engine))

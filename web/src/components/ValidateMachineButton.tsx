@@ -3,14 +3,17 @@ import { useTranslation } from 'react-i18next'
 import { validateMachine } from '@/api/writeApi'
 import { ErrorNotice } from '@/components/Notice'
 import { Button } from '@/components/ui/button'
-import { HEALTH_QUERY_KEY } from '@/hooks/useReadResources'
+import { HEALTH_QUERY_KEY, MACHINES_QUERY_KEY } from '@/hooks/useReadResources'
 
-export function ValidateMachineButton({ machineId }: { machineId: string }) {
+export function ValidateMachineButton({ machineId, engineName }: { machineId: string; engineName: string }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const validation = useMutation({
-    mutationFn: () => validateMachine(machineId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: HEALTH_QUERY_KEY }),
+    mutationFn: () => validateMachine(machineId, engineName),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...MACHINES_QUERY_KEY, engineName] })
+      void queryClient.invalidateQueries({ queryKey: HEALTH_QUERY_KEY })
+    },
   })
   return (
     <div className="space-y-1">

@@ -11,6 +11,7 @@ interface RowDeleteActionProps {
   description: string
   target: string
   confirmValue?: string
+  engineName?: string
   request: (confirm: string) => Promise<unknown>
   invalidates: QueryKey[]
   onDeleted?: () => void
@@ -19,7 +20,7 @@ interface RowDeleteActionProps {
   iconOnly?: boolean
 }
 
-export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, request, invalidates, onDeleted, onFailed, disabledReason, iconOnly = false }: RowDeleteActionProps) {
+export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, target, confirmValue, engineName, request, invalidates, onDeleted, onFailed, disabledReason, iconOnly = false }: RowDeleteActionProps) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const hasDeletedRef = useRef(false)
@@ -61,6 +62,7 @@ export function RowDeleteAction({ buttonLabel, ariaLabel, title, description, ta
       description={description}
       target={target}
       confirmValue={confirmValue}
+      engineName={engineName}
       submitLabel={buttonLabel}
       request={request}
       onDeleted={finishDeletion}

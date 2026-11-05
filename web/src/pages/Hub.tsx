@@ -12,6 +12,8 @@ import { WriteOnly } from '@/components/WriteOnly'
 import { ReloadBanner } from '@/components/ReloadBanner'
 import { TableSkeleton } from '@/components/TableSkeleton'
 import { useClientFilter } from '@/hooks/useClientFilter'
+import { EngineTargetSelect } from '@/components/EngineTargetSelect'
+import { useEngineTarget } from '@/hooks/useEngineTarget'
 import { useHub } from '@/hooks/useReadResources'
 
 const NO_HUB_ITEMS: HubItem[] = []
@@ -22,7 +24,8 @@ function hubItemSearchTexts(hubItem: HubItem): string[] {
 
 export function Hub() {
   const { t } = useTranslation()
-  const { data, error, isPending } = useHub()
+  const [engineName, setEngineName] = useEngineTarget()
+  const { data, error, isPending } = useHub(engineName)
   const [selectedType, setSelectedType] = useState('')
   const hubItems = data ?? NO_HUB_ITEMS
 
@@ -37,9 +40,10 @@ export function Hub() {
   return (
     <section className="space-y-4">
       <PageHeader title={t('hub.title')} />
+      <EngineTargetSelect id="hub-engine" value={engineName} onChange={setEngineName} />
       <WriteOnly>
-        <ReloadBanner />
-        <HubToolbar />
+        <ReloadBanner engineName={engineName} />
+        <HubToolbar engineName={engineName} />
       </WriteOnly>
       <HubFilters
         types={types}
@@ -55,7 +59,7 @@ export function Hub() {
       {data && data.length === 0 && <EmptyState message={t('hub.noItems')} />}
       {data && data.length > 0 && (
         <ClientFilterResults visibleCount={visibleItems.length} totalCount={data.length}>
-          <HubTable items={visibleItems} />
+          <HubTable items={visibleItems} engineName={engineName} />
         </ClientFilterResults>
       )}
     </section>
