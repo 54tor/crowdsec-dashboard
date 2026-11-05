@@ -76,9 +76,7 @@ func (handlers healthReportHandlers) get(responseWriter http.ResponseWriter, req
 	if machinesError != nil {
 		report.Degraded = append(report.Degraded, "machines")
 	} else {
-		for machineIndex := range machines {
-			machines[machineIndex].Self = handlers.selfMachineID != "" && machines[machineIndex].MachineID == handlers.selfMachineID
-		}
+		markSelfMachine(machines, handlers.selfMachineID)
 		report.Machines = machines
 	}
 	writeJSON(responseWriter, http.StatusOK, report)

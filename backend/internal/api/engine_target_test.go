@@ -313,3 +313,21 @@ func TestRegistryTargetWithoutExecutorIsRefusedAsSidecarless(testContext *testin
 	}
 	expectError(testContext, recorder, http.StatusConflict, "engine_has_no_sidecar")
 }
+
+// A registry that answers with another engine's target (a stale cache, a
+// renamed engine) must never let the request run on that other engine.
+func TestResolvedTargetOfAnotherEngineIsRefused(testContext *testing.T) {
+	for _, targetedRoute := range engineTargetedRoutes() {
+		testContext.Run(targetedRoute.pattern, func(caseTest *testing.T) {
+			fixture := newEngineTargetFixture(caseTest)
+			fixture.targets.targetsByName[remotePeerBName] = fixture.targets.targetsByName[remotePeerAName]
+
+			response := fixture.send(targetedRoute.method, withEngineParameter(targetedRoute.path, remotePeerBName), targetedRoute.body)
+
+			expectError(caseTest, response, http.StatusConflict, "engine_target_mismatch")
+			if fixture.totalExecutedCommands() != 0 {
+				caseTest.Errorf("nothing may run: local %v, peer-a %v, peer-b %v", fixture.localExecutor.commandNames(), fixture.peerAExecutor.commandNames(), fixture.peerBExecutor.commandNames())
+			}
+		})
+	}
+}

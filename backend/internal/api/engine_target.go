@@ -47,6 +47,10 @@ func remoteTargetOf(responseWriter http.ResponseWriter, targets EngineTargets, e
 		writeError(responseWriter, http.StatusConflict, "engine_has_no_sidecar")
 		return engines.Target{}, false, false
 	}
+	if target.Engine.Name != engineName {
+		writeError(responseWriter, http.StatusConflict, "engine_target_mismatch")
+		return engines.Target{}, false, false
+	}
 	isRemoteWithExecutor := !target.Engine.IsLocal && target.Executor != nil
 	if !isRemoteWithExecutor {
 		writeError(responseWriter, http.StatusConflict, "engine_has_no_sidecar")

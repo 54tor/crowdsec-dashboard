@@ -305,6 +305,7 @@ resolved once, before the body is read, and a refusal never falls back to the lo
 | 400 `invalid_request` | the name is empty, malformed, or given more than once |
 | 404 `engine_not_found` | no enabled engine has that name |
 | 409 `engine_has_no_sidecar` | the engine exists but has no usable sidecar (it stays read-only) |
+| 409 `engine_target_mismatch` | the registry answered with another engine than the one named (nothing runs) |
 | 409 `sidecar_command_refused` | the sidecar refused the command (`SIDECAR_READ_ONLY`, or a command outside `SIDECAR_ALLOWED_COMMANDS`) |
 | 502 `sidecar_unavailable`, `sidecar_fingerprint_mismatch`, `sidecar_auth_failed`, `sidecar_clock_skew`; 503 `sidecar_busy` | the sidecar could not be reached, presented another certificate, refused the token, reported a clock skew, or is at its concurrency or rate limit |
 
