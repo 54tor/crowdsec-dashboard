@@ -9,7 +9,8 @@ import (
 	"crowdsec-dashboard/internal/store"
 )
 
-const eventSelection = `audit_event_id, audit_event_created_at, account_name, audit_event_action, audit_event_target, audit_event_client_ip`
+const eventSelection = `audit_event_id, audit_event_created_at, account_name, audit_event_action,
+	CASE WHEN audit_event_action = ? THEN NULL ELSE audit_event_target END AS audit_event_target, audit_event_client_ip`
 
 type EventQuery struct {
 	Action, AccountName, Search string
@@ -43,7 +44,7 @@ func (reader *Reader) ListEvents(ctx context.Context, query EventQuery) ([]Event
 	if query.Limit == 0 {
 		return events, total, totalCapped, nil
 	}
-	pageError := reader.filteredQuery(query).ColumnExpr(eventSelection).
+	pageError := reader.filteredQuery(query).ColumnExpr(eventSelection, string(ActionLoginFailure)).
 		Join("LEFT JOIN account ON account_id = audit_event_account_id").
 		OrderExpr("audit_event_created_at DESC, audit_event_id DESC").
 		Offset(int64(query.Offset)).Limit(int64(query.Limit)).

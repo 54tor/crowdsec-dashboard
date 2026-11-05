@@ -197,3 +197,27 @@ func TestListEventsCountsMatchesWhilePaging(testContext *testing.T) {
 		testContext.Errorf("expected total 3 while paging, got %d", total)
 	}
 }
+
+// A login_failure target is whatever was typed in the account field, possibly a
+// password: the reader must neither return it nor let a search reach it.
+func TestListEventsHidesAndDoesNotSearchLoginFailureTargets(testContext *testing.T) {
+	fixture := newAuditReaderFixture(testContext)
+	failureEventID := fixture.insertEventAt(testContext, 0, string(ActionLoginFailure), "typed-secret-value", fixture.referenceTime)
+
+	allEvents, _ := fixture.mustListEvents(testContext, EventQuery{Limit: 10})
+	expectEventIDs(testContext, allEvents, failureEventID)
+	if allEvents[0].Target != nil {
+		testContext.Errorf("a login_failure target is never returned, got %q", *allEvents[0].Target)
+	}
+
+	targetSearchEvents, targetSearchTotal := fixture.mustListEvents(testContext, EventQuery{Search: "typed-secret", Limit: 10})
+	expectEventIDs(testContext, targetSearchEvents)
+	if targetSearchTotal != 0 {
+		testContext.Errorf("a search on a login_failure target counts nothing, got %d", targetSearchTotal)
+	}
+
+	actionSearchEvents, _ := fixture.mustListEvents(testContext, EventQuery{Search: "login_failure", Limit: 10})
+	expectEventIDs(testContext, actionSearchEvents, failureEventID)
+	actionFilterEvents, _ := fixture.mustListEvents(testContext, EventQuery{Action: string(ActionLoginFailure), Limit: 10})
+	expectEventIDs(testContext, actionFilterEvents, failureEventID)
+}

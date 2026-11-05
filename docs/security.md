@@ -326,7 +326,8 @@ recorded: restrict who can read the table; the target is erased with the client 
 ([Personal data](#personal-data)). Administrators read the log with a session from the « Journal
 d'audit » page, through `GET /api/audit` ([api.md](api.md#audit-log)); it is never readable with an
 API token, and a `read_only` account cannot read it. The page and the route are read-only, return
-only the stored columns, and change nothing in the retention above. A failed write is logged by the
+the stored columns except the target of `login_failure` events, which is neither returned nor
+searched, and change nothing in the retention above. A failed write is logged by the
 dashboard and never blocks the login.
 
 ## Personal data

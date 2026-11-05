@@ -163,13 +163,14 @@ Parameters, combined with AND:
 - `since`: a duration such as `24h` or `7d`; only events recorded since then.
 - `q`: free search, 3 to 64 characters after trimming, no control character; a case-insensitive
   literal substring (`%`, `_` and `\` match themselves) of the action, the account name or the
-  target. It runs under a 5 s deadline.
+  target. It runs under a 5 s deadline. It never matches the target of a `login_failure` event.
 
 Success: `200` with the list page shape `{"items","page","per_page","window_size","may_be_truncated","total","total_capped","live_status"}`
 (`window_size` 0, `may_be_truncated` false, `live_status` `ok`, `total` capped at 10 000 with
 `total_capped`). Each item is exactly `{"id","created_at","account","action","target","client_ip"}`:
 `created_at` RFC 3339 in UTC, `account` null for an event without account or whose account was
-deleted, `target` and `client_ip` null when not stored. Order: newest first, ties by descending `id`.
+deleted, `target` and `client_ip` null when not stored; `target` is always null for `login_failure`
+events (it holds what was typed in the account field). Order: newest first, ties by descending `id`.
 Values are returned as stored: render them as text.
 
 Errors: 400 `invalid_request` (any parameter outside the rules above), 503 `search_timeout` (the

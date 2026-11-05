@@ -215,3 +215,20 @@ func TestAuditListWithoutDatabaseAnswersDatabaseUnavailable(testContext *testing
 
 	expectError(testContext, recorder, http.StatusServiceUnavailable, "database_unavailable")
 }
+
+func TestAuditListHidesTheTargetOfFailedLogins(testContext *testing.T) {
+	fixture := newAuditReadFixture(testContext)
+	failureRecorder := audit.NewPostgresRecorder(fixture.database)
+	if recordError := failureRecorder.Record(context.Background(), 0, audit.ActionLoginFailure, "typed-secret-value", "203.0.113.7"); recordError != nil {
+		testContext.Fatalf("record login_failure: %v", recordError)
+	}
+
+	_, items := decodeAuditPage(testContext, fixture.get("/api/audit", fixture.environment.adminCookie, ""))
+	if len(items) != 1 || string(items[0]["target"]) != "null" {
+		testContext.Fatalf("a login_failure item has a null target, got %v", items)
+	}
+	_, searchedItems := decodeAuditPage(testContext, fixture.get("/api/audit?q=typed-secret-value", fixture.environment.adminCookie, ""))
+	if len(searchedItems) != 0 {
+		testContext.Errorf("a search equal to a login_failure target finds nothing, got %d items", len(searchedItems))
+	}
+}
