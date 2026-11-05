@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func writeTrustedKeysFile(testContext *testing.T, path, content string) {
@@ -192,7 +194,7 @@ func TestLoadTrustedKeysFollowsASymlinkInsideItsDirectory(testContext *testing.T
 func TestLoadTrustedKeysRefusesAnOversizedFile(testContext *testing.T) {
 	trustedKey := mustGenerateSigningKey(testContext)
 	keysPath := filepath.Join(testContext.TempDir(), "trusted_keys")
-	padding := strings.Repeat("#", maxTrustedKeysFileSize) + "\n"
+	padding := strings.Repeat("#\n", maxTrustedKeysFileSize/2+1)
 	writeTrustedKeysFile(testContext, keysPath, trustedKey.TrustedKeyLine()+"\n"+padding)
 
 	if _, loadError := LoadTrustedKeys(keysPath); loadError == nil {
@@ -202,6 +204,7 @@ func TestLoadTrustedKeysRefusesAnOversizedFile(testContext *testing.T) {
 
 func TestTrustedKeysLookupIsSafeDuringReloads(testContext *testing.T) {
 	const lookupCount = 500
+	const readerCount = 4
 	firstKey := mustGenerateSigningKey(testContext)
 	secondKey := mustGenerateSigningKey(testContext)
 	keysPath := filepath.Join(testContext.TempDir(), "trusted_keys")
@@ -212,8 +215,8 @@ func TestTrustedKeysLookupIsSafeDuringReloads(testContext *testing.T) {
 	// Readers must always see a complete set (both keys), never a half-built
 	// map; the race detector flags any unsynchronised access.
 	var workers sync.WaitGroup
-	lookupFailures := make(chan string, lookupCount*2)
-	for readerIndex := 0; readerIndex < 4; readerIndex++ {
+	lookupFailures := make(chan string, readerCount*lookupCount*2)
+	for readerIndex := 0; readerIndex < readerCount; readerIndex++ {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
@@ -239,5 +242,40 @@ func TestTrustedKeysLookupIsSafeDuringReloads(testContext *testing.T) {
 
 	for failedLookup := range lookupFailures {
 		testContext.Fatalf("lookup saw an incomplete key set: %s", failedLookup)
+	}
+}
+
+func TestLoadTrustedKeysRefusesAFifoWithoutBlocking(testContext *testing.T) {
+	fifoPath := filepath.Join(testContext.TempDir(), "trusted_keys")
+	if fifoError := syscall.Mkfifo(fifoPath, 0o600); fifoError != nil {
+		testContext.Fatalf("mkfifo: %v", fifoError)
+	}
+	loadOutcome := make(chan error, 1)
+
+	go func() {
+		_, loadError := LoadTrustedKeys(fifoPath)
+		loadOutcome <- loadError
+	}()
+
+	select {
+	case loadError := <-loadOutcome:
+		if loadError == nil {
+			testContext.Fatal("a FIFO must be refused")
+		}
+	case <-time.After(2 * time.Second):
+		testContext.Fatal("loading a FIFO blocked instead of failing")
+	}
+}
+
+func TestParseTrustedKeysReportsAnOverLongLine(testContext *testing.T) {
+	overLongLine := strings.Repeat("a", maxTrustedKeysFileSize+1) + "\n"
+
+	_, parseError := ParseTrustedKeys([]byte(overLongLine))
+
+	if parseError == nil {
+		testContext.Fatal("expected an over-long line to be refused")
+	}
+	if !strings.Contains(parseError.Error(), "line too long") || !strings.Contains(parseError.Error(), "line 1") {
+		testContext.Fatalf("error should report a too long line 1: %v", parseError)
 	}
 }

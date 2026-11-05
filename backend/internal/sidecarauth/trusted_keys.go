@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 
 	"aidanwoods.dev/go-paseto"
 )
@@ -84,7 +85,10 @@ func ParseTrustedKeys(content []byte) (map[string]paseto.V4AsymmetricPublicKey, 
 		parsedKeys[keyID] = publicKey
 	}
 	if scanError := lineScanner.Err(); scanError != nil {
-		return nil, errTrustedKeysFileTooLarge
+		if errors.Is(scanError, bufio.ErrTooLong) {
+			return nil, fmt.Errorf("sidecarauth: trusted keys line %d: line too long", lineNumber+1)
+		}
+		return nil, errors.New("sidecarauth: trusted keys file could not be scanned")
 	}
 	if len(parsedKeys) == 0 {
 		return nil, errNoTrustedKeys
@@ -110,7 +114,7 @@ func readTrustedKeysFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("sidecarauth: open trusted keys directory: %w", openRootError)
 	}
 	defer root.Close()
-	keysFile, openError := root.Open(filepath.Base(path))
+	keysFile, openError := root.OpenFile(filepath.Base(path), os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if openError != nil {
 		return nil, fmt.Errorf("sidecarauth: open trusted keys file: %w", openError)
 	}

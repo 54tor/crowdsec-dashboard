@@ -151,3 +151,13 @@ func TestReplayCacheAcceptsExactlyOneOfConcurrentPresentations(testContext *test
 		testContext.Fatalf("expected exactly one accepted presentation, got %d", acceptedCount)
 	}
 }
+
+func TestNewReplayCacheFallsBackToTheSystemClockWhenNoClockIsGiven(testContext *testing.T) {
+	replayCache := NewReplayCache(1, nil)
+
+	claimError := replayCache.Claim("token-1", time.Now().Add(time.Minute))
+
+	if claimError != nil {
+		testContext.Fatalf("Claim with the default clock: %v", claimError)
+	}
+}

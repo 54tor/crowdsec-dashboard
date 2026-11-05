@@ -15,6 +15,9 @@ type ReplayCache struct {
 }
 
 func NewReplayCache(capacity int, now func() time.Time) *ReplayCache {
+	if now == nil {
+		now = time.Now
+	}
 	return &ReplayCache{capacity: capacity, now: now, expiryByID: map[string]time.Time{}}
 }
 
