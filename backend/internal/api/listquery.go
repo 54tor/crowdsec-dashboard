@@ -11,6 +11,7 @@ import (
 	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/engines"
+	"crowdsec-dashboard/internal/search"
 )
 
 const (
@@ -39,6 +40,7 @@ type listQuery struct {
 	Engine         string
 	SourceKind     string
 	IncludeExpired bool
+	Search         string
 }
 
 type page[T any] struct {
@@ -67,6 +69,7 @@ func parseListQuery(request *http.Request) (listQuery, bool) {
 	perPage, perPageValid := parseBounded(values, "per_page", defaultPerPage, math.MaxInt)
 	normalisedIP, ipValid := normaliseIPFilter(values.Get("ip"))
 	includeExpired, includeExpiredValid := parseOptionalBool(values.Get("include_expired"))
+	searchTerm, searchTermValid := search.ParseTerm(values.Get("q"))
 	query := listQuery{
 		Page:           pageNumber,
 		PerPage:        min(perPage, maxPerPage),
@@ -76,8 +79,9 @@ func parseListQuery(request *http.Request) (listQuery, bool) {
 		Engine:         values.Get("engine"),
 		SourceKind:     values.Get("source_kind"),
 		IncludeExpired: includeExpired,
+		Search:         searchTerm,
 	}
-	valid := pageValid && perPageValid && ipValid && includeExpiredValid
+	valid := pageValid && perPageValid && ipValid && includeExpiredValid && searchTermValid
 	valid = valid && (query.Scenario == "" || scenarioPattern.MatchString(query.Scenario))
 	valid = valid && (query.IP == "" || cscli.ValidateTarget(query.IP) == nil)
 	valid = valid && (query.Since == "" || cscli.ValidateDuration(query.Since) == nil)

@@ -6,6 +6,7 @@ import (
 
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/search"
 )
 
 func apiRoutes(loadedConfig config.Config, services Services, authenticationHandlers *authHandlers) []apiRoute {
@@ -114,8 +115,8 @@ func readRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	configFiles := configFileHandlers{files: services.ConfigFiles}
 	return []apiRoute{
-		{"GET /api/alerts", accessAuthenticated, http.HandlerFunc(alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive}.list)},
-		{"GET /api/decisions", accessAuthenticated, http.HandlerFunc(decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive}.list)},
+		{"GET /api/alerts", accessAuthenticated, http.HandlerFunc(alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout}.list)},
+		{"GET /api/decisions", accessAuthenticated, http.HandlerFunc(decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout}.list)},
 		{"GET /api/alerts/archive/{archive_id}", accessAuthenticated, http.HandlerFunc(archivedAlerts.detail)},
 		{"DELETE /api/alerts/archive/{archive_id}", accessAdmin, http.HandlerFunc(archivedAlerts.remove)},
 		{"DELETE /api/alerts/{id}", accessAdmin, http.HandlerFunc(liveAlerts.remove)},

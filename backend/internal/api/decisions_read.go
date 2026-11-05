@@ -17,6 +17,7 @@ type DecisionLister interface {
 type decisionReadHandlers struct {
 	lister        DecisionLister
 	archiveReader *archive.Reader
+	searchTimeout time.Duration
 }
 
 func (handlers decisionReadHandlers) list(responseWriter http.ResponseWriter, request *http.Request) {
@@ -25,6 +26,9 @@ func (handlers decisionReadHandlers) list(responseWriter http.ResponseWriter, re
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	searchRequestContext, cancelSearch := searchContext(request.Context(), query.Search, handlers.searchTimeout)
+	defer cancelSearch()
+	request = request.WithContext(searchRequestContext)
 	if handlers.archiveReader == nil {
 		handlers.listLiveOnly(responseWriter, request, query)
 		return
@@ -38,13 +42,14 @@ func (handlers decisionReadHandlers) listLiveOnly(responseWriter http.ResponseWr
 		writeUpstreamError(responseWriter, listError)
 		return
 	}
+	matchingDecisions := matchingLiveDecisions(window.Decisions, query.Search)
 	writeJSON(responseWriter, http.StatusOK, page[lapi.Decision]{
-		Items:          slicePage(window.Decisions, query),
+		Items:          slicePage(matchingDecisions, query),
 		Page:           query.Page,
 		PerPage:        query.PerPage,
 		WindowSize:     len(window.Decisions),
 		MayBeTruncated: window.MayBeTruncated,
-		Total:          len(window.Decisions),
+		Total:          len(matchingDecisions),
 		LiveStatus:     liveStatusOK,
 	})
 }
@@ -76,7 +81,7 @@ func (handlers decisionReadHandlers) listMerged(responseWriter http.ResponseWrit
 		}
 		return archivedItems, archiveTotal, listError
 	}
-	items, total, mergeError := archive.MergePage(liveDecisionItems(window.Decisions, archiveIDsByLiveID), readArchivePage, query.Page, query.PerPage)
+	items, total, mergeError := archive.MergePage(liveDecisionItems(matchingLiveDecisions(window.Decisions, query.Search), archiveIDsByLiveID), readArchivePage, query.Page, query.PerPage)
 	if mergeError != nil {
 		writeArchiveError(responseWriter, "list archived decisions", mergeError)
 		return

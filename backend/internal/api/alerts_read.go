@@ -19,6 +19,7 @@ type AlertLister interface {
 type alertReadHandlers struct {
 	lister        AlertLister
 	archiveReader *archive.Reader
+	searchTimeout time.Duration
 }
 
 func (handlers alertReadHandlers) list(responseWriter http.ResponseWriter, request *http.Request) {
@@ -27,6 +28,9 @@ func (handlers alertReadHandlers) list(responseWriter http.ResponseWriter, reque
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	searchRequestContext, cancelSearch := searchContext(request.Context(), query.Search, handlers.searchTimeout)
+	defer cancelSearch()
+	request = request.WithContext(searchRequestContext)
 	if handlers.archiveReader == nil {
 		handlers.listLiveOnly(responseWriter, request, query)
 		return
@@ -40,7 +44,7 @@ func (handlers alertReadHandlers) listLiveOnly(responseWriter http.ResponseWrite
 		writeUpstreamError(responseWriter, listError)
 		return
 	}
-	alertsOfKind := liveAlertsOfKind(window, query.SourceKind)
+	alertsOfKind := liveAlertsOfKind(matchingLiveAlerts(window, query.Search), query.SourceKind)
 	writeJSON(responseWriter, http.StatusOK, page[lapi.Alert]{
 		Items:          prepareAlertsForResponse(slicePage(alertsOfKind, query)),
 		Page:           query.Page,
@@ -76,7 +80,7 @@ func (handlers alertReadHandlers) listMerged(responseWriter http.ResponseWriter,
 		}
 		return archivedItems, archiveTotal, listError
 	}
-	items, total, mergeError := archive.MergePage(liveAlertItems(window, archivedIDs, query.SourceKind), readArchivePage, query.Page, query.PerPage)
+	items, total, mergeError := archive.MergePage(liveAlertItems(matchingLiveAlerts(window, query.Search), archivedIDs, query.SourceKind), readArchivePage, query.Page, query.PerPage)
 	if mergeError != nil {
 		writeArchiveError(responseWriter, "list archived alerts", mergeError)
 		return

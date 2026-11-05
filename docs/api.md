@@ -172,7 +172,17 @@ they are never presented as currently enforced. By default only archived decisio
 is in the future are listed; `include_expired=true` adds the expired history (the live part only
 ever holds active decisions). Lists never carry alert `events`.
 
-- `total` is the live window size plus the matching archive rows, counted up to 10 000;
+- `q` searches free text: trimmed, then 3 to 64 characters, no control character (NUL included);
+  anything else answers 400 `invalid_request`, an empty or blank `q` means no search. The match is a
+  case-insensitive literal substring (`%`, `_` and `\` match themselves), combined by AND with every
+  other filter. Alerts match on the source value, scenario, message, machine and engine name;
+  decisions on the value, scenario (the parent alert's when the decision has none), type, origin,
+  engine name and the parent alert's machine. Live decisions carry no machine: a term matching only a
+  machine finds archived decisions, never live ones (the archived copy of a live decision stays
+  excluded). The live window is read from the LAPI without `q`, then filtered by the same rules:
+  `total` counts the matches only, `window_size` and `may_be_truncated` keep the unfiltered window
+  values. A search that runs past 5 s answers 503 `search_timeout`.
+- `total` is the live window size (with `q`, its matches) plus the matching archive rows, counted up to 10 000;
   `total_capped:true` means there are more (the client shows the total with a "+"). A page whose archive offset would pass
   10 000 answers 400 `invalid_request`.
 - `live_status` is `ok`, or `unavailable` when the local LAPI could not be read: the page is then

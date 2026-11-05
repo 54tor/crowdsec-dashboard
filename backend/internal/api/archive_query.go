@@ -10,6 +10,7 @@ import (
 
 	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/engines"
+	"crowdsec-dashboard/internal/search"
 )
 
 func archiveQueryFor(query listQuery, now time.Time) (archive.AlertQuery, error) {
@@ -20,6 +21,7 @@ func archiveQueryFor(query listQuery, now time.Time) (archive.AlertQuery, error)
 		SourceKind:     query.SourceKind,
 		IncludeExpired: query.IncludeExpired,
 		ExcludedEngine: engines.ReservedLocalName,
+		Search:         query.Search,
 	}
 	if query.Since == "" {
 		return archiveQuery, nil
@@ -44,6 +46,9 @@ func writeArchiveError(responseWriter http.ResponseWriter, operation string, arc
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 	case errors.Is(archiveError, archive.ErrAlertNotFound):
 		writeError(responseWriter, http.StatusNotFound, "not_found")
+	case search.IsTimeout(archiveError):
+		log.Printf("%s: %v", operation, archiveError)
+		writeError(responseWriter, http.StatusServiceUnavailable, "search_timeout")
 	default:
 		log.Printf("%s: %v", operation, archiveError)
 		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
