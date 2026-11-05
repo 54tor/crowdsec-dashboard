@@ -377,7 +377,7 @@ func TestImportAuditTargetPutsFailedFirstWithTwoDigitCounters(testContext *testi
 		{Section: bundle.SectionConfig, Applied: 78, Skipped: 40},
 	}}
 	expectedTarget := "failed=11 hub=12 decisions=34 alerts=56 config=78 skipped=100"
-	if obtainedTarget := BundleImportAuditTarget(report); obtainedTarget != expectedTarget {
+	if obtainedTarget := BundleImportAuditTarget(report, ""); obtainedTarget != expectedTarget {
 		testContext.Errorf("expected %q, got %q", expectedTarget, obtainedTarget)
 	}
 	if runeCount := len([]rune(expectedTarget)); runeCount > 64 {

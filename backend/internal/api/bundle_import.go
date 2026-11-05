@@ -48,6 +48,7 @@ type importHandlers struct {
 	recorder       audit.Recorder
 	trustedCIDRs   []*net.IPNet
 	previewTimeout time.Duration
+	targets        EngineTargets
 }
 
 func (handlers importHandlers) importBundle(responseWriter http.ResponseWriter, request *http.Request) {
@@ -56,6 +57,10 @@ func (handlers importHandlers) importBundle(responseWriter http.ResponseWriter, 
 		return
 	}
 	defer release()
+	deps, resolved := handlers.importDepsFor(responseWriter, request)
+	if !resolved {
+		return
+	}
 	payload, imported, decoded := decodeImportRequest(responseWriter, request)
 	if !decoded {
 		return
@@ -64,7 +69,6 @@ func (handlers importHandlers) importBundle(responseWriter http.ResponseWriter, 
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
 		return
 	}
-	deps := handlers.requestDeps(request)
 	if payload.Mode == importModePreview {
 		handlers.preview(responseWriter, request, deps, imported, payload.Sections)
 		return
@@ -108,8 +112,19 @@ func decodeImportRequest(responseWriter http.ResponseWriter, request *http.Reque
 	return payload, imported, true
 }
 
-func (handlers importHandlers) requestDeps(request *http.Request) bundle.ImportDeps {
+func (handlers importHandlers) importDepsFor(responseWriter http.ResponseWriter, request *http.Request) (bundle.ImportDeps, bool) {
+	target, isRemote, resolved := bundleTargetOf(responseWriter, request, handlers.targets)
+	if !resolved {
+		return bundle.ImportDeps{}, false
+	}
 	deps := handlers.deps
+	if isRemote {
+		deps = remoteBundleImportDeps(target, handlers.deps)
+	}
+	return handlers.withCallerAddress(request, deps), true
+}
+
+func (handlers importHandlers) withCallerAddress(request *http.Request, deps bundle.ImportDeps) bundle.ImportDeps {
 	clientAddress := auth.ClientIP(request, handlers.trustedCIDRs)
 	deps.IsCallerAddress = func(target string) bool {
 		return targetContainsClient(target, clientAddress)
@@ -152,7 +167,7 @@ func (handlers importHandlers) apply(responseWriter http.ResponseWriter, request
 			report.Sections[sectionIndex].ErrorCode = sectionErrorCode(sectionReport.Failure)
 		}
 	}
-	handlers.record(request, report)
+	handlers.record(request, BundleImportAuditTarget(report, deps.TargetEngine))
 	responseWriter.Header().Set("Cache-Control", "no-store")
 	writeJSON(responseWriter, http.StatusOK, importApplyResponse{Digest: plan.Digest, Report: report})
 }
@@ -210,15 +225,15 @@ func isClassifiedUpstreamError(failure error) bool {
 	return slices.ContainsFunc(loggableSentinels, func(sentinel error) bool { return errors.Is(failure, sentinel) })
 }
 
-func (handlers importHandlers) record(request *http.Request, report bundle.ApplyReport) {
+func (handlers importHandlers) record(request *http.Request, auditTarget string) {
 	identity, _ := auth.IdentityFromContext(request.Context())
 	auditContext, cancelAudit := context.WithTimeout(context.WithoutCancel(request.Context()), bundleAuditTimeout)
 	defer cancelAudit()
 	clientIP := auditClientIP(request, handlers.trustedCIDRs)
-	audit.RecordOrLog(auditContext, handlers.recorder, identity.AccountID, audit.ActionBundleImported, BundleImportAuditTarget(report), clientIP)
+	audit.RecordOrLog(auditContext, handlers.recorder, identity.AccountID, audit.ActionBundleImported, auditTarget, clientIP)
 }
 
-func BundleImportAuditTarget(report bundle.ApplyReport) string {
+func BundleImportAuditTarget(report bundle.ApplyReport, engineName string) string {
 	appliedBySection := map[string]int{}
 	skippedTotal, failedTotal := 0, 0
 	for _, sectionReport := range report.Sections {
@@ -226,7 +241,8 @@ func BundleImportAuditTarget(report bundle.ApplyReport) string {
 		skippedTotal += sectionReport.Skipped
 		failedTotal += sectionReport.Failed
 	}
-	return fmt.Sprintf("failed=%d hub=%d decisions=%d alerts=%d config=%d skipped=%d",
+	counters := fmt.Sprintf("failed=%d hub=%d decisions=%d alerts=%d config=%d skipped=%d",
 		failedTotal, appliedBySection[bundle.SectionHub], appliedBySection[bundle.SectionDecision],
 		appliedBySection[bundle.SectionAlerts], appliedBySection[bundle.SectionConfig], skippedTotal)
+	return withEngineAuditPrefix(engineName, counters)
 }

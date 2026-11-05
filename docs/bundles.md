@@ -1,9 +1,10 @@
 # Export and import bundles
 
-The Export / Import page (administrators only) saves the state of the **local** engine into one JSON
-file, a bundle, and applies a bundle to the local engine, for example to migrate to a new CrowdSec.
-It never reads from or writes to a remote engine. Four sections can be chosen independently: the
-installed hub collections, the active bans, the alerts and the configuration files.
+The Export / Import page (administrators only) saves the state of an engine into one JSON file, a
+bundle, and applies a bundle to an engine, for example to migrate to a new CrowdSec. The engine is
+the local one by default; an engine with a usable sidecar can be chosen instead (see
+[Remote engines](#remote-engines)). Four sections can be chosen independently: the installed hub
+collections, the active bans, the alerts and the configuration files.
 
 ## Format
 
@@ -70,12 +71,13 @@ version of the format gets a new `version` number.
 - **Secrets.** `include_secrets: true` exports the configuration unredacted and marks the bundle
   `contains_secrets: true`. It needs a browser session (a token gets 403 `session_required`) and
   `"confirm_secrets": "SECRETS"` retyped (400 `confirmation_required`). Treat such a file as a
-  secret. Without the config section the flag has no effect.
+  secret. Without the config section the flag has no effect. On a remote engine it is refused with
+  409 `remote_secrets_unsupported` before anything is read: a sidecar only serves masked content.
 - The export takes the operation lock shared with the sync and the import (409
   `operation_running`). An unreadable engine version (`cscli version`) fails the whole export with
   an upstream code; there is never a partial bundle.
 - Audited `bundle_exported`, target `secrets=<bool> [skipped=<n>] [skipped_files=<n>]
-  sections=<list>`, on success only.
+  sections=<list>`, on success only; on a remote engine the target starts with `engine=<name> `.
 
 ## Import
 
@@ -100,7 +102,8 @@ read at all.
 
 The **digest** is a SHA-256 over the canonical plan: the sections, the planned collections,
 decisions (target, scenario, `until` rounded **down** to the minute), alerts and files (name, new
-and current SHA-256), the skipped items, warnings and unavailable sections. Anything that changes
+and current SHA-256), the skipped items, warnings and unavailable sections, and the name of the
+target engine when it is not the local one (the local digest is unchanged). Anything that changes
 the plan between preview and apply changes it: a ban added or expired meanwhile, a new allowlist
 entry, a configuration file edited on disk. The decisions scenario is `import/<UTC date>`, so an
 apply after midnight UTC needs a new preview.
@@ -111,7 +114,9 @@ reports `applied`, `failed` (with an `error_code`), `not_run` or `section_unavai
 applied, skipped and failed counts. The answer is 200 even when a section failed. Replaying a
 bundle is idempotent: what is already there is skipped. Each apply is audited `bundle_imported`,
 target `failed=<n> hub=<n> decisions=<n> alerts=<n> config=<n> skipped=<n>` (counts only, never
-content; `failed` comes first so that it survives the truncation of long targets).
+content; `failed` comes first so that it survives the truncation of long targets). On a remote
+engine the target starts with `engine=<name> ` (the engine is kept before the counters by the
+64-character truncation).
 
 Limits per apply, beyond which the **whole** bundle is refused with 422 `too_many_changes` (no
 truncation; split the bundle): 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions, 500 alerts.
@@ -232,6 +237,34 @@ permission on CrowdSec's configuration, and it is limited to acquisition files:
   replaced file keeps its mode but takes the dashboard owner. CrowdSec must be able to read them
   (it runs as root in the official image). See [security.md](security.md#configuration-import) for
   the mount and the threat model.
+
+## Remote engines
+
+`POST /api/export?engine=<name>` and `POST /api/import?engine=<name>` run on that engine only; absent
+or `engine=local` keeps the local behaviour. The engine is resolved once per request, before the
+body is read (for the import, right after the operation lock), with the codes of the
+[engine target](api.md#engine-target): 400 `invalid_request`, 404 `engine_not_found`, 409
+`engine_has_no_sidecar` (also when the engine has no sidecar or no LAPI client), 409
+`engine_target_mismatch`. Every read and write of the request then uses that engine and never
+falls back to the local one:
+
+- **Export.** Hub and version through the sidecar (`hub_list`, `version`), bans and alerts from the
+  engine's LAPI, configuration through the sidecar's masked file reads (`/v1/files`). The
+  configuration is always redacted; `include_secrets` gives 409 `remote_secrets_unsupported`.
+- **Import.** Same preview, digest, `IMPORT` confirmation, operation lock, codes and statuses as
+  locally. Collections are installed through the sidecar; bans and alerts are written to the
+  engine's LAPI after a real read of **that engine's** allowlists (unreadable: the section is
+  unavailable with `allowlist_unavailable` and nothing is written). The caller-address and sharing
+  rules are the same as locally; the alerts flush limit is read through the sidecar.
+- **Configuration import** is always enabled on a sidecar engine (the sidecar decides): files are
+  written only by the sidecar's apply (`/v1/config/apply`) into its dedicated `acquis.d`, which runs
+  `crowdsec -t` and rolls back itself. The current file is read masked with an opaque digest
+  computed by that sidecar: `previous_sha256` in a remote plan is that digest, comparable only with
+  another answer of the same sidecar, so an identical file plans as `updated` with an empty diff
+  and is reported `unchanged` by the apply. A read-only sidecar (`SIDECAR_READ_ONLY`) refuses the
+  apply: the config section fails with `sidecar_command_refused` and the later sections do not run.
+- **Digest.** It includes the engine name, so a plan previewed on one engine is refused with 409
+  `import_conflict` when applied to another (or to the local engine).
 
 ## Codes
 

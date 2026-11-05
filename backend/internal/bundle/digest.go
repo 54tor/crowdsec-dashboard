@@ -10,6 +10,7 @@ import (
 const digestUntilPrecision = time.Minute
 
 type digestInput struct {
+	Engine      string           `json:"engine,omitempty"`
 	Sections    []string         `json:"sections"`
 	Hub         []HubAction      `json:"hub"`
 	Decisions   []DecisionAction `json:"decisions"`
@@ -22,6 +23,7 @@ type digestInput struct {
 
 func Digest(plan ImportPlan) string {
 	input := digestInput{
+		Engine:      plan.targetEngine,
 		Sections:    plan.Sections,
 		Hub:         plan.Hub,
 		Decisions:   make([]DecisionAction, 0, len(plan.Decisions)),

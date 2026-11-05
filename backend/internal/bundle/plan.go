@@ -107,6 +107,7 @@ type ImportPlan struct {
 	UnavailableCodes map[string]string         `json:"unavailable_codes"`
 	Digest           string                    `json:"digest"`
 	sectionPlans     map[string]SectionPlan
+	targetEngine     string
 }
 
 func PlanImport(ctx context.Context, deps ImportDeps, imported Bundle, sections []string) (ImportPlan, error) {
@@ -114,6 +115,7 @@ func PlanImport(ctx context.Context, deps ImportDeps, imported Bundle, sections 
 		return ImportPlan{}, validationError
 	}
 	plan := newImportPlan()
+	plan.targetEngine = deps.TargetEngine
 	deps.Allowlists = readAllowlistsOnce(deps.Allowlists)
 	for _, sectionName := range applyOrder {
 		if !slices.Contains(sections, sectionName) {

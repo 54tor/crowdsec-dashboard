@@ -184,8 +184,8 @@ func syncRoutes(loadedConfig config.Config, services Services) []apiRoute {
 func bundleRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	deps := services.BundleExport
 	deps.LocalMachineID = loadedConfig.LAPIMachineID
-	handlers := bundleHandlers{deps: deps, operationLock: services.OperationLock, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
-	imports := importHandlers{deps: services.BundleImport, operationLock: services.OperationLock, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, previewTimeout: importPreviewTimeout}
+	handlers := bundleHandlers{deps: deps, operationLock: services.OperationLock, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, targets: services.EngineTargets}
+	imports := importHandlers{deps: services.BundleImport, operationLock: services.OperationLock, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, previewTimeout: importPreviewTimeout, targets: services.EngineTargets}
 	return []apiRoute{
 		{"POST /api/export", accessAdmin, longWrite(http.HandlerFunc(handlers.export))},
 		{"POST /api/import", accessAdminSessionOnly, http.HandlerFunc(imports.importBundle)},

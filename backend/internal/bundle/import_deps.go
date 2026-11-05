@@ -29,4 +29,5 @@ type ImportDeps struct {
 	LocalMachineID      string
 	ConfigImportEnabled bool
 	Acquisition         AcquisitionWriter
+	TargetEngine        string
 }
