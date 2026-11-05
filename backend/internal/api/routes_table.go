@@ -127,7 +127,7 @@ func allowlistRoutes(loadedConfig config.Config, services Services) []apiRoute {
 
 func readRoutes(loadedConfig config.Config, services Services, searches searchLimiter) []apiRoute {
 	archivedAlerts := archivedAlertHandlers{archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
-	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, targets: services.EngineTargets}
 	configFiles := configFileHandlers{files: services.ConfigFiles}
 	alertLists := alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
 	decisionLists := decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
@@ -153,7 +153,7 @@ func readRoutes(loadedConfig config.Config, services Services, searches searchLi
 }
 
 func crowdsecWriteRoutes(loadedConfig config.Config, services Services) []apiRoute {
-	decisions := decisionHandlers{service: services.Decisions, lister: services.DecisionReader, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, allowlists: services.DecisionAllowlists, now: time.Now}
+	decisions := decisionHandlers{service: services.Decisions, lister: services.DecisionReader, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, allowlists: services.DecisionAllowlists, now: time.Now, targets: services.EngineTargets}
 	bouncers := bouncerHandlers{service: services.Bouncers, targets: services.EngineTargets}
 	machines := machineHandlers{service: services.Machines, selfMachineID: loadedConfig.LAPIMachineID, targets: services.EngineTargets}
 	hub := hubHandlers{service: services.Hub, targets: services.EngineTargets}

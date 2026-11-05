@@ -12,7 +12,6 @@ import (
 	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
-	"crowdsec-dashboard/internal/engines"
 )
 
 const (
@@ -26,9 +25,14 @@ type alertHandlers struct {
 	archiveReader *archive.Reader
 	recorder      audit.Recorder
 	trustedCIDRs  []*net.IPNet
+	targets       EngineTargets
 }
 
 func (handlers alertHandlers) remove(responseWriter http.ResponseWriter, request *http.Request) {
+	target, resolved := handlers.targetOf(responseWriter, request)
+	if !resolved {
+		return
+	}
 	rawID := request.PathValue("id")
 	if requireConfirm(request, rawID) != nil {
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
@@ -40,11 +44,11 @@ func (handlers alertHandlers) remove(responseWriter http.ResponseWriter, request
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	if handlers.lookup == nil {
+	if target.lookup == nil {
 		writeError(responseWriter, http.StatusBadGateway, "lapi_unavailable")
 		return
 	}
-	liveAlert, lookupError := handlers.lookup.GetAlert(request.Context(), upstreamID)
+	liveAlert, lookupError := target.lookup.GetAlert(request.Context(), upstreamID)
 	if lookupError != nil {
 		writeUpstreamError(responseWriter, lookupError)
 		return
@@ -53,24 +57,24 @@ func (handlers alertHandlers) remove(responseWriter http.ResponseWriter, request
 		writeError(responseWriter, http.StatusConflict, "target_mismatch")
 		return
 	}
-	if deleteError := handlers.service.Delete(request.Context(), rawID); deleteError != nil {
+	if deleteError := target.service.Delete(request.Context(), rawID); deleteError != nil {
 		writeUpstreamError(responseWriter, deleteError)
 		return
 	}
-	recordAlertDeletion(request, handlers.recorder, handlers.trustedCIDRs, alertAuditTarget(engines.ReservedLocalName, upstreamID))
+	recordAlertDeletion(request, handlers.recorder, handlers.trustedCIDRs, alertAuditTarget(target.engineName, upstreamID))
 	response := map[string]any{"status": "deleted"}
 	if handlers.archiveReader != nil {
 		liveKey := archive.UpstreamKey{UpstreamID: upstreamID, UUID: liveAlert.UUID}
-		response["archive_deleted"] = handlers.deleteArchivedCopy(request.Context(), liveKey)
+		response["archive_deleted"] = handlers.deleteArchivedCopy(request.Context(), target.engineName, liveKey)
 	}
 	writeJSON(responseWriter, http.StatusOK, response)
 }
 
-func (handlers alertHandlers) deleteArchivedCopy(requestContext context.Context, liveKey archive.UpstreamKey) bool {
+func (handlers alertHandlers) deleteArchivedCopy(requestContext context.Context, engineName string, liveKey archive.UpstreamKey) bool {
 	deleteContext, cancelDelete := context.WithTimeout(context.WithoutCancel(requestContext), archivedCopyDeleteTimeout)
 	defer cancelDelete()
-	if _, deleteError := handlers.archiveReader.DeleteAlert(deleteContext, engines.ReservedLocalName, liveKey); deleteError != nil {
-		log.Printf("delete archived copy of local/%d: archive_delete_failed: %v", liveKey.UpstreamID, deleteError)
+	if _, deleteError := handlers.archiveReader.DeleteAlert(deleteContext, engineName, liveKey); deleteError != nil {
+		log.Printf("delete archived copy of %s/%d: archive_delete_failed: %v", engineName, liveKey.UpstreamID, deleteError)
 		return false
 	}
 	return true

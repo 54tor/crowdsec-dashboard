@@ -32,6 +32,7 @@ type decisionHandlers struct {
 	trustedCIDRs []*net.IPNet
 	allowlists   AllowlistReader
 	now          func() time.Time
+	targets      EngineTargets
 }
 
 type banRequest struct {
@@ -80,6 +81,10 @@ func validReason(reason string) bool {
 }
 
 func (handlers decisionHandlers) add(responseWriter http.ResponseWriter, request *http.Request) {
+	target, resolved := handlers.targetOf(responseWriter, request)
+	if !resolved {
+		return
+	}
 	var ban banRequest
 	limitedBody := http.MaxBytesReader(responseWriter, request.Body, maxBanBodyBytes)
 	if decodeError := json.NewDecoder(limitedBody).Decode(&ban); decodeError != nil {
@@ -103,20 +108,20 @@ func (handlers decisionHandlers) add(responseWriter http.ResponseWriter, request
 		writeError(responseWriter, http.StatusConflict, "self_ban")
 		return
 	}
-	if refusalStatus, refusalCode, refused := handlers.allowlistRefusal(request.Context(), ban.IP); refused {
+	if refusalStatus, refusalCode, refused := handlers.allowlistRefusal(request.Context(), target.allowlists, ban.IP); refused {
 		writeError(responseWriter, refusalStatus, refusalCode)
 		return
 	}
 	newDecision := lapi.NewDecision{Target: ban.IP, Scope: scope, Type: "ban", Duration: ban.Duration, Reason: ban.Reason}
-	if addError := handlers.service.Add(request.Context(), newDecision); addError != nil {
+	if addError := target.service.Add(request.Context(), newDecision); addError != nil {
 		writeUpstreamError(responseWriter, addError)
 		return
 	}
 	writeJSON(responseWriter, http.StatusCreated, map[string]string{"status": "created"})
 }
 
-func (handlers decisionHandlers) allowlistRefusal(ctx context.Context, target string) (int, string, bool) {
-	verdict := handlers.allowlistVerdict(ctx, target)
+func (handlers decisionHandlers) allowlistRefusal(ctx context.Context, allowlists AllowlistReader, target string) (int, string, bool) {
+	verdict := handlers.allowlistVerdict(ctx, allowlists, target)
 	switch {
 	case verdict.Allowed:
 		return 0, "", false
@@ -129,16 +134,20 @@ func (handlers decisionHandlers) allowlistRefusal(ctx context.Context, target st
 	}
 }
 
-func (handlers decisionHandlers) allowlistVerdict(ctx context.Context, target string) allowguard.Verdict {
-	if handlers.allowlists == nil || handlers.now == nil {
+func (handlers decisionHandlers) allowlistVerdict(ctx context.Context, allowlists AllowlistReader, target string) allowguard.Verdict {
+	if allowlists == nil || handlers.now == nil {
 		return allowguard.Verdict{Reason: allowguard.ReasonAllowlistUnavailable}
 	}
 	targetPrefix, _ := netparse.ParseAllowlistValue(target)
-	allowlistRead, readError := handlers.allowlists.ListAllowlists(ctx)
+	allowlistRead, readError := allowlists.ListAllowlists(ctx)
 	return allowguard.FromRead(allowlistRead, readError, handlers.now()).Check(targetPrefix)
 }
 
 func (handlers decisionHandlers) remove(responseWriter http.ResponseWriter, request *http.Request) {
+	target, resolved := handlers.targetOf(responseWriter, request)
+	if !resolved {
+		return
+	}
 	rawID := request.PathValue("id")
 	if requireConfirm(request, rawID) != nil {
 		writeError(responseWriter, http.StatusBadRequest, "confirmation_required")
@@ -151,11 +160,11 @@ func (handlers decisionHandlers) remove(responseWriter http.ResponseWriter, requ
 		writeError(responseWriter, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	if handlers.lister == nil {
+	if target.lister == nil {
 		writeError(responseWriter, http.StatusBadGateway, "lapi_unavailable")
 		return
 	}
-	liveDecision, found, lookupError := findLiveDecision(request.Context(), handlers.lister, decisionID, expectedScope, expectedValue)
+	liveDecision, found, lookupError := findLiveDecision(request.Context(), target.lister, decisionID, expectedScope, expectedValue)
 	if lookupError != nil {
 		writeUpstreamError(responseWriter, lookupError)
 		return
@@ -169,17 +178,16 @@ func (handlers decisionHandlers) remove(responseWriter http.ResponseWriter, requ
 		writeError(responseWriter, http.StatusConflict, "target_mismatch")
 		return
 	}
-	if deleteError := handlers.service.Delete(request.Context(), decisionID); deleteError != nil {
+	if deleteError := target.service.Delete(request.Context(), decisionID); deleteError != nil {
 		writeUpstreamError(responseWriter, deleteError)
 		return
 	}
-	handlers.recordRemoval(request, decisionID)
+	handlers.recordRemoval(request, target.auditTarget(decisionID))
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-func (handlers decisionHandlers) recordRemoval(request *http.Request, decisionID int64) {
+func (handlers decisionHandlers) recordRemoval(request *http.Request, target string) {
 	identity, _ := auth.IdentityFromContext(request.Context())
 	clientIP := auditClientIP(request, handlers.trustedCIDRs)
-	target := "decision:" + strconv.FormatInt(decisionID, 10)
 	audit.RecordOrLog(context.WithoutCancel(request.Context()), handlers.recorder, identity.AccountID, audit.ActionDecisionRemoved, target, clientIP)
 }

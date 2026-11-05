@@ -293,11 +293,14 @@ a `read_only` account or a `read` token gets 403 `forbidden`.
 
 ### Engine target
 
-`GET /api/hub`, `GET /api/bouncers`, `GET /api/machines` and every bouncer, machine, hub and reload
-route of the table below take an optional `engine` query parameter (an engine name). Absent, or
-`engine=local`, the command runs on the local engine exactly as before. Any other name runs the
-command on that engine through its sidecar (see [Engines](#engines)), and only there: the engine is
-resolved once, before the body is read, and a refusal never falls back to the local engine.
+`GET /api/hub`, `GET /api/bouncers`, `GET /api/machines` and every route of the table below except
+`DELETE /api/alerts/archive/{archive_id}` take an optional `engine` query parameter (an engine
+name). Absent, or `engine=local`, the request runs on the local engine exactly as before. Any other
+name runs it on that engine, and only there: the engine is resolved once, before the body is read,
+the request finishes on what was resolved then, and a refusal never falls back to the local engine.
+`cscli` commands go through the engine's sidecar (see [Engines](#engines)); a ban, a decision
+removal and the alert lookup go through the engine's LAPI with the machine credentials the dashboard
+holds for it, but still require a usable sidecar (an engine without one stays read-only).
 `/api/health` and `/api/metrics` stay local.
 
 | Answer | When |
@@ -310,13 +313,23 @@ resolved once, before the body is read, and a refusal never falls back to the lo
 | 502 `sidecar_unavailable`, `sidecar_fingerprint_mismatch`, `sidecar_auth_failed`, `sidecar_clock_skew`; 503 `sidecar_busy` | the sidecar could not be reached, presented another certificate, refused the token, reported a clock skew, or is at its concurrency or rate limit |
 
 On a remote engine the machine self-check protects the machine the dashboard uses on that engine
-(its `machine_id`), not `LAPI_MACHINE_ID`. Audit is the same as locally (these routes are not
-audited); a bouncer key or machine password produced by a remote engine is returned once with
-`Cache-Control: no-store` and never logged.
+(its `machine_id`), not `LAPI_MACHINE_ID`. Audit is the same as locally (the bouncer, machine, hub
+and reload routes are not audited); a bouncer key or machine password produced by a remote engine is
+returned once with `Cache-Control: no-store` and never logged. A remote decision removal is audited
+`decision_removed` with target `decision:<engine>/<id>` (locally `decision:<id>`); a remote alert
+deletion is audited `alert_deleted` with target `<engine>/<upstream id>`.
+
+A remote ban checks the allowlists of the **target** engine (read from its LAPI), never the local
+ones, with the same target normalisation as locally: 409 `target_allowlisted` when the target
+overlaps one of its active entries, 503 `allowlist_unavailable` when they cannot be read (any error,
+a 404 included), and nothing is written on any engine. `self_ban` still compares the target with the
+caller's client address. A remote alert deletion reads the alert and its uuid from the target
+engine's LAPI, deletes it with `cscli alerts delete` through its sidecar, and removes the archived
+copy of that engine only.
 
 | Method | Path | Access | Body | Success response | Errors |
 |---|---|---|---|---|---|
-| POST | `/api/decisions` | admin | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` (not audited) | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 409 `target_allowlisted` (the target overlaps an active allowlist entry of the local engine); 503 `allowlist_unavailable` (the local allowlists could not be read: the ban is refused); 502 |
+| POST | `/api/decisions` | admin | `{"ip","duration","reason"}`; `ip` is an IP or CIDR no wider than /8 (IPv4) or /32 (IPv6), `duration` like `24h`, `reason` up to 200 characters, optional | `201 {"status":"created"}` (not audited) | 400 `invalid_target`, `invalid_duration`, `invalid_reason`, `invalid_request`; 409 `self_ban` (the target is, or a range contains, the caller's client address; checked before any LAPI call); 409 `target_allowlisted` (the target overlaps an active allowlist entry of the target engine); 503 `allowlist_unavailable` (the target engine's allowlists could not be read: the ban is refused); 502 |
 | DELETE | `/api/decisions/{id}?scope=<scope>&value=<value>` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted"}`, audited `decision_removed` | 400 `confirmation_required`, `invalid_request`; 404 `not_found`; 409 `target_mismatch`; 502 |
 | DELETE | `/api/alerts/{id}?uuid=<uuid>` | admin | `{"confirm":"<id>"}` | `200 {"status":"deleted","archive_deleted":true}` | 400; 403 `forbidden`; 404 `not_found`; 409 `target_mismatch`; 502 `cscli_failed` |
 | DELETE | `/api/alerts/archive/{archive_id}` | admin | `{"confirm":"<archive_id>"}` | `200 {"status":"deleted"}` | 400 `invalid_request`, `confirmation_required`; 403; 404 `not_found`; 503 |
@@ -335,7 +348,7 @@ Both live deletions name the target they mean, because an `id` alone may belong 
 or to an older generation of the local LAPI (ids are reused after a reset):
 
 - `DELETE /api/alerts/{id}` needs `uuid` (lowercase, as listed). The dashboard reads the alert from
-  the local LAPI (`GET /v1/alerts/{id}`) first: 404 `not_found` when the LAPI has no such alert,
+  the LAPI of the target engine (`GET /v1/alerts/{id}`) first: 404 `not_found` when the LAPI has no such alert,
   409 `target_mismatch` when its uuid differs, and in both cases nothing is deleted or audited. It
   then deletes the alert with `cscli alerts delete` and its archived copy (same engine, id and uuid)
   in the same request, so it does not come back from the archive, unless a collection of that engine
@@ -349,11 +362,11 @@ or to an older generation of the local LAPI (ids are reused after a reset):
   `not_found` when it is in neither, 409 `target_mismatch` when its scope (case-insensitive) or
   value differs.
 
-Only `live:true` rows of the `local` engine can be deleted this way. `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
+Only `live:true` rows of the `local` engine, or of an engine with a sidecar named by `engine`, can be deleted this way. `DELETE /api/alerts/archive/{archive_id}` removes an archived alert of any engine
 from the archive only (a remote engine is never contacted). Both alert routes (`DELETE /api/alerts/{id}` and `DELETE /api/alerts/archive/{archive_id}`) are audited `alert_deleted` with
 target `<engine>/<upstream id>` for the live delete and `archive/<engine>/<upstream id>` for the archive-only delete.
 
-The manual ban checks the allowlists of the local engine just before the write, with the same
+The manual ban checks the allowlists of the target engine just before the write, with the same
 filter as the sync and the bundle import ([security.md](security.md#allowlist-check-before-writes)):
 there is no override, remove the entry first. The order is: body, target, duration, reason,
 `self_ban`, allowlists, then the LAPI write.
