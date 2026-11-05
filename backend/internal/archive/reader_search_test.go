@@ -89,7 +89,9 @@ func TestListAlertsSearchIsCaseInsensitive(testContext *testing.T) {
 }
 
 // %, _ and \ typed by a user are literal characters: none of them may act as a
-// LIKE wildcard or escape, and a term made only of them matches nothing here.
+// LIKE wildcard or escape, and a term made only of them matches nothing here. A
+// single quote is plain text too: it neither breaks the statement nor widens the
+// match.
 func TestListAlertsSearchTreatsLikeMetacharactersLiterally(testContext *testing.T) {
 	fixture := newReaderFixture(testContext)
 	fixture.storeFor(testContext, fixture.engineID, []lapi.Alert{
@@ -97,17 +99,20 @@ func TestListAlertsSearchTreatsLikeMetacharactersLiterally(testContext *testing.
 		searchableAlert(2, "203.0.113.2", "test/a_b", "spike", "lb-02"),
 		searchableAlert(3, "203.0.113.3", `test/a\b`, "spike", "lb-02"),
 		searchableAlert(4, "203.0.113.4", "test/axb", "spike", "lb-02"),
+		searchableAlert(5, "203.0.113.5", "test/a'b", "spike", "lb-02"),
 	})
 
 	expectedIDsByTerm := map[string]string{
-		"a%b":  "local:1",
-		"a_b":  "local:2",
-		`a\b`:  "local:3",
-		"%%%":  "",
-		"___":  "",
-		`\\\`:  "",
-		"axb":  "local:4",
-		"t/a%": "local:1",
+		"a%b":    "local:1",
+		"a_b":    "local:2",
+		`a\b`:    "local:3",
+		"%%%":    "",
+		"___":    "",
+		`\\\`:    "",
+		"axb":    "local:4",
+		"t/a%":   "local:1",
+		"a'b":    "local:5",
+		"'); --": "",
 	}
 	for term, expectedIDs := range expectedIDsByTerm {
 		fixture.expectSearchResult(testContext, AlertQuery{Search: term, Limit: 50}, expectedIDs)
@@ -174,26 +179,17 @@ func TestAlertSearchUsesTrigramIndexes(testContext *testing.T) {
 	fixture.seedUnmatchedAlerts(testContext, 3000)
 	searchSQL := fixture.reader.alertQuery(AlertQuery{Search: "ssh-bf"}).ColumnExpr("alert_id").String()
 
-	var planLines []string
-	transactionError := fixture.database.RunInTx(context.Background(), nil, func(transactionContext context.Context, transaction bun.Tx) error {
-		if _, settingError := transaction.ExecContext(transactionContext, "SET LOCAL enable_seqscan = off; SET LOCAL enable_indexscan = off"); settingError != nil {
-			return settingError
-		}
-		planRows, explainError := transaction.QueryContext(transactionContext, "EXPLAIN "+searchSQL)
-		if explainError != nil {
-			return explainError
-		}
-		return collectPlanLines(planRows, &planLines)
-	})
-	if transactionError != nil {
-		testContext.Fatalf("explain %q: %v", searchSQL, transactionError)
+	planText := fixture.explainWithoutPlainScans(testContext, searchSQL)
+	expectedPlanParts := []string{
+		"BitmapOr",
+		"alert_scenario_name_trigram_index",
+		"alert_source_value_trigram_index",
+		"alert_message_trigram_index",
+		"alert_machine_id_trigram_index",
 	}
-
-	planText := strings.Join(planLines, "\n")
-	testContext.Logf("plan:\n%s", planText)
-	for _, expectedIndex := range []string{"alert_scenario_name_trigram_index", "alert_source_value_trigram_index"} {
-		if !strings.Contains(planText, expectedIndex) {
-			testContext.Errorf("the plan must use %s, got:\n%s", expectedIndex, planText)
+	for _, expectedPlanPart := range expectedPlanParts {
+		if !strings.Contains(planText, expectedPlanPart) {
+			testContext.Errorf("the plan must contain %s, got:\n%s", expectedPlanPart, planText)
 		}
 	}
 }
@@ -217,6 +213,27 @@ func (fixture readerFixture) seedUnmatchedAlerts(testContext *testing.T, alertCo
 	if _, analyseError := fixture.database.ExecContext(context.Background(), `ANALYZE alert, engine`); analyseError != nil {
 		testContext.Fatalf("analyse: %v", analyseError)
 	}
+}
+
+func (fixture readerFixture) explainWithoutPlainScans(testContext *testing.T, searchSQL string) string {
+	testContext.Helper()
+	var planLines []string
+	transactionError := fixture.database.RunInTx(context.Background(), nil, func(transactionContext context.Context, transaction bun.Tx) error {
+		if _, settingError := transaction.ExecContext(transactionContext, "SET LOCAL enable_seqscan = off; SET LOCAL enable_indexscan = off"); settingError != nil {
+			return settingError
+		}
+		planRows, explainError := transaction.QueryContext(transactionContext, "EXPLAIN "+searchSQL)
+		if explainError != nil {
+			return explainError
+		}
+		return collectPlanLines(planRows, &planLines)
+	})
+	if transactionError != nil {
+		testContext.Fatalf("explain %q: %v", searchSQL, transactionError)
+	}
+	planText := strings.Join(planLines, "\n")
+	testContext.Logf("plan:\n%s", planText)
+	return planText
 }
 
 func collectPlanLines(planRows *sql.Rows, planLines *[]string) error {

@@ -11,7 +11,8 @@ import (
 
 // A search ends as a timeout when its context deadline passed (even wrapped) or
 // when PostgreSQL cancelled the statement (SQLSTATE 57014, query_canceled); a
-// lost connection or any other failure stays a plain database error.
+// lost connection or any other failure stays a plain database error. A context
+// cancelled by the client (closed request) is not a timeout either.
 func TestIsTimeoutRecognisesDeadlineAndCancelledStatement(testContext *testing.T) {
 	timeoutCases := []struct {
 		name            string
@@ -20,6 +21,7 @@ func TestIsTimeoutRecognisesDeadlineAndCancelledStatement(testContext *testing.T
 	}{
 		{name: "wrapped deadline", queryError: fmt.Errorf("list: %w", context.DeadlineExceeded), expectedTimeout: true},
 		{name: "cancelled statement", queryError: fmt.Errorf("q: %w", &pgconn.PgError{Code: "57014"}), expectedTimeout: true},
+		{name: "cancelled by the client", queryError: fmt.Errorf("list: %w", context.Canceled), expectedTimeout: false},
 		{name: "connection failure", queryError: &pgconn.PgError{Code: "08006"}, expectedTimeout: false},
 		{name: "other error", queryError: errors.New("other"), expectedTimeout: false},
 		{name: "no error", queryError: nil, expectedTimeout: false},

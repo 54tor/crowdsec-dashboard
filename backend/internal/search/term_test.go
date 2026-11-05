@@ -26,6 +26,8 @@ func TestParseTermEnforcesBoundsAfterTrim(testContext *testing.T) {
 		{rawTerm: "ab\x00c", expectedTerm: "", expectedValid: false},
 		{rawTerm: "ab\tcd", expectedTerm: "", expectedValid: false},
 		{rawTerm: "ab\xffcd", expectedTerm: "", expectedValid: false},
+		{rawTerm: "a'b", expectedTerm: "a'b", expectedValid: true},
+		{rawTerm: "'); --", expectedTerm: "'); --", expectedValid: true},
 	}
 	for _, parseCase := range parseCases {
 		obtainedTerm, obtainedValid := ParseTerm(parseCase.rawTerm)
@@ -46,6 +48,8 @@ func TestContainsPatternEscapesLikeMetacharacters(testContext *testing.T) {
 		"a_b":    `%a\_b%`,
 		`a\b`:    `%a\\b%`,
 		`%_\`:    `%\%\_\\%`,
+		"a'b":    "%a'b%",
+		"'); --": "%'); --%",
 	}
 	for term, expectedPattern := range patternCases {
 		if obtainedPattern := ContainsPattern(term); obtainedPattern != expectedPattern {
@@ -69,6 +73,8 @@ func TestMatchesIsACaseInsensitiveLiteralSubstring(testContext *testing.T) {
 		{term: "peer", candidateTexts: []string{"local", "web-01"}, expectedMatch: false},
 		{term: "peer", candidateTexts: nil, expectedMatch: false},
 		{term: "", candidateTexts: []string{"anything"}, expectedMatch: true},
+		{term: "a'b", candidateTexts: []string{"test/a'b"}, expectedMatch: true},
+		{term: "a'b", candidateTexts: []string{"test/ab"}, expectedMatch: false},
 	}
 	for _, matchCase := range matchCases {
 		if obtainedMatch := Matches(matchCase.term, matchCase.candidateTexts...); obtainedMatch != matchCase.expectedMatch {
