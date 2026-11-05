@@ -29,6 +29,12 @@ type EngineService interface {
 	Probe(ctx context.Context, name string) (string, error)
 	CollectionStats() map[string]collector.EngineStats
 	UnavailableEngines() map[string]string
+	ObserveSidecar(ctx context.Context, name, sidecarURL string) (string, error)
+	ConfigureSidecar(ctx context.Context, name string, input engines.SidecarInput) (engines.Engine, error)
+	StageSidecarKey(ctx context.Context, name string) (engines.Engine, error)
+	PromoteSidecarKey(ctx context.Context, name string) (engines.Engine, error)
+	RemoveSidecar(ctx context.Context, name string) error
+	PingSidecar(ctx context.Context, name string, useNextKey bool) error
 }
 
 type engineService struct {
@@ -205,6 +211,8 @@ func writeEngineError(responseWriter http.ResponseWriter, operation string, oper
 		writeError(responseWriter, http.StatusBadRequest, "invalid_engine")
 	case errors.Is(operationError, engines.ErrSecretRequired):
 		writeError(responseWriter, http.StatusBadRequest, "engine_secret_required")
+	case errors.Is(operationError, engines.ErrSidecarRenameRequiresRemoval):
+		writeError(responseWriter, http.StatusConflict, "sidecar_rename_requires_removal")
 	default:
 		log.Printf("%s: %v", operation, operationError)
 		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")

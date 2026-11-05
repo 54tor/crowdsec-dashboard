@@ -16,6 +16,7 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, tokenRoutes(loadedConfig, services)...)
 	routes = append(routes, accountAdminRoutes(loadedConfig, services, newSearchLimiter(maxConcurrentAuditSearches))...)
 	routes = append(routes, engineRoutes(loadedConfig, services)...)
+	routes = append(routes, sidecarRoutes(loadedConfig, services)...)
 	routes = append(routes, allowlistRoutes(loadedConfig, services)...)
 	routes = append(routes, readRoutes(loadedConfig, services, newSearchLimiter(maxConcurrentSearches))...)
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
@@ -97,6 +98,19 @@ func engineRoutes(loadedConfig config.Config, services Services) []apiRoute {
 		{"PATCH /api/engines/{name}", accessAdminSessionOnly, http.HandlerFunc(engines.update)},
 		{"DELETE /api/engines/{name}", accessAdminSessionOnly, http.HandlerFunc(engines.remove)},
 		{"POST /api/engines/{name}/test", accessAdmin, http.HandlerFunc(engines.test)},
+	}
+}
+
+func sidecarRoutes(loadedConfig config.Config, services Services) []apiRoute {
+	engines := engineHandlers{service: services.Engines, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	sidecars := sidecarHandlers{engineHandlers: engines, issuer: loadedConfig.WebAuthnRPID}
+	return []apiRoute{
+		{"POST /api/engines/{name}/sidecar/observe", accessAdminSessionOnly, http.HandlerFunc(sidecars.observe)},
+		{"PUT /api/engines/{name}/sidecar", accessAdminSessionOnly, http.HandlerFunc(sidecars.configure)},
+		{"POST /api/engines/{name}/sidecar/test", accessAdmin, http.HandlerFunc(sidecars.test)},
+		{"POST /api/engines/{name}/sidecar/keys/next", accessAdminSessionOnly, http.HandlerFunc(sidecars.stageKey)},
+		{"POST /api/engines/{name}/sidecar/keys/promote", accessAdminSessionOnly, http.HandlerFunc(sidecars.promoteKey)},
+		{"DELETE /api/engines/{name}/sidecar", accessAdminSessionOnly, http.HandlerFunc(sidecars.remove)},
 	}
 }
 

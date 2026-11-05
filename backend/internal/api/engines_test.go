@@ -217,7 +217,7 @@ func TestEngineNamesReadableByReadOnly(testContext *testing.T) {
 
 	recorder := fixture.send(http.MethodGet, "/api/engines/names", "")
 
-	expectedBody := `{"items":[{"name":"local","is_local":true,"enabled":true},{"name":"edge-1","is_local":false,"enabled":false}]}`
+	expectedBody := `{"items":[{"name":"local","is_local":true,"enabled":true,"has_sidecar":true},{"name":"edge-1","is_local":false,"enabled":false,"has_sidecar":false}]}`
 	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != expectedBody {
 		testContext.Fatalf("unexpected response %d %q", recorder.Code, recorder.Body.String())
 	}
@@ -243,7 +243,7 @@ func TestListEnginesShowsCollectionStateWithoutSecrets(testContext *testing.T) {
 	expectedBody := `{"items":[{"name":"edge-1","is_local":false,"lapi_url":"https://edge.example.com","machine_id":"dashboard",` +
 		`"proxy":{"kind":"socks5","url":"socks5://proxy.example.com:1080"},"has_proxy_credentials":true,"allow_insecure_http":false,` +
 		`"public_addresses":[],"enabled":true,"sync_enabled":false,"collection":{"cursor":42,"last_collected_at":"2026-10-31T12:00:00Z",` +
-		`"last_error_code":"engine_unreachable","consecutive_failures":0,"next_attempt_at":null,"inserted":0,"duplicates":0,"skipped":0,"gaps":0,"resets":0}}]}`
+		`"last_error_code":"engine_unreachable","consecutive_failures":0,"next_attempt_at":null,"inserted":0,"duplicates":0,"skipped":0,"gaps":0,"resets":0},"sidecar":null}]}`
 	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != expectedBody {
 		testContext.Fatalf("unexpected response %d\n got %s\nwant %s", recorder.Code, recorder.Body.String(), expectedBody)
 	}

@@ -60,7 +60,11 @@ func (key SigningKey) PublicKeyHex() string {
 }
 
 func (key SigningKey) TrustedKeyLine() string {
-	return key.KeyID + " " + key.PublicKeyHex()
+	return TrustedKeyLineOf(key.KeyID, key.PublicKeyHex())
+}
+
+func TrustedKeyLineOf(keyID, publicKeyHex string) string {
+	return keyID + " " + publicKeyHex
 }
 
 func (key SigningKey) String() string {

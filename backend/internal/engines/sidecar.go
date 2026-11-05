@@ -11,6 +11,8 @@ var (
 	ErrEngineHasNoSidecar = errors.New("engine has no sidecar")
 	ErrSidecarURLChange   = errors.New("sidecar url cannot change while a sidecar is configured")
 	ErrNoNextSidecarKey   = errors.New("engine has no staged sidecar key")
+
+	ErrSidecarRenameRequiresRemoval = errors.New("an engine with a sidecar cannot be renamed")
 )
 
 type Sidecar struct {

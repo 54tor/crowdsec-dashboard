@@ -101,6 +101,9 @@ func (repository *Repository) planIdentity(ctx context.Context, transaction bun.
 	var changes []columnChange
 	effectiveName := currentRow.Name
 	if input.Name != "" && input.Name != currentRow.Name {
+		if currentRow.SidecarURL != nil {
+			return nil, ErrSidecarRenameRequiresRemoval
+		}
 		if nameError := validateNameField(input.Name); nameError != nil {
 			return nil, nameError
 		}

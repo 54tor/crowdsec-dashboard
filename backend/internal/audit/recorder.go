@@ -31,6 +31,10 @@ const (
 	ActionEngineUpdated              Action = "engine_updated"
 	ActionEngineDeleted              Action = "engine_deleted"
 	ActionEngineTested               Action = "engine_tested"
+	ActionEngineSidecarConfigured    Action = "engine_sidecar_configured"
+	ActionEngineSidecarKeyStaged     Action = "engine_sidecar_key_staged"
+	ActionEngineSidecarKeyPromoted   Action = "engine_sidecar_key_promoted"
+	ActionEngineSidecarRemoved       Action = "engine_sidecar_removed"
 	ActionAlertDeleted               Action = "alert_deleted"
 
 	ActionAPITokenCreated          Action = "api_token_created"

@@ -37,13 +37,15 @@ type engineView struct {
 	Enabled             bool                 `json:"enabled"`
 	SyncEnabled         bool                 `json:"sync_enabled"`
 	Collection          engineCollectionView `json:"collection"`
+	Sidecar             *sidecarView         `json:"sidecar"`
 	Warning             string               `json:"warning,omitempty"`
 }
 
 type engineNameView struct {
-	Name    string `json:"name"`
-	IsLocal bool   `json:"is_local"`
-	Enabled bool   `json:"enabled"`
+	Name       string `json:"name"`
+	IsLocal    bool   `json:"is_local"`
+	Enabled    bool   `json:"enabled"`
+	HasSidecar bool   `json:"has_sidecar"`
 }
 
 type engineListResponse[View any] struct {
@@ -68,6 +70,7 @@ func newEngineView(viewedEngine engines.Engine) engineView {
 			Cursor:          viewedEngine.CollectionCursor,
 			LastCollectedAt: viewedEngine.LastCollectedAt,
 		},
+		Sidecar: newSidecarView(viewedEngine.Sidecar),
 	}
 	if viewedEngine.LastCollectionError != "" {
 		lastErrorCode := viewedEngine.LastCollectionError
@@ -112,7 +115,12 @@ func applyCollectionState(views []engineView, statsByName map[string]collector.E
 func newEngineNameViews(engineList []engines.Engine) []engineNameView {
 	views := make([]engineNameView, 0, len(engineList))
 	for _, listedEngine := range engineList {
-		views = append(views, engineNameView{Name: listedEngine.Name, IsLocal: listedEngine.IsLocal, Enabled: listedEngine.Enabled})
+		views = append(views, engineNameView{
+			Name:       listedEngine.Name,
+			IsLocal:    listedEngine.IsLocal,
+			Enabled:    listedEngine.Enabled,
+			HasSidecar: listedEngine.IsLocal || listedEngine.Sidecar != nil,
+		})
 	}
 	return views
 }

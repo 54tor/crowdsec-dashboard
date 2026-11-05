@@ -360,17 +360,19 @@ trace of them is `has_proxy_credentials`. Error bodies never repeat a submitted 
 
 | Method | Path | Body | Success response | Errors |
 |---|---|---|---|---|
-| GET | `/api/engines/names` | none | `200 {"items":[{name,is_local,enabled}]}`, any role | 401, 503 `database_unavailable` |
+| GET | `/api/engines/names` | none | `200 {"items":[{name,is_local,enabled,has_sidecar}]}`, any role (`has_sidecar` is true for `local`, which runs its commands itself, and for a remote engine with a sidecar) | 401, 503 `database_unavailable` |
 | GET | `/api/engines` | none | `200 {"items":[engine]}` | 403, 503 |
 | POST | `/api/engines` | `{name, lapi_url, machine_id, machine_password, proxy?{kind,url,username?,password?}, allow_insecure_http, public_addresses, enabled, sync_enabled}` | `201 engine` | 400 `invalid_engine`, `invalid_request`; 409 `engine_exists`, `engine_deleting` (same name or URL as an engine whose archive is still being deleted); 403; 503 |
-| PATCH | `/api/engines/{name}` | same fields, all optional; absent = unchanged; `"proxy": null` removes the proxy; `proxy.clear_credentials: true` drops the proxy credentials | `200 engine` | 400 `invalid_engine`, `engine_secret_required`, `invalid_request`; 404 `engine_not_found`; 409 `engine_exists`, `engine_local_readonly`; 403; 503 |
+| PATCH | `/api/engines/{name}` | same fields, all optional; absent = unchanged; `"proxy": null` removes the proxy; `proxy.clear_credentials: true` drops the proxy credentials | `200 engine` | 400 `invalid_engine`, `engine_secret_required`, `invalid_request`; 404 `engine_not_found`; 409 `engine_exists`, `engine_local_readonly`, `sidecar_rename_requires_removal` (a rename of an engine that has a sidecar); 403; 503 |
 | DELETE | `/api/engines/{name}` | `{"confirm":"<name>"}` | `202 {"status":"deleting"}`: the archive is deleted in the background | 400 `confirmation_required`; 404; 409 `engine_local_readonly`; 403; 503 |
 | POST | `/api/engines/{name}/test` | none | `200 {"status":"ok"}` | 502 `engine_unreachable`, `engine_auth_failed`, `engine_blocked_address`, `engine_secret_unreadable` (the stored secret cannot be opened); 404; 403; 503 |
 
 `engine` is `{name, is_local, lapi_url, machine_id, proxy:{kind,url}|null, has_proxy_credentials,
 allow_insecure_http, public_addresses, enabled, sync_enabled, collection:{cursor,
 last_collected_at, last_error_code, consecutive_failures, next_attempt_at, inserted, duplicates,
-skipped, gaps, resets}}`. `cursor`, `last_collected_at` (last successful collection) and
+skipped, gaps, resets}, sidecar}`. `sidecar` is `null` or `{url, spki_sha256, key_id, public_key,
+next_key_id, next_public_key}` (`next_*` empty when no key is staged); it never carries a private
+key. `cursor`, `last_collected_at` (last successful collection) and
 `last_error_code` come from the database; `consecutive_failures`, `next_attempt_at` and the counters
 come from the running collector and restart at zero with the process (`0` or `null` before the
 first collection). `last_error_code` is one of `engine_unreachable`, `engine_auth_failed`,
@@ -405,6 +407,48 @@ out of the collection until it is fixed); never a raw error text.
   target. After each successful write the engine registry is reloaded; when that reload fails the
   write is kept, the failure is logged and the response carries `"warning":"registry_reload_failed"`
   (the previous engine set stays active until the next successful reload).
+
+### Engine sidecars
+
+A remote engine can run commands through a sidecar deployed next to its CrowdSec. Every route is
+admin; all but the test are session only (403 `session_required` for a token). Bodies are capped at
+8 KiB, unknown fields are refused (400 `invalid_request`).
+
+| Method | Path | Body | Success response | Errors |
+|---|---|---|---|---|
+| POST | `/api/engines/{name}/sidecar/observe` | `{"url"}` | `200 {"spki_sha256"}`: the SPKI SHA-256 of the certificate the sidecar presents | 400 `invalid_engine`; 404; 409 `engine_local_readonly`; 502 `sidecar_*` |
+| PUT | `/api/engines/{name}/sidecar` | `{"url","spki_sha256","confirm":"<name>"}` | `200 {"sidecar","trusted_key_line","issuer","audience"}` | 400 `confirmation_required`, `invalid_engine`; 404; 409 `sidecar_fingerprint_changed`, `sidecar_url_change_requires_removal`, `engine_local_readonly`; 502 `sidecar_*`; 503 `sidecar_issuer_missing` |
+| POST | `/api/engines/{name}/sidecar/test` | none | `200 {"status":"ok"}`: a ping signed with the current key | 404; 409 `engine_has_no_sidecar`, `engine_secret_unreadable`; 502 `sidecar_*`; 503 `sidecar_busy`; 504 `cscli_timeout` |
+| POST | `/api/engines/{name}/sidecar/keys/next` | none | `200 {"sidecar","trusted_key_line"}` (the line of the staged key) | 404; 409 `engine_has_no_sidecar` |
+| POST | `/api/engines/{name}/sidecar/keys/promote` | none | `200 {"sidecar","trusted_key_line"}` (the line of the new current key) | 404; 409 `engine_has_no_sidecar`, `sidecar_no_next_key`; 502 `sidecar_*` |
+| DELETE | `/api/engines/{name}/sidecar` | `{"confirm":"<name>"}` | `200 {"status":"removed"}` | 400 `confirmation_required`; 404; 409 `engine_has_no_sidecar` |
+
+- `url` is `https`, with a host, an optional port and no path, query, fragment or credentials; the
+  same literal addresses as `lapi_url` are refused (400 `invalid_engine`) before any connection.
+  The sidecar is reached through the engine's own guarded client and proxy (an `https` proxy is
+  refused), so the engine must be enabled and its stored settings readable.
+- `PUT` observes the certificate again and refuses (409 `sidecar_fingerprint_changed`) when its
+  SPKI SHA-256 differs from `spki_sha256` (64 hexadecimal characters, stored in lower case). The
+  first `PUT` generates the engine's signing key; a `PUT` with the same URL re-pins a renewed
+  certificate and keeps the keys; another URL needs the sidecar to be removed first.
+- The `PUT` response gives the values to configure on the sidecar: `issuer` for `SIDECAR_ISSUER`
+  (the dashboard's `WEBAUTHN_RP_ID`; without it the enrolment is refused with 503
+  `sidecar_issuer_missing`), `audience` for `SIDECAR_AUDIENCE` (the engine name, which is why an
+  engine with a sidecar cannot be renamed) and `trusted_key_line` (`<kid> <public key hex>`) for
+  `SIDECAR_TRUSTED_KEYS_FILE`.
+- Key rotation: `keys/next` stages a new key (replacing a previously staged one) and returns its
+  line, to add to the trusted keys file; `keys/promote` first pings the sidecar with the staged key
+  and only promotes it when that ping succeeds (otherwise the error is returned and nothing
+  changes). The old line can then be removed from the file.
+- `sidecar_*` errors: `sidecar_unavailable` (unreachable or invalid answer),
+  `sidecar_fingerprint_mismatch` (the certificate is not the pinned one), `sidecar_auth_failed`
+  (the sidecar refused the token, for example an untrusted key), `sidecar_clock_skew`; also
+  409 `sidecar_command_refused`. `engine_secret_unreadable`: the engine's stored sidecar key cannot be
+  opened; `DELETE` still works, so the sidecar can be removed and enrolled again.
+- The configuration, the staging, the promotion and the removal are audited
+  (`engine_sidecar_configured`, `engine_sidecar_key_staged`, `engine_sidecar_key_promoted`,
+  `engine_sidecar_removed`) with the engine name as target, and each reloads the engine registry
+  (`"warning":"registry_reload_failed"` as above). Observing and testing are not audited.
 
 ## Allowlists
 

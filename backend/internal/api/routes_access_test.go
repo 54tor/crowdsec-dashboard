@@ -185,7 +185,12 @@ func TestReadTokenGets403OnEveryAdminRoute(testContext *testing.T) {
 
 func TestAdminWriteTokenGets403OnEngineWrites(testContext *testing.T) {
 	environment := newRouteAccessEnvironment(testContext)
-	engineWrites := map[string]bool{"POST /api/engines": true, "PATCH /api/engines/{name}": true, "DELETE /api/engines/{name}": true}
+	engineWrites := map[string]bool{
+		"POST /api/engines": true, "PATCH /api/engines/{name}": true, "DELETE /api/engines/{name}": true,
+		"POST /api/engines/{name}/sidecar/observe": true, "PUT /api/engines/{name}/sidecar": true,
+		"POST /api/engines/{name}/sidecar/keys/next": true, "POST /api/engines/{name}/sidecar/keys/promote": true,
+		"DELETE /api/engines/{name}/sidecar": true,
+	}
 	checkedRoutes := 0
 	for _, route := range routeTableForTest(environment) {
 		if !engineWrites[route.Pattern] {
@@ -341,6 +346,40 @@ var requiredSessionOnlyRoutes = map[string]routeAccess{
 	"POST /api/accounts/{name}/unlock":              accessAdminSessionOnly,
 	"DELETE /api/accounts/{name}":                   accessAdminSessionOnly,
 	"GET /api/audit":                                accessAdminSessionOnly,
+
+	"POST /api/engines/{name}/sidecar/observe":      accessAdminSessionOnly,
+	"PUT /api/engines/{name}/sidecar":               accessAdminSessionOnly,
+	"POST /api/engines/{name}/sidecar/keys/next":    accessAdminSessionOnly,
+	"POST /api/engines/{name}/sidecar/keys/promote": accessAdminSessionOnly,
+	"DELETE /api/engines/{name}/sidecar":            accessAdminSessionOnly,
+}
+
+// requiredSidecarRoutes pins the access class of every sidecar enrolment route;
+// any new /sidecar route must be added here.
+var requiredSidecarRoutes = map[string]routeAccess{
+	"POST /api/engines/{name}/sidecar/observe":      accessAdminSessionOnly,
+	"PUT /api/engines/{name}/sidecar":               accessAdminSessionOnly,
+	"POST /api/engines/{name}/sidecar/test":         accessAdmin,
+	"POST /api/engines/{name}/sidecar/keys/next":    accessAdminSessionOnly,
+	"POST /api/engines/{name}/sidecar/keys/promote": accessAdminSessionOnly,
+	"DELETE /api/engines/{name}/sidecar":            accessAdminSessionOnly,
+}
+
+func TestSidecarRoutesKeepTheirAccessClass(testContext *testing.T) {
+	foundAccessByPattern := map[string]routeAccess{}
+	for _, route := range routeTableForTest(newRouteAccessEnvironment(testContext)) {
+		foundAccessByPattern[route.Pattern] = route.Access
+		_, isPinned := requiredSidecarRoutes[route.Pattern]
+		if strings.Contains(route.Pattern, "/sidecar") && !isPinned {
+			testContext.Errorf("%s is not pinned in requiredSidecarRoutes", route.Pattern)
+		}
+	}
+	for pattern, expectedAccess := range requiredSidecarRoutes {
+		foundAccess, isPresent := foundAccessByPattern[pattern]
+		if !isPresent || foundAccess != expectedAccess {
+			testContext.Errorf("%s: expected access %d, found %d (present=%v)", pattern, expectedAccess, foundAccess, isPresent)
+		}
+	}
 }
 
 var requiredSyncRoutes = map[string]routeAccess{
