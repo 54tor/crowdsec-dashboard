@@ -56,7 +56,10 @@ export function ClientFilterField({ id, label, value, onChange, visibleCount, to
           </Button>
         )}
       </div>
-      <p id={countId} role="status" aria-live="polite" className="text-xs text-muted-foreground">
+      <p id={countId} aria-hidden="true" className="text-xs text-muted-foreground">
+        {countMessage}
+      </p>
+      <p role="status" aria-live="polite" className="sr-only">
         {announcedCountMessage}
       </p>
     </div>

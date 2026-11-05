@@ -17,6 +17,7 @@ const SEARCH_TOO_SHORT_MESSAGE = 'Enter at least 3 characters.'
 const SEARCH_TIMEOUT_MESSAGE = 'The search took longer than 5 seconds. Narrow it down.'
 const CLEAR_SEARCH_LABEL = 'Clear the search'
 const SEARCH_INVALID_MESSAGE = 'The search cannot contain control characters.'
+const SEARCH_BUSY_MESSAGE = 'Too many searches are running, try again in a moment.'
 
 const UNFILTERED_TABLE_URL = '/api/alerts?page=1&per_page=20'
 const UNFILTERED_CHART_URL = '/api/alerts?page=1&per_page=100'
@@ -218,5 +219,16 @@ describe('alerts search', () => {
     renderApp('/alerts?q=ssh-bf')
 
     expect(await screen.findByText(SEARCH_TIMEOUT_MESSAGE)).toBeInTheDocument()
+  })
+  it('showsTheSearchBusyMessage', async () => {
+    const searchBusyResponse = { status: 429, body: { error: 'search_busy' }, headers: { 'Retry-After': '1' } }
+    stubFetch({
+      ...unfilteredAlertsRoutes(),
+      [`GET ${SEARCHED_TABLE_URL}`]: searchBusyResponse,
+      [`GET ${SEARCHED_CHART_URL}`]: searchBusyResponse,
+    })
+    renderApp('/alerts?q=ssh-bf')
+
+    expect(await screen.findByText(SEARCH_BUSY_MESSAGE)).toBeInTheDocument()
   })
 })

@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ClientFilterField } from '@/components/ClientFilterField'
 import en from '@/i18n/en.json'
-import { prepareEnglishApp } from '@/test/pageHarness'
+import { prepareEnglishApp, waitForDebounce } from '@/test/pageHarness'
 
 const FIELD_LABEL = 'Filter the sample list'
 
@@ -45,6 +45,21 @@ describe('ClientFilterField', () => {
     const filterInput = screen.getByLabelText(FIELD_LABEL)
     expect(filterInput).toHaveValue('')
     expect(filterInput).toHaveFocus()
+  })
+
+  // Pages mount the field before their data arrives: the count must be right as soon as the
+  // rows are there, while the polite live region still waits for the debounce to announce.
+  it('showsTheCountAtOnceWhenTheDataArrivesAfterTheFieldMounted', async () => {
+    const { rerender } = render(<StatefulFilterField visibleCount={0} totalCount={0} />)
+
+    rerender(<StatefulFilterField visibleCount={4} totalCount={4} />)
+
+    expect(screen.getByText('4 of 4', { selector: '[aria-hidden="true"]' })).toBeVisible()
+    const countStatus = screen.getByRole('status')
+    expect(countStatus).toHaveClass('sr-only')
+    expect(countStatus).not.toHaveTextContent('4 of 4')
+    await waitForDebounce()
+    await waitFor(() => expect(countStatus).toHaveTextContent('4 of 4'))
   })
 
   // An empty list has nothing to filter: the field would only add noise.

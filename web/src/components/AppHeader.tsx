@@ -7,7 +7,12 @@ import { useCommandPaletteShortcut } from '@/hooks/useCommandPaletteShortcut'
 import { useIsMobileViewport } from '@/hooks/useMediaQuery'
 
 function focusedElement(): HTMLElement | null {
-  return document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const activeElement = document.activeElement
+  const isDocumentLevelElement = activeElement === document.body || activeElement === document.documentElement
+  if (isDocumentLevelElement || !(activeElement instanceof HTMLElement)) {
+    return null
+  }
+  return activeElement
 }
 
 export function AppHeader() {

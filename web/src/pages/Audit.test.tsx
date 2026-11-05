@@ -23,6 +23,7 @@ const TARGET_HIDDEN_EXPLANATION = 'Hidden on purpose for failed sign-ins'
 const TARGET_UNAVAILABLE_PLACEHOLDER = 'Not available'
 const SEARCH_TOO_SHORT_MESSAGE = 'Enter at least 3 characters.'
 const SEARCH_INVALID_MESSAGE = 'The search cannot contain control characters.'
+const SEARCH_BUSY_MESSAGE = 'Too many searches are running, try again in a moment.'
 const PHONE_VIEWPORT_WIDTH_IN_PIXELS = 390
 const SECOND_AUDIT_PAGE_URL = '/api/audit?page=2&per_page=20'
 const FIRST_PAGE_FILTERED_ON_ACTION_URL = '/api/audit?page=1&per_page=20&action=login_failure'
@@ -161,6 +162,44 @@ describe('audit log page', () => {
     renderApp('/audit')
 
     expect(await screen.findByText(en.list.searchTimeout)).toBeInTheDocument()
+  })
+
+  it('showsTheSearchBusyMessage', async () => {
+    stubFetch({
+      'GET /api/auth/me': SESSION_OK,
+      [`GET ${UNFILTERED_AUDIT_URL}`]: { status: 429, body: { error: 'search_busy' }, headers: { 'Retry-After': '1' } },
+    })
+    renderApp('/audit')
+
+    expect(await screen.findByText(SEARCH_BUSY_MESSAGE)).toBeInTheDocument()
+  })
+
+  // The first request is held open; typing a search replaces it, so TanStack must abort it
+  // through the signal handed to fetch, and the aborted request must not surface as an error.
+  it('cancelsTheAbandonedRequestWithoutShowingAnError', async () => {
+    const searchedAuditUrl = '/api/audit?page=1&per_page=20&q=peer'
+    const fetchMock = stubFetch(auditRoutes([], { [`GET ${searchedAuditUrl}`]: { status: 200, body: makePage([makeAuditEvent()]) } }))
+    const defaultImplementation = fetchMock.getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    const heldRequest: { signal?: AbortSignal } = {}
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== UNFILTERED_AUDIT_URL) {
+        return defaultImplementation(input, init)
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        heldRequest.signal = init?.signal ?? undefined
+        heldRequest.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      })
+    })
+    const user = userEvent.setup()
+    renderApp('/audit')
+    await screen.findByLabelText(SEARCH_LABEL)
+
+    await user.type(screen.getByLabelText(SEARCH_LABEL), 'peer')
+    await waitForDebounce()
+
+    expect(await screen.findByText('engine_create', { selector: 'td bdi' })).toBeInTheDocument()
+    expect(heldRequest.signal?.aborted).toBe(true)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('explainsWhyTheTargetOfAFailedSignInIsHidden', async () => {

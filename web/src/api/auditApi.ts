@@ -36,7 +36,7 @@ export function buildAuditUrl(filters: AuditFilters, page: number, perPage: numb
 export function useAuditList(filters: AuditFilters, page: number, isEnabled: boolean): UseQueryResult<Page<AuditEvent>> {
   return useQuery({
     queryKey: ['audit', filters, page],
-    queryFn: () => apiFetch<Page<AuditEvent>>(buildAuditUrl(filters, page, PAGE_SIZE)),
+    queryFn: ({ signal }) => apiFetch<Page<AuditEvent>>(buildAuditUrl(filters, page, PAGE_SIZE), { signal }),
     placeholderData: keepPreviousData,
     enabled: isEnabled,
   })

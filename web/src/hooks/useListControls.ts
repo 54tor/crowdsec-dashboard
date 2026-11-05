@@ -1,13 +1,13 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 import type { ListFilters } from '@/api/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useKnownEngineNames } from '@/hooks/useKnownEngineNames'
+import { EMPTY_FILTERS } from '@/lib/emptyFilters'
 import { validateFilters } from '@/lib/filterValidation'
 
 export const FILTER_DEBOUNCE_MILLISECONDS = 300
 const LOCAL_ENGINE_NAME = 'local'
-export const EMPTY_FILTERS: ListFilters = { q: '', scenario: '', ip: '', since: '', engine: '', source_kind: '' }
 
 function filtersFromUrl(searchParams: URLSearchParams): ListFilters {
   return { ...EMPTY_FILTERS, q: searchParams.get('q') ?? '', engine: searchParams.get('engine') ?? '' }
@@ -19,13 +19,13 @@ function isEngineKnown(engineName: string, knownEngineNames: string[] | undefine
 
 export function useListControls() {
   const [searchParams] = useSearchParams()
-  const currentUrlSearch = searchParams.toString()
+  const { key: currentLocationKey } = useLocation()
   const knownEngineNames = useKnownEngineNames()
   const [draftFilters, setDraftFilters] = useState<ListFilters>(() => filtersFromUrl(searchParams))
-  const [appliedUrlSearch, setAppliedUrlSearch] = useState(currentUrlSearch)
+  const [appliedLocationKey, setAppliedLocationKey] = useState(currentLocationKey)
 
-  if (appliedUrlSearch !== currentUrlSearch) {
-    setAppliedUrlSearch(currentUrlSearch)
+  if (appliedLocationKey !== currentLocationKey) {
+    setAppliedLocationKey(currentLocationKey)
     setDraftFilters(filtersFromUrl(searchParams))
   }
   const isDraftEngineUnknown = knownEngineNames !== undefined && !isEngineKnown(draftFilters.engine, knownEngineNames)

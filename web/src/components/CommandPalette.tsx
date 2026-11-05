@@ -24,7 +24,7 @@ function PaletteStatus({ results, searchTerm }: { results: PaletteResults; searc
   return (
     <div role="status" className="grid gap-1 px-2 text-xs text-muted-foreground empty:hidden">
       {results.isSearchingRecords && <p>{t('palette.searching')}</p>}
-      {results.hasRecordSearchFailed && <p>{t('palette.searchError')}</p>}
+      {results.hasRecordSearchFailed && <p>{t(results.isRecordSearchBusy ? 'errors.search_busy' : 'palette.searchError')}</p>}
       {hasNoResult && <p>{t('palette.noResult')}</p>}
       {needsLongerTerm && <p>{t('palette.typeMore')}</p>}
     </div>

@@ -3,8 +3,9 @@ import type { AccountRole } from '@/auth/AuthContext'
 import type { Alert, Decision, Page } from '@/api/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useKnownEngineNames } from '@/hooks/useKnownEngineNames'
-import { EMPTY_FILTERS } from '@/hooks/useListControls'
 import { usePagedList } from '@/hooks/usePagedList'
+import { isSearchBusyError } from '@/lib/apiErrors'
+import { EMPTY_FILTERS } from '@/lib/emptyFilters'
 import { validateFilters } from '@/lib/filterValidation'
 import { PALETTE_DEBOUNCE_MILLISECONDS, PALETTE_RESULTS_PER_CATEGORY } from '@/lib/paletteTargets'
 import { matchesSearchText } from '@/lib/searchText'
@@ -16,6 +17,7 @@ interface RecordResults {
   recordSearchTerm: string
   isSearchingRecords: boolean
   hasRecordSearchFailed: boolean
+  isRecordSearchBusy: boolean
 }
 
 export interface PaletteResults extends RecordResults {
@@ -27,6 +29,7 @@ interface RecordQueryState<Item> {
   data?: Page<Item>
   isFetching: boolean
   isError: boolean
+  error: unknown
   isPlaceholderData: boolean
 }
 
@@ -55,7 +58,7 @@ function useRecordResults(searchText: string): RecordResults {
   const decisionsQuery = usePagedList<Decision>('decisions', searchFilters, 1, PALETTE_RESULTS_PER_CATEGORY, isSearchTermLongEnough)
   const isDebouncePending = typedSearchTerm !== debouncedSearchTerm && isRecordSearchTermUsable(typedSearchTerm)
   if (!isSearchTermLongEnough) {
-    return { alerts: [], decisions: [], recordSearchTerm: debouncedSearchTerm, isSearchingRecords: isDebouncePending, hasRecordSearchFailed: false }
+    return { alerts: [], decisions: [], recordSearchTerm: debouncedSearchTerm, isSearchingRecords: isDebouncePending, hasRecordSearchFailed: false, isRecordSearchBusy: false }
   }
   return {
     alerts: currentResults(alertsQuery),
@@ -63,6 +66,7 @@ function useRecordResults(searchText: string): RecordResults {
     recordSearchTerm: debouncedSearchTerm,
     isSearchingRecords: isDebouncePending || alertsQuery.isFetching || decisionsQuery.isFetching,
     hasRecordSearchFailed: alertsQuery.isError || decisionsQuery.isError,
+    isRecordSearchBusy: isSearchBusyError(alertsQuery.error) || isSearchBusyError(decisionsQuery.error),
   }
 }
 

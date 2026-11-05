@@ -18,6 +18,7 @@ const TYPE_MORE_MESSAGE = 'Type at least 3 characters to search alerts and decis
 const SEARCHING_MESSAGE = 'Searching…'
 const NO_RESULT_MESSAGE = 'No result'
 const SEARCH_ERROR_MESSAGE = 'Alerts and decisions could not be searched.'
+const SEARCH_BUSY_MESSAGE = 'Too many searches are running, try again in a moment.'
 const ALERTS_GROUP_HEADING = 'Alerts'
 const DECISIONS_GROUP_HEADING = 'Decisions'
 // Existing en.json values used by the pages the palette opens.
@@ -374,6 +375,100 @@ describe('command palette', () => {
 
     await waitFor(() => expect(visitedLocations.at(-1)).toBe('/decisions?q=ssh-bf'))
     await waitFor(() => expect(document.getElementById('main-content')).toHaveFocus())
+  })
+
+  // Picking a result whose URL is the one already shown is still a navigation: the edited
+  // field and its request must go back to what the URL says.
+  it('anAlertResultForTheShownSearchResetsTheEditedField', async () => {
+    const fetchMock = stubFetch({
+      ...shellRoutes(),
+      ...paletteRecordRoutes(),
+      'GET /api/alerts?page=1&per_page=20&q=ssh-bf': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/searched-row' })]) },
+      'GET /api/alerts?page=1&per_page=100&q=ssh-bf': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/searched-row' })]) },
+      'GET /api/alerts?page=1&per_page=20&q=foo': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/foo-row' })]) },
+    })
+    const user = userEvent.setup()
+    const { visitedLocations } = renderApp('/alerts?q=ssh-bf')
+    expect(await screen.findByText('crowdsecurity/searched-row', { selector: 'td bdi' })).toBeInTheDocument()
+    await user.clear(screen.getByLabelText(FILTER_SEARCH_LABEL))
+    await user.type(screen.getByLabelText(FILTER_SEARCH_LABEL), 'foo')
+    await waitForDebounce()
+    expect(await screen.findByText('crowdsecurity/foo-row', { selector: 'td bdi' })).toBeInTheDocument()
+    await openPaletteWithShortcut(user)
+
+    await user.type(paletteInput(), 'ssh-bf')
+    await waitForDebounce()
+    await user.click(await screen.findByRole('option', { name: 'crowdsecurity/ssh-bf-result 203.0.113.7' }))
+
+    expect(visitedLocations.at(-1)).toBe('/alerts?q=ssh-bf')
+    await waitFor(() => expect(screen.getByLabelText(FILTER_SEARCH_LABEL)).toHaveValue('ssh-bf'))
+    await waitForDebounce()
+    expect(await screen.findByText('crowdsecurity/searched-row', { selector: 'td bdi' })).toBeInTheDocument()
+    const tableUrls = requestedUrls(fetchMock).filter((requestedUrl) => requestedUrl.startsWith('/api/alerts?') && requestedUrl.includes('per_page=20'))
+    expect(tableUrls.at(-1)).toBe('/api/alerts?page=1&per_page=20&q=ssh-bf')
+  })
+
+  it('anEngineResultForTheShownEngineResetsTheEditedField', async () => {
+    const fetchMock = stubFetch({
+      ...shellRoutes(),
+      'GET /api/engines/names': { status: 200, body: { items: [{ name: 'peer-a', is_local: false, enabled: true }] } },
+      'GET /api/alerts?page=1&per_page=20&engine=peer-a': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/peer-row' })]) },
+      'GET /api/alerts?page=1&per_page=20&q=foo&engine=peer-a': { status: 200, body: makePage([makeAlert({ scenario: 'crowdsecurity/foo-row' })]) },
+    })
+    const user = userEvent.setup()
+    renderApp('/alerts?engine=peer-a')
+    expect(await screen.findByText('crowdsecurity/peer-row', { selector: 'td bdi' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText(FILTER_SEARCH_LABEL), 'foo')
+    await waitForDebounce()
+    expect(await screen.findByText('crowdsecurity/foo-row', { selector: 'td bdi' })).toBeInTheDocument()
+    await openPaletteWithShortcut(user)
+
+    await user.type(paletteInput(), 'peer')
+    await waitFor(() => expect(selectedOptionText()).toBe('peer-a'))
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(screen.getByLabelText(FILTER_SEARCH_LABEL)).toHaveValue(''))
+    await waitForDebounce()
+    expect(await screen.findByText('crowdsecurity/peer-row', { selector: 'td bdi' })).toBeInTheDocument()
+    const tableUrls = requestedUrls(fetchMock).filter((requestedUrl) => requestedUrl.startsWith('/api/alerts?') && requestedUrl.includes('per_page=20'))
+    expect(tableUrls.at(-1)).toBe('/api/alerts?page=1&per_page=20&engine=peer-a')
+  })
+
+  // Ctrl+K with nothing focused reports the body as the active element: it is no opener,
+  // so closing must fall back to the main content.
+  it('escapeFocusesTheMainContentWhenNothingWasFocused', async () => {
+    stubFetch(shellRoutes())
+    const user = userEvent.setup()
+    await renderAlertsPage()
+    expect(document.activeElement).toBe(document.body)
+    await openPaletteWithShortcut(user)
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(document.getElementById('main-content')).toHaveFocus())
+  })
+
+  it('aBusySearchServerShowsTheBusyMessageWithoutRetrying', async () => {
+    const busyResponse = { status: 429, body: { error: 'search_busy' }, headers: { 'Retry-After': '1' } }
+    const fetchMock = stubFetch({
+      ...shellRoutes(),
+      [`GET ${PALETTE_ALERTS_URL}`]: busyResponse,
+      [`GET ${PALETTE_DECISIONS_URL}`]: busyResponse,
+    })
+    const user = userEvent.setup()
+    await renderAlertsPage()
+    await openPaletteWithShortcut(user)
+
+    await user.type(paletteInput(), 'ssh-bf')
+    await waitForDebounce()
+
+    expect(await screen.findByText(SEARCH_BUSY_MESSAGE)).toBeInTheDocument()
+    expect(screen.queryByText(SEARCH_ERROR_MESSAGE)).not.toBeInTheDocument()
+    expect(screen.queryByText(NO_RESULT_MESSAGE)).not.toBeInTheDocument()
+    await waitForDebounce()
+    const paletteAlertRequests = requestedUrls(fetchMock).filter((requestedUrl) => requestedUrl === PALETTE_ALERTS_URL)
+    expect(paletteAlertRequests).toHaveLength(1)
   })
 
   it('previousTermResultsDisappearWhileTheNextTermLoads', async () => {

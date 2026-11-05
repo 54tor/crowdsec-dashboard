@@ -116,6 +116,7 @@
     "forbidden": "Vous n'avez pas l'autorisation d'effectuer cette action.",
     "invalid_credentials": "Nom de compte ou mot de passe incorrect.",
     "too_many_attempts": "Trop de tentatives. Réessayez plus tard.",
+    "search_busy": "Trop de recherches en cours, réessayez dans un instant.",
     "cross_origin": "Requête bloquée : les requêtes inter-origines sont interdites.",
     "not_found": "Ressource introuvable.",
     "invalid_request": "La requête est invalide.",
