@@ -131,6 +131,9 @@ func (verifier *Verifier) checkClaims(claims verifiedClaims, method, requestURI 
 }
 
 func (verifier *Verifier) checkTimes(claims verifiedClaims) error {
+	if claims.expiresAt.Before(claims.issuedAt) || claims.expiresAt.Before(claims.notBefore) {
+		return refuse(CodeInvalidToken)
+	}
 	lifetimeTooLong := claims.expiresAt.Sub(claims.issuedAt) > TokenLifetime ||
 		claims.expiresAt.Sub(claims.notBefore) > TokenLifetime
 	if lifetimeTooLong {

@@ -1,7 +1,9 @@
 package sidecarauth
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"aidanwoods.dev/go-paseto"
 )
@@ -66,5 +68,36 @@ func TestSignerUsesAFreshTokenIDEachTime(testContext *testing.T) {
 			testContext.Fatalf("expected a new 128-bit hex jti, got %q (%v)", tokenID, tokenIDError)
 		}
 		seenTokenIDs[tokenID] = true
+	}
+}
+
+func TestSignerRefusesToProduceATokenAboveTheMaximumLength(testContext *testing.T) {
+	signer := newTestSigner(mustGenerateSigningKey(testContext))
+	oversizedRequestURI := "/" + strings.Repeat("a", maxTokenLength)
+
+	token, signError := signer.Sign(testMethod, oversizedRequestURI, testBody)
+
+	if signError == nil {
+		testContext.Fatalf("expected an error, got a token of %d characters", len(token))
+	}
+	if token != "" {
+		testContext.Fatal("no token may be returned alongside the error")
+	}
+}
+
+func TestSignerWritesTimeClaimsWithSubSecondPrecision(testContext *testing.T) {
+	signingKey := mustGenerateSigningKey(testContext)
+	signingTimeWithNanoseconds := signingTime.Add(123456789 * time.Nanosecond)
+	signer := NewSigner(testIssuer, testAudience, signingKey, fixedClock(signingTimeWithNanoseconds))
+	token := mustSign(testContext, signer, testMethod, testRequestURI, testBody)
+
+	parsedToken, parseError := paseto.NewParserWithoutExpiryCheck().ParseV4Public(signingKey.secret.Public(), token, nil)
+	if parseError != nil {
+		testContext.Fatalf("library parse: %v", parseError)
+	}
+
+	issuedAt, issuedAtError := parsedToken.GetIssuedAt()
+	if issuedAtError != nil || !issuedAt.Equal(signingTimeWithNanoseconds) {
+		testContext.Fatalf("iat: expected %v, got %v (%v)", signingTimeWithNanoseconds, issuedAt, issuedAtError)
 	}
 }

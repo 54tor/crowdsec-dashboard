@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"aidanwoods.dev/go-paseto"
@@ -20,6 +21,8 @@ const (
 	claimRequestURI = "htu"
 	claimBodyHash   = "bdh"
 )
+
+var errTokenTooLong = errors.New("sidecar token exceeds the maximum length")
 
 type tokenFooter struct {
 	KeyID string `json:"kid"`
@@ -54,15 +57,19 @@ func (signer Signer) Sign(method, requestURI string, body []byte) (string, error
 	token := paseto.NewToken()
 	token.SetIssuer(signer.issuer)
 	token.SetAudience(signer.audience)
-	token.SetIssuedAt(issuedAt)
-	token.SetNotBefore(issuedAt)
-	token.SetExpiration(issuedAt.Add(TokenLifetime))
+	token.SetString("iat", issuedAt.Format(time.RFC3339Nano))
+	token.SetString("nbf", issuedAt.Format(time.RFC3339Nano))
+	token.SetString("exp", issuedAt.Add(TokenLifetime).Format(time.RFC3339Nano))
 	token.SetJti(tokenID)
 	token.SetString(claimMethod, method)
 	token.SetString(claimRequestURI, requestURI)
 	token.SetString(claimBodyHash, hashBody(body))
 	token.SetFooter(footer)
-	return token.V4Sign(signer.key.secret, nil), nil
+	signedToken := token.V4Sign(signer.key.secret, nil)
+	if len(signedToken) > maxTokenLength {
+		return "", errTokenTooLong
+	}
+	return signedToken, nil
 }
 
 func hashBody(body []byte) string {

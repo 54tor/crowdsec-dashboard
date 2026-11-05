@@ -2,6 +2,7 @@ package sidecarauth
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,20 +52,26 @@ func TestVerifierRefusesAReplayedToken(testContext *testing.T) {
 }
 
 func TestVerifierRefusesAnotherMethodPathOrQuery(testContext *testing.T) {
+	const signedRequestURI = "/v1/exec?x=1"
 	mismatchedRequests := []struct {
 		name       string
 		method     string
 		requestURI string
 	}{
-		{name: "other method", method: http.MethodGet, requestURI: "/v1/files?x=1"},
-		{name: "other path", method: http.MethodPost, requestURI: "/v1/exec"},
-		{name: "other query", method: http.MethodPost, requestURI: "/v1/files?x=2"},
-		{name: "query dropped", method: http.MethodPost, requestURI: "/v1/files"},
+		{name: "other method", method: http.MethodGet, requestURI: signedRequestURI},
+		{name: "other path", method: http.MethodPost, requestURI: "/v1/files?x=1"},
+		{name: "other query", method: http.MethodPost, requestURI: "/v1/exec?x=2"},
+		{name: "query dropped", method: http.MethodPost, requestURI: "/v1/exec"},
+		{name: "trailing slash", method: http.MethodPost, requestURI: "/v1/exec/"},
+		{name: "other path case", method: http.MethodPost, requestURI: "/V1/exec?x=1"},
+		{name: "percent-encoded path", method: http.MethodPost, requestURI: "/v1/%65xec?x=1"},
+		{name: "added query string", method: http.MethodPost, requestURI: "/v1/exec?x=1&added=1"},
+		{name: "lowercase method", method: "post", requestURI: signedRequestURI},
 	}
 	for _, mismatchedRequest := range mismatchedRequests {
 		testContext.Run(mismatchedRequest.name, func(subtestContext *testing.T) {
 			fixture := newVerifierFixture(subtestContext, signingTime.Add(time.Second))
-			token := mustSign(subtestContext, newTestSigner(fixture.key), http.MethodPost, "/v1/files?x=1", nil)
+			token := mustSign(subtestContext, newTestSigner(fixture.key), http.MethodPost, signedRequestURI, nil)
 
 			_, verifyError := fixture.verifier.Verify("Bearer "+token, mismatchedRequest.method, mismatchedRequest.requestURI)
 
@@ -74,6 +81,14 @@ func TestVerifierRefusesAnotherMethodPathOrQuery(testContext *testing.T) {
 			}
 		})
 	}
+	testContext.Run("exact request", func(subtestContext *testing.T) {
+		fixture := newVerifierFixture(subtestContext, signingTime.Add(time.Second))
+		token := mustSign(subtestContext, newTestSigner(fixture.key), http.MethodPost, signedRequestURI, nil)
+
+		_, verifyError := fixture.verifier.Verify("Bearer "+token, http.MethodPost, signedRequestURI)
+
+		expectAccepted(subtestContext, verifyError)
+	})
 }
 
 func TestBodyBindingRefusesAnotherBody(testContext *testing.T) {
@@ -305,4 +320,82 @@ func TestVerifierRefusesWhenNotFullyConfigured(testContext *testing.T) {
 			expectRefusal(subtestContext, verifyError, CodeInvalidToken)
 		})
 	}
+}
+
+func TestVerifierAcceptsASubSecondSigningTimeWithStartedAtOneNanosecondEarlier(testContext *testing.T) {
+	signingTimeWithNanoseconds := signingTime.Add(123456789 * time.Nanosecond)
+	fixture := newVerifierFixture(testContext, signingTimeWithNanoseconds.Add(time.Second))
+	fixture.verifier.settings.StartedAt = signingTimeWithNanoseconds.Add(-time.Nanosecond)
+	signer := NewSigner(testIssuer, testAudience, fixture.key, fixedClock(signingTimeWithNanoseconds))
+	token := mustSign(testContext, signer, testMethod, testRequestURI, testBody)
+
+	_, verifyError := fixture.verifier.Verify("Bearer "+token, testMethod, testRequestURI)
+
+	expectAccepted(testContext, verifyError)
+}
+
+func TestVerifierRefusesAnExpiryBeforeIssuedAtOrNotBefore(testContext *testing.T) {
+	testContext.Run("expiry before issued-at", func(subtestContext *testing.T) {
+		fixture := newVerifierFixture(subtestContext, signingTime.Add(time.Second))
+		claims := boundClaims(signingTime)
+		claims["exp"] = signingTime.Add(-time.Second).Format(time.RFC3339)
+		token := signHandBuiltToken(subtestContext, fixture.key, footerFor(fixture.key.KeyID), claims)
+
+		_, verifyError := fixture.verifier.Verify("Bearer "+token, testMethod, testRequestURI)
+
+		expectRefusal(subtestContext, verifyError, CodeInvalidToken)
+	})
+	testContext.Run("expiry before not-before", func(subtestContext *testing.T) {
+		fixture := newVerifierFixture(subtestContext, signingTime.Add(time.Second))
+		claims := boundClaims(signingTime)
+		claims["nbf"] = signingTime.Add(5 * time.Second).Format(time.RFC3339)
+		claims["exp"] = signingTime.Add(3 * time.Second).Format(time.RFC3339)
+		token := signHandBuiltToken(subtestContext, fixture.key, footerFor(fixture.key.KeyID), claims)
+
+		_, verifyError := fixture.verifier.Verify("Bearer "+token, testMethod, testRequestURI)
+
+		expectRefusal(subtestContext, verifyError, CodeInvalidToken)
+	})
+}
+
+func TestVerifierAcceptsATokenOfExactlyTheMaximumLength(testContext *testing.T) {
+	fixture := newVerifierFixture(testContext, signingTime.Add(time.Second))
+	tokenAtCap, requestURIAtCap := buildTokenOfLength(testContext, fixture.key, maxTokenLength)
+
+	_, verifyError := fixture.verifier.Verify("Bearer "+tokenAtCap, testMethod, requestURIAtCap)
+
+	expectAccepted(testContext, verifyError)
+}
+
+func TestVerifierRefusesATokenOneByteAboveTheMaximumLength(testContext *testing.T) {
+	fixture := newVerifierFixture(testContext, signingTime.Add(time.Second))
+	tokenAboveCap, requestURIAboveCap := buildTokenOfLength(testContext, fixture.key, maxTokenLength+1)
+
+	_, verifyError := fixture.verifier.Verify("Bearer "+tokenAboveCap, testMethod, requestURIAboveCap)
+
+	expectRefusal(testContext, verifyError, CodeInvalidToken)
+}
+
+// buildTokenOfLength pads the htu claim and a footer field until the token is
+// exactly targetLength long; base64 growth is not byte-granular, so both
+// paddings are searched together.
+func buildTokenOfLength(testContext *testing.T, key SigningKey, targetLength int) (string, string) {
+	testContext.Helper()
+	for requestURILength := targetLength / 2; requestURILength < targetLength; requestURILength++ {
+		requestURI := "/" + strings.Repeat("a", requestURILength)
+		for footerPaddingLength := 0; footerPaddingLength < 3; footerPaddingLength++ {
+			footer := `{"kid":"` + key.KeyID + `","pad":"` + strings.Repeat("b", footerPaddingLength) + `"}`
+			claims := boundClaims(signingTime)
+			claims["htu"] = requestURI
+			token := signHandBuiltToken(testContext, key, footer, claims)
+			if len(token) == targetLength {
+				return token, requestURI
+			}
+			if len(token) > targetLength {
+				break
+			}
+		}
+	}
+	testContext.Fatalf("no token of length %d could be built", targetLength)
+	return "", ""
 }

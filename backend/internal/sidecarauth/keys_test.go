@@ -116,6 +116,10 @@ func TestSigningKeyNeverFormatsItsSecret(testContext *testing.T) {
 			testContext.Fatalf("%s: expected %q, got %q", verbName, expectedText, rendering)
 		}
 	}
+	expectedJSON := `{"KeyID":"` + generatedKey.KeyID + `"}`
+	if string(jsonOutput) != expectedJSON {
+		testContext.Fatalf("json: expected %s, got %s", expectedJSON, jsonOutput)
+	}
 	for renderingName, rendering := range map[string]string{"slog": logOutput.String(), "json": string(jsonOutput)} {
 		lowercaseRendering := strings.ToLower(rendering)
 		if strings.Contains(lowercaseRendering, secretHex) || strings.Contains(lowercaseRendering, seedHex) {
