@@ -30,6 +30,7 @@ type Reader struct {
 type AlertQuery struct {
 	Engine, Scenario, IP string
 	SourceKind           string
+	Search               string
 	Since                time.Time
 	IncludeExpired       bool
 	Offset, Limit        int
@@ -158,6 +159,7 @@ func (reader *Reader) alertQuery(query AlertQuery) *bun.SelectQuery {
 	if query.SourceKind != "" {
 		selectQuery = selectQuery.Where("alert_source_kind = ?", query.SourceKind)
 	}
+	selectQuery = alertSearchPredicate(selectQuery, query.Search)
 	if query.ExcludedEngine != "" && len(query.ExcludedKeys) > 0 {
 		excludedIDs, excludedUUIDs := splitKeys(query.ExcludedKeys)
 		selectQuery = selectQuery.Where(
@@ -258,7 +260,7 @@ func isValidWindow(query AlertQuery) bool {
 }
 
 func hasUnstorableFilter(query AlertQuery) bool {
-	for _, filterText := range []string{query.Engine, query.Scenario, query.IP, query.ExcludedEngine, query.SourceKind} {
+	for _, filterText := range []string{query.Engine, query.Scenario, query.IP, query.ExcludedEngine, query.SourceKind, query.Search} {
 		if strings.ContainsRune(filterText, 0) {
 			return true
 		}
