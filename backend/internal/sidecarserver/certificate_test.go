@@ -42,18 +42,21 @@ func expectFileMode(testContext *testing.T, filePath string, expectedMode os.Fil
 func TestCertificateIsCreatedOnceAndReused(testContext *testing.T) {
 	dataDir := secureDataDir(testContext)
 
-	firstCertificate, firstFingerprint, firstError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
+	firstCertificate, firstFingerprint, firstWasCreated, firstError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
 	if firstError != nil {
 		testContext.Fatalf("first LoadOrCreateCertificate: %v", firstError)
 	}
 	// The second call stands for a restart: it must load the same files, not
 	// mint a new certificate the dashboard would have to re-pin.
 	restartClock := func() time.Time { return testNow.Add(time.Hour) }
-	_, secondFingerprint, secondError := LoadOrCreateCertificate(dataDir, restartClock)
+	_, secondFingerprint, secondWasCreated, secondError := LoadOrCreateCertificate(dataDir, restartClock)
 	if secondError != nil {
 		testContext.Fatalf("second LoadOrCreateCertificate: %v", secondError)
 	}
 
+	if !firstWasCreated || secondWasCreated {
+		testContext.Errorf("expected created=true then created=false, got %v then %v", firstWasCreated, secondWasCreated)
+	}
 	if firstFingerprint != secondFingerprint {
 		testContext.Errorf("expected the same fingerprint after a restart, got %s then %s", firstFingerprint, secondFingerprint)
 	}
@@ -82,7 +85,7 @@ func TestCertificateIsCreatedOnceAndReused(testContext *testing.T) {
 
 func TestCertificateIsRecreatedWhenOneFileIsMissing(testContext *testing.T) {
 	dataDir := secureDataDir(testContext)
-	if _, _, createError := LoadOrCreateCertificate(dataDir, fixedCertificateClock); createError != nil {
+	if _, _, _, createError := LoadOrCreateCertificate(dataDir, fixedCertificateClock); createError != nil {
 		testContext.Fatalf("LoadOrCreateCertificate: %v", createError)
 	}
 	// A crash between the two writes leaves the key without its certificate:
@@ -91,7 +94,7 @@ func TestCertificateIsRecreatedWhenOneFileIsMissing(testContext *testing.T) {
 		testContext.Fatalf("remove certificate: %v", removeError)
 	}
 
-	_, _, recreateError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
+	_, _, _, recreateError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
 
 	if recreateError != nil {
 		testContext.Fatalf("expected a fresh pair, got %v", recreateError)
@@ -101,14 +104,14 @@ func TestCertificateIsRecreatedWhenOneFileIsMissing(testContext *testing.T) {
 
 func TestCertificateRefusesAPrivateKeyReadableByOthers(testContext *testing.T) {
 	dataDir := secureDataDir(testContext)
-	if _, _, createError := LoadOrCreateCertificate(dataDir, fixedCertificateClock); createError != nil {
+	if _, _, _, createError := LoadOrCreateCertificate(dataDir, fixedCertificateClock); createError != nil {
 		testContext.Fatalf("LoadOrCreateCertificate: %v", createError)
 	}
 	if chmodError := os.Chmod(filepath.Join(dataDir, "tls.key"), 0o644); chmodError != nil {
 		testContext.Fatalf("chmod key: %v", chmodError)
 	}
 
-	_, _, loadError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
+	_, _, _, loadError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
 
 	if !errors.Is(loadError, errInsecurePrivateKey) {
 		testContext.Fatalf("expected errInsecurePrivateKey, got %v", loadError)
@@ -119,7 +122,7 @@ func TestCertificateRefusesAMismatchedPair(testContext *testing.T) {
 	dataDir := secureDataDir(testContext)
 	otherDataDir := secureDataDir(testContext)
 	for _, preparedDir := range []string{dataDir, otherDataDir} {
-		if _, _, createError := LoadOrCreateCertificate(preparedDir, fixedCertificateClock); createError != nil {
+		if _, _, _, createError := LoadOrCreateCertificate(preparedDir, fixedCertificateClock); createError != nil {
 			testContext.Fatalf("LoadOrCreateCertificate: %v", createError)
 		}
 	}
@@ -131,10 +134,10 @@ func TestCertificateRefusesAMismatchedPair(testContext *testing.T) {
 		testContext.Fatalf("swap certificate: %v", writeError)
 	}
 
-	_, _, loadError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
+	_, _, _, loadError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
 
-	if loadError == nil {
-		testContext.Fatal("expected a certificate that does not match its key to be refused")
+	if !errors.Is(loadError, errMismatchedPair) {
+		testContext.Fatalf("expected errMismatchedPair, got %v", loadError)
 	}
 }
 
@@ -160,21 +163,19 @@ func TestCertificateRefusesAnUnsafeOrUnusableDataDirectory(testContext *testing.
 			}
 			return dataDir
 		}},
-		{"unreadable directory", func(caseContext *testing.T) string {
-			dataDir := caseContext.TempDir()
-			if chmodError := os.Chmod(dataDir, 0o000); chmodError != nil {
-				caseContext.Fatalf("chmod: %v", chmodError)
+		{"dangling symbolic link", func(caseContext *testing.T) string {
+			linkPath := filepath.Join(caseContext.TempDir(), "dangling")
+			if linkError := os.Symlink(filepath.Join(caseContext.TempDir(), "absent-target"), linkPath); linkError != nil {
+				caseContext.Fatalf("symlink: %v", linkError)
 			}
-			// Restore the mode so t.TempDir can remove the directory.
-			caseContext.Cleanup(func() { _ = os.Chmod(dataDir, 0o700) })
-			return dataDir
+			return linkPath
 		}},
 	}
 	for _, directoryCase := range directoryCases {
 		testContext.Run(directoryCase.caseName, func(caseContext *testing.T) {
 			dataDir := directoryCase.prepareDataDir(caseContext)
 
-			_, fingerprint, loadError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
+			_, fingerprint, _, loadError := LoadOrCreateCertificate(dataDir, fixedCertificateClock)
 
 			if loadError == nil || fingerprint != "" {
 				caseContext.Fatalf("expected a refusal without fingerprint, got %q, %v", fingerprint, loadError)

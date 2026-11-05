@@ -21,6 +21,9 @@ func writeFileAtomically(dataRoot *os.Root, fileName string, content []byte, fil
 	if writeError == nil {
 		writeError = dataRoot.Rename(temporaryName, fileName)
 	}
+	if writeError == nil {
+		writeError = syncDirectory(dataRoot)
+	}
 	if writeError != nil {
 		_ = dataRoot.Remove(temporaryName)
 		return fmt.Errorf("sidecar %s: %w", fileName, writeError)
@@ -36,4 +39,17 @@ func writeAndSync(file *os.File, content []byte, fileMode fs.FileMode) error {
 		return writeError
 	}
 	return file.Sync()
+}
+
+func syncDirectory(dataRoot *os.Root) error {
+	directory, openError := dataRoot.Open(".")
+	if openError != nil {
+		return openError
+	}
+	syncError := directory.Sync()
+	closeError := directory.Close()
+	if syncError != nil {
+		return syncError
+	}
+	return closeError
 }

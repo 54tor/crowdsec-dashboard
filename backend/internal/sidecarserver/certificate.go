@@ -32,29 +32,31 @@ const (
 
 var errInsecureDataDir = errors.New("sidecar data directory is writable by group or others")
 var errInsecurePrivateKey = errors.New("sidecar private key file is accessible by group or others")
+var errMismatchedPair = errors.New("sidecar certificate and private key do not form a valid pair")
 var errUnexpectedKeyType = errors.New("sidecar certificate key is not ECDSA P-256")
 
-func LoadOrCreateCertificate(dataDir string, now func() time.Time) (tls.Certificate, string, error) {
+func LoadOrCreateCertificate(dataDir string, now func() time.Time) (tls.Certificate, string, bool, error) {
 	dataRoot, openError := openDataRoot(dataDir)
 	if openError != nil {
-		return tls.Certificate{}, "", openError
+		return tls.Certificate{}, "", false, openError
 	}
 	defer dataRoot.Close()
 
 	bothFilesExist, existError := certificateFilesExist(dataRoot)
 	if existError != nil {
-		return tls.Certificate{}, "", existError
+		return tls.Certificate{}, "", false, existError
 	}
-	if !bothFilesExist {
+	created := !bothFilesExist
+	if created {
 		if createError := createCertificateFiles(dataRoot, now()); createError != nil {
-			return tls.Certificate{}, "", createError
+			return tls.Certificate{}, "", false, createError
 		}
 	}
 	certificate, loadError := loadCertificateFiles(dataRoot)
 	if loadError != nil {
-		return tls.Certificate{}, "", loadError
+		return tls.Certificate{}, "", false, loadError
 	}
-	return certificate, SPKIFingerprint(certificate.Leaf), nil
+	return certificate, SPKIFingerprint(certificate.Leaf), created, nil
 }
 
 func SPKIFingerprint(certificate *x509.Certificate) string {
@@ -111,7 +113,7 @@ func loadCertificateFiles(dataRoot *os.Root) (tls.Certificate, error) {
 	}
 	certificate, pairError := tls.X509KeyPair(certificatePEM, privateKeyPEM)
 	if pairError != nil {
-		return tls.Certificate{}, errors.New("sidecar certificate and private key do not form a valid pair")
+		return tls.Certificate{}, errMismatchedPair
 	}
 	publicKey, isECDSA := certificate.Leaf.PublicKey.(*ecdsa.PublicKey)
 	if !isECDSA || publicKey.Curve != elliptic.P256() {

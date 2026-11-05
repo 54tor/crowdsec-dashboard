@@ -118,6 +118,32 @@ func TestOversizeBodyIsRefused(testContext *testing.T) {
 	expectResponse(testContext, recorder, http.StatusRequestEntityTooLarge, codeBody(sidecarapi.CodeBodyTooLarge))
 }
 
+func TestOversizeBodyMakesTheServerCloseTheConnection(testContext *testing.T) {
+	fixture := newAuthenticatedFixture(testContext)
+	oversizeBody := bytes.Repeat([]byte("a"), pingBodyLimit+1)
+	token := fixture.sign(testContext, http.MethodPost, sidecarapi.PathPing, oversizeBody)
+	liveServer := httptest.NewServer(fixture.handler)
+	testContext.Cleanup(liveServer.Close)
+	request, requestError := http.NewRequest(http.MethodPost, liveServer.URL+sidecarapi.PathPing, bytes.NewReader(oversizeBody))
+	if requestError != nil {
+		testContext.Fatalf("NewRequest: %v", requestError)
+	}
+	request.Header.Set("Authorization", sidecarauth.AuthorizationPrefix+token)
+
+	response, doError := liveServer.Client().Do(request)
+	if doError != nil {
+		testContext.Fatalf("Do: %v", doError)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusRequestEntityTooLarge {
+		testContext.Errorf("expected status 413, got %d", response.StatusCode)
+	}
+	if !response.Close {
+		testContext.Error("expected the server to announce Connection: close after an oversize body")
+	}
+}
+
 func TestHandlerWithoutVerifierRefusesEveryRequest(testContext *testing.T) {
 	handler := NewHandler(Dependencies{Executor: forbiddenExecutor{testContext: testContext}})
 	recorder := httptest.NewRecorder()

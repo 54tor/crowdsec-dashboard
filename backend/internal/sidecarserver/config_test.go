@@ -107,6 +107,7 @@ func TestLoadConfigRefusesInvalidValues(testContext *testing.T) {
 		{"relative data dir", "SIDECAR_DATA_DIR", "data", "SIDECAR_DATA_DIR"},
 		{"relative acquisition dir", "SIDECAR_ACQUISITION_DIR", "acquis.d", "SIDECAR_ACQUISITION_DIR"},
 		{"listen address without port", "SIDECAR_LISTEN_ADDR", "127.0.0.1", "SIDECAR_LISTEN_ADDR"},
+		{"listen address with port zero", "SIDECAR_LISTEN_ADDR", "127.0.0.1:0", "SIDECAR_LISTEN_ADDR"},
 		{"listen address with a named port", "SIDECAR_LISTEN_ADDR", ":https", "SIDECAR_LISTEN_ADDR"},
 		{"empty allowed command entry", "SIDECAR_ALLOWED_COMMANDS", "version,,hub_list", "SIDECAR_ALLOWED_COMMANDS"},
 		{"read only not a boolean", "SIDECAR_READ_ONLY", "yes", "SIDECAR_READ_ONLY"},

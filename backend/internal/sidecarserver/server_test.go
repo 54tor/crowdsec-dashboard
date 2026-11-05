@@ -29,7 +29,7 @@ type startedServer struct {
 // sidecar_started log line, which is what an operator would copy.
 func startTLSServer(testContext *testing.T) startedServer {
 	testContext.Helper()
-	certificate, fingerprint, certificateError := LoadOrCreateCertificate(secureDataDir(testContext), fixedCertificateClock)
+	certificate, fingerprint, _, certificateError := LoadOrCreateCertificate(secureDataDir(testContext), fixedCertificateClock)
 	if certificateError != nil {
 		testContext.Fatalf("LoadOrCreateCertificate: %v", certificateError)
 	}
@@ -133,10 +133,20 @@ func TestServerRefusesAnotherPinOlderTLSAndPlaintext(testContext *testing.T) {
 func TestServerSetsEveryTimeout(testContext *testing.T) {
 	server := NewServer(Config{ListenAddress: ":8443"}, http.NotFoundHandler(), tls.Certificate{})
 
-	timeoutsSet := server.ReadHeaderTimeout == 5*time.Second && server.WriteTimeout == 150*time.Second &&
-		server.ReadTimeout > 0 && server.IdleTimeout > 0
-	if !timeoutsSet {
-		testContext.Errorf("unexpected timeouts %+v", server)
+	if server.ReadHeaderTimeout != 5*time.Second {
+		testContext.Errorf("expected ReadHeaderTimeout 5s, got %s", server.ReadHeaderTimeout)
+	}
+	if server.ReadTimeout != 30*time.Second {
+		testContext.Errorf("expected ReadTimeout 30s, got %s", server.ReadTimeout)
+	}
+	if server.WriteTimeout != 150*time.Second {
+		testContext.Errorf("expected WriteTimeout 150s, got %s", server.WriteTimeout)
+	}
+	if server.IdleTimeout != 60*time.Second {
+		testContext.Errorf("expected IdleTimeout 60s, got %s", server.IdleTimeout)
+	}
+	if server.MaxHeaderBytes != 16*1024 {
+		testContext.Errorf("expected MaxHeaderBytes 16384, got %d", server.MaxHeaderBytes)
 	}
 	if server.TLSConfig.MinVersion != tls.VersionTLS13 {
 		testContext.Errorf("expected TLS 1.3 minimum, got %x", server.TLSConfig.MinVersion)

@@ -45,12 +45,12 @@ func refusalCodeOf(verifyError error) string {
 	return sidecarauth.CodeInvalidToken
 }
 
-func readBoundBody(request *http.Request, limit int64) ([]byte, error) {
+func readBoundBody(writer http.ResponseWriter, request *http.Request, limit int64) ([]byte, error) {
 	binding, hasBinding := request.Context().Value(bodyBindingContextKey{}).(sidecarauth.BodyBinding)
 	if !hasBinding {
 		return nil, errMissingBodyBinding
 	}
-	body, readError := io.ReadAll(http.MaxBytesReader(nil, request.Body, limit))
+	body, readError := io.ReadAll(http.MaxBytesReader(writer, request.Body, limit))
 	if readError != nil {
 		return nil, readError
 	}

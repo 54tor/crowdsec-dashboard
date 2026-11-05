@@ -17,6 +17,7 @@ const (
 	defaultCrowdSecContainer       = "crowdsec"
 	defaultMaxConcurrentExecutions = 4
 	minimumConcurrentExecutions    = 1
+	minimumListenPort              = 1
 	maximumConcurrentExecutions    = 16
 )
 
@@ -97,7 +98,7 @@ func parseListenAddress(rawValue string) (string, error) {
 	if splitError != nil {
 		return "", fmt.Errorf("SIDECAR_LISTEN_ADDR: %w", splitError)
 	}
-	if _, portError := strconv.ParseUint(port, 10, 16); portError != nil {
+	if portNumber, portError := strconv.ParseUint(port, 10, 16); portError != nil || portNumber < minimumListenPort {
 		return "", fmt.Errorf("SIDECAR_LISTEN_ADDR: invalid port %q", port)
 	}
 	return listenAddress, nil
