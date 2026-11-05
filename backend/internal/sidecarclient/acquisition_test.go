@@ -51,7 +51,7 @@ func TestRemoteAcquisitionReadReturnsRedactedContentAndAKeyedDigest(testContext 
 
 func TestRemoteAcquisitionReadRefusesInconsistentAnswers(testContext *testing.T) {
 	encodedContent := base64.StdEncoding.EncodeToString([]byte(nginxAcquisition))
-	oversizedContent := base64.StdEncoding.EncodeToString(make([]byte, confwrite.MaxFileBytes+1))
+	oversizedContent := base64.StdEncoding.EncodeToString(make([]byte, maxRedactedFileBytes+1))
 	inconsistentBodies := map[string]string{
 		"oversized with content":    `{"exists":true,"oversized":true,"digest":"","content":"` + encodedContent + `"}`,
 		"oversized with a digest":   `{"exists":true,"oversized":true,"digest":"` + validDigest + `","content":null}`,
@@ -115,13 +115,51 @@ func TestRemoteApplyRefusesResultsNamingInvalidFiles(testContext *testing.T) {
 	}
 }
 
-func TestRemoteFileReadRefusesContentAboveTheConfreadCap(testContext *testing.T) {
-	oversizedContent := base64.StdEncoding.EncodeToString(make([]byte, confread.MaxFileBytes+1))
+func TestRemoteFileReadRefusesContentAboveTheRedactedCap(testContext *testing.T) {
+	oversizedContent := base64.StdEncoding.EncodeToString(make([]byte, maxRedactedFileBytes+1))
 	client := startHostileSidecar(testContext, answering(http.StatusOK, `{"name":"config.yaml","content":"`+oversizedContent+`"}`))
 
 	content, readError := client.ReadFile(context.Background(), "config.yaml")
 
 	if !errors.Is(readError, ErrInvalidResponse) || content != nil {
 		testContext.Errorf("expected ErrInvalidResponse and no content, got %v and %d bytes", readError, len(content))
+	}
+}
+
+// nearLimitSecretFile is a raw file just under confread's cap made only of
+// secret lines: redaction makes it longer than the raw cap ("password: x"
+// becomes "password: [REDACTED]"), which the client must still accept.
+func nearLimitSecretFile(testContext *testing.T) (string, string) {
+	testContext.Helper()
+	secretLine := "password: x\n"
+	rawContent := strings.Repeat(secretLine, confread.MaxFileBytes/len(secretLine))
+	redactedContent := string(confread.Redact([]byte(rawContent)))
+	if len(redactedContent) <= confread.MaxFileBytes {
+		testContext.Fatalf("the fixture must grow past the raw cap once redacted, got %d bytes", len(redactedContent))
+	}
+	return rawContent, redactedContent
+}
+
+func TestRemoteFileReadAcceptsANearLimitFileThatGrowsWhenRedacted(testContext *testing.T) {
+	sidecar := startConfigSidecar(testContext, nil)
+	rawContent, redactedContent := nearLimitSecretFile(testContext)
+	writeFixtureFile(testContext, filepath.Join(sidecar.confDir, "config.yaml"), rawContent)
+
+	obtainedContent, readError := sidecar.client.ReadFile(context.Background(), "config.yaml")
+
+	if readError != nil || string(obtainedContent) != redactedContent {
+		testContext.Errorf("expected the %d redacted bytes, got %d bytes (%v)", len(redactedContent), len(obtainedContent), readError)
+	}
+}
+
+func TestRemoteAcquisitionReadAcceptsANearLimitFileThatGrowsWhenRedacted(testContext *testing.T) {
+	sidecar := startConfigSidecar(testContext, nil)
+	rawContent, redactedContent := nearLimitSecretFile(testContext)
+	writeFixtureFile(testContext, filepath.Join(sidecar.acquisitionDir, "nginx.yaml"), rawContent)
+
+	acquisitionFile, readError := sidecar.client.ReadAcquisitionFile(context.Background(), "nginx.yaml")
+
+	if readError != nil || acquisitionFile.Oversized || string(acquisitionFile.RedactedContent) != redactedContent {
+		testContext.Errorf("expected the %d redacted bytes, got %d bytes oversized=%v (%v)", len(redactedContent), len(acquisitionFile.RedactedContent), acquisitionFile.Oversized, readError)
 	}
 }

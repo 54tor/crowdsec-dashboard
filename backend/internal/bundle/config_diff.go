@@ -11,7 +11,7 @@ import (
 const maxDiffLines = 200
 
 func boundedDiff(redactedCurrentContent, newContent []byte) (string, bool) {
-	currentLines, currentTruncated := firstLines(redactedCurrentContent)
+	currentLines, currentTruncated := firstLines(confread.Redact(redactedCurrentContent))
 	newLines, newTruncated := firstLines(confread.Redact(newContent))
 	diffLines := renderDiff(diff.DiffChunks(currentLines, newLines))
 	isTruncated := currentTruncated || newTruncated || len(diffLines) > maxDiffLines

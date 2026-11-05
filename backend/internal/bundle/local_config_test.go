@@ -22,8 +22,9 @@ type contextKey struct{}
 // acquisitionStateCase is one import directory layout and how it was prepared:
 // the local adapter must report exactly what the confwrite calls report.
 type acquisitionStateCase struct {
-	description      string
-	prepareDirectory func(testContext *testing.T) string
+	description            string
+	prepareDirectory       func(testContext *testing.T) string
+	expectsPendingRecovery bool
 }
 
 func pendingRecoveryDirectory(testContext *testing.T) string {
@@ -46,9 +47,9 @@ func missingDirectory(testContext *testing.T) string {
 
 func TestLocalAcquisitionMatchesTheDirectConfwriteCalls(testContext *testing.T) {
 	stateCases := []acquisitionStateCase{
-		{"clean directory", func(caseTest *testing.T) string { return caseTest.TempDir() }},
-		{"pending recovery", pendingRecoveryDirectory},
-		{"missing directory", missingDirectory},
+		{"clean directory", func(caseTest *testing.T) string { return caseTest.TempDir() }, false},
+		{"pending recovery", pendingRecoveryDirectory, true},
+		{"missing directory", missingDirectory, false},
 	}
 	succeedingConfigTest := func(context.Context) error { return nil }
 	for _, stateCase := range stateCases {
@@ -62,6 +63,12 @@ func TestLocalAcquisitionMatchesTheDirectConfwriteCalls(testContext *testing.T) 
 				if recoveryError != nil {
 					caseTest.Fatalf("HasPendingRecovery: %v", recoveryError)
 				}
+			}
+
+			// Without this guard a broken journal fixture would make both sides
+			// report false and the pending case would pass without testing anything.
+			if pendingExpected != stateCase.expectsPendingRecovery {
+				caseTest.Fatalf("fixture %q: confwrite reports pending=%v, expected %v", stateCase.description, pendingExpected, stateCase.expectsPendingRecovery)
 			}
 
 			writableObtained, pendingObtained, stateError := LocalAcquisition(importDirectory, succeedingConfigTest).State(context.Background())

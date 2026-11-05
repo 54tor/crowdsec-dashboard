@@ -84,6 +84,9 @@ func newAlertPlanner(ctx context.Context, deps ImportDeps) (*alertPlanner, local
 	if !guard.Available() {
 		return nil, localAlertBudget{}, ErrorCodeAllowlistUnavailable
 	}
+	if deps.Config == nil {
+		return nil, localAlertBudget{}, ErrorCodeFlushConfigUnreadable
+	}
 	maxItems, configReadable := deps.Config.FlushMaxItems(ctx)
 	if !configReadable {
 		return nil, localAlertBudget{}, ErrorCodeFlushConfigUnreadable

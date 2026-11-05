@@ -3,7 +3,6 @@ package sidecarclient
 import (
 	"regexp"
 
-	"crowdsec-dashboard/internal/confwrite"
 	"crowdsec-dashboard/internal/sidecarapi"
 )
 
@@ -34,6 +33,6 @@ func isConsistentAcquisitionFile(fileResponse sidecarapi.AcquisitionFileResponse
 		isKnownState := fileResponse.Exists || !fileResponse.Oversized
 		return isKnownState && fileResponse.Content == nil && fileResponse.Digest == ""
 	}
-	isContentWithinCap := fileResponse.Content != nil && len(fileResponse.Content) <= confwrite.MaxFileBytes
+	isContentWithinCap := fileResponse.Content != nil && len(fileResponse.Content) <= maxRedactedFileBytes
 	return isContentWithinCap && keyedDigestPattern.MatchString(fileResponse.Digest)
 }

@@ -50,6 +50,11 @@ func TestRedactSecretsTable(testContext *testing.T) {
 			if obtained != testCase.expected {
 				subTest.Errorf("expected %q, got %q", testCase.expected, obtained)
 			}
+			// The bundle diff redacts content the sidecar already redacted: a
+			// second pass must leave it unchanged or the preview shows phantom edits.
+			if redactedTwice := string(Redact([]byte(obtained))); redactedTwice != obtained {
+				subTest.Errorf("redaction is not idempotent: %q became %q", obtained, redactedTwice)
+			}
 		})
 	}
 }

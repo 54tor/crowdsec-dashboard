@@ -9,7 +9,10 @@ import (
 	"crowdsec-dashboard/internal/sidecarapi"
 )
 
-const fileReadTimeout = 15 * time.Second
+const (
+	fileReadTimeout      = 15 * time.Second
+	maxRedactedFileBytes = 2 * confread.MaxFileBytes
+)
 
 func (client *Client) ListFiles(ctx context.Context) ([]string, error) {
 	var listResponse sidecarapi.FileListResponse
@@ -27,7 +30,7 @@ func (client *Client) ReadFile(ctx context.Context, name string) ([]byte, error)
 	if readError := client.read(ctx, sidecarapi.PathFilePrefix+name, fileSentinelOfCode, &fileResponse); readError != nil {
 		return nil, readError
 	}
-	isWithinCap := len(fileResponse.Content) <= confread.MaxFileBytes
+	isWithinCap := len(fileResponse.Content) <= maxRedactedFileBytes
 	if fileResponse.Name != name || fileResponse.Content == nil || !isWithinCap {
 		return nil, ErrInvalidResponse
 	}

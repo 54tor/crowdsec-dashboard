@@ -11,6 +11,8 @@ import (
 	"crowdsec-dashboard/internal/confread"
 )
 
+var ErrConfigUnavailable = errors.New("bundle: configuration reader unavailable")
+
 var excludedConfigNames = []string{"config.yaml"}
 
 var excludedConfigNameFragments = []string{"credential", "secret", "password", "token", "apikey", "api_key", ".key", ".pem"}
@@ -32,6 +34,9 @@ func IsExcludedConfigFile(name string) bool {
 }
 
 func exportConfig(ctx context.Context, reader ConfigReader, includeSecrets bool) (*ConfigSection, int, error) {
+	if reader == nil {
+		return nil, 0, ErrConfigUnavailable
+	}
 	names, listError := reader.List(ctx)
 	if listError != nil {
 		return nil, 0, listError
