@@ -22,6 +22,23 @@ function OptionalUntrustedText({ value, placeholder, maxWidthClassName }: { valu
   return <UntrustedText value={value} maxWidthClassName={maxWidthClassName} />
 }
 
+const LOGIN_FAILURE_ACTION = 'login_failure'
+
+function TargetCell({ auditEvent }: { auditEvent: AuditEvent }) {
+  const { t } = useTranslation()
+  const isHiddenFailedSignInTarget = auditEvent.target === null && auditEvent.action === LOGIN_FAILURE_ACTION
+  if (!isHiddenFailedSignInTarget) {
+    return <OptionalUntrustedText value={auditEvent.target} placeholder={t('audit.noTarget')} maxWidthClassName="max-w-[40ch]" />
+  }
+  const explanation = t('audit.targetHiddenForLoginFailure')
+  return (
+    <span className="text-muted-foreground" title={explanation}>
+      {t('audit.noTarget')}
+      <span className="sr-only"> {explanation}</span>
+    </span>
+  )
+}
+
 export function Audit() {
   const { t, i18n } = useTranslation()
   const controls = useAuditControls()
@@ -54,7 +71,7 @@ export function Audit() {
       {
         key: 'target',
         header: t('audit.columns.target'),
-        cell: (auditEvent) => <OptionalUntrustedText value={auditEvent.target} placeholder={t('audit.noTarget')} maxWidthClassName="max-w-[40ch]" />,
+        cell: (auditEvent) => <TargetCell auditEvent={auditEvent} />,
       },
       {
         key: 'clientIp',

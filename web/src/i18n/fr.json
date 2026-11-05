@@ -957,6 +957,7 @@
     "empty": "Aucun événement ne correspond.",
     "noAccount": "—",
     "noTarget": "Non disponible",
+    "targetHiddenForLoginFailure": "Masquée volontairement pour les échecs de connexion",
     "noClientIp": "effacée",
     "columns": {
       "createdAt": "Date",

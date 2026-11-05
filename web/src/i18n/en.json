@@ -957,6 +957,7 @@
     "empty": "No event matches.",
     "noAccount": "—",
     "noTarget": "Not available",
+    "targetHiddenForLoginFailure": "Hidden on purpose for failed sign-ins",
     "noClientIp": "erased",
     "columns": {
       "createdAt": "Date",
