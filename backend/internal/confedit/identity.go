@@ -1,9 +1,7 @@
 package confedit
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,7 +17,7 @@ type secretSlot struct {
 	value         *yaml.Node
 }
 
-type endpointValue struct {
+type locatedValue struct {
 	canonical string
 	line      int
 }
@@ -27,38 +25,33 @@ type endpointValue struct {
 type parsedText struct {
 	lines          []string
 	slots          map[int]secretSlot
-	endpoints      map[string]endpointValue
+	endpoints      map[string]locatedValue
 	endpointCounts map[string]int
-	indirections   map[string]bool
+	indirections   map[string]indirectionOccurrences
 	canonical      string
+	plain          *canonicalizer
+	masked         *canonicalizer
 }
 
 func parseText(text string) (*parsedText, error) {
+	documents, decodeError := decodeDocuments(text)
+	if decodeError != nil {
+		return nil, decodeError
+	}
 	parsed := &parsedText{
 		lines:          strings.Split(text, "\n"),
 		slots:          make(map[int]secretSlot),
-		endpoints:      make(map[string]endpointValue),
+		endpoints:      make(map[string]locatedValue),
 		endpointCounts: make(map[string]int),
-		indirections:   make(map[string]bool),
+		indirections:   make(map[string]indirectionOccurrences),
+		plain:          newCanonicalizer(false, nil),
+		masked:         newCanonicalizer(true, nil),
 	}
-	canonical, canonicalError := canonicalDocument(text, canonicalizer{})
-	if canonicalError != nil {
-		return nil, canonicalError
+	parsed.canonical = parsed.plain.documents(documents)
+	for documentIndex, document := range documents {
+		parsed.collect(document, fmt.Sprintf("document%d", documentIndex))
 	}
-	parsed.canonical = canonical
-
-	decoder := yaml.NewDecoder(strings.NewReader(text))
-	for documentIndex := 0; ; documentIndex++ {
-		var document yaml.Node
-		decodeError := decoder.Decode(&document)
-		if errors.Is(decodeError, io.EOF) {
-			return parsed, nil
-		}
-		if decodeError != nil {
-			return nil, decodeError
-		}
-		parsed.collect(&document, fmt.Sprintf("document%d", documentIndex))
-	}
+	return parsed, nil
 }
 
 func (parsed *parsedText) recordSlot(line int, slot secretSlot) {
@@ -67,27 +60,17 @@ func (parsed *parsedText) recordSlot(line int, slot secretSlot) {
 	}
 }
 
-func (parsed *parsedText) noteIndirection(node *yaml.Node) {
-	if node.Kind == yaml.AliasNode {
-		parsed.indirections["*"+strconv.Quote(node.Value)] = true
-	}
-	if node.Anchor != "" {
-		anchored := canonicalizer{maskSecrets: true}.node(node)
-		parsed.indirections["&"+strconv.Quote(node.Anchor)+"="+hashText(anchored)] = true
-	}
-}
-
 func (parsed *parsedText) noteEndpoint(identity string, keyNode, valueNode *yaml.Node) {
 	occurrence := parsed.endpointCounts[identity]
 	parsed.endpointCounts[identity] = occurrence + 1
-	parsed.endpoints[identity+"\x00"+strconv.Itoa(occurrence)] = endpointValue{
-		canonical: canonicalizer{}.node(valueNode),
+	parsed.endpoints[identity+"\x00"+strconv.Itoa(occurrence)] = locatedValue{
+		canonical: parsed.plain.node(valueNode),
 		line:      keyNode.Line,
 	}
 }
 
 func (parsed *parsedText) collect(node *yaml.Node, path string) {
-	parsed.noteIndirection(node)
+	parsed.noteIndirection(node, path)
 	switch node.Kind {
 	case yaml.DocumentNode:
 		for _, child := range node.Content {
@@ -105,13 +88,11 @@ func (parsed *parsedText) collectMapping(mapping *yaml.Node, path string) {
 	for pairIndex := 0; pairIndex+1 < len(mapping.Content); pairIndex += 2 {
 		keyNode := mapping.Content[pairIndex]
 		valueNode := mapping.Content[pairIndex+1]
-		parsed.noteIndirection(keyNode)
-		if keyNode.Value == "<<" && keyNode.Tag == "!!merge" {
-			parsed.indirections["<<="+hashText(canonicalizer{maskSecrets: true}.node(valueNode))] = true
-		}
-		identity := path + "/" + strconv.Quote(keyNode.Value)
+		identity := path + "/" + parsed.masked.keyLabel(keyNode)
+		parsed.noteIndirection(keyNode, identity+"?key")
+		parsed.noteMergeKey(identity, keyNode, valueNode)
 		parsed.recordSlot(keyNode.Line, secretSlot{identity: identity, flowContainer: isFlow, value: valueNode})
-		if endpointKeyPattern.MatchString(keyNode.Value) {
+		if keyNode.Kind == yaml.ScalarNode && endpointKeyPattern.MatchString(keyNode.Value) {
 			parsed.noteEndpoint(identity, keyNode, valueNode)
 		}
 		parsed.collect(valueNode, identity)
@@ -120,11 +101,11 @@ func (parsed *parsedText) collectMapping(mapping *yaml.Node, path string) {
 
 func (parsed *parsedText) collectSequence(sequence *yaml.Node, path string) {
 	isFlow := sequence.Style&yaml.FlowStyle != 0
-	segments := sequenceSegments(sequence)
+	segments := sequenceSegments(sequence, parsed.masked)
 	for itemIndex, item := range sequence.Content {
 		itemPath := path + "[" + segments[itemIndex] + "]"
 		if item.Kind == yaml.ScalarNode {
-			parsed.noteIndirection(item)
+			parsed.noteIndirection(item, itemPath)
 			parsed.recordSlot(item.Line, secretSlot{identity: itemPath, flowContainer: isFlow, value: item})
 			continue
 		}

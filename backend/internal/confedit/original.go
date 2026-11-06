@@ -73,7 +73,7 @@ func loadOriginal(originalText string) (*originalDocument, error) {
 		}
 		secret := originalSecret{text: restorableText(redactedLine), flowContainer: slot.flowContainer}
 		if rawSlot, hasRawSlot := rawParsed.slots[currentRawLine]; hasRawSlot {
-			secret.value = canonicalizer{}.node(rawSlot.value)
+			secret.value = rawParsed.plain.node(rawSlot.value)
 			secret.hasValue = true
 		}
 		key := secretKey(slot.identity, redactedLine.Masked)

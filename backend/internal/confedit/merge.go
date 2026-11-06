@@ -17,17 +17,20 @@ func firstMarkerLine(lines []string) int {
 }
 
 func checkDestinationUnchanged(original, submitted *parsedText) error {
-	if findIndirectionChange(original, submitted) {
-		return &MergeError{Line: firstMarkerLine(submitted.lines), Err: ErrSecretContextChanged}
+	for _, change := range []firstChange{
+		findIndirectionChange(original, submitted),
+		findEndpointChange(original, submitted),
+	} {
+		if !change.found {
+			continue
+		}
+		changedLine := change.line
+		if changedLine == 0 {
+			changedLine = firstMarkerLine(submitted.lines)
+		}
+		return &MergeError{Line: changedLine, Err: ErrSecretContextChanged}
 	}
-	changedLine, hasChange := findEndpointChange(original, submitted)
-	if !hasChange {
-		return nil
-	}
-	if changedLine == 0 {
-		changedLine = firstMarkerLine(submitted.lines)
-	}
-	return &MergeError{Line: changedLine, Err: ErrSecretContextChanged}
+	return nil
 }
 
 func MergeRedactedValues(originalRaw, submittedMasked []byte) ([]byte, error) {

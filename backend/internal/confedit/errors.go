@@ -8,6 +8,7 @@ import (
 var (
 	ErrRedactedWithoutOriginal = errors.New("redacted marker has no original secret at this position")
 	ErrSecretContextChanged    = errors.New("secret cannot be restored because its sibling url or host changed")
+	ErrNestingTooDeep          = errors.New("yaml nesting exceeds the supported depth")
 )
 
 type MergeError struct {

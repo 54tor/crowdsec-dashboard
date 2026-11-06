@@ -22,11 +22,11 @@ func verifyMerged(mergedText, submittedText string, restored []restoredSecret) e
 		submittedLines[secret.submittedLine] = true
 	}
 
-	mergedCanonical, mergedError := canonicalDocument(mergedText, canonicalizer{ignoredLines: mergedLines})
+	mergedCanonical, mergedError := canonicalDocument(mergedText, newCanonicalizer(false, mergedLines))
 	if mergedError != nil {
 		return fmt.Errorf("%w: %v", ErrMergedStructureChanged, mergedError)
 	}
-	submittedCanonical, submittedError := canonicalDocument(submittedText, canonicalizer{ignoredLines: submittedLines})
+	submittedCanonical, submittedError := canonicalDocument(submittedText, newCanonicalizer(false, submittedLines))
 	if submittedError != nil || mergedCanonical != submittedCanonical {
 		return ErrMergedStructureChanged
 	}
@@ -43,7 +43,7 @@ func verifyMerged(mergedText, submittedText string, restored []restoredSecret) e
 		if !hasSlot {
 			return ErrMergedStructureChanged
 		}
-		mergedValue := canonicalizer{}.node(slot.value)
+		mergedValue := mergedParsed.plain.node(slot.value)
 		if mergedValue != secret.originalValue {
 			return ErrMergedStructureChanged
 		}

@@ -3,8 +3,6 @@ package confedit
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,6 +17,15 @@ const secretPlaceholder = "<R>"
 type canonicalizer struct {
 	maskSecrets  bool
 	ignoredLines map[int]bool
+	digests      map[*yaml.Node]string
+}
+
+func newCanonicalizer(maskSecrets bool, ignoredLines map[int]bool) *canonicalizer {
+	return &canonicalizer{
+		maskSecrets:  maskSecrets,
+		ignoredLines: ignoredLines,
+		digests:      make(map[*yaml.Node]string),
+	}
 }
 
 func hashText(text string) string {
@@ -34,54 +41,72 @@ func isMaskedSequence(node *yaml.Node) bool {
 		node.Content[0].Value == "REDACTED"
 }
 
-func (canon canonicalizer) node(node *yaml.Node) string {
-	var builder strings.Builder
-	canon.write(&builder, node)
-	return builder.String()
+func (canon *canonicalizer) node(node *yaml.Node) string {
+	if digest, isKnown := canon.digests[node]; isKnown {
+		return digest
+	}
+	digest := hashText(canon.describe(node))
+	canon.digests[node] = digest
+	return digest
 }
 
-func (canon canonicalizer) write(builder *strings.Builder, node *yaml.Node) {
+func (canon *canonicalizer) describe(node *yaml.Node) string {
+	anchorPrefix := ""
 	if node.Anchor != "" {
-		builder.WriteString("&" + strconv.Quote(node.Anchor))
+		anchorPrefix = "&" + strconv.Quote(node.Anchor)
 	}
 	switch node.Kind {
 	case yaml.DocumentNode:
-		for _, child := range node.Content {
-			canon.write(builder, child)
-		}
+		return anchorPrefix + "d" + canon.joinedChildren(node)
 	case yaml.AliasNode:
-		builder.WriteString("*" + strconv.Quote(node.Value))
+		return anchorPrefix + "*" + strconv.Quote(node.Value)
 	case yaml.ScalarNode:
 		if canon.maskSecrets && strings.Contains(node.Value, confread.RedactedMarker) {
-			builder.WriteString(secretPlaceholder)
-			return
+			return anchorPrefix + secretPlaceholder
 		}
-		builder.WriteString("s" + strconv.Quote(node.Value))
+		return anchorPrefix + "s" + strconv.Quote(node.Value)
 	case yaml.SequenceNode:
-		canon.writeSequence(builder, node)
+		return anchorPrefix + canon.describeSequence(node)
 	case yaml.MappingNode:
-		canon.writeMapping(builder, node)
+		return anchorPrefix + canon.describeMapping(node)
 	}
+	return anchorPrefix + "?"
 }
 
-func (canon canonicalizer) writeSequence(builder *strings.Builder, sequence *yaml.Node) {
-	if canon.maskSecrets && isMaskedSequence(sequence) {
-		builder.WriteString(secretPlaceholder)
-		return
+func (canon *canonicalizer) joinedChildren(node *yaml.Node) string {
+	childDigests := make([]string, 0, len(node.Content))
+	for _, child := range node.Content {
+		childDigests = append(childDigests, canon.node(child))
 	}
-	builder.WriteString("[")
+	return "(" + strings.Join(childDigests, ",") + ")"
+}
+
+func (canon *canonicalizer) describeSequence(sequence *yaml.Node) string {
+	if canon.maskSecrets && isMaskedSequence(sequence) {
+		return secretPlaceholder
+	}
+	itemTexts := make([]string, 0, len(sequence.Content))
 	for _, item := range sequence.Content {
 		if item.Kind == yaml.ScalarNode && canon.ignoredLines[item.Line] {
-			builder.WriteString(secretPlaceholder)
-		} else {
-			canon.write(builder, item)
+			itemTexts = append(itemTexts, secretPlaceholder)
+			continue
 		}
-		builder.WriteString(",")
+		itemTexts = append(itemTexts, canon.node(item))
 	}
-	builder.WriteString("]")
+	return "[" + strings.Join(itemTexts, ",") + "]"
 }
 
-func (canon canonicalizer) writeMapping(builder *strings.Builder, mapping *yaml.Node) {
+func (canon *canonicalizer) keyLabel(keyNode *yaml.Node) string {
+	switch keyNode.Kind {
+	case yaml.ScalarNode:
+		return strconv.Quote(keyNode.Value)
+	case yaml.AliasNode:
+		return "*" + strconv.Quote(keyNode.Value)
+	}
+	return "?" + canon.node(keyNode)
+}
+
+func (canon *canonicalizer) describeMapping(mapping *yaml.Node) string {
 	entries := make([]string, 0, len(mapping.Content)/2)
 	for pairIndex := 0; pairIndex+1 < len(mapping.Content); pairIndex += 2 {
 		keyNode := mapping.Content[pairIndex]
@@ -89,25 +114,25 @@ func (canon canonicalizer) writeMapping(builder *strings.Builder, mapping *yaml.
 		if !canon.ignoredLines[keyNode.Line] {
 			valueText = canon.node(mapping.Content[pairIndex+1])
 		}
-		entries = append(entries, strconv.Quote(keyNode.Value)+":"+valueText)
+		entries = append(entries, canon.keyLabel(keyNode)+":"+valueText)
 	}
 	sort.Strings(entries)
-	builder.WriteString("{" + strings.Join(entries, ",") + "}")
+	return "{" + strings.Join(entries, ",") + "}"
 }
 
-func canonicalDocument(text string, canon canonicalizer) (string, error) {
-	decoder := yaml.NewDecoder(strings.NewReader(text))
+func (canon *canonicalizer) documents(documents []*yaml.Node) string {
 	var builder strings.Builder
-	for {
-		var document yaml.Node
-		decodeError := decoder.Decode(&document)
-		if errors.Is(decodeError, io.EOF) {
-			return builder.String(), nil
-		}
-		if decodeError != nil {
-			return "", decodeError
-		}
-		canon.write(&builder, &document)
+	for _, document := range documents {
+		builder.WriteString(canon.node(document))
 		builder.WriteString("\n---\n")
 	}
+	return builder.String()
+}
+
+func canonicalDocument(text string, canon *canonicalizer) (string, error) {
+	documents, decodeError := decodeDocuments(text)
+	if decodeError != nil {
+		return "", decodeError
+	}
+	return canon.documents(documents), nil
 }

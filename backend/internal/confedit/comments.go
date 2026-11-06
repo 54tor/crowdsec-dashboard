@@ -17,7 +17,7 @@ func isRealComment(parsed *parsedText, lineIndex int) bool {
 	remainingLines := make([]string, 0, len(parsed.lines)-1)
 	remainingLines = append(remainingLines, parsed.lines[:lineIndex]...)
 	remainingLines = append(remainingLines, parsed.lines[lineIndex+1:]...)
-	canonical, canonicalError := canonicalDocument(strings.Join(remainingLines, "\n"), canonicalizer{})
+	canonical, canonicalError := canonicalDocument(strings.Join(remainingLines, "\n"), newCanonicalizer(false, nil))
 	return canonicalError == nil && canonical == parsed.canonical
 }
 
