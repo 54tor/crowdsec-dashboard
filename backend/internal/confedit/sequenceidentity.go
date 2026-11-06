@@ -2,7 +2,7 @@ package confedit
 
 import (
 	"fmt"
-	"sort"
+	"strconv"
 	"strings"
 
 	"crowdsec-dashboard/internal/confread"
@@ -16,10 +16,11 @@ func sequenceSegments(sequence *yaml.Node) []string {
 	for itemIndex, item := range sequence.Content {
 		if hasUniqueKey {
 			itemValue, _ := plainScalarValue(item, uniqueKey)
-			segments[itemIndex] = uniqueKey + "=" + itemValue
+			segments[itemIndex] = strconv.Quote(uniqueKey) + "=" + strconv.Quote(itemValue)
 			continue
 		}
-		segments[itemIndex] = fmt.Sprintf("#%d/%d/%s", itemIndex, len(sequence.Content), fingerprint(item))
+		itemFingerprint := hashText(canonicalizer{maskSecrets: true}.node(item))
+		segments[itemIndex] = fmt.Sprintf("#%d/%d/%s", itemIndex, len(sequence.Content), itemFingerprint)
 	}
 	return segments
 }
@@ -30,15 +31,12 @@ func plainScalarValue(item *yaml.Node, key string) (string, bool) {
 	}
 	for pairIndex := 0; pairIndex+1 < len(item.Content); pairIndex += 2 {
 		valueNode := item.Content[pairIndex+1]
-		if item.Content[pairIndex].Value == key && isPlainScalar(valueNode) {
+		isPlainScalar := valueNode.Kind == yaml.ScalarNode && !strings.Contains(valueNode.Value, confread.RedactedMarker)
+		if item.Content[pairIndex].Value == key && isPlainScalar {
 			return valueNode.Value, true
 		}
 	}
 	return "", false
-}
-
-func isPlainScalar(node *yaml.Node) bool {
-	return node.Kind == yaml.ScalarNode && !strings.Contains(node.Value, confread.RedactedMarker)
 }
 
 func uniqueScalarKey(sequence *yaml.Node) (string, bool) {
@@ -65,25 +63,4 @@ func hasUniqueValues(sequence *yaml.Node, key string) bool {
 		seenValues[itemValue] = true
 	}
 	return true
-}
-
-func fingerprint(item *yaml.Node) string {
-	if item.Kind == yaml.ScalarNode {
-		if isPlainScalar(item) {
-			return item.Value
-		}
-		return ""
-	}
-	if item.Kind != yaml.MappingNode {
-		return ""
-	}
-	entries := make([]string, 0, len(item.Content)/2)
-	for pairIndex := 0; pairIndex+1 < len(item.Content); pairIndex += 2 {
-		valueNode := item.Content[pairIndex+1]
-		if isPlainScalar(valueNode) {
-			entries = append(entries, item.Content[pairIndex].Value+"="+valueNode.Value)
-		}
-	}
-	sort.Strings(entries)
-	return strings.Join(entries, "&")
 }

@@ -2,6 +2,8 @@ package confedit
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -217,6 +219,78 @@ func TestMergeRedactedValues(testingContext *testing.T) {
 			submitted:      "a: 2\n",
 			valeurAttendue: "\ufeffa: 2\r\n",
 		},
+		{
+			name:           "refusesItemWhenNestedNonSecretSubtreeIsSwapped",
+			original:       "items:\n  - password: s1\n    sub:\n      label: a\n  - password: s2\n    sub:\n      label: b\n",
+			submitted:      "items:\n  - password: [REDACTED]\n    sub:\n      label: b\n  - password: [REDACTED]\n    sub:\n      label: a\n",
+			erreurAttendue: ErrRedactedWithoutOriginal,
+		},
+		{
+			name:           "refusesItemWhenNestedHostSubtreeIsSwapped",
+			original:       "items:\n  - password: s1\n    sub:\n      host: a\n  - password: s2\n    sub:\n      host: b\n",
+			submitted:      "items:\n  - password: [REDACTED]\n    sub:\n      host: b\n  - password: [REDACTED]\n    sub:\n      host: a\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "refusesWhenAnchoredSubtreeChanged",
+			original:       "base: &b\n  label: good\nsvc:\n  <<: *b\n  password: s1\n",
+			submitted:      "base: &b\n  label: evil\nsvc:\n  <<: *b\n  password: [REDACTED]\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "restoresWhenAnchorsAndAliasesAreUnchanged",
+			original:       "base: &b\n  label: good\nsvc:\n  <<: *b\n  password: s1\n",
+			submitted:      "base: &b\n  label: good\nsvc:\n  <<: *b\n  password: [REDACTED]\n  extra: 1\n",
+			valeurAttendue: "base: &b\n  label: good\nsvc:\n  <<: *b\n  password: s1\n  extra: 1\n",
+		},
+		{
+			name:           "refusesCommentMarkerInsideQuotedScalar",
+			original:       "api:\n  url: http://lapi\n  # see postgres://u:p@h\n",
+			submitted:      "api:\n  url: http://lapi\n  note: \"x\n  # see postgres://[REDACTED]@h\n  \"\n",
+			erreurAttendue: ErrRedactedWithoutOriginal,
+		},
+		{
+			name:           "refusesCommentMarkerBuildingLiveUrl",
+			original:       "api:\n  url: http://lapi\n  # see postgres://u:p@h\n",
+			submitted:      "api:\n  url: \"http://evil/?q=\n  # see postgres://[REDACTED]@h\n  \"\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "refusesCommentSecretWhenEndpointChanged",
+			original:       "url: http://a\n# see postgres://u:p@h\n",
+			submitted:      "url: http://b\n# see postgres://[REDACTED]@h\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "refusesPathsThatCollideWhenKeysContainSeparators",
+			original:       "outputs:\n  smtp:\n    password: s1\n",
+			submitted:      "outputs/smtp:\n    password: [REDACTED]\n",
+			erreurAttendue: ErrRedactedWithoutOriginal,
+		},
+		{
+			name:           "refusesBlockToFlowRestoration",
+			original:       "auth:\n  password: ab\n",
+			submitted:      "auth: {\n  password: [REDACTED]\n  }\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "refusesAllSecretsWhenUnrelatedEndpointKeyChanges",
+			original:       "listen: 1\nsvc:\n  password: s\n",
+			submitted:      "listen: 2\nsvc:\n  password: [REDACTED]\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "refusesWhenEndpointKeyIsRemoved",
+			original:       "listen: 1\nsvc:\n  password: s\n",
+			submitted:      "svc:\n  password: [REDACTED]\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "refusesWhenNonScalarEndpointValueChanges",
+			original:       "servers:\n  - a\nsvc:\n  password: s\n",
+			submitted:      "servers:\n  - a\n  - b\nsvc:\n  password: [REDACTED]\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
 	}
 
 	for _, casDeTestCourant := range casesDeTest {
@@ -242,5 +316,24 @@ func TestMergeErrorCarriesSubmittedLineNumber(testingContext *testing.T) {
 	}
 	if erreurDeFusion.Line != 2 {
 		testingContext.Fatalf("ligne obtenue %d, attendue 2", erreurDeFusion.Line)
+	}
+}
+
+func TestMergeHandlesLargeListsWithoutBlowup(testingContext *testing.T) {
+	var originalBuilder, submittedBuilder strings.Builder
+	originalBuilder.WriteString("users:\n")
+	submittedBuilder.WriteString("users:\n")
+	for itemIndex := 0; itemIndex < 3000; itemIndex++ {
+		originalBuilder.WriteString(fmt.Sprintf("  - name: user%d\n    password: secret%d\n", itemIndex, itemIndex))
+		submittedBuilder.WriteString(fmt.Sprintf("  - name: user%d\n    password: [REDACTED]\n", itemIndex))
+	}
+
+	valeurObtenue, erreurObtenue := MergeRedactedValues([]byte(originalBuilder.String()), []byte(submittedBuilder.String()))
+
+	if erreurObtenue != nil {
+		testingContext.Fatalf("erreur inattendue %v", erreurObtenue)
+	}
+	if string(valeurObtenue) != originalBuilder.String() {
+		testingContext.Fatalf("le contenu fusionne differe de l'original")
 	}
 }
