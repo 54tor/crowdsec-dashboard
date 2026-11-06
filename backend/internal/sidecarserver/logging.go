@@ -79,6 +79,16 @@ func logApply(logger *slog.Logger, request *http.Request, outcome execOutcome, d
 	)
 }
 
+func logEdit(logger *slog.Logger, request *http.Request, outcome execOutcome, duration time.Duration) {
+	logger.Info("sidecar_config_edit",
+		slog.String("request_id", requestIDOf(request.Context())),
+		slog.String("path", request.URL.Path),
+		slog.Int("status", outcome.status),
+		slog.String("code", outcome.code),
+		slog.Int64("duration_ms", duration.Milliseconds()),
+	)
+}
+
 func withRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, requestIDContextKey{}, requestID)
 }

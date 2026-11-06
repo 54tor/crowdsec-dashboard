@@ -26,7 +26,9 @@ func NewHandler(dependencies Dependencies) http.Handler {
 	authenticatedRoutes.Handle("POST "+sidecarapi.PathPing, pingHandler(logger))
 	authenticatedRoutes.Handle("POST "+sidecarapi.PathExec, newExecHandler(dependencies, executionSlots, logger))
 	registerFileRoutes(authenticatedRoutes, dependencies.Config.ConfDir, logger)
-	registerAcquisitionRoutes(authenticatedRoutes, newApplyHandler(dependencies, executionSlots, logger), dependencies.DigestKey, logger)
+	applyHandler := newApplyHandler(dependencies, executionSlots, logger)
+	registerAcquisitionRoutes(authenticatedRoutes, applyHandler, dependencies.DigestKey, logger)
+	registerEditRoutes(authenticatedRoutes, dependencies, applyHandler, logger)
 	rateLimitedRoutes := limitRate(logger, refuseUncleanPaths(authenticatedRoutes))
 	authenticatedHandler := authenticate(dependencies.Verifier, newThrottledRefusalLog(logger), rateLimitedRoutes)
 

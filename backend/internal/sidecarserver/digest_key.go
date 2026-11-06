@@ -72,8 +72,12 @@ func (digestKey DigestKey) isUsable() bool {
 	return len(digestKey.secret) == digestKeyByteCount
 }
 
+func (digestKey DigestKey) digester() digest.Digester {
+	return digest.NewDigester(digestKey.secret)
+}
+
 func (digestKey DigestKey) digestOf(content []byte) string {
-	return digest.NewDigester(digestKey.secret).Of(content)
+	return digestKey.digester().Of(content)
 }
 
 func (digestKey DigestKey) Format(state fmt.State, _ rune) {

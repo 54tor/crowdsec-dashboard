@@ -16,4 +16,9 @@ const (
 	CodeConfigInconsistent     = "config_inconsistent"
 	CodeConcurrentChange       = "concurrent_change"
 	CodeRecoveryPending        = "recovery_pending"
+	CodeDigestMismatch         = "digest_mismatch"
+	CodeReadOnlyFile           = "read_only_file"
+	CodeProtectedFile          = "protected_file"
+	CodeParentMissing          = "parent_missing"
+	CodeSchemaInvalid          = "schema_invalid"
 )

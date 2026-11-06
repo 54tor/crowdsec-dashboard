@@ -78,13 +78,23 @@ var confwriteErrorOutcomes = []struct {
 	{confwrite.ErrConfigInconsistent, execOutcome{http.StatusInternalServerError, sidecarapi.CodeConfigInconsistent}},
 	{confwrite.ErrConcurrentChange, execOutcome{http.StatusConflict, sidecarapi.CodeConcurrentChange}},
 	{confwrite.ErrRecoveryPending, execOutcome{http.StatusConflict, sidecarapi.CodeRecoveryPending}},
+	{confwrite.ErrReadOnlyFile, execOutcome{http.StatusForbidden, sidecarapi.CodeReadOnlyFile}},
+	{confwrite.ErrProtectedFile, execOutcome{http.StatusForbidden, sidecarapi.CodeProtectedFile}},
+	{confwrite.ErrParentMissing, execOutcome{http.StatusNotFound, sidecarapi.CodeParentMissing}},
 }
 
 func outcomeOfConfwriteError(confwriteError error) execOutcome {
-	for _, errorOutcome := range confwriteErrorOutcomes {
-		if errors.Is(confwriteError, errorOutcome.sentinel) {
-			return errorOutcome.outcome
-		}
+	if outcome, isKnown := knownConfwriteOutcome(confwriteError); isKnown {
+		return outcome
 	}
 	return execOutcome{http.StatusServiceUnavailable, sidecarapi.CodeAcquisitionUnavailable}
+}
+
+func knownConfwriteOutcome(confwriteError error) (execOutcome, bool) {
+	for _, errorOutcome := range confwriteErrorOutcomes {
+		if errors.Is(confwriteError, errorOutcome.sentinel) {
+			return errorOutcome.outcome, true
+		}
+	}
+	return execOutcome{}, false
 }
