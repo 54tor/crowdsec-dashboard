@@ -48,7 +48,8 @@ compose() {
   docker compose -p "$project" "$@"
 }
 
-if ! compose config --services | grep -qx "$service"; then
+defined_services="$(compose config --services)"
+if ! grep -qx -- "$service" <<<"$defined_services"; then
   echo "service $service is not defined in compose project $project" >&2
   exit 1
 fi
@@ -132,7 +133,8 @@ admin_sql() {
 
 trap finish EXIT
 
-if compose ps --status running --services | grep -qx "$dashboard_service"; then
+running_services="$(compose ps --status running --services)"
+if grep -qx -- "$dashboard_service" <<<"$running_services"; then
   dashboard_was_running=1
 fi
 dashboard_stopped=1
