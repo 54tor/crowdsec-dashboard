@@ -180,3 +180,19 @@ func TestApplyTreeAcceptsNonAcquisitionYamlWithoutSourceKey(testContext *testing
 		testContext.Fatalf("result=%+v error=%v", result, applyError)
 	}
 }
+
+// The root acquis.yaml is acquisition content even though ValidateName refuses
+// it as an import name: a security review found that the strict source policy
+// (allowed sources only, no anchors, no transform) was skipped for it, so an
+// editor save could smuggle an arbitrary datasource through the root file.
+func TestApplyTreeAppliesAcquisitionSourcePolicyToRootAcquisYaml(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	forbiddenSourceContent := "source: http\nlisten_addr: 0.0.0.0:8080\nlabels:\n  type: web\n"
+	_, applyError := ApplyTree(importDirectory, []FileChange{{Name: "acquis.yaml", Content: []byte(forbiddenSourceContent)}}, passingConfigTest)
+	if !errors.Is(applyError, ErrForbiddenSource) {
+		testContext.Fatalf("got %v, want ErrForbiddenSource", applyError)
+	}
+	if _, statError := os.Stat(filepath.Join(importDirectory, "acquis.yaml")); statError == nil {
+		testContext.Fatal("acquis.yaml must not be written")
+	}
+}

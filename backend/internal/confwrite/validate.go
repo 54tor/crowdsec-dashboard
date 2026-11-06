@@ -11,7 +11,10 @@ import (
 	"crowdsec-dashboard/internal/confread"
 )
 
-const MaxFileBytes = 256 << 10
+const (
+	MaxFileBytes        = 256 << 10
+	rootAcquisitionName = "acquis.yaml"
+)
 
 var (
 	ErrInvalidName     = errors.New("confwrite: invalid file name")
@@ -78,7 +81,7 @@ func validateContentFor(name string, content []byte) error {
 }
 
 func isAcquisitionPath(name string) bool {
-	return ValidateName(name) == nil || path.Dir(name) == acquisitionDirectory
+	return ValidateName(name) == nil || name == rootAcquisitionName || path.Dir(name) == acquisitionDirectory
 }
 
 func validateChanges(changes []FileChange, validateName func(string) error) error {
