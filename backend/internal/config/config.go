@@ -183,6 +183,10 @@ func parseCIDRs(rawValue string) ([]*net.IPNet, error) {
 		if parseError != nil {
 			return nil, fmt.Errorf("TRUSTED_PROXY_CIDRS entry %q is invalid: %w", rawCIDR, parseError)
 		}
+		prefixLength, _ := network.Mask.Size()
+		if prefixLength == 0 {
+			return nil, fmt.Errorf("TRUSTED_PROXY_CIDRS entry %q trusts every address: list only the reverse proxy", rawCIDR)
+		}
 		networks = append(networks, network)
 	}
 	return networks, nil

@@ -135,6 +135,20 @@ func TestLoadParsesTrustedProxyCIDRs(testContext *testing.T) {
 	}
 }
 
+// A zero-length prefix trusts every peer, so any client could forge X-Forwarded-For.
+func TestLoadRefusesATrustedProxyCIDRCoveringEveryAddress(testContext *testing.T) {
+	for _, catchAllCIDR := range []string{"0.0.0.0/0", "::/0", "10.0.0.0/8, ::/0"} {
+		_, loadError := Load(environmentFrom(map[string]string{
+			"DATABASE_URL":        validTestDatabaseURL,
+			"TRUSTED_PROXY_CIDRS": catchAllCIDR,
+		}))
+
+		if loadError == nil {
+			testContext.Errorf("%q: expected an error, got none", catchAllCIDR)
+		}
+	}
+}
+
 func TestLoadAppliesDefaults(testContext *testing.T) {
 	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL}))
 
