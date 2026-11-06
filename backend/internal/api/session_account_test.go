@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"crowdsec-dashboard/internal/audit"
 )
 
 func authenticatedRequest(method, path string, sessionCookie *http.Cookie) *http.Request {
@@ -47,6 +49,24 @@ func TestLogoutAllInvalidatesEverySessionOfTheAccount(testContext *testing.T) {
 		if recorder.Code != http.StatusUnauthorized {
 			testContext.Errorf("%s: expected 401 after logout-all, got %d", description, recorder.Code)
 		}
+	}
+}
+
+// "Log out everywhere" revokes every session and token of the account: it is audited with the
+// same action as an administrator revoking them, the account targeting itself.
+func TestLogoutAllRecordsTheRevocationInTheAuditLog(testContext *testing.T) {
+	auditRecorder := &fakeAuditRecorder{}
+	handler, sessions := newTestHandlerAndSessions(testContext, Services{Audit: auditRecorder}, "")
+	sessionCookie := newAuthenticatedCookie(testContext, sessions, testAccountID)
+
+	handler.ServeHTTP(httptest.NewRecorder(), authenticatedRequest(http.MethodPost, "/api/auth/logout-all", sessionCookie))
+
+	expectedEvent := recordedAuditEvent{action: audit.ActionAccountSessionsRevoked, target: "account:" + testAccountName, clientIP: "192.0.2.1"}
+	if len(auditRecorder.events) != 1 || auditRecorder.events[0] != expectedEvent {
+		testContext.Fatalf("expected %+v, got %+v", expectedEvent, auditRecorder.events)
+	}
+	if auditRecorder.actorAccountIDs[0] != testAccountID {
+		testContext.Errorf("expected actor %d, got %d", testAccountID, auditRecorder.actorAccountIDs[0])
 	}
 }
 

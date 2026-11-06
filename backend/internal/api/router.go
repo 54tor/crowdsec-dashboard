@@ -22,6 +22,7 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 		trustedCIDRs:        loadedConfig.TrustedProxyCIDRs,
 		sessions:            services.Sessions,
 		accountManager:      services.AccountManager,
+		recorder:            services.Audit,
 		limiter:             auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
 		secondFactorLimiter: auth.NewLoginLimiter(secondFactorAttemptsPerIP, 0),
 		failureWait:         failureWait,

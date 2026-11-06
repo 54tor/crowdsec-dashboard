@@ -319,7 +319,7 @@ of control characters and cut at 64 characters. Recorded actions:
 | `allowlist_created`, `allowlist_deleted` | an allowlist of an engine was created or deleted | `<engine>/<allowlist>` |
 | `allowlist_entry_added`, `allowlist_entry_removed` | an allowlist entry was added or removed | `<value>@<engine>/<allowlist>`; the value comes first and is never cut |
 | `api_token_created`, `api_token_revoked` | a token was created or revoked | `api_token:<id>:<name>` |
-| `account_created`, `account_role_changed`, `account_second_factor_reset`, `account_sessions_revoked`, `account_unlocked`, `account_deleted` | an administrator acted on an account | `account:<name>`; at creation `account:<name>:<role>`; role change `account:<name>:<previous role>-><new role>` |
+| `account_created`, `account_role_changed`, `account_second_factor_reset`, `account_sessions_revoked`, `account_unlocked`, `account_deleted` | an administrator acted on an account; `account_sessions_revoked` is also recorded when an account uses "log out everywhere" on itself | `account:<name>`; at creation `account:<name>:<role>`; role change `account:<name>:<previous role>-><new role>` |
 | `secrets_rotated` | `dashboard rotate-secrets` finished a real run (no account) | number of rows rewritten |
 | `retention_purged` | the hourly job removed or scrubbed something (no account) | counts: `ips=… audit=… sessions=… tokens=… archive=…` |
 | `sync_run` | a manual sync run finished, or a scheduled one planned or applied a change or ended with an error (no account) | `[err=<code> ]dry_run=<bool> engines=<n> added=<n> removed=<n> skipped=<n>` (`err=` only when the run ended with a run-level code) |

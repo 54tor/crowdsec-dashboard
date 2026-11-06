@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"time"
 
+	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/login"
 	"crowdsec-dashboard/internal/secondfactor"
@@ -29,6 +30,7 @@ type authHandlers struct {
 	trustedCIDRs        []*net.IPNet
 	sessions            auth.SessionStore
 	accountManager      AccountManager
+	recorder            audit.Recorder
 	limiter             *auth.LoginLimiter
 	secondFactorLimiter *auth.LoginLimiter
 	failureWait         time.Duration
@@ -142,6 +144,8 @@ func (handlers *authHandlers) logoutAll(responseWriter http.ResponseWriter, requ
 		writeError(responseWriter, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
+	audit.RecordOrLog(request.Context(), handlers.recorder, identity.AccountID, audit.ActionAccountSessionsRevoked,
+		accountTargetPrefix+identity.AccountName, auditClientIP(request, handlers.trustedCIDRs))
 	http.SetCookie(responseWriter, handlers.sessionCookie("", -1))
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
 }
