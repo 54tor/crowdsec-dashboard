@@ -260,22 +260,32 @@ the older one), and is reused by the release workflow. Its jobs:
 
 | Job | What it checks |
 |---|---|
-| `backend` | `go vet ./...`, `go build ./cmd/dashboard`, `go test -p 2` against a `postgres:latest` service (`TEST_DATABASE_URL` set, `pg_trgm` comes with the image), `-race` on `./internal/api` only; the backup check tests skip without their variables |
+| `backend` | `go vet ./...`, `go build ./cmd/dashboard ./cmd/sidecar`, `go test -p 2` against a `postgres:latest` service (`TEST_DATABASE_URL` set, `pg_trgm` comes with the image), `-race` on `./internal/api` only; the backup check tests skip without their variables |
 | `web` | Node LTS, `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` |
-| `docker` | hadolint on `deploy/Dockerfile` (`.hadolint.yaml` ignores the floating-tag and unpinned-package rules on purpose), then a buildx build without push, cached in the GitHub Actions cache; `linux/amd64` on pull requests, `linux/amd64` and `linux/arm64` otherwise |
+| `docker` | hadolint on `deploy/Dockerfile` and `deploy/Dockerfile.sidecar` (`.hadolint.yaml` ignores the floating-tag and unpinned-package rules on purpose), then a buildx build of both images without push, each cached in the GitHub Actions cache; `linux/amd64` on pull requests, `linux/amd64` and `linux/arm64` otherwise |
 | `docs-hygiene` | fails when a tracked file other than a changelog holds a local home path, or when `docs/superpowers` or `.superpowers` is tracked |
 
 `release.yml` runs on a tag `vX.Y.Z` (or `vX.Y.Z-rc.N`). It refuses a tag that differs from `v`
-plus the `version` of `web/package.json`, runs the whole `ci.yml`, then builds the image from the
-tag commit for `linux/amd64` and `linux/arm64` and pushes it to `ghcr.io/<owner>/<repository>`
-(the repository name, lowercased) with the tags `X.Y.Z`, `X.Y` and `latest`; a pre-release tag
-(with a `-`) only gets `X.Y.Z-rc.N`. The image carries a max-mode provenance and an SBOM, and a
-signed build provenance attestation is stored with it (`gh attestation verify
-oci://ghcr.io/<owner>/<repository>:X.Y.Z --repo <owner>/<repository>`). Finally a GitHub Release
-is created with generated notes, marked as a pre-release for a pre-release tag. Only the publish
-job may write packages and attestations, and only the release job may write the repository
-contents. A further image is published by adding one entry (`name`, `dockerfile`, `context`) to the
-`images` matrix of the `publish` job; it is pushed as `ghcr.io/<owner>/<repository>/<name>`.
+plus the `version` of `web/package.json` and runs the whole `ci.yml`. It then publishes in two
+phases, so a release is complete or absent:
+
+1. `publish` builds every image of its `images` matrix from the tag commit for `linux/amd64` and
+   `linux/arm64` and pushes it under the commit tag `sha-<full commit sha>` only: the dashboard to
+   `ghcr.io/<owner>/<repository>` (the repository name, lowercased), the sidecar to
+   `ghcr.io/<owner>/<repository>/sidecar`. Each image carries a max-mode provenance and an SBOM, and
+   a signed build provenance attestation is stored with it. A failed build moves no public tag.
+2. `promote` runs only when every build succeeded and copies each `sha-<commit>` manifest, without
+   rebuilding (`docker buildx imagetools create`, same digest and attestations), under `X.Y.Z`,
+   `X.Y` and `latest`; a pre-release tag (with a `-`) only gets `X.Y.Z-rc.N`. A failure here is
+   retried by re-running the job.
+
+Finally a GitHub Release is created with generated notes, marked as a pre-release for a pre-release
+tag. Verify an image with `gh attestation verify oci://ghcr.io/<owner>/<repository>:X.Y.Z --repo
+<owner>/<repository>`. Only `publish` and `promote` may write packages (`publish` alone writes
+attestations), and only the release job may write the repository contents. A further image needs
+an entry (`name`, `dockerfile`, `context`) in the `images` matrix of `publish` and a matching
+metadata step and `promote_image` call in `promote`; it is pushed as
+`ghcr.io/<owner>/<repository>/<name>`.
 
 To cut a release:
 
@@ -285,8 +295,9 @@ To cut a release:
 3. follow the Release workflow in the Actions tab; the tag must point at the commit that holds the
    version, otherwise the first job fails and nothing is published.
 
-The same checks run locally with the commands of [Tests](#tests), plus `hadolint deploy/Dockerfile`
-(it reads `.hadolint.yaml`) and `docker build -f deploy/Dockerfile .` from the repository root.
+The same checks run locally with the commands of [Tests](#tests), plus `hadolint deploy/Dockerfile deploy/Dockerfile.sidecar`
+(it reads `.hadolint.yaml`), `docker build -f deploy/Dockerfile .` and
+`docker build -f deploy/Dockerfile.sidecar .` from the repository root.
 `actionlint` checks the workflow files.
 
 Repository settings and first publication:

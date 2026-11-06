@@ -34,6 +34,8 @@ jobs:
       contents: read
     uses: ./.github/workflows/ci.yml
 
+  # Phase 1: every image is built and pushed under the commit tag sha-<commit> only. No public tag
+  # moves, so a failed build leaves the previous release untouched.
   publish:
     needs: gates
     runs-on: ubuntu-latest
@@ -75,9 +77,7 @@ jobs:
           images: ${{ steps.image.outputs.reference }}
           flavor: latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=sha,format=long
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
@@ -105,8 +105,68 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
-  github-release:
+  # Phase 2: runs only once every image of phase 1 succeeded, and copies each sha-<commit>
+  # manifest under the version tags without rebuilding, so the digests and attestations stay.
+  promote:
     needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Resolve the image references
+        id: images
+        run: |
+          repository_image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "dashboard=${repository_image}" >> "${GITHUB_OUTPUT}"
+          echo "sidecar=${repository_image}/sidecar" >> "${GITHUB_OUTPUT}"
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        id: dashboard-tags
+        with:
+          images: ${{ steps.images.outputs.dashboard }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        id: sidecar-tags
+        with:
+          images: ${{ steps.images.outputs.sidecar }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag the commit images with the version tags
+        env:
+          DASHBOARD_IMAGE: ${{ steps.images.outputs.dashboard }}
+          DASHBOARD_TAGS: ${{ steps.dashboard-tags.outputs.tags }}
+          SIDECAR_IMAGE: ${{ steps.images.outputs.sidecar }}
+          SIDECAR_TAGS: ${{ steps.sidecar-tags.outputs.tags }}
+        run: |
+          promote_image() {
+            local image_reference="$1"
+            local version_tags="$2"
+            local tag_arguments=()
+            while IFS= read -r version_tag; do
+              if [ -n "${version_tag}" ]; then
+                tag_arguments+=(--tag "${version_tag}")
+              fi
+            done <<< "${version_tags}"
+            docker buildx imagetools create "${tag_arguments[@]}" "${image_reference}:sha-${GITHUB_SHA}"
+          }
+          promote_image "${DASHBOARD_IMAGE}" "${DASHBOARD_TAGS}"
+          promote_image "${SIDECAR_IMAGE}" "${SIDECAR_TAGS}"
+
+  github-release:
+    needs: promote
     runs-on: ubuntu-latest
     permissions:
       contents: write
