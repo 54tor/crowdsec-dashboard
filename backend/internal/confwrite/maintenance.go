@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -59,23 +58,4 @@ func isExpiredBackup(entry fs.DirEntry, now time.Time) bool {
 	}
 	createdAt, parseError := time.Parse(backupTimestampLayout, entry.Name())
 	return parseError == nil && now.Sub(createdAt) > backupRetention
-}
-
-func CleanStaleTemps(rootDir string) error {
-	root, openError := openImportRoot(rootDir)
-	if openError != nil {
-		return openError
-	}
-	defer root.Close()
-	entries, listError := fs.ReadDir(root.FS(), ".")
-	if listError != nil {
-		return listError
-	}
-	removeErrors := []error{}
-	for _, entry := range entries {
-		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), tempFilePrefix) {
-			removeErrors = append(removeErrors, root.Remove(entry.Name()))
-		}
-	}
-	return errors.Join(removeErrors...)
 }

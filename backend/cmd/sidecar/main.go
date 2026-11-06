@@ -40,6 +40,7 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	prepareConfigDirectories(sidecarConfig, time.Now(), logger)
 	verifier := sidecarauth.NewVerifier(sidecarauth.VerifierSettings{
 		Issuer:    sidecarConfig.Issuer,
 		Audience:  sidecarConfig.Audience,

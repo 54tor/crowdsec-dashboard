@@ -15,3 +15,7 @@ func enableConfigImport(services *api.Services, loadedConfig config.Config, now 
 	services.EnableLocalConfigImport(loadedConfig.ConfigImportDir)
 	confwrite.PrepareImportDir(loadedConfig.ConfigImportDir, now, logLine)
 }
+
+func prepareConfDir(confDir string, now time.Time, logLine logFunction) {
+	confwrite.PrepareConfDir(confDir, false, now, logLine)
+}

@@ -3,6 +3,7 @@ package confwrite
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"path"
 	"slices"
 
@@ -50,13 +51,21 @@ type rootInspector interface {
 	Lstat(name string) (fs.FileInfo, error)
 }
 
-func parentDirectoriesOf(writes []*pendingWrite) []string {
+func parentDirectoriesOf(names []string) []string {
 	directories := []string{}
-	for _, write := range writes {
-		directory := path.Dir(write.name)
+	for _, name := range names {
+		directory := path.Dir(name)
 		if directory != "." && !slices.Contains(directories, directory) {
 			directories = append(directories, directory)
 		}
 	}
 	return directories
+}
+
+func syncDirectoriesOf(root *os.Root, names []string, syncDir func(*os.Root, string) error) error {
+	syncErrors := []error{syncDir(root, ".")}
+	for _, directory := range parentDirectoriesOf(names) {
+		syncErrors = append(syncErrors, syncDir(root, directory))
+	}
+	return errors.Join(syncErrors...)
 }

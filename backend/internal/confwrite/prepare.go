@@ -6,28 +6,46 @@ import (
 	"time"
 )
 
-func PrepareImportDir(importDir string, now time.Time, logLine func(format string, arguments ...any)) {
-	recoverInterruptedImport(importDir, logLine)
-	if cleanError := CleanStaleTemps(importDir); cleanError != nil {
-		logLine("config import: stale temporary files not cleaned: %v", cleanError)
+const (
+	importLogPrefix = "config import"
+	editLogPrefix   = "config edit"
+)
+
+type logFunction = func(format string, arguments ...any)
+
+func PrepareImportDir(importDir string, now time.Time, logLine logFunction) {
+	prepareDirectory(importDir, now, importLogPrefix, logLine)
+}
+
+func PrepareConfDir(confDir string, readOnly bool, now time.Time, logLine logFunction) {
+	if confDir == "" || readOnly || CheckWritable(confDir) != nil {
+		return
 	}
-	if purgeError := PurgeOldBackups(importDir, now); purgeError != nil {
-		logLine("config import: old backups not purged: %v", purgeError)
+	prepareDirectory(confDir, now, editLogPrefix, logLine)
+}
+
+func prepareDirectory(rootDir string, now time.Time, logPrefix string, logLine logFunction) {
+	recoverInterruptedWrites(rootDir, logPrefix, logLine)
+	if cleanError := CleanStaleTemps(rootDir); cleanError != nil {
+		logLine("%s: stale temporary files not cleaned: %v", logPrefix, cleanError)
+	}
+	if purgeError := PurgeOldBackups(rootDir, now); purgeError != nil {
+		logLine("%s: old backups not purged: %v", logPrefix, purgeError)
 	}
 }
 
-func recoverInterruptedImport(importDir string, logLine func(format string, arguments ...any)) {
-	recovery, recoveryError := RecoverPending(importDir)
+func recoverInterruptedWrites(rootDir string, logPrefix string, logLine logFunction) {
+	recovery, recoveryError := RecoverPending(rootDir)
 	if recoveryError != nil {
-		logLine("config import: pending journals not checked: %v", recoveryError)
+		logLine("%s: pending journals not checked: %v", logPrefix, recoveryError)
 		return
 	}
 	if len(recovery.Recovered) > 0 {
-		logLine("config import: config_recovered files=%s", strings.Join(recovery.Recovered, ","))
+		logLine("%s: config_recovered files=%s", logPrefix, strings.Join(recovery.Recovered, ","))
 	}
 	for _, pendingJournal := range recovery.Inconsistent {
-		logLine("config import: config_inconsistent reason=%s files=%s backup=%s: restore the listed files from %s/ then delete %s",
-			pendingJournal.Reason, strings.Join(pendingJournal.Files, ","), pendingJournal.BackupDir,
+		logLine("%s: config_inconsistent reason=%s files=%s backup=%s: restore the listed files from %s/ then delete %s",
+			logPrefix, pendingJournal.Reason, strings.Join(pendingJournal.Files, ","), pendingJournal.BackupDir,
 			pendingJournal.BackupDir, path.Join(pendingJournal.BackupDir, JournalName))
 	}
 }

@@ -304,3 +304,31 @@ func TestConcurrentImportsAreSerialised(testContext *testing.T) {
 		testContext.Error("second import must be written")
 	}
 }
+
+func TestRecoverySyncsTheParentOfEveryRestoredNestedFile(testContext *testing.T) {
+	confDirectory := testContext.TempDir()
+	backupDirectory := filepath.Join(BackupDirName, "20261103T120000.000000000Z")
+	// A crash left a replaced acquis.d file and a created parser whitelist behind their journal.
+	writeNestedFixture(testContext, confDirectory, "acquis.d/nginx.yaml", "source: file\n# new\n")
+	writeNestedFixture(testContext, confDirectory, filepath.Join(backupDirectory, "acquis.d/nginx.yaml"), "source: file\n# old\n")
+	writeNestedFixture(testContext, confDirectory, "parsers/s02-enrich/my-whitelist.yaml", "name: added\n")
+	writeNestedFixture(testContext, confDirectory, filepath.Join(backupDirectory, JournalName),
+		`{"created":["parsers/s02-enrich/my-whitelist.yaml"],"replaced":["acquis.d/nginx.yaml"]}`)
+	syncedDirectories := []string{}
+	recordingSync := func(root *os.Root, directoryName string) error {
+		syncedDirectories = append(syncedDirectories, directoryName)
+		return syncDirectory(root, directoryName)
+	}
+
+	recovery, recoveryError := recoverPendingWith(confDirectory, recordingSync)
+
+	if recoveryError != nil || len(recovery.Inconsistent) != 0 {
+		testContext.Fatalf("recovery: %+v %v", recovery, recoveryError)
+	}
+	// A rename or removal is durable only once the directory holding the entry is synced.
+	for _, expectedDirectory := range []string{".", "acquis.d", "parsers/s02-enrich"} {
+		if !slices.Contains(syncedDirectories, expectedDirectory) {
+			testContext.Errorf("recovery must sync %s, synced %v", expectedDirectory, syncedDirectories)
+		}
+	}
+}

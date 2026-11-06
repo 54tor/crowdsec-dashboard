@@ -155,11 +155,11 @@ func (writeTransaction *transaction) applyWrite(write *pendingWrite) error {
 }
 
 func (writeTransaction *transaction) syncTouchedDirectories() error {
-	syncErrors := []error{writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")}
-	for _, directory := range parentDirectoriesOf(writeTransaction.writes) {
-		syncErrors = append(syncErrors, writeTransaction.hooks.syncDirectory(writeTransaction.root, directory))
+	writtenNames := []string{}
+	for _, write := range writeTransaction.writes {
+		writtenNames = append(writtenNames, write.name)
 	}
-	return errors.Join(syncErrors...)
+	return syncDirectoriesOf(writeTransaction.root, writtenNames, writeTransaction.hooks.syncDirectory)
 }
 
 func (writeTransaction *transaction) verifyTarget(write *pendingWrite) error {

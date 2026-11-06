@@ -64,7 +64,8 @@ func (recovery *Recovery) recoverJournal(root *os.Root, backupDir string, syncDi
 			failedNames = append(failedNames, replacedName)
 		}
 	}
-	for _, journaledName := range append(append([]string{}, entry.Created...), entry.Replaced...) {
+	journaledNames := append(append([]string{}, entry.Created...), entry.Replaced...)
+	for _, journaledName := range journaledNames {
 		if !slices.Contains(failedNames, journaledName) {
 			recovery.Recovered = append(recovery.Recovered, journaledName)
 		}
@@ -74,7 +75,7 @@ func (recovery *Recovery) recoverJournal(root *os.Root, backupDir string, syncDi
 		recovery.keep(backupDir, failedNames, ReasonUnrestoredFiles)
 		return
 	}
-	if syncDir(root, ".") != nil {
+	if syncDirectoriesOf(root, journaledNames, syncDir) != nil {
 		recovery.keep(backupDir, []string{}, ReasonSyncFailed)
 		return
 	}
