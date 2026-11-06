@@ -17,7 +17,7 @@ these files, which compose would otherwise expand.
 | `LAPI_MACHINE_PASSWORD` | none | Password of that machine account. |
 | `CROWDSEC_CONTAINER` | none | Name of the CrowdSec container in which `cscli` commands are executed. Must match the name allowed in the socket-proxy rule. |
 | `DOCKER_HOST` | none | Docker API endpoint, normally the socket proxy: `tcp://socket-proxy:2375`. |
-| `CROWDSEC_CONF_DIR` | none | Directory holding a read-only copy of the CrowdSec configuration, for example `/etc/crowdsec`. |
+| `CROWDSEC_CONF_DIR` | none | Directory holding the CrowdSec configuration, for example `/etc/crowdsec`. Mounted read-write it enables the config editor; mounted read-only the Config page stays a viewer and saves answer `config_unavailable` ([Config editor mount](#config-editor-mount)). |
 | `TRUSTED_PROXY_CIDRS` | empty | Comma-separated CIDRs of reverse proxies whose `X-Forwarded-For` is believed. Empty means the TCP peer address is always used. An entry with a zero-length prefix (`0.0.0.0/0`, `::/0`) stops the start. |
 | `SECRETS_KEY_FILE` | none, required | Path of the file holding the key that encrypts the TOTP secrets: 32 random bytes, base64 encoded on one line. The process refuses to start when it is unset, unreadable, not base64 or not 32 bytes. The example compose sets `/run/dashboard-secrets/key` (see [Secrets key](#secrets-key)). |
 | `SECRETS_RETIRED_KEY_FILES` | empty | Comma-separated paths of the retired keys the dashboard still reads during a rotation (same format as the current key), for example `/run/dashboard-secrets/retired-1`. They are the copies made at start by the `25-secrets-key` script from `SECRETS_RETIRED_KEY_SOURCES` (compose secrets under `/run/secrets`, read by the script only). A stored secret whose key is neither the current key nor listed here stops the start and the log names the key ids ([Secrets key](#secrets-key)). |
@@ -146,6 +146,32 @@ managed on the Engines page ([sync.md](sync.md)). There is no peers file any mor
 stops the start. The safe first deployment is `SYNC_ENABLED=true` with `SYNC_DRY_RUN=true`, then
 `SYNC_DRY_RUN=false` once the plan on the Sync page looks right.
 
+## Config editor mount
+
+The editor of the Config page (advanced mode, [api.md](api.md#configuration-editor)) writes straight
+into `CROWDSEC_CONF_DIR`, so the example compose mounts the CrowdSec configuration volume
+**read-write** in the dashboard. This widens the attack surface ([security.md](security.md#configuration-editor-and-the-writable-mount)).
+To keep the viewer only, append `:ro` to that mount: editing then answers `config_unavailable` and
+nothing else changes.
+
+- **Editable files**: the allow list of the viewer, at most 256 KiB each: `acquis.yaml`,
+  `profiles.yaml`, `acquis.d/*.yaml|yml`, `parsers/*/*whitelist*.yaml|yml`,
+  `postoverflows/*/*whitelist*.yaml|yml`, and `config.yaml.local`. `credentials` files are never
+  readable or writable.
+- **`config.yaml` is read-only.** Changes to the main configuration go into `config.yaml.local`,
+  CrowdSec's native override file; `config.yaml` itself is left intact.
+- **Backups**: every save, restore or delete keeps the previous content, masked, in the database
+  (table `config_file_backup`): the 10 newest per engine and file. The digests that guard against
+  overwriting are valid for the life of the dashboard process; a restart makes the editor re-read
+  the files.
+- **Symlinks**: a symlinked directory in the path of a file (for example `acquis.d` itself) is now
+  refused for writes, as it already was for reads. Behaviour change: an `acquis.d` symlink that
+  the viewer used to follow no longer accepts saves; mount a real directory instead.
+- **With the config import** (`CONFIG_IMPORT_*`, below): the import directory is CrowdSec's
+  `acquis.d`. If you mount it read-only at `<CROWDSEC_CONF_DIR>/acquis.d`, the editor cannot write
+  acquisition files there (they change through the import); mounted read-write, both the import and
+  the editor write the same files, each with its own backup.
+
 ## Config import mount
 
 Importing configuration files from a bundle is off unless `CONFIG_IMPORT_ENABLED=true`. When you
@@ -166,8 +192,8 @@ CrowdSec configuration:
   the files are moved out of it into the dedicated directory, they disappear from both without this
   mount.
 
-Never mount `/etc/crowdsec` (or the CrowdSec configuration volume) writable in the dashboard. The
-commented lines of `deploy/compose.example.yaml` show the setup; the threat model is in
+Unless you use the [config editor](#config-editor-mount), do not mount `/etc/crowdsec` (or the
+CrowdSec configuration volume) writable in the dashboard. The commented lines of `deploy/compose.example.yaml` show the setup; the threat model is in
 [security.md](security.md#configuration-import). Turn the feature off again once the migration is
 done.
 

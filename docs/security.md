@@ -478,8 +478,8 @@ default since 9.1). Never turn it off, neither in the server configuration nor t
 
 Only administrators can read configuration files, and only an allowlist is readable: `config.yaml`, `acquis.yaml`, `profiles.yaml`, `acquis.d/*.yaml|yml`,
 `parsers/*/*whitelist*.yaml|yml` and `postoverflows/*/*whitelist*.yaml|yml`, each at most 256 KiB. Any file whose name contains
-`credentials` is refused, as is any path through a symlink. The mount is read-only; the only
-writable CrowdSec path is the optional, dedicated import directory ([Configuration import](#configuration-import)).
+`credentials` is refused, as is any path through a symlink. The example mount is read-write for the [config editor](#configuration-editor-and-the-writable-mount); mounted
+read-only, the only writable CrowdSec path is the optional, dedicated import directory ([Configuration import](#configuration-import)).
 
 Redaction is line based. A value is replaced by `[REDACTED]` when its key contains `password`,
 `passwd`, `token`, `secret`, `api_key`, `apikey`, `key`, `authorization`, `bearer`, `credential` or
@@ -488,6 +488,36 @@ are masked anywhere. Known gaps: a secret stored under a key with another name, 
 comment or free text, is not detected. Do not rely on redaction for files you
 would not show an admin. Engine credentials and the LAPI client also print as redacted when
 formatted or logged.
+
+## Configuration editor and the writable mount
+
+The advanced mode of the Config page lets an administrator write the CrowdSec configuration, which
+needs the configuration volume mounted **read-write** in the dashboard (or in the sidecar of a remote
+engine with `SIDECAR_READ_ONLY=false`). The viewer model above (read-only mount) no longer holds
+for that deployment.
+
+- **Who.** Admin, session only: a `read_only` account and any API token, `write` included, are
+  refused. Same CSRF rule as other writes.
+- **Which files.** The allow list only, `config.yaml` excluded (its override goes to
+  `config.yaml.local`); names validated, `os.Root`, no symlinked file or parent directory, 256 KiB, atomic
+  write.
+- **Secrets stay server side.** The browser only receives masked content. A `[REDACTED]` value
+  resubmitted unchanged keeps the secret of the file on disk, but only if its position, list
+  identity, endpoint-like siblings anywhere in the document (URL, host, address, port...) and the YAML
+  anchors, aliases and merge keys are unchanged. Otherwise the save is refused
+  (`redacted_content`, `secret_context_changed`, `merged_structure_changed`) and the secret must be retyped.
+- **No silent overwrite.** The save carries the digest (a keyed HMAC of the raw content, so it reveals
+  nothing of it) of what was read; a change in between, even of a secret only, gives
+  `digest_mismatch`.
+- **Integrity.** YAML and schema checks, then `crowdsec -t` on the written tree with automatic
+  rollback; the reload is a separate, manual action.
+- **Audit and backups.** `config_file_written`, `config_file_deleted` and `config_file_restored`
+  record who, engine and file, never content. Backups (10 per file) are masked.
+- **Residual risk.** A compromised administrator session (or dashboard process) can reconfigure
+  CrowdSec through `config.yaml.local`: data paths, plugins, acquisition, API settings. That is the same
+  power as owning the writable configuration directory, and the checks above do not prevent it.
+  Mitigations: keep the mount `:ro` (and `SIDECAR_READ_ONLY=true`) when editing is not needed, review the audit log, keep
+  administrator accounts few and protected by a second factor.
 
 ## Container image
 
@@ -710,8 +740,8 @@ The peers file of earlier designs is refused at start.
 
 Off by default. Enabling it (`CONFIG_IMPORT_ENABLED=true`) **gives the dashboard a write permission
 on part of the CrowdSec configuration**: the dedicated directory `CONFIG_IMPORT_DIR`, mounted
-read-write in the dashboard and read-only in CrowdSec as its `acquis.d`. Nothing else of
-`/etc/crowdsec` may be writable ([configuration.md](configuration.md#config-import-mount)).
+read-write in the dashboard and read-only in CrowdSec as its `acquis.d`. Without the config
+editor, nothing else of `/etc/crowdsec` may be writable ([configuration.md](configuration.md#config-import-mount)).
 
 - **Threat model.** A compromised dashboard, or an administrator session, with the import enabled
   can add or change acquisition files, that is decide what CrowdSec reads: it can blind detection

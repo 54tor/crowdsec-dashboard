@@ -28,6 +28,21 @@
 | Export / Import | Local engine only. Exports at most 5000 bans and the newest 1000 native alerts; imports at most 20 collections, `min(500, SYNC_MAX_CHANGES)` decisions and 500 alerts per apply; config import of `acquis.d` files only, off by default ([bundles.md](bundles.md)). |
 | Prometheus | `GET /api/prometheus/metrics` accepts a session or an API token of any scope; give Prometheus a `read` token. There is no anonymous scrape ([Health and metrics](#health-and-metrics)). |
 
+## Config editor
+
+Advanced mode on the Config page edits the allow-listed files ([configuration.md](configuration.md#config-editor-mount)).
+Operating notes:
+
+- The `config_file_backup` table comes with migration `00002_config_file_backups.sql`, applied
+  automatically at the next dashboard start; nothing to run by hand.
+- A save never reloads CrowdSec. Use "Reload CrowdSec" (`POST /api/crowdsec/reload`, `kill -HUP 1` in
+  the CrowdSec container through the existing socket-proxy exec rule) once you are satisfied.
+- A save runs `crowdsec -t` after writing and puts the previous files back when it fails
+  (`config_test_failed`, `rolled_back: true`). If the rollback itself fails you get
+  `config_inconsistent` with the affected files; further writes answer `recovery_pending` while a
+  journal is left. Check the listed files by hand, then follow [Config import recovery](#config-import-recovery).
+- Edit digests are kept in memory: after a restart reload the file before saving.
+
 ## Troubleshooting
 
 Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the interface.
@@ -57,6 +72,14 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `would_lock_out_current_client` | 409 | The change would stop your current address from signing in. Add an IP rule for it first, or use the SQL procedure from the host. |
 | `geolocation_unavailable` | 409 | A country rule was added while no readable GeoLite2 database is loaded. |
 | `too_many_attempts` | 429 | Login rate limit or concurrency cap. Wait a minute (the response carries `Retry-After: 60`). If everybody is limited, the proxy address is probably not in `TRUSTED_PROXY_CIDRS` and all users share one client address. |
+| `digest_mismatch` | 409 | The file changed (another admin, `cscli`, a restart) since you read it. Reload it in the editor and redo the change. |
+| `config_test_failed` | 422 | `crowdsec -t` refused the new file; it was rolled back (`rolled_back: true`). Fix the content and save again. |
+| `config_inconsistent` | 500 | Rollback after a failed test failed too; `affected_files` lists the files. Check the files by hand; the journal procedure is in [Config import recovery](#config-import-recovery). |
+| `read_only_file`, `protected_file` | 403 | `config.yaml` cannot be written (use `config.yaml.local`), and a protected file such as `profiles.yaml` cannot be deleted. |
+| `parent_missing` | 404 | The directory of a new file does not exist (the editor creates files, not directories). |
+| `backup_unavailable` | 503 | The backup table is unreadable or unwritable; a delete is refused without its backup. Check the migration and PostgreSQL. |
+| `sidecar_command_refused` | 409 | On a remote engine: `SIDECAR_READ_ONLY=true` (or a command outside `SIDECAR_ALLOWED_COMMANDS`). |
+| `config_unavailable` | 500 | `CROWDSEC_CONF_DIR` is unset or unreadable, or the mount is read-only so the editor cannot write. |
 | `cross_origin` | 403 | A state-changing request came from another origin. Check that the reverse proxy forwards `Host` and does not rewrite `Origin`. |
 | `invalid_request` | 400 | Malformed body, id or filter. |
 | `invalid_target`, `invalid_duration`, `invalid_reason` | 400 | Ban form: not an IP/CIDR (or range wider than /8 IPv4, /32 IPv6), duration not like `24h`, reason over 200 characters or with control characters. |
@@ -435,12 +458,16 @@ remote engine is read-only.
 | `SIDECAR_TRUSTED_KEYS_FILE` | required | Absolute path of the file of `<kid> <public key hex>` lines the dashboard gives at enrolment. It must hold at least one key at start. The file and its directory must not be writable by their group or by others (for example `0644` in a `0755` directory owned by root): anyone able to write either could trust their own key, so the sidecar refuses to start, or to reload, otherwise. |
 | `SIDECAR_LISTEN_ADDR` | `:8443` | HTTPS listen address. |
 | `SIDECAR_DATA_DIR` | `/var/lib/crowdsec-dashboard-sidecar` | Private directory (mode 0700, a volume) holding the self-signed certificate and the digest key. |
-| `SIDECAR_CONF_DIR` | `/etc/crowdsec` | Read-only CrowdSec configuration served masked. |
+| `SIDECAR_CONF_DIR` | `/etc/crowdsec` | CrowdSec configuration served masked. Read-only unless the sidecar mounts it read-write and `SIDECAR_READ_ONLY=false`, which also lets the dashboard edit it ([Config editor](#config-editor)). |
 | `SIDECAR_ACQUISITION_DIR` | empty | Dedicated `acquis.d` directory, writable; enables the configuration import ([bundles.md](bundles.md)). |
 | `SIDECAR_ALLOWED_COMMANDS` | all | Comma-separated subset of the `cscli` commands the sidecar accepts. |
-| `SIDECAR_READ_ONLY` | `false` | Refuses every write command. |
+| `SIDECAR_READ_ONLY` | `false` | Refuses every write command, including config editor saves (the dashboard shows `sidecar_command_refused`). Validation stays available. |
 | `SIDECAR_MAX_CONCURRENT_EXECUTIONS` | `4` | Parallel `cscli` executions, 1 to 16. |
 | `DOCKER_HOST`, `CROWDSEC_CONTAINER` | none, `crowdsec` | Docker API endpoint (a socket proxy) and the CrowdSec container, as for the dashboard. |
+
+The editor uses the signed routes `GET /v1/config/edit/<name>`, `POST /v1/config/edit-validate` and
+`POST /v1/config/edit-save` next to `/v1/files`, `/v1/exec` and `/v1/config/apply`; only the
+dashboard can call them.
 
 Enrolment, once per engine:
 

@@ -127,8 +127,15 @@ services:
       # CONFIG_IMPORT_ENABLED: "true"
       # CONFIG_IMPORT_DIR: /var/lib/dashboard-acquis.d
     volumes:
-      # Read-only: never mount /etc/crowdsec (or the CrowdSec config volume) writable here.
-      - crowdsec-config:/etc/crowdsec:ro
+      # WRITABLE on purpose: the Config page editor writes the CrowdSec configuration here
+      # (config.yaml.local, profiles.yaml, acquisition files, whitelists; never credentials).
+      # This widens the attack surface: a compromised dashboard process or administrator session
+      # can then reconfigure CrowdSec (paths, plugins, acquisition, API) through
+      # config.yaml.local, see docs/security.md. If you do not want editing, append :ro to
+      # this line: the viewer keeps working and every save answers config_unavailable.
+      # Reload uses the existing exec rule of the socket proxy (kill -HUP in the CrowdSec
+      # container); no extra proxy permission is needed.
+      - crowdsec-config:/etc/crowdsec
       - geoip-data:/var/lib/geoip
       # Optional config import: the ONLY writable CrowdSec path, the same host directory that the
       # crowdsec service mounts read-only at /etc/crowdsec/acquis.d. Create it owned by the dashboard
