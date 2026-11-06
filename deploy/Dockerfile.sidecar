@@ -1,0 +1,21 @@
+# Build context is the repository root: docker build -f deploy/Dockerfile.sidecar .
+FROM golang:latest AS backend
+WORKDIR /src/backend
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+RUN CGO_ENABLED=0 go build -p 4 -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
+
+FROM alpine:latest
+LABEL org.opencontainers.image.title="crowdsec-dashboard-sidecar" \
+      org.opencontainers.image.description="Remote execution sidecar of the CrowdSec dashboard: runs allowlisted cscli commands for an engine."
+RUN set -eux; \
+    addgroup -g 10000 -S sidecar; \
+    adduser -u 10000 -S -G sidecar -H -s /sbin/nologin sidecar; \
+    install -d -o 10000 -g 10000 -m 0700 /var/lib/crowdsec-dashboard-sidecar
+COPY --from=backend /out/sidecar /usr/local/bin/sidecar
+USER 10000:10000
+VOLUME /var/lib/crowdsec-dashboard-sidecar
+EXPOSE 8443
+HEALTHCHECK CMD wget -q --no-check-certificate -O /dev/null https://127.0.0.1:8443/healthz
+ENTRYPOINT ["/usr/local/bin/sidecar"]
