@@ -387,12 +387,16 @@ above until the dump is deleted, so give dumps their own retention.
 
 ## Headers and content security policy
 
-Every response carries `Content-Security-Policy: default-src 'self'`, `X-Content-Type-Options:
+Every response carries `Content-Security-Policy: default-src 'self'; base-uri 'none'; form-action 'self';
+object-src 'none'; frame-ancestors 'none'`, `X-Content-Type-Options:
 nosniff`, `Referrer-Policy: no-referrer` and `X-Frame-Options: DENY`. Every response under `/api/`
 (configuration file contents and new secrets included) carries `Cache-Control: no-store`; static assets do not.
 
 `default-src 'self'` allows only same-origin scripts, styles, fonts, images and connections: no
 inline script, no CDN, no external font. The front end bundles its fonts and charts for this reason.
+`base-uri`, `form-action` and `frame-ancestors` do not fall back to `default-src`, so they are set
+explicitly: no injected `<base>` can redirect relative URLs, no form can post off-site, and no page
+can frame the dashboard (the same as `X-Frame-Options: DENY`, for browsers that only read the CSP).
 Known consequence: the dialog library injects an inline `<style>` to lock page scrolling, which the
 policy blocks. A console message "Applying inline style violates ... Content Security Policy" appears
 when a dialog opens, and the page behind a modal dialog can still scroll. Dialogs themselves work.

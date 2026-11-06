@@ -321,7 +321,7 @@ Repository settings and first publication:
   tints). Components use the tokens through Tailwind classes.
 - **Theme choice** (light, dark or system) is stored in `localStorage` under `theme-preference`.
   `web/public/theme-init.js` applies it before React mounts, so the page never flashes the wrong
-  theme; it is an external file because the CSP `default-src 'self'` forbids inline scripts.
+  theme; it is an external file because the CSP (`default-src 'self'`) forbids inline scripts.
 - **Table density** (comfortable: 40 px minimum rows and roomier cells, compact: 32 px and tight
   cells) is stored under `table-density` and shared by every list. The toggle sits in the page
   header, only when the list has rows, and is hidden on phones above lists shown as cards, which

@@ -275,7 +275,7 @@ func TestResponsesCarrySecurityHeaders(testContext *testing.T) {
 	newTestHandler(testContext).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/healthz", nil))
 
 	expectedHeaders := map[string]string{
-		"Content-Security-Policy": "default-src 'self'",
+		"Content-Security-Policy": "default-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'",
 		"X-Content-Type-Options":  "nosniff",
 		"Referrer-Policy":         "no-referrer",
 		"X-Frame-Options":         "DENY",
