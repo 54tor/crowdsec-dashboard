@@ -11,7 +11,7 @@ import (
 
 var (
 	trailingBlankLinesPattern = regexp.MustCompile(`(\n[ \t]*)+$`)
-	keepChompingPattern       = regexp.MustCompile(`:[ \t]*[|>][0-9+-]*\+`)
+	keepChompingPattern       = regexp.MustCompile(`[ \t][|>][0-9]*\+[0-9]*(?:[ \t]+#.*)?$`)
 )
 
 type originalSecret struct {
@@ -19,16 +19,8 @@ type originalSecret struct {
 	context map[string]string
 }
 
-func isCommentLine(line string) bool {
-	return strings.HasPrefix(strings.TrimSpace(line), "#")
-}
-
 func secretKey(identity, maskedLine string) string {
 	return identity + "\x00" + maskedLine
-}
-
-func commentKey(maskedLine string) string {
-	return "#" + maskedLine
 }
 
 func restorableText(redactedLine confread.RedactedLine) string {
@@ -39,35 +31,36 @@ func restorableText(redactedLine confread.RedactedLine) string {
 	return trailingBlankLinesPattern.ReplaceAllString(redactedLine.Original, "")
 }
 
-func collectOriginalSecrets(originalText string) (map[string][]originalSecret, error) {
+func collectOriginalSecrets(originalText string) (map[string][]originalSecret, *parsedText, error) {
 	redactedLines := confread.RedactLines([]byte(originalText))
 	maskedLines := make([]string, 0, len(redactedLines))
 	for _, redactedLine := range redactedLines {
 		maskedLines = append(maskedLines, redactedLine.Masked)
 	}
-	slots, parseError := parseSecretSlots(strings.Join(maskedLines, "\n"))
+	parsed, parseError := parseText(strings.Join(maskedLines, "\n"))
 	if parseError != nil {
-		return nil, fmt.Errorf("parse original: %w", parseError)
+		return nil, nil, fmt.Errorf("parse original: %w", parseError)
 	}
+	commentKeyByLine := commentKeys(parsed)
 
 	secretsByKey := make(map[string][]originalSecret)
 	for lineIndex, redactedLine := range redactedLines {
 		if !strings.Contains(redactedLine.Masked, confread.RedactedMarker) {
 			continue
 		}
-		if isCommentLine(redactedLine.Masked) {
-			key := commentKey(redactedLine.Masked)
-			secretsByKey[key] = append(secretsByKey[key], originalSecret{text: redactedLine.Original})
+		lineNumber := lineIndex + 1
+		if commentKey, isComment := commentKeyByLine[lineNumber]; isComment {
+			secretsByKey[commentKey] = append(secretsByKey[commentKey], originalSecret{text: redactedLine.Original})
 			continue
 		}
-		slot, hasSlot := slots[lineIndex+1]
+		slot, hasSlot := parsed.slots[lineNumber]
 		if !hasSlot {
 			continue
 		}
 		key := secretKey(slot.identity, redactedLine.Masked)
 		secretsByKey[key] = append(secretsByKey[key], originalSecret{text: restorableText(redactedLine), context: slot.context})
 	}
-	return secretsByKey, nil
+	return secretsByKey, parsed, nil
 }
 
 func takeSecret(secretsByKey map[string][]originalSecret, key string) (originalSecret, bool) {
@@ -79,50 +72,59 @@ func takeSecret(secretsByKey map[string][]originalSecret, key string) (originalS
 	return candidates[0], true
 }
 
-func MergeRedactedValues(originalRaw, submittedMasked []byte) ([]byte, error) {
-	if !strings.Contains(string(submittedMasked), confread.RedactedMarker) {
-		return submittedMasked, nil
+func firstMarkerLine(lines []string) int {
+	for lineIndex, line := range lines {
+		if strings.Contains(line, confread.RedactedMarker) {
+			return lineIndex + 1
+		}
 	}
+	return 0
+}
 
+func MergeRedactedValues(originalRaw, submittedMasked []byte) ([]byte, error) {
 	originalText, originalStyle := normaliseText(originalRaw)
 	submittedText, _ := normaliseText(submittedMasked)
+	if !strings.Contains(submittedText, confread.RedactedMarker) {
+		return []byte(applyTextStyle(submittedText, originalStyle)), nil
+	}
 
-	secretsByKey, originalError := collectOriginalSecrets(originalText)
+	secretsByKey, originalParsed, originalError := collectOriginalSecrets(originalText)
 	if originalError != nil {
 		return nil, originalError
 	}
-	submittedSlots, submittedError := parseSecretSlots(submittedText)
+	submittedParsed, submittedError := parseText(submittedText)
 	if submittedError != nil {
 		return nil, fmt.Errorf("parse submitted: %w", submittedError)
 	}
+	if submittedParsed.usesIndirection && !originalParsed.usesIndirection {
+		return nil, &MergeError{Line: firstMarkerLine(submittedParsed.lines), Err: ErrSecretContextChanged}
+	}
 
-	submittedLines := strings.Split(submittedText, "\n")
-	mergedLines := make([]string, 0, len(submittedLines))
-	for lineIndex, submittedLine := range submittedLines {
+	commentKeyByLine := commentKeys(submittedParsed)
+	mergedLines := make([]string, 0, len(submittedParsed.lines))
+	for lineIndex, submittedLine := range submittedParsed.lines {
 		if !strings.Contains(submittedLine, confread.RedactedMarker) {
 			mergedLines = append(mergedLines, submittedLine)
 			continue
 		}
 		lineNumber := lineIndex + 1
 
-		if isCommentLine(submittedLine) {
-			secret, found := takeSecret(secretsByKey, commentKey(submittedLine))
-			if !found {
-				secret.text = submittedLine
+		lookupKey, isComment := commentKeyByLine[lineNumber]
+		var slotContext map[string]string
+		if !isComment {
+			slot, hasSlot := submittedParsed.slots[lineNumber]
+			if !hasSlot {
+				return nil, &MergeError{Line: lineNumber, Err: ErrRedactedWithoutOriginal}
 			}
-			mergedLines = append(mergedLines, secret.text)
-			continue
+			lookupKey = secretKey(slot.identity, submittedLine)
+			slotContext = slot.context
 		}
 
-		slot, hasSlot := submittedSlots[lineNumber]
-		if !hasSlot {
-			return nil, &MergeError{Line: lineNumber, Err: ErrRedactedWithoutOriginal}
-		}
-		secret, found := takeSecret(secretsByKey, secretKey(slot.identity, submittedLine))
+		secret, found := takeSecret(secretsByKey, lookupKey)
 		if !found {
 			return nil, &MergeError{Line: lineNumber, Err: ErrRedactedWithoutOriginal}
 		}
-		if !maps.Equal(secret.context, slot.context) {
+		if !isComment && !maps.Equal(secret.context, slotContext) {
 			return nil, &MergeError{Line: lineNumber, Err: ErrSecretContextChanged}
 		}
 		mergedLines = append(mergedLines, secret.text)

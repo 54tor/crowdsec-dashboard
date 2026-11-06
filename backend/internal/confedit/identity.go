@@ -4,123 +4,107 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
-
-	"crowdsec-dashboard/internal/confread"
 
 	"go.yaml.in/yaml/v3"
 )
-
-var contextKeyPattern = regexp.MustCompile(`(?i)url|uri|host|endpoint|server|broker|address|port|listen|dsn`)
 
 type secretSlot struct {
 	identity string
 	context  map[string]string
 }
 
-func parseSecretSlots(text string) (map[int]secretSlot, error) {
+type parsedText struct {
+	lines           []string
+	slots           map[int]secretSlot
+	blockLines      map[int]bool
+	usesIndirection bool
+}
+
+func parseText(text string) (*parsedText, error) {
+	parsed := &parsedText{
+		lines:      strings.Split(text, "\n"),
+		slots:      make(map[int]secretSlot),
+		blockLines: make(map[int]bool),
+	}
 	decoder := yaml.NewDecoder(strings.NewReader(text))
-	slots := make(map[int]secretSlot)
 	for documentIndex := 0; ; documentIndex++ {
 		var document yaml.Node
 		decodeError := decoder.Decode(&document)
 		if errors.Is(decodeError, io.EOF) {
-			return slots, nil
+			return parsed, nil
 		}
 		if decodeError != nil {
 			return nil, decodeError
 		}
-		collectSlots(&document, fmt.Sprintf("document%d", documentIndex), slots)
+		parsed.collect(&document, fmt.Sprintf("document%d", documentIndex), map[string]string{})
 	}
 }
 
-func recordSlot(slots map[int]secretSlot, line int, slot secretSlot) {
-	if _, alreadyRecorded := slots[line]; !alreadyRecorded {
-		slots[line] = slot
+func (parsed *parsedText) recordSlot(line int, slot secretSlot) {
+	if _, alreadyRecorded := parsed.slots[line]; !alreadyRecorded {
+		parsed.slots[line] = slot
 	}
 }
 
-func collectSlots(node *yaml.Node, path string, slots map[int]secretSlot) {
+func (parsed *parsedText) markBlockScalar(scalar *yaml.Node, ownerIndent int) {
+	isBlockScalar := scalar.Kind == yaml.ScalarNode && scalar.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0
+	if !isBlockScalar {
+		return
+	}
+	for lineNumber := scalar.Line + 1; lineNumber <= len(parsed.lines); lineNumber++ {
+		line := parsed.lines[lineNumber-1]
+		isBlank := strings.TrimSpace(line) == ""
+		if !isBlank && leadingIndent(line) <= ownerIndent {
+			return
+		}
+		parsed.blockLines[lineNumber] = true
+	}
+}
+
+func leadingIndent(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " \t"))
+}
+
+func (parsed *parsedText) collect(node *yaml.Node, path string, ancestors map[string]string) {
 	switch node.Kind {
 	case yaml.DocumentNode:
 		for _, child := range node.Content {
-			collectSlots(child, path, slots)
+			parsed.collect(child, path, ancestors)
 		}
 	case yaml.MappingNode:
-		collectMappingSlots(node, path, slots)
+		parsed.collectMapping(node, path, ancestors)
 	case yaml.SequenceNode:
-		collectSequenceSlots(node, path, slots)
+		parsed.collectSequence(node, path, ancestors)
+	case yaml.AliasNode:
+		parsed.usesIndirection = true
 	}
 }
 
-func collectMappingSlots(mapping *yaml.Node, path string, slots map[int]secretSlot) {
-	context := contextOf(mapping)
+func (parsed *parsedText) collectMapping(mapping *yaml.Node, path string, ancestors map[string]string) {
+	context := mergeContext(ancestors, contextOf(mapping, path))
 	for pairIndex := 0; pairIndex+1 < len(mapping.Content); pairIndex += 2 {
 		keyNode := mapping.Content[pairIndex]
 		valueNode := mapping.Content[pairIndex+1]
+		if keyNode.Value == "<<" && keyNode.Tag == "!!merge" {
+			parsed.usesIndirection = true
+		}
 		identity := path + "/" + keyNode.Value
-		recordSlot(slots, keyNode.Line, secretSlot{identity: identity, context: context})
-		collectSlots(valueNode, identity, slots)
+		parsed.recordSlot(keyNode.Line, secretSlot{identity: identity, context: context})
+		parsed.markBlockScalar(valueNode, keyNode.Column-1)
+		parsed.collect(valueNode, identity, context)
 	}
 }
 
-func collectSequenceSlots(sequence *yaml.Node, path string, slots map[int]secretSlot) {
+func (parsed *parsedText) collectSequence(sequence *yaml.Node, path string, ancestors map[string]string) {
 	segments := sequenceSegments(sequence)
 	for itemIndex, item := range sequence.Content {
 		itemPath := path + "[" + segments[itemIndex] + "]"
 		if item.Kind == yaml.ScalarNode {
-			recordSlot(slots, item.Line, secretSlot{identity: itemPath})
+			parsed.recordSlot(item.Line, secretSlot{identity: itemPath, context: ancestors})
+			parsed.markBlockScalar(item, leadingIndent(parsed.lines[item.Line-1]))
 			continue
 		}
-		collectSlots(item, itemPath, slots)
+		parsed.collect(item, itemPath, ancestors)
 	}
-}
-
-func sequenceSegments(sequence *yaml.Node) []string {
-	discriminators := make([]string, 0, len(sequence.Content))
-	seen := make(map[string]bool)
-	for _, item := range sequence.Content {
-		discriminator := itemDiscriminator(item)
-		if discriminator == "" || seen[discriminator] {
-			return positionalSegments(len(sequence.Content))
-		}
-		seen[discriminator] = true
-		discriminators = append(discriminators, discriminator)
-	}
-	return discriminators
-}
-
-func positionalSegments(itemCount int) []string {
-	segments := make([]string, itemCount)
-	for itemIndex := range segments {
-		segments[itemIndex] = fmt.Sprintf("#%d/%d", itemIndex, itemCount)
-	}
-	return segments
-}
-
-func itemDiscriminator(item *yaml.Node) string {
-	if item.Kind != yaml.MappingNode {
-		return ""
-	}
-	for pairIndex := 0; pairIndex+1 < len(item.Content); pairIndex += 2 {
-		valueNode := item.Content[pairIndex+1]
-		isPlainScalar := valueNode.Kind == yaml.ScalarNode && !strings.Contains(valueNode.Value, confread.RedactedMarker)
-		if isPlainScalar {
-			return item.Content[pairIndex].Value + "=" + valueNode.Value
-		}
-	}
-	return ""
-}
-
-func contextOf(mapping *yaml.Node) map[string]string {
-	context := make(map[string]string)
-	for pairIndex := 0; pairIndex+1 < len(mapping.Content); pairIndex += 2 {
-		keyNode := mapping.Content[pairIndex]
-		valueNode := mapping.Content[pairIndex+1]
-		if valueNode.Kind == yaml.ScalarNode && contextKeyPattern.MatchString(keyNode.Value) {
-			context[strings.ToLower(keyNode.Value)] = valueNode.Value
-		}
-	}
-	return context
 }
