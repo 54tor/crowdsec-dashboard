@@ -164,16 +164,6 @@ func TestBackupDirectoryAndTemporaryFilesStayHidden(testContext *testing.T) {
 	}
 }
 
-// Known HMAC-SHA256 vector (RFC 4231 style example from the Go and Wikipedia
-// references): pins the hex encoding the sidecar's on-disk-keyed digests rely on.
-func TestDigesterComputesHexHMACSHA256(testContext *testing.T) {
-	valeurAttendue := "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
-	valeurObtenue := NewDigester([]byte("key")).Of([]byte("The quick brown fox jumps over the lazy dog"))
-	if valeurObtenue != valeurAttendue {
-		testContext.Fatalf("got %s, want %s", valeurObtenue, valeurAttendue)
-	}
-}
-
 func hasIssue(issues []confschema.Issue, severity, code string) bool {
 	for _, issue := range issues {
 		if issue.Severity == severity && issue.Code == code {

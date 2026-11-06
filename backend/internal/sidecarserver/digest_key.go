@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"os"
 
-	"crowdsec-dashboard/internal/confedit"
+	"crowdsec-dashboard/internal/digest"
 )
 
 const (
@@ -73,7 +73,7 @@ func (digestKey DigestKey) isUsable() bool {
 }
 
 func (digestKey DigestKey) digestOf(content []byte) string {
-	return confedit.NewDigester(digestKey.secret).Of(content)
+	return digest.NewDigester(digestKey.secret).Of(content)
 }
 
 func (digestKey DigestKey) Format(state fmt.State, _ rune) {
