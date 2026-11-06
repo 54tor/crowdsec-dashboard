@@ -80,6 +80,7 @@ func cscliOutputsForTargetTests() map[string]string {
 	return map[string]string{
 		"bouncers_add":  "API key for 'firewall':\n\n   " + remoteBouncerKey + "\n\nPlease keep this key since you will not be able to retrieve it!\n",
 		"machines_add":  "url: https://lapi.example.com\nlogin: edge\npassword: " + testMachinePassword + "\n",
+		"hub_list_all":  `{"collections":[{"name":"crowdsecurity/linux","status":"enabled","local_version":"0.2","description":"linux"}]}`,
 		"hub_list":      `{"collections":[{"name":"crowdsecurity/linux","status":"enabled","local_version":"0.2","description":"linux"}]}`,
 		"bouncers_list": `[{"name":"firewall","type":"cs-firewall-bouncer","version":"v0.0.31","ip_address":"192.0.2.10","last_pull":"2026-11-05T10:00:00Z","revoked":false,"auth_type":"api-key"}]`,
 		"machines_list": `[{"machineId":"` + remotePeerBMachineID + `","ipAddress":"192.0.2.20","last_heartbeat":"2026-11-05T10:00:00Z","version":"v1.7.0","isValidated":true,"auth_type":"password"},{"machineId":"edge","ipAddress":"192.0.2.21","isValidated":false,"auth_type":"password"}]`,
@@ -155,7 +156,7 @@ func withEngineParameter(path, engineName string) string {
 
 func engineTargetedRoutes() []engineTargetedRoute {
 	return []engineTargetedRoute{
-		{"GET /api/hub", http.MethodGet, "/api/hub", "", "hub_list"},
+		{"GET /api/hub", http.MethodGet, "/api/hub", "", "hub_list_all"},
 		{"POST /api/hub/update", http.MethodPost, "/api/hub/update", "", "hub_update"},
 		{"POST /api/hub/upgrade", http.MethodPost, "/api/hub/upgrade", "", "hub_upgrade"},
 		{"POST /api/hub/{kind}", http.MethodPost, "/api/hub/collections", `{"name":"crowdsecurity/nginx"}`, "collections_install"},

@@ -410,7 +410,7 @@ const hubListOutput = `{
 }`
 
 func TestHubListProjectsOnlyKnownFields(testContext *testing.T) {
-	fixture := newAdminFixture(testContext, map[string]string{"cscli hub list -o json": hubListOutput}, nil)
+	fixture := newAdminFixture(testContext, map[string]string{"cscli hub list -a -o json": hubListOutput}, nil)
 
 	recorder := fixture.send(http.MethodGet, "/api/hub", "", true)
 
@@ -457,7 +457,7 @@ func TestHubListIsEmptyArrayForNullOrEmptyAndCapped(testContext *testing.T) {
 		"capped": {manyItems.String(), maxHubItems},
 	}
 	for caseName, testCase := range testCases {
-		fixture := newAdminFixture(testContext, map[string]string{"cscli hub list -o json": testCase.output}, nil)
+		fixture := newAdminFixture(testContext, map[string]string{"cscli hub list -a -o json": testCase.output}, nil)
 		recorder := fixture.send(http.MethodGet, "/api/hub", "", true)
 		var items []map[string]any
 		if recorder.Code != http.StatusOK || json.Unmarshal(recorder.Body.Bytes(), &items) != nil || items == nil || len(items) != testCase.expectedCount {
@@ -467,7 +467,7 @@ func TestHubListIsEmptyArrayForNullOrEmptyAndCapped(testContext *testing.T) {
 }
 
 func TestHubListMapsCscliFailure(testContext *testing.T) {
-	fixture := newAdminFixture(testContext, nil, map[string]bool{"cscli hub list -o json": true})
+	fixture := newAdminFixture(testContext, nil, map[string]bool{"cscli hub list -a -o json": true})
 
 	recorder := fixture.send(http.MethodGet, "/api/hub", "", true)
 

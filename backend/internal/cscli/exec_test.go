@@ -74,6 +74,7 @@ func TestExecuteBuildsExpectedArgv(t *testing.T) {
 		{"machines_validate", map[string]string{"name": "m1"}, []string{"cscli", "machines", "validate", "m1"}},
 		{"machines_delete", map[string]string{"name": "m1"}, []string{"cscli", "machines", "delete", "m1"}},
 		{"hub_list", nil, []string{"cscli", "hub", "list", "-o", "json"}},
+		{"hub_list_all", nil, []string{"cscli", "hub", "list", "-a", "-o", "json"}},
 		{"hub_update", nil, []string{"cscli", "hub", "update"}},
 		{"hub_upgrade", nil, []string{"cscli", "hub", "upgrade"}},
 		{"collections_remove", map[string]string{"name": "crowdsecurity/linux"}, []string{"cscli", "collections", "remove", "crowdsecurity/linux"}},

@@ -14,7 +14,7 @@ const (
 	HubMutationTimeout = 120 * time.Second
 )
 
-var readOnlyCommands = []string{"bouncers_list", "machines_list", "hub_list", "metrics", "version", "config_test"}
+var readOnlyCommands = []string{"bouncers_list", "machines_list", "hub_list", "hub_list_all", "metrics", "version", "config_test"}
 
 var hubMutationCommands = []string{"hub_update", "hub_upgrade", "collections_install", "collections_remove", "appsec_rules_install", "appsec_rules_remove", "appsec_configs_install", "appsec_configs_remove"}
 
@@ -92,6 +92,7 @@ func buildCommands() map[string]Command {
 		{Name: "machines_validate", Build: withName(validateName, []string{"cscli", "machines", "validate"})},
 		{Name: "machines_delete", Build: withName(validateName, []string{"cscli", "machines", "delete"})},
 		{Name: "hub_list", Build: fixed("cscli", "hub", "list", "-o", "json")},
+		{Name: "hub_list_all", Build: fixed("cscli", "hub", "list", "-a", "-o", "json")},
 		{Name: "hub_update", Build: fixed("cscli", "hub", "update")},
 		{Name: "hub_upgrade", Build: fixed("cscli", "hub", "upgrade")},
 		{Name: "collections_install", Build: withName(validateHubName, []string{"cscli", "collections", "install"})},

@@ -16,7 +16,7 @@ func (handlers hubHandlers) list(responseWriter http.ResponseWriter, request *ht
 	if !resolved {
 		return
 	}
-	items, listError := service.List(request.Context())
+	items, listError := service.ListAll(request.Context())
 	if listError != nil {
 		writeUpstreamError(responseWriter, listError)
 		return

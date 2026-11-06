@@ -479,6 +479,7 @@
     "installDescription": "Installs a collection, an AppSec rule or an AppSec configuration from the CrowdSec hub, for example crowdsecurity/linux.",
     "installKind": "Item type",
     "installName": "Item name",
+    "installAria": "Install {{name}}",
     "installSubmit": "Install",
     "appsecSuggestions": "AppSec suggestions: the collections crowdsecurity/appsec-virtual-patching and crowdsecurity/appsec-generic-rules (install them with the Collection type).",
     "appsecActivationNote": "Installing is not enough: enabling AppSec needs an appsec acquisition and a compatible bouncer. Install crowdsecurity/appsec-generic-rules then crowdsecurity/appsec-virtual-patching before enabling the appsec acquisition (the default appsec configuration loads both), otherwise the engine does not start. See docs/operations.md.",

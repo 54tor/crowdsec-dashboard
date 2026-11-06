@@ -25,6 +25,7 @@ func TestNamesIsExactlyThePinnedCommandList(testContext *testing.T) {
 		"collections_remove",
 		"config_test",
 		"hub_list",
+		"hub_list_all",
 		"hub_update",
 		"hub_upgrade",
 		"machines_add",
@@ -46,8 +47,8 @@ func TestNamesIsExactlyThePinnedCommandList(testContext *testing.T) {
 // ReadOnly decides what a read-only sidecar may still run: only commands that
 // change nothing on the engine may carry it.
 func TestEveryCommandDeclaresWhetherItIsReadOnly(testContext *testing.T) {
-	expectedReadOnly := []string{"bouncers_list", "config_test", "hub_list", "machines_list", "metrics", "version"}
-	const expectedCommandCount = 25
+	expectedReadOnly := []string{"bouncers_list", "config_test", "hub_list", "hub_list_all", "machines_list", "metrics", "version"}
+	const expectedCommandCount = 26
 
 	listedNames := Names()
 

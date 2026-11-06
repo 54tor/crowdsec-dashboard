@@ -43,6 +43,21 @@ describe('hub page', () => {
   beforeEach(prepareEnglishApp)
   afterEach(() => vi.unstubAllGlobals())
 
+  it('offersInstallOnlyOnItemsNotYetInstalled', async () => {
+    const hubItems = [
+      makeHubItem({ type: 'collections', name: 'crowdsecurity/linux', status: 'enabled' }),
+      makeHubItem({ type: 'collections', name: 'a1ad/mikrotik', status: 'disabled,update-available', local_version: '' }),
+    ]
+    const fetchMock = stubFetch(hubRoutes({ 'GET /api/hub': { status: 200, body: hubItems }, 'POST /api/hub/collections': { status: 200, body: { status: 'installed' } } }))
+    const user = userEvent.setup()
+    renderApp('/hub')
+
+    await user.click(await screen.findByRole('button', { name: 'Install a1ad/mikrotik' }))
+
+    await waitFor(() => expect(requestsTo(fetchMock, 'POST', '/api/hub/collections')).toHaveLength(1))
+    expect(screen.queryByRole('button', { name: 'Install crowdsecurity/linux' })).not.toBeInTheDocument()
+  })
+
   it('listsItemsAndFiltersByTypeAndName', async () => {
     stubFetch(hubRoutes())
     const user = userEvent.setup()

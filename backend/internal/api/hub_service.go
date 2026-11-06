@@ -12,7 +12,7 @@ import (
 	"crowdsec-dashboard/internal/cscli"
 )
 
-const maxHubItems = 1000
+const maxHubItems = 5000
 
 var ErrUnknownHubKind = errors.New("unknown hub kind")
 
@@ -35,6 +35,7 @@ type rawHubItem struct {
 
 type HubService interface {
 	List(ctx context.Context) ([]HubItem, error)
+	ListAll(ctx context.Context) ([]HubItem, error)
 	Update(ctx context.Context) error
 	Upgrade(ctx context.Context) error
 	Install(ctx context.Context, kind, name string) error
@@ -70,7 +71,15 @@ func projectHubItems(output []byte) ([]HubItem, error) {
 }
 
 func (service cscliHub) List(ctx context.Context) ([]HubItem, error) {
-	output, executeError := service.executor.Execute(ctx, "hub_list", map[string]string{})
+	return service.listWith(ctx, "hub_list")
+}
+
+func (service cscliHub) ListAll(ctx context.Context) ([]HubItem, error) {
+	return service.listWith(ctx, "hub_list_all")
+}
+
+func (service cscliHub) listWith(ctx context.Context, commandName string) ([]HubItem, error) {
+	output, executeError := service.executor.Execute(ctx, commandName, map[string]string{})
 	if executeError != nil {
 		return nil, executeError
 	}

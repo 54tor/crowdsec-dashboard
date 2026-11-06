@@ -283,7 +283,7 @@ applies but the items carry no `source_kind` field.
 | GET | `/api/metrics` | authenticated | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
 | GET | `/api/config/files` | admin | `{"files":["acquis.yaml", ...]}`; optional `engine` (see [Remote configuration files](#remote-configuration-files)) | 500 `config_unavailable`; engine and sidecar errors below |
 | GET | `/api/config/files/{name...}` | admin | `{"name","content"}` with secrets redacted; optional `engine` | 403 `forbidden`, 404 `not_found`, 413 `file_too_large`, 500 `config_unavailable`; engine and sidecar errors below |
-| GET | `/api/hub` | authenticated | array of `{type,name,status,local_version,description}` (max 1000) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
+| GET | `/api/hub` | authenticated | array of `{type,name,status,local_version,description}` for every hub item, installed or not (`cscli hub list -a`, command `hub_list_all`; max 5000) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 | GET | `/api/bouncers` | authenticated | `{"items":[{name,type,version,ip_address,last_pull,revoked,auth_type}]}` (`cscli bouncers list -o json`) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 | GET | `/api/machines` | authenticated | `{"items":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}]}` (`cscli machines list -o json`); `self` marks the machine the dashboard uses on that engine (`LAPI_MACHINE_ID` locally, the engine's `machine_id` on a remote engine) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 
