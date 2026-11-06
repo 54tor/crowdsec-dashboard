@@ -77,8 +77,8 @@ func TestRedactSecretsHandlesMaximumSizeInputQuickly(testContext *testing.T) {
 func TestRedactKeepsFinalNewlineAfterTrailingSecret(testContext *testing.T) {
 	testCases := map[string]string{
 		"db_config:\n  user: crowdsec\n  password: hunter2\n": "db_config:\n  user: crowdsec\n  password: [REDACTED]\n",
-		"secret_notes: |\n  line1\n  line2\n":                "secret_notes: [REDACTED]\n",
-		"password: hunter2\n\n":                              "password: [REDACTED]\n",
+		"secret_notes: |\n  line1\n  line2\n":                 "secret_notes: [REDACTED]\n",
+		"password: hunter2\n\n":                               "password: [REDACTED]\n",
 	}
 	for input, valeurAttendue := range testCases {
 		if valeurObtenue := string(Redact([]byte(input))); valeurObtenue != valeurAttendue {
