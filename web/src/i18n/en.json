@@ -69,8 +69,7 @@
       "submitting": "Checking…",
       "useRecoveryCode": "Use a recovery code",
       "useTotp": "Use an authentication code",
-      "useSecurityKey": "Use a security key",
-      "securityKeyWaiting": "Waiting for your security key…"
+      "useSecurityKey": "Use a security key"
     }
   },
   "enroll": {

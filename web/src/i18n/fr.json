@@ -69,8 +69,7 @@
       "submitting": "Vérification…",
       "useRecoveryCode": "Utiliser un code de secours",
       "useTotp": "Utiliser un code d'authentification",
-      "useSecurityKey": "Utiliser une clé de sécurité",
-      "securityKeyWaiting": "En attente de votre clé de sécurité…"
+      "useSecurityKey": "Utiliser une clé de sécurité"
     }
   },
   "enroll": {
