@@ -67,6 +67,78 @@ func TestMergeRedactedValues(testingContext *testing.T) {
 			submitted:      "b:\n  password: [REDACTED]\na:\n  password: [REDACTED]\n",
 			valeurAttendue: "b:\n  password: sb\na:\n  password: sa\n",
 		},
+		{
+			name:           "keepsEachSecretWhenListItemIsDeleted",
+			original:       "users:\n  - name: a\n    password: s1\n  - name: b\n    password: s2\n",
+			submitted:      "users:\n  - name: b\n    password: [REDACTED]\n",
+			valeurAttendue: "users:\n  - name: b\n    password: s2\n",
+		},
+		{
+			name:           "keepsEachSecretWhenListItemsAreSwapped",
+			original:       "users:\n  - name: a\n    password: s1\n  - name: b\n    password: s2\n",
+			submitted:      "users:\n  - name: b\n    password: [REDACTED]\n  - name: a\n    password: [REDACTED]\n",
+			valeurAttendue: "users:\n  - name: b\n    password: s2\n  - name: a\n    password: s1\n",
+		},
+		{
+			name:           "refusesMarkerOnNewListItemAfterDeletion",
+			original:       "users:\n  - name: a\n    password: s1\n  - name: b\n    password: s2\n",
+			submitted:      "users:\n  - name: b\n    password: [REDACTED]\n  - name: c\n    password: [REDACTED]\n",
+			erreurAttendue: ErrRedactedWithoutOriginal,
+		},
+		{
+			name:           "refusesIndexedListWhenItemCountChanged",
+			original:       "users:\n  - password: s1\n  - password: s2\n",
+			submitted:      "users:\n  - password: [REDACTED]\n",
+			erreurAttendue: ErrRedactedWithoutOriginal,
+		},
+		{
+			name:           "keepsSecretsUnderAnchoredAndCommentedParentsWhenReordered",
+			original:       "a: &x\n  password: sa\nb: # note\n  password: sb\nc: !!map\n  password: sc\n",
+			submitted:      "c: !!map\n  password: [REDACTED]\nb: # note\n  password: [REDACTED]\na: &x\n  password: [REDACTED]\n",
+			valeurAttendue: "c: !!map\n  password: sc\nb: # note\n  password: sb\na: &x\n  password: sa\n",
+		},
+		{
+			name:           "keepsTrailingBlankLinesOfKeepChompedBlock",
+			original:       "key: |+\n  a\n\nname: x\n",
+			submitted:      "key: [REDACTED]\nname: x\n",
+			valeurAttendue: "key: |+\n  a\n\nname: x\n",
+		},
+		{
+			name:           "mergesCrlfContentWithBomAndRestoresOriginalStyle",
+			original:       "\ufeffpassword: s\r\nname: a\r\n",
+			submitted:      "password: [REDACTED]\nname: b\n",
+			valeurAttendue: "\ufeffpassword: s\r\nname: b\r\n",
+		},
+		{
+			name:           "mergesSubmittedCrlfAgainstLfOriginal",
+			original:       "password: s\nname: a\n",
+			submitted:      "\ufeffpassword: [REDACTED]\r\nname: b\r\n",
+			valeurAttendue: "password: s\nname: b\n",
+		},
+		{
+			name:           "consumesDuplicateIdenticalLinesInOrder",
+			original:       "password: s1\npassword: s2\n",
+			submitted:      "password: [REDACTED]\npassword: [REDACTED]\n",
+			valeurAttendue: "password: s1\npassword: s2\n",
+		},
+		{
+			name:           "refusesRestoringSecretWhenSiblingUrlChanged",
+			original:       "notify:\n  url: https://a.example.com\n  token: s\n",
+			submitted:      "notify:\n  url: https://evil.example.com\n  token: [REDACTED]\n",
+			erreurAttendue: ErrSecretContextChanged,
+		},
+		{
+			name:           "restoresSecretWhenOnlyUnrelatedSiblingChanged",
+			original:       "notify:\n  url: https://a.example.com\n  label: one\n  token: s\n",
+			submitted:      "notify:\n  url: https://a.example.com\n  label: two\n  token: [REDACTED]\n",
+			valeurAttendue: "notify:\n  url: https://a.example.com\n  label: two\n  token: s\n",
+		},
+		{
+			name:           "keepsCommentLineWithMarkerVerbatim",
+			original:       "password: s\n",
+			submitted:      "# note password: [REDACTED]\npassword: [REDACTED]\n",
+			valeurAttendue: "# note password: [REDACTED]\npassword: s\n",
+		},
 	}
 
 	for _, casDeTestCourant := range casesDeTest {
@@ -80,5 +152,17 @@ func TestMergeRedactedValues(testingContext *testing.T) {
 				testingContext.Fatalf("obtenu %q, attendu %q", valeurObtenue, casDeTestCourant.valeurAttendue)
 			}
 		})
+	}
+}
+
+func TestMergeErrorCarriesSubmittedLineNumber(testingContext *testing.T) {
+	_, erreurObtenue := MergeRedactedValues([]byte("name: x\n"), []byte("name: x\npassword: [REDACTED]\n"))
+
+	var erreurDeFusion *MergeError
+	if !errors.As(erreurObtenue, &erreurDeFusion) {
+		testingContext.Fatalf("erreur de fusion attendue, obtenu %v", erreurObtenue)
+	}
+	if erreurDeFusion.Line != 2 {
+		testingContext.Fatalf("ligne obtenue %d, attendue 2", erreurDeFusion.Line)
 	}
 }

@@ -1,92 +1,131 @@
 package confedit
 
 import (
-	"errors"
+	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 
 	"crowdsec-dashboard/internal/confread"
 )
 
-var ErrRedactedWithoutOriginal = errors.New("redacted marker has no original secret at this position")
+var (
+	trailingBlankLinesPattern = regexp.MustCompile(`(\n[ \t]*)+$`)
+	keepChompingPattern       = regexp.MustCompile(`:[ \t]*[|>][0-9+-]*\+`)
+)
 
-var trailingBlankLinesPattern = regexp.MustCompile(`(\n[ \t]*)+$`)
-
-type parentKey struct {
-	indent int
-	name   string
+type originalSecret struct {
+	text    string
+	context map[string]string
 }
 
-func leadingIndent(line string) int {
-	return len(line) - len(strings.TrimLeft(line, " \t"))
+func isCommentLine(line string) bool {
+	return strings.HasPrefix(strings.TrimSpace(line), "#")
 }
 
-func parentPaths(lines []string) []string {
-	paths := make([]string, len(lines))
-	var parents []parentKey
-	for lineIndex, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		indent := leadingIndent(line)
-		for len(parents) > 0 && parents[len(parents)-1].indent >= indent {
-			parents = parents[:len(parents)-1]
-		}
-		names := make([]string, 0, len(parents))
-		for _, parent := range parents {
-			names = append(names, parent.name)
-		}
-		paths[lineIndex] = strings.Join(names, "/")
-		if strings.HasSuffix(trimmed, ":") {
-			parents = append(parents, parentKey{indent: indent, name: trimmed})
-		}
+func secretKey(identity, maskedLine string) string {
+	return identity + "\x00" + maskedLine
+}
+
+func commentKey(maskedLine string) string {
+	return "#" + maskedLine
+}
+
+func restorableText(redactedLine confread.RedactedLine) string {
+	firstLine, _, _ := strings.Cut(redactedLine.Original, "\n")
+	if keepChompingPattern.MatchString(firstLine) {
+		return redactedLine.Original
 	}
-	return paths
+	return trailingBlankLinesPattern.ReplaceAllString(redactedLine.Original, "")
 }
 
-func secretKey(path, maskedLine string) string {
-	return path + "\x00" + maskedLine
-}
-
-func originalSecretsByKey(originalRaw []byte) map[string][]string {
-	redactedLines := confread.RedactLines(originalRaw)
+func collectOriginalSecrets(originalText string) (map[string][]originalSecret, error) {
+	redactedLines := confread.RedactLines([]byte(originalText))
 	maskedLines := make([]string, 0, len(redactedLines))
 	for _, redactedLine := range redactedLines {
 		maskedLines = append(maskedLines, redactedLine.Masked)
 	}
-	paths := parentPaths(maskedLines)
+	slots, parseError := parseSecretSlots(strings.Join(maskedLines, "\n"))
+	if parseError != nil {
+		return nil, fmt.Errorf("parse original: %w", parseError)
+	}
 
-	secretsByKey := make(map[string][]string)
+	secretsByKey := make(map[string][]originalSecret)
 	for lineIndex, redactedLine := range redactedLines {
 		if !strings.Contains(redactedLine.Masked, confread.RedactedMarker) {
 			continue
 		}
-		key := secretKey(paths[lineIndex], redactedLine.Masked)
-		originalWithoutTrailingBlankLines := trailingBlankLinesPattern.ReplaceAllString(redactedLine.Original, "")
-		secretsByKey[key] = append(secretsByKey[key], originalWithoutTrailingBlankLines)
+		if isCommentLine(redactedLine.Masked) {
+			key := commentKey(redactedLine.Masked)
+			secretsByKey[key] = append(secretsByKey[key], originalSecret{text: redactedLine.Original})
+			continue
+		}
+		slot, hasSlot := slots[lineIndex+1]
+		if !hasSlot {
+			continue
+		}
+		key := secretKey(slot.identity, redactedLine.Masked)
+		secretsByKey[key] = append(secretsByKey[key], originalSecret{text: restorableText(redactedLine), context: slot.context})
 	}
-	return secretsByKey
+	return secretsByKey, nil
+}
+
+func takeSecret(secretsByKey map[string][]originalSecret, key string) (originalSecret, bool) {
+	candidates := secretsByKey[key]
+	if len(candidates) == 0 {
+		return originalSecret{}, false
+	}
+	secretsByKey[key] = candidates[1:]
+	return candidates[0], true
 }
 
 func MergeRedactedValues(originalRaw, submittedMasked []byte) ([]byte, error) {
-	secretsByKey := originalSecretsByKey(originalRaw)
-	submittedLines := strings.Split(string(submittedMasked), "\n")
-	paths := parentPaths(submittedLines)
+	if !strings.Contains(string(submittedMasked), confread.RedactedMarker) {
+		return submittedMasked, nil
+	}
 
+	originalText, originalStyle := normaliseText(originalRaw)
+	submittedText, _ := normaliseText(submittedMasked)
+
+	secretsByKey, originalError := collectOriginalSecrets(originalText)
+	if originalError != nil {
+		return nil, originalError
+	}
+	submittedSlots, submittedError := parseSecretSlots(submittedText)
+	if submittedError != nil {
+		return nil, fmt.Errorf("parse submitted: %w", submittedError)
+	}
+
+	submittedLines := strings.Split(submittedText, "\n")
 	mergedLines := make([]string, 0, len(submittedLines))
 	for lineIndex, submittedLine := range submittedLines {
 		if !strings.Contains(submittedLine, confread.RedactedMarker) {
 			mergedLines = append(mergedLines, submittedLine)
 			continue
 		}
-		key := secretKey(paths[lineIndex], submittedLine)
-		candidates := secretsByKey[key]
-		if len(candidates) == 0 {
-			return nil, ErrRedactedWithoutOriginal
+		lineNumber := lineIndex + 1
+
+		if isCommentLine(submittedLine) {
+			secret, found := takeSecret(secretsByKey, commentKey(submittedLine))
+			if !found {
+				secret.text = submittedLine
+			}
+			mergedLines = append(mergedLines, secret.text)
+			continue
 		}
-		mergedLines = append(mergedLines, candidates[0])
-		secretsByKey[key] = candidates[1:]
+
+		slot, hasSlot := submittedSlots[lineNumber]
+		if !hasSlot {
+			return nil, &MergeError{Line: lineNumber, Err: ErrRedactedWithoutOriginal}
+		}
+		secret, found := takeSecret(secretsByKey, secretKey(slot.identity, submittedLine))
+		if !found {
+			return nil, &MergeError{Line: lineNumber, Err: ErrRedactedWithoutOriginal}
+		}
+		if !maps.Equal(secret.context, slot.context) {
+			return nil, &MergeError{Line: lineNumber, Err: ErrSecretContextChanged}
+		}
+		mergedLines = append(mergedLines, secret.text)
 	}
-	return []byte(strings.Join(mergedLines, "\n")), nil
+	return []byte(applyTextStyle(strings.Join(mergedLines, "\n"), originalStyle)), nil
 }
