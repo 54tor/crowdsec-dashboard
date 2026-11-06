@@ -18,36 +18,39 @@ type viewKey struct {
 	sourceID   string
 }
 
-type viewState struct {
-	key        viewKey
-	lastAccess time.Time
-}
-
 type viewAuditGate struct {
 	mutex    sync.Mutex
 	now      func() time.Time
-	statuses map[int64]viewState
+	accesses map[int64]map[viewKey]time.Time
 }
 
 func newViewAuditGate(now func() time.Time) *viewAuditGate {
-	return &viewAuditGate{now: now, statuses: map[int64]viewState{}}
+	return &viewAuditGate{now: now, accesses: map[int64]map[viewKey]time.Time{}}
 }
 
 func (gate *viewAuditGate) shouldRecord(accountID int64, engineName, sourceID string) bool {
 	gate.mutex.Lock()
 	defer gate.mutex.Unlock()
 	currentTime := gate.now()
-	gate.forgetIdleAccounts(currentTime)
-	previous, hasPrevious := gate.statuses[accountID]
+	gate.forgetIdleViews(currentTime)
 	key := viewKey{engineName: engineName, sourceID: sourceID}
-	gate.statuses[accountID] = viewState{key: key, lastAccess: currentTime}
-	return !hasPrevious || previous.key != key
+	if gate.accesses[accountID] == nil {
+		gate.accesses[accountID] = map[viewKey]time.Time{}
+	}
+	_, isOpenView := gate.accesses[accountID][key]
+	gate.accesses[accountID][key] = currentTime
+	return !isOpenView
 }
 
-func (gate *viewAuditGate) forgetIdleAccounts(currentTime time.Time) {
-	for accountID, statusCourant := range gate.statuses {
-		if currentTime.Sub(statusCourant.lastAccess) > viewAuditIdleWindow {
-			delete(gate.statuses, accountID)
+func (gate *viewAuditGate) forgetIdleViews(currentTime time.Time) {
+	for accountID, views := range gate.accesses {
+		for key, lastAccess := range views {
+			if currentTime.Sub(lastAccess) > viewAuditIdleWindow {
+				delete(views, key)
+			}
+		}
+		if len(views) == 0 {
+			delete(gate.accesses, accountID)
 		}
 	}
 }

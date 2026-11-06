@@ -34,6 +34,7 @@ export function EngineLogs() {
   const sources = sourcesQuery.data?.sources ?? []
   const activeSourceId = sources.find((source) => source.id === chosenSourceId)?.id ?? sources[0]?.id
   const tailQuery = useLogTail(engineName, activeSourceId)
+  const isTailOfActiveSource = tailQuery.data?.engine === engineName && tailQuery.data.source_id === activeSourceId
   function selectEngine(nextEngineName: string) {
     setChosenSourceId(undefined)
     setEngineName(nextEngineName)
@@ -62,7 +63,7 @@ export function EngineLogs() {
       )}
       {sourcesQuery.data && <UnreadableSources unreadableSources={sourcesQuery.data.unreadable} />}
       {tailQuery.error && <ErrorNotice error={tailQuery.error} />}
-      {tailQuery.data && !tailQuery.error && <LogLines lines={tailQuery.data.lines} />}
+      {tailQuery.data && isTailOfActiveSource && !tailQuery.error && <LogLines lines={tailQuery.data.lines} />}
     </section>
   )
 }

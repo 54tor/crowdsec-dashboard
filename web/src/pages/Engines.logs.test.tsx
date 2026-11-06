@@ -91,6 +91,18 @@ describe('engines page received logs', () => {
     expect(requestedUrls(fetchMock)).toContain(LINES_URL(NGINX_SOURCE_ID, '&engine=peer'))
   })
 
+  it('neGardePasLesLignesDUnEngineSurUnAutreEngineSansSource', async () => {
+    stubFetch(logRoutes({ 'GET /api/logs/sources?engine=peer': { status: 200, body: { engine: 'peer', sources: [], unreadable: [], truncated: false } } }))
+    const user = userEvent.setup()
+    renderApp('/engines')
+
+    await screen.findByText('GET /b 404')
+    await user.selectOptions(screen.getByLabelText(en.engineTarget.label), 'peer')
+
+    await screen.findByText(en.engineLogs.noSources)
+    expect(screen.queryByText('GET /b 404')).not.toBeInTheDocument()
+  })
+
   it('neRendJamaisLeContenuDUneLigneCommeHtml', async () => {
     stubFetch(logRoutes({ [`GET ${LINES_URL(NGINX_SOURCE_ID)}`]: { status: 200, body: { engine: 'local', source_id: NGINX_SOURCE_ID, lines: ['<img src=x onerror=alert(1)>'], file_size: 1, truncated: false } } }))
     renderApp('/engines')

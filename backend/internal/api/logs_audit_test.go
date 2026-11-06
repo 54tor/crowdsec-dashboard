@@ -38,3 +38,22 @@ func TestViewAuditGate_enregistreDeNouveauApresDeuxMinutesDInactivite(t *testing
 		t.Fatalf("got active=%v afterIdle=%v, want false/true", toujoursActif, apresInactivite)
 	}
 }
+
+func TestViewAuditGate_nInscritPasChaqueRafraichissementDeDeuxOngletsAlternes(t *testing.T) {
+	horlogeCourante := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	gate := newViewAuditGate(func() time.Time { return horlogeCourante })
+	nombreEntrees := 0
+
+	for indexRafraichissement := 0; indexRafraichissement < 6; indexRafraichissement++ {
+		horlogeCourante = horlogeCourante.Add(4 * time.Second)
+		for _, sourceCourante := range []string{"src-a", "src-b"} {
+			if gate.shouldRecord(1, "local", sourceCourante) {
+				nombreEntrees++
+			}
+		}
+	}
+
+	if nombreEntrees != 2 {
+		t.Fatalf("got %d audit entries, want 2", nombreEntrees)
+	}
+}

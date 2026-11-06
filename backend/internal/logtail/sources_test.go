@@ -225,3 +225,24 @@ func TestListSources_retourneUneListeVideSansAcquisition(t *testing.T) {
 		t.Fatalf("got %v, %v", listing, listError)
 	}
 }
+
+func TestListSources_suitUnFichierAcquisDLienSymboliqueVersUnFichierRegulier(t *testing.T) {
+	fixture := newAcquisitionFixture(t)
+	logPath := filepath.Join(fixture.logsDir, "linked.log")
+	writeFixtureFile(t, logPath, "x\n")
+	realFile := filepath.Join(fixture.confDir, "..data", "web.yaml")
+	writeFixtureFile(t, realFile, "filename: "+logPath+"\n")
+	acquisitionDir := filepath.Join(fixture.confDir, "acquis.d")
+	if mkdirError := os.MkdirAll(acquisitionDir, 0o755); mkdirError != nil {
+		t.Fatal(mkdirError)
+	}
+	if symlinkError := os.Symlink(realFile, filepath.Join(acquisitionDir, "web.yaml")); symlinkError != nil {
+		t.Fatal(symlinkError)
+	}
+
+	listing, listError := ListSources(fixture.confDir, fixture.rootsDir)
+
+	if listError != nil || len(listing.Sources) != 1 {
+		t.Fatalf("got %v, %v", labelsOf(listing.Sources), listError)
+	}
+}

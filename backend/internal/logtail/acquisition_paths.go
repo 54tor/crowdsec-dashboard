@@ -97,8 +97,10 @@ func yamlFilesOf(dir string) []string {
 	files := []string{}
 	for _, entryCourante := range entries {
 		extension := filepath.Ext(entryCourante.Name())
-		if entryCourante.Type().IsRegular() && (extension == ".yaml" || extension == ".yml") {
-			files = append(files, filepath.Join(dir, entryCourante.Name()))
+		entryPath := filepath.Join(dir, entryCourante.Name())
+		fileInfo, statError := os.Stat(entryPath)
+		if statError == nil && fileInfo.Mode().IsRegular() && (extension == ".yaml" || extension == ".yml") {
+			files = append(files, entryPath)
 		}
 	}
 	slices.Sort(files)
