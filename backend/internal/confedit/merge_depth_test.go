@@ -110,3 +110,49 @@ func TestMergeHandlesWideFirstListItemQuickly(testingContext *testing.T) {
 		testingContext.Fatalf("fusion trop lente : %v", dureeObtenue)
 	}
 }
+
+// A long explicit key above many children used to be copied into the path of
+// every child (and quoted again for every node), which made memory and time
+// grow with key length times child count.
+func cleExpliciteLongueAuDessusDe(longueurCle, nombreEnfants int, valeurSecrete string) string {
+	var builder strings.Builder
+	builder.WriteString("? " + strings.Repeat("a", longueurCle) + "\n:\n")
+	for indexEnfant := 0; indexEnfant < nombreEnfants; indexEnfant++ {
+		builder.WriteString(fmt.Sprintf("  n%d: 1\n", indexEnfant))
+	}
+	builder.WriteString("  password: " + valeurSecrete + "\n")
+	return builder.String()
+}
+
+func TestMergeHandlesLongKeyOverManyChildrenQuickly(testingContext *testing.T) {
+	const dureeMaximalePourCleLongue = time.Second
+	casesDeTest := []struct {
+		name          string
+		longueurCle   int
+		nombreEnfants int
+	}{
+		{name: "key20KiBOver3000Children", longueurCle: 20 << 10, nombreEnfants: 3000},
+		{name: "key100KiBOver16000Children", longueurCle: 100 << 10, nombreEnfants: 16000},
+	}
+
+	for _, casDeTestCourant := range casesDeTest {
+		testingContext.Run(casDeTestCourant.name, func(testingContext *testing.T) {
+			original := cleExpliciteLongueAuDessusDe(casDeTestCourant.longueurCle, casDeTestCourant.nombreEnfants, "s1")
+			submitted := cleExpliciteLongueAuDessusDe(casDeTestCourant.longueurCle, casDeTestCourant.nombreEnfants, "[REDACTED]")
+
+			debut := time.Now()
+			valeurObtenue, erreurObtenue := MergeRedactedValues([]byte(original), []byte(submitted))
+			dureeObtenue := time.Since(debut)
+
+			if erreurObtenue != nil {
+				testingContext.Fatalf("erreur inattendue %v", erreurObtenue)
+			}
+			if string(valeurObtenue) != original {
+				testingContext.Fatalf("le contenu fusionne differe de l'original")
+			}
+			if dureeObtenue > dureeMaximalePourCleLongue {
+				testingContext.Fatalf("fusion trop lente : %v", dureeObtenue)
+			}
+		})
+	}
+}

@@ -21,16 +21,15 @@ func (parsed *parsedText) addIndirection(record string, line int) {
 }
 
 func (parsed *parsedText) noteIndirection(node *yaml.Node, path string) {
-	location := strconv.Quote(path) + "\x00"
 	if node.Kind == yaml.AliasNode {
 		aliasTarget := ""
 		if node.Alias != nil {
 			aliasTarget = parsed.masked.node(node.Alias)
 		}
-		parsed.addIndirection("*"+location+strconv.Quote(node.Value)+"="+aliasTarget, node.Line)
+		parsed.addIndirection("*"+path+"\x00"+strconv.Quote(node.Value)+"="+aliasTarget, node.Line)
 	}
 	if node.Anchor != "" {
-		parsed.addIndirection("&"+location+strconv.Quote(node.Anchor)+"="+parsed.masked.node(node), node.Line)
+		parsed.addIndirection("&"+path+"\x00"+strconv.Quote(node.Anchor)+"="+parsed.masked.node(node), node.Line)
 	}
 }
 
@@ -38,5 +37,5 @@ func (parsed *parsedText) noteMergeKey(identity string, keyNode, valueNode *yaml
 	if keyNode.Value != "<<" || keyNode.Tag != "!!merge" {
 		return
 	}
-	parsed.addIndirection("<<"+strconv.Quote(identity)+"\x00="+parsed.masked.node(valueNode), keyNode.Line)
+	parsed.addIndirection("<<"+identity+"\x00="+parsed.masked.node(valueNode), keyNode.Line)
 }

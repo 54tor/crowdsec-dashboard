@@ -54,6 +54,10 @@ func parseText(text string) (*parsedText, error) {
 	return parsed, nil
 }
 
+func childIdentity(parentIdentity, segment string) string {
+	return hashText(parentIdentity + "\x00" + segment)
+}
+
 func (parsed *parsedText) recordSlot(line int, slot secretSlot) {
 	if _, alreadyRecorded := parsed.slots[line]; !alreadyRecorded {
 		parsed.slots[line] = slot
@@ -88,8 +92,8 @@ func (parsed *parsedText) collectMapping(mapping *yaml.Node, path string) {
 	for pairIndex := 0; pairIndex+1 < len(mapping.Content); pairIndex += 2 {
 		keyNode := mapping.Content[pairIndex]
 		valueNode := mapping.Content[pairIndex+1]
-		identity := path + "/" + parsed.masked.keyLabel(keyNode)
-		parsed.noteIndirection(keyNode, identity+"?key")
+		identity := childIdentity(path, "/"+parsed.masked.keyLabel(keyNode))
+		parsed.noteIndirection(keyNode, childIdentity(identity, "?key"))
 		parsed.noteMergeKey(identity, keyNode, valueNode)
 		parsed.recordSlot(keyNode.Line, secretSlot{identity: identity, flowContainer: isFlow, value: valueNode})
 		if keyNode.Kind == yaml.ScalarNode && endpointKeyPattern.MatchString(keyNode.Value) {
@@ -103,7 +107,7 @@ func (parsed *parsedText) collectSequence(sequence *yaml.Node, path string) {
 	isFlow := sequence.Style&yaml.FlowStyle != 0
 	segments := sequenceSegments(sequence, parsed.masked)
 	for itemIndex, item := range sequence.Content {
-		itemPath := path + "[" + segments[itemIndex] + "]"
+		itemPath := childIdentity(path, "["+segments[itemIndex]+"]")
 		if item.Kind == yaml.ScalarNode {
 			parsed.noteIndirection(item, itemPath)
 			parsed.recordSlot(item.Line, secretSlot{identity: itemPath, flowContainer: isFlow, value: item})
