@@ -40,6 +40,27 @@ func TestSidecarFileReadsAreMasked(testContext *testing.T) {
 	expectResponse(testContext, traversalRecorder, http.StatusNotFound, codeBody(sidecarapi.CodeNotFound))
 }
 
+// config.yaml.local is on the confread allow list since the config editor
+// exists: it is readable through the file routes, but only masked.
+func TestSidecarFileReadsMaskTheLocalOverride(testContext *testing.T) {
+	fixture := newConfigFixture(testContext, nil)
+	writeTestFile(testContext, filepath.Join(fixture.confDir, "config.yaml.local"), "db_config:\n  password: "+plantedSecret+"\n")
+
+	recorder := fixture.get(testContext, sidecarapi.PathFilePrefix+"config.yaml.local")
+
+	if recorder.Code != http.StatusOK {
+		testContext.Fatalf("expected 200, got %d with %q", recorder.Code, recorder.Body.String())
+	}
+	var fileResponse sidecarapi.FileResponse
+	decodeStrictJSON(testContext, recorder, &fileResponse)
+	if strings.Contains(string(fileResponse.Content), plantedSecret) {
+		testContext.Errorf("the planted secret left the sidecar: %s", fileResponse.Content)
+	}
+	if !strings.Contains(string(fileResponse.Content), confread.RedactedMarker) {
+		testContext.Errorf("expected the redaction marker in %s", fileResponse.Content)
+	}
+}
+
 func TestSidecarFileReadsHideEverythingOutsideTheAllowList(testContext *testing.T) {
 	// Each name either escapes ConfDir, is outside the confread allow list,
 	// is a symlink, a directory, or is absent: the answer must be the same
@@ -55,7 +76,6 @@ func TestSidecarFileReadsHideEverythingOutsideTheAllowList(testContext *testing.
 		sidecarapi.PathFilePrefix + "/etc/passwd",
 		sidecarapi.PathFilePrefix + "%2Fetc%2Fpasswd",
 		sidecarapi.PathFilePrefix + "secrets",
-		sidecarapi.PathFilePrefix + "config.yaml.local",
 		sidecarapi.PathFilePrefix + "acquis.d/credentials.yaml",
 		sidecarapi.PathFilePrefix + "acquis.d/escape.yaml",
 		sidecarapi.PathFilePrefix + "acquis.d/missing.yaml",
@@ -85,7 +105,7 @@ func TestSidecarFileListShowsOnlyAllowedRegularFiles(testContext *testing.T) {
 	}
 	var listResponse sidecarapi.FileListResponse
 	decodeStrictJSON(testContext, recorder, &listResponse)
-	expectedFiles := []string{"acquis.d/nginx.yaml", "config.yaml", "profiles.yaml"}
+	expectedFiles := []string{"acquis.d/nginx.yaml", "config.yaml", "config.yaml.local", "profiles.yaml"}
 	if !slices.Equal(listResponse.Files, expectedFiles) {
 		testContext.Errorf("expected files %v, got %v", expectedFiles, listResponse.Files)
 	}
