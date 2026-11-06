@@ -48,22 +48,38 @@ func redactLine(line string) (redacted string, blockIndent int) {
 	return strings.TrimRight(match[1], " \t") + " " + RedactedMarker, keyIndent(match[1])
 }
 
-func redactSecrets(content []byte) []byte {
+type RedactedLine struct {
+	Masked   string
+	Original string
+}
+
+func RedactLines(content []byte) []RedactedLine {
 	lines := strings.Split(string(content), "\n")
-	output := make([]string, 0, len(lines))
+	output := make([]RedactedLine, 0, len(lines))
 	blockIndent := -1
 	for _, line := range lines {
 		if blockIndent >= 0 {
 			if isMaskedContinuation(line, blockIndent) {
+				lastIndex := len(output) - 1
+				output[lastIndex].Original += "\n" + line
 				continue
 			}
 			blockIndent = -1
 		}
 		redacted, openedBlock := redactLine(line)
-		output = append(output, redacted)
+		output = append(output, RedactedLine{Masked: redacted, Original: line})
 		blockIndent = openedBlock
 	}
-	return []byte(strings.Join(output, "\n"))
+	return output
+}
+
+func redactSecrets(content []byte) []byte {
+	redactedLines := RedactLines(content)
+	maskedLines := make([]string, 0, len(redactedLines))
+	for _, redactedLine := range redactedLines {
+		maskedLines = append(maskedLines, redactedLine.Masked)
+	}
+	return []byte(strings.Join(maskedLines, "\n"))
 }
 
 func Redact(content []byte) []byte {
