@@ -43,7 +43,7 @@ func (reader Reader) Read(sourceID string, lineCount int) (Lines, error) {
 	if !isKnown {
 		return Lines{}, ErrSourceNotFound
 	}
-	tail, tailError := tailFile(source.Path, boundedLineCount(lineCount))
+	tail, tailError := tailInRoot(source.Root, source.Relative, boundedLineCount(lineCount))
 	if errors.Is(tailError, fs.ErrNotExist) {
 		return Lines{}, ErrSourceNotFound
 	}

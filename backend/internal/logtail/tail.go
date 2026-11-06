@@ -17,8 +17,15 @@ type tailResult struct {
 
 var errNotRegularFile = errors.New("logtail: not a regular file")
 
-func tailFile(path string, lineCount int) (tailResult, error) {
-	file, openError := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+const lineTooLongMarker = "…[line too long, start not shown]"
+
+func tailInRoot(rootDir string, relativePath string, lineCount int) (tailResult, error) {
+	root, rootError := os.OpenRoot(rootDir)
+	if rootError != nil {
+		return tailResult{}, rootError
+	}
+	defer root.Close()
+	file, openError := root.OpenFile(relativePath, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if openError != nil {
 		return tailResult{}, openError
 	}
@@ -49,8 +56,11 @@ func lastLines(window []byte, startsMidFile bool, lineCount int) []string {
 		return []string{}
 	}
 	parts := strings.Split(string(window), "\n")
-	if startsMidFile && len(parts) > 1 {
+	if startsMidFile {
 		parts = parts[1:]
+		if len(parts) == 0 {
+			return []string{lineTooLongMarker}
+		}
 	}
 	if len(parts) > lineCount {
 		parts = parts[len(parts)-lineCount:]

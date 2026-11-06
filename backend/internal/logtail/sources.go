@@ -18,9 +18,10 @@ var (
 )
 
 type Source struct {
-	ID    string
-	Path  string
-	Label string
+	ID       string
+	Root     string
+	Relative string
+	Label    string
 }
 
 type UnreadableSource struct {

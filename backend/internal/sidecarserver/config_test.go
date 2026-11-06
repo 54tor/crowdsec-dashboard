@@ -67,6 +67,7 @@ func TestLoadConfigReadsEveryExplicitValue(testContext *testing.T) {
 	environment["SIDECAR_ALLOWED_COMMANDS"] = " version , hub_list "
 	environment["SIDECAR_READ_ONLY"] = "true"
 	environment["SIDECAR_MAX_CONCURRENT_EXECUTIONS"] = "16"
+	environment["SIDECAR_LOGS_ALLOWED_ROOTS"] = "/var/log/nginx:/var/log/auth/"
 
 	obtainedConfig, loadError := LoadConfig(environmentReader(environment))
 	if loadError != nil {
@@ -86,6 +87,7 @@ func TestLoadConfigReadsEveryExplicitValue(testContext *testing.T) {
 		AllowedCommands:         []string{"version", "hub_list"},
 		ReadOnly:                true,
 		MaxConcurrentExecutions: 16,
+		LogsAllowedRoots:        []string{"/var/log/nginx", "/var/log/auth"},
 	}
 	if !reflect.DeepEqual(obtainedConfig, expectedConfig) {
 		testContext.Errorf("expected %+v, got %+v", expectedConfig, obtainedConfig)
@@ -106,6 +108,7 @@ func TestLoadConfigRefusesInvalidValues(testContext *testing.T) {
 		{"relative trusted keys file", "SIDECAR_TRUSTED_KEYS_FILE", "trusted-keys", "SIDECAR_TRUSTED_KEYS_FILE"},
 		{"relative data dir", "SIDECAR_DATA_DIR", "data", "SIDECAR_DATA_DIR"},
 		{"relative acquisition dir", "SIDECAR_ACQUISITION_DIR", "acquis.d", "SIDECAR_ACQUISITION_DIR"},
+		{"relative log root", "SIDECAR_LOGS_ALLOWED_ROOTS", "/var/log:logs", "SIDECAR_LOGS_ALLOWED_ROOTS"},
 		{"listen address without port", "SIDECAR_LISTEN_ADDR", "127.0.0.1", "SIDECAR_LISTEN_ADDR"},
 		{"listen address with port zero", "SIDECAR_LISTEN_ADDR", "127.0.0.1:0", "SIDECAR_LISTEN_ADDR"},
 		{"listen address with a named port", "SIDECAR_LISTEN_ADDR", ":https", "SIDECAR_LISTEN_ADDR"},

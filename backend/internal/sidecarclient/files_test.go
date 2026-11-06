@@ -70,6 +70,13 @@ func startConfigSidecar(testContext *testing.T, runnerError error) configSidecar
 // a test sabotage the tree while a transaction is in flight.
 func startConfigSidecarWithHook(testContext *testing.T, runnerError error, onRun func(confDir string)) configSidecar {
 	testContext.Helper()
+	return startConfiguredSidecar(testContext, runnerError, onRun, nil)
+}
+
+// startConfiguredSidecar is startConfigSidecarWithHook with a last chance to
+// adjust the sidecar Config (log roots, for example) once confDir exists.
+func startConfiguredSidecar(testContext *testing.T, runnerError error, onRun func(confDir string), adjustConfig func(*sidecarserver.Config, string)) configSidecar {
+	testContext.Helper()
 	confDir := testContext.TempDir()
 	acquisitionDir := testContext.TempDir()
 	writeFixtureFile(testContext, filepath.Join(confDir, "config.yaml"), "db_config:\n  password: hunter2\n  flush:\n    max_items: 250\n")
@@ -87,16 +94,20 @@ func startConfigSidecarWithHook(testContext *testing.T, runnerError error, onRun
 	if digestKeyError != nil {
 		testContext.Fatalf("LoadOrCreateDigestKey: %v", digestKeyError)
 	}
+	sidecarConfig := sidecarserver.Config{
+		AllowedCommands:         cscli.Names(),
+		MaxConcurrentExecutions: 4,
+		ConfDir:                 confDir,
+		AcquisitionDir:          acquisitionDir,
+	}
+	if adjustConfig != nil {
+		adjustConfig(&sidecarConfig, confDir)
+	}
 	sidecarHandler := sidecarserver.NewHandler(sidecarserver.Dependencies{
 		DigestKey: digestKey,
 		Verifier:  newRealVerifier(testContext, signingKey),
 		Executor:  cscli.NewLocalExecutor(runner),
-		Config: sidecarserver.Config{
-			AllowedCommands:         cscli.Names(),
-			MaxConcurrentExecutions: 4,
-			ConfDir:                 confDir,
-			AcquisitionDir:          acquisitionDir,
-		},
+		Config:    sidecarConfig,
 	})
 	server, fingerprint := startPinnedTLSServer(testContext, sidecarHandler)
 	client := mustNewClient(testContext, Settings{

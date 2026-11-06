@@ -7,6 +7,7 @@ import (
 	"path"
 
 	"crowdsec-dashboard/internal/cscli"
+	"crowdsec-dashboard/internal/logtail"
 	"crowdsec-dashboard/internal/sidecarapi"
 	"crowdsec-dashboard/internal/sidecarauth"
 )
@@ -27,6 +28,7 @@ func NewHandler(dependencies Dependencies) http.Handler {
 	authenticatedRoutes.Handle("POST "+sidecarapi.PathExec, newExecHandler(dependencies, executionSlots, logger))
 	registerFileRoutes(authenticatedRoutes, dependencies.Config.ConfDir, logger)
 	applyHandler := newApplyHandler(dependencies, executionSlots, logger)
+	registerLogRoutes(authenticatedRoutes, logtail.Reader{ConfDir: dependencies.Config.ConfDir, AllowedRoots: dependencies.Config.LogsAllowedRoots}, logger)
 	registerAcquisitionRoutes(authenticatedRoutes, applyHandler, dependencies.DigestKey, logger)
 	registerEditRoutes(authenticatedRoutes, dependencies, applyHandler, logger)
 	rateLimitedRoutes := limitRate(logger, refuseUncleanPaths(authenticatedRoutes))

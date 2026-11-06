@@ -19,7 +19,7 @@ const (
 )
 
 func ObserveFingerprint(ctx context.Context, baseURL string, egressSettings egress.Settings) (string, error) {
-	endpoint, endpointError := endpointURL(baseURL, sidecarapi.PathHealth)
+	endpoint, endpointError := endpointURL(baseURL, sidecarapi.PathHealth, "")
 	if endpointError != nil {
 		return "", endpointError
 	}

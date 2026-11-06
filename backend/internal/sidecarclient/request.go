@@ -15,6 +15,7 @@ import (
 type call struct {
 	method     string
 	path       string
+	rawQuery   string
 	body       []byte
 	routeCodes map[string]error
 }
@@ -41,7 +42,7 @@ func (client *Client) exchange(ctx context.Context, sidecarCall call, destinatio
 }
 
 func (client *Client) signedRequest(ctx context.Context, sidecarCall call) (*http.Request, error) {
-	endpoint, endpointError := endpointURL(client.baseURL, sidecarCall.path)
+	endpoint, endpointError := endpointURL(client.baseURL, sidecarCall.path, sidecarCall.rawQuery)
 	if endpointError != nil {
 		return nil, endpointError
 	}
@@ -58,12 +59,12 @@ func (client *Client) signedRequest(ctx context.Context, sidecarCall call) (*htt
 	return request, nil
 }
 
-func endpointURL(baseURL, path string) (string, error) {
+func endpointURL(baseURL, path, rawQuery string) (string, error) {
 	parsedBaseURL, parseError := url.Parse(baseURL)
 	if parseError != nil || !isHTTPSOrigin(parsedBaseURL) {
 		return "", fmt.Errorf("%w: invalid sidecar URL", ErrUnavailable)
 	}
-	endpoint := url.URL{Scheme: "https", Host: parsedBaseURL.Host, Path: path}
+	endpoint := url.URL{Scheme: "https", Host: parsedBaseURL.Host, Path: path, RawQuery: rawQuery}
 	return endpoint.String(), nil
 }
 

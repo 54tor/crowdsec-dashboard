@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"crowdsec-dashboard/internal/cscli"
+	"crowdsec-dashboard/internal/logtail"
 )
 
 const (
@@ -34,6 +35,7 @@ type Config struct {
 	AllowedCommands         []string
 	ReadOnly                bool
 	MaxConcurrentExecutions int
+	LogsAllowedRoots        []string
 }
 
 func LoadConfig(getenv func(string) string) (Config, error) {
@@ -61,6 +63,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		return Config{}, loadError
 	}
 	if config.MaxConcurrentExecutions, loadError = parseMaxConcurrentExecutions(getenv("SIDECAR_MAX_CONCURRENT_EXECUTIONS")); loadError != nil {
+		return Config{}, loadError
+	}
+	if config.LogsAllowedRoots, loadError = logtail.ParseAllowedRoots("SIDECAR_LOGS_ALLOWED_ROOTS", getenv("SIDECAR_LOGS_ALLOWED_ROOTS")); loadError != nil {
 		return Config{}, loadError
 	}
 	return config, nil

@@ -16,6 +16,10 @@ func TestMaskLine_masqueLesValeursSensibles(t *testing.T) {
 		{"apikey", `apikey: SECRET123`, `apikey: [REDACTED]`},
 		{"cookie", `Cookie: session=abc; other=def`, `Cookie: [REDACTED]`},
 		{"set-cookie", `Set-Cookie: session=abc; Path=/`, `Set-Cookie: [REDACTED]`},
+		{"json", `{"password":"hunter2","user":"bob"}`, `{"password":"[REDACTED]","user":"bob"}`},
+		{"cle avec tiret", `api-key=abc123 end`, `api-key=[REDACTED] end`},
+		{"access key", `access_key: abc123`, `access_key: [REDACTED]`},
+		{"identifiants dans une url", `proxy https://bob:pw@host.example/path`, `proxy https://[REDACTED]@host.example/path`},
 		{"ligne sans secret", `203.0.113.7 - - "GET /index.html"`, `203.0.113.7 - - "GET /index.html"`},
 	}
 	for _, casDeTestCourant := range casDeTest {

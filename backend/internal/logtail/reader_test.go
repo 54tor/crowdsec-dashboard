@@ -58,7 +58,20 @@ func TestReader_tronqueUneLigneDeDixMioAMaxLineBytes(t *testing.T) {
 		t.Fatal(readError)
 	}
 	if len(lines.Lines) != 1 || len(lines.Lines[0]) > MaxLineBytes+len(truncationMarker) {
-		t.Fatalf("line length = %d", len(lines.Lines[0]))
+		t.Fatalf("lines = %d", len(lines.Lines))
+	}
+}
+
+func TestReader_tronqueUneLigneLongueMaisCompleteAMaxLineBytes(t *testing.T) {
+	reader, source, _ := newReaderWithLog(t, strings.Repeat("a", 3*MaxLineBytes)+"\n")
+
+	lines, readError := reader.Read(source.ID, 1)
+
+	if readError != nil {
+		t.Fatal(readError)
+	}
+	if !lines.Truncated || !strings.HasSuffix(lines.Lines[0], truncationMarker) {
+		t.Fatalf("expected a truncated line, got truncated=%v", lines.Truncated)
 	}
 }
 

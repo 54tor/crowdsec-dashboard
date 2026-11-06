@@ -15,4 +15,8 @@ const (
 	CodeExecStillRunning    = "exec_still_running"
 	CodeExecutorUnavailable = "executor_unavailable"
 	CodeInternalError       = "internal_error"
+	CodeLogsDisabled        = "logs_disabled"
+	CodeLogSourceNotFound   = "log_source_not_found"
+	CodeLogSourceUnreadable = "log_source_unreadable"
+	CodeAcquisitionInvalid  = "acquisition_invalid"
 )

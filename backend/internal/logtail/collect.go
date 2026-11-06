@@ -21,11 +21,15 @@ func resolveRoots(allowedRoots []string) []string {
 	return resolved
 }
 
-func isUnderRoots(resolvedPath string, resolvedRoots []string) bool {
-	return slices.ContainsFunc(resolvedRoots, func(rootCourante string) bool {
-		relative, relativeError := filepath.Rel(rootCourante, resolvedPath)
-		return relativeError == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
-	})
+func containingRoot(resolvedPath string, resolvedRoots []string) (root string, relative string, found bool) {
+	for _, rootCourante := range resolvedRoots {
+		relativePath, relativeError := filepath.Rel(rootCourante, resolvedPath)
+		isInside := relativeError == nil && relativePath != "." && relativePath != ".." && !strings.HasPrefix(relativePath, ".."+string(filepath.Separator))
+		if isInside {
+			return rootCourante, relativePath, true
+		}
+	}
+	return "", "", false
 }
 
 func collectSources(declarations []declaration, resolvedRoots []string) ([]Source, bool) {
@@ -39,13 +43,13 @@ func collectSources(declarations []declaration, resolvedRoots []string) ([]Sourc
 			matches, _ := filepath.Glob(patternCourant)
 			for _, matchCourant := range matches {
 				source, isReadable := sourceOf(matchCourant, resolvedRoots)
-				if !isReadable || seenPaths[source.Path] {
+				if !isReadable || seenPaths[source.Root+"/"+source.Relative] {
 					continue
 				}
 				if len(sources) == MaxSources {
 					return sortedSources(sources), true
 				}
-				seenPaths[source.Path] = true
+				seenPaths[source.Root+"/"+source.Relative] = true
 				sources = append(sources, source)
 			}
 		}
@@ -55,14 +59,18 @@ func collectSources(declarations []declaration, resolvedRoots []string) ([]Sourc
 
 func sourceOf(matchedPath string, resolvedRoots []string) (Source, bool) {
 	resolvedPath, resolveError := filepath.EvalSymlinks(matchedPath)
-	if resolveError != nil || !isUnderRoots(resolvedPath, resolvedRoots) {
+	if resolveError != nil {
+		return Source{}, false
+	}
+	root, relative, isInside := containingRoot(resolvedPath, resolvedRoots)
+	if !isInside {
 		return Source{}, false
 	}
 	fileInfo, statError := os.Stat(resolvedPath)
 	if statError != nil || !fileInfo.Mode().IsRegular() {
 		return Source{}, false
 	}
-	return Source{ID: sourceIDOf(resolvedPath), Path: resolvedPath, Label: matchedPath}, true
+	return Source{ID: sourceIDOf(resolvedPath), Root: root, Relative: relative, Label: matchedPath}, true
 }
 
 func sortedSources(sources []Source) []Source {

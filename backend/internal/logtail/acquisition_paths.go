@@ -97,7 +97,7 @@ func yamlFilesOf(dir string) []string {
 	files := []string{}
 	for _, entryCourante := range entries {
 		extension := filepath.Ext(entryCourante.Name())
-		if !entryCourante.IsDir() && (extension == ".yaml" || extension == ".yml") {
+		if entryCourante.Type().IsRegular() && (extension == ".yaml" || extension == ".yml") {
 			files = append(files, filepath.Join(dir, entryCourante.Name()))
 		}
 	}

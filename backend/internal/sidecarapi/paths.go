@@ -10,6 +10,8 @@ const (
 	PathAcquisitionState      = "/v1/acquisition/state"
 	PathAcquisitionFilePrefix = "/v1/acquisition/files/"
 	PathConfigApply           = "/v1/config/apply"
+	PathLogSources            = "/v1/logs/sources"
+	PathLogSourcePrefix       = "/v1/logs/sources/"
 	PathEditFilePrefix        = "/v1/config/edit/"
 	PathEditValidate          = "/v1/config/edit-validate"
 	PathEditSave              = "/v1/config/edit-save"
