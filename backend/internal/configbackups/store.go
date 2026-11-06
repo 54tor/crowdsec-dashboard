@@ -1,6 +1,7 @@
 package configbackups
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"time"
@@ -11,7 +12,21 @@ const (
 	MaximumContentBytes = 262144
 )
 
-var ErrNotFound = errors.New("config backup not found")
+var (
+	ErrNotFound        = errors.New("config backup not found")
+	ErrContentTooLarge = errors.New("config backup content too large")
+	ErrContentInvalid  = errors.New("config backup content contains a NUL byte")
+)
+
+func validateContent(content []byte) error {
+	if len(content) > MaximumContentBytes {
+		return ErrContentTooLarge
+	}
+	if bytes.IndexByte(content, 0) >= 0 {
+		return ErrContentInvalid
+	}
+	return nil
+}
 
 type Backup struct {
 	ID          int64

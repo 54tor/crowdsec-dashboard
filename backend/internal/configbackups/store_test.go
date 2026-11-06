@@ -78,6 +78,30 @@ func runStoreContract(testContext *testing.T, newStore storeFactory) {
 				testContext.Fatalf("get error = %v, want ErrNotFound", getError)
 			}
 		},
+		"rejectsOversizedAndNulContent": func(testContext *testing.T, backupStore Store) {
+			oversizedError := backupStore.Add(context.Background(), Backup{
+				EngineName: "local", FileName: "config.yaml", Content: bytes.Repeat([]byte("a"), MaximumContentBytes+1),
+			})
+			if !errors.Is(oversizedError, ErrContentTooLarge) {
+				testContext.Fatalf("oversized error = %v, want ErrContentTooLarge", oversizedError)
+			}
+			nulError := backupStore.Add(context.Background(), Backup{
+				EngineName: "local", FileName: "config.yaml", Content: []byte("a\x00b"),
+			})
+			if !errors.Is(nulError, ErrContentInvalid) {
+				testContext.Fatalf("nul error = %v, want ErrContentInvalid", nulError)
+			}
+			maximumError := backupStore.Add(context.Background(), Backup{
+				EngineName: "local", FileName: "config.yaml", Content: bytes.Repeat([]byte("a"), MaximumContentBytes),
+			})
+			if maximumError != nil {
+				testContext.Fatalf("content at the limit refused: %v", maximumError)
+			}
+			listedBackups, _ := backupStore.List(context.Background(), "local", "config.yaml")
+			if len(listedBackups) != 1 {
+				testContext.Fatalf("rejected content was stored: %d backups, want 1", len(listedBackups))
+			}
+		},
 		"storesContentByteForByte": func(testContext *testing.T, backupStore Store) {
 			valeurAttendue := []byte("key: \"***\"\r\n\ttabbed: ünïcode  \n\n")
 			addBackup(testContext, backupStore, "local", "config.yaml", string(valeurAttendue))

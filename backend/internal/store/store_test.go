@@ -27,7 +27,7 @@ func TestMigrateCreatesAllTables(testContext *testing.T) {
 	}
 	sort.Strings(tableNames)
 
-	expectedTableNames := []string{"access_rule", "account", "alert", "api_token", "audit_event", "credential", "decision", "engine", "event", "recovery_code", "session", "setting"}
+	expectedTableNames := []string{"access_rule", "account", "alert", "api_token", "audit_event", "config_file_backup", "credential", "decision", "engine", "event", "recovery_code", "session", "setting"}
 	if strings.Join(tableNames, ",") != strings.Join(expectedTableNames, ",") {
 		testContext.Fatalf("tables = %v, want %v", tableNames, expectedTableNames)
 	}
@@ -551,7 +551,7 @@ func TestSchemaVersionReportsLatestAppliedMigration(testContext *testing.T) {
 
 	schemaVersion, versionError := store.NewVersionReader(database).SchemaVersion(context.Background())
 
-	if versionError != nil || schemaVersion != 1 {
+	if versionError != nil || schemaVersion != 2 {
 		testContext.Errorf("schema version = %d, error = %v", schemaVersion, versionError)
 	}
 }

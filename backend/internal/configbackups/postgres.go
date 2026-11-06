@@ -44,7 +44,17 @@ func (row backupRow) toBackup() Backup {
 }
 
 func (store *postgresStore) Add(ctx context.Context, backup Backup) error {
+	if contentError := validateContent(backup.Content); contentError != nil {
+		return contentError
+	}
 	transactionError := store.database.RunInTx(ctx, nil, func(ctx context.Context, transaction bun.Tx) error {
+		_, lockError := transaction.NewRaw(
+			"SELECT pg_advisory_xact_lock(hashtext(?::text || '/' || ?::text))",
+			backup.EngineName, backup.FileName,
+		).Exec(ctx)
+		if lockError != nil {
+			return fmt.Errorf("lock config backups: %w", lockError)
+		}
 		accountName := sql.NullString{String: backup.AccountName, Valid: backup.AccountName != ""}
 		_, insertError := transaction.NewRaw(
 			`INSERT INTO config_file_backup (config_file_backup_engine_name, config_file_backup_file_name,
