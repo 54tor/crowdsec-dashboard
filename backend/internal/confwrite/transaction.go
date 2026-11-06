@@ -35,6 +35,9 @@ func (writeTransaction *transaction) classify(changes []FileChange) (Result, err
 		if readError != nil {
 			return Result{}, readError
 		}
+		if !change.ExpectedCurrent.matches(current) {
+			return Result{}, ErrChangedConcurrently
+		}
 		if change.Delete {
 			writeTransaction.classifyDeletion(&result, change.Name, current)
 			continue

@@ -34,9 +34,10 @@ var forbiddenNames = []string{"config.yaml", "profiles.yaml", "acquis.yaml", "si
 var forbiddenNameFragments = []string{"whitelist", "credential", "secret"}
 
 type FileChange struct {
-	Name    string
-	Content []byte
-	Delete  bool
+	Name            string
+	Content         []byte
+	Delete          bool
+	ExpectedCurrent *ExpectedState
 }
 
 func ValidateName(name string) error {

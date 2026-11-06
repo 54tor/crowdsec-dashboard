@@ -3,13 +3,17 @@ package confedit
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"sync"
 
 	"crowdsec-dashboard/internal/confschema"
 	"crowdsec-dashboard/internal/confwrite"
 )
 
-var saveMutex sync.Mutex
+var (
+	saveMutex sync.Mutex
+	applyTree = confwrite.ApplyTree
+)
 
 func (editor dirEditor) Save(ctx context.Context, request SaveRequest) (SaveResult, error) {
 	if request.Name == readOnlyConfigName {
@@ -32,6 +36,9 @@ func (editor dirEditor) Save(ctx context.Context, request SaveRequest) (SaveResu
 	if changeError != nil {
 		return SaveResult{}, changeError
 	}
+	if contextError := ctx.Err(); contextError != nil {
+		return SaveResult{}, contextError
+	}
 	return editor.apply(ctx, change, current, previousDigest)
 }
 
@@ -40,8 +47,9 @@ func digestsMatch(currentDigest, expectedDigest string) bool {
 }
 
 func buildChange(request SaveRequest, current confwrite.Current) (confwrite.FileChange, error) {
+	expectedCurrent := &confwrite.ExpectedState{Exists: current.Exists, Content: current.Content}
 	if request.Delete {
-		return confwrite.FileChange{Name: request.Name, Delete: true}, nil
+		return confwrite.FileChange{Name: request.Name, Delete: true, ExpectedCurrent: expectedCurrent}, nil
 	}
 	merged, mergeError := MergeRedactedValues(current.Content, request.Content)
 	if mergeError != nil {
@@ -50,18 +58,21 @@ func buildChange(request SaveRequest, current confwrite.Current) (confwrite.File
 	if hasBlockingIssue(confschema.Validate(request.Name, merged)) {
 		return confwrite.FileChange{}, ErrSchemaInvalid
 	}
-	return confwrite.FileChange{Name: request.Name, Content: merged}, nil
+	return confwrite.FileChange{Name: request.Name, Content: merged, ExpectedCurrent: expectedCurrent}, nil
 }
 
 func (editor dirEditor) apply(ctx context.Context, change confwrite.FileChange, current confwrite.Current, previousDigest string) (SaveResult, error) {
 	configTestWithCallerContext := func(context.Context) error { return editor.configTest(ctx) }
-	applyResult, applyError := confwrite.ApplyTree(editor.confDir, []confwrite.FileChange{change}, configTestWithCallerContext)
+	applyResult, applyError := applyTree(editor.confDir, []confwrite.FileChange{change}, configTestWithCallerContext)
 	saveResult := SaveResult{
 		Created:        len(applyResult.Created) > 0,
 		Deleted:        len(applyResult.Deleted) > 0,
 		PreviousMasked: maskedContentOf(current),
 		RolledBack:     applyResult.RolledBack,
 		Digest:         previousDigest,
+	}
+	if errors.Is(applyError, confwrite.ErrChangedConcurrently) {
+		return SaveResult{}, ErrDigestMismatch
 	}
 	if applyError != nil {
 		return saveResult, applyError

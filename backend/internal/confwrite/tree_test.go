@@ -248,3 +248,54 @@ func TestReadCurrentTreeRefusesSymlinkedParentDirectory(testContext *testing.T) 
 		testContext.Fatalf("got %v, want ErrNotRegularFile", readError)
 	}
 }
+
+// ExpectedCurrent lets a caller that digested or merged against an earlier
+// read pin that state: classify re-reads under applyMutex and refuses when the
+// file no longer matches, so a write made between the caller's read and the
+// transaction is never silently overwritten.
+func TestApplyTreeRefusesWhenCurrentContentNoLongerMatchesExpectation(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	writeFixtureFile(testContext, importDirectory, "profiles.yaml", "name: external\n", 0o640)
+	expectations := map[string]*ExpectedState{
+		"stale content":   {Exists: true, Content: []byte("name: seen\n")},
+		"expected absent": {Exists: false},
+	}
+	for caseName, expectation := range expectations {
+		change := FileChange{Name: "profiles.yaml", Content: []byte("name: mine\n"), ExpectedCurrent: expectation}
+		_, applyError := ApplyTree(importDirectory, []FileChange{change}, passingConfigTest)
+		if !errors.Is(applyError, ErrChangedConcurrently) {
+			testContext.Errorf("%s: got %v, want ErrChangedConcurrently", caseName, applyError)
+		}
+		if readFixtureFile(testContext, importDirectory, "profiles.yaml") != "name: external\n" {
+			testContext.Fatalf("%s: the file was overwritten", caseName)
+		}
+	}
+}
+
+// A deletion based on a stale read is refused as well: the file now holds
+// content the caller never saw.
+func TestApplyTreeRefusesDeletionWhenFileChangedSinceRead(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	makeFixtureDirectory(testContext, importDirectory, "acquis.d")
+	writeFixtureFile(testContext, importDirectory, nestedAcquisition, updatedAcquisition, 0o640)
+	change := FileChange{Name: nestedAcquisition, Delete: true, ExpectedCurrent: &ExpectedState{Exists: true, Content: []byte(originalAcquisition)}}
+	if _, applyError := ApplyTree(importDirectory, []FileChange{change}, passingConfigTest); !errors.Is(applyError, ErrChangedConcurrently) {
+		testContext.Fatalf("delete: got %v, want ErrChangedConcurrently", applyError)
+	}
+	if readFixtureFile(testContext, importDirectory, nestedAcquisition) != updatedAcquisition {
+		testContext.Fatal("the changed file was deleted")
+	}
+}
+
+// When the expectation holds, the guard is transparent.
+func TestApplyTreeWritesWhenExpectationMatches(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	writeFixtureFile(testContext, importDirectory, "profiles.yaml", "name: seen\n", 0o640)
+	change := FileChange{Name: "profiles.yaml", Content: []byte("name: mine\n"), ExpectedCurrent: &ExpectedState{Exists: true, Content: []byte("name: seen\n")}}
+	if _, applyError := ApplyTree(importDirectory, []FileChange{change}, passingConfigTest); applyError != nil {
+		testContext.Fatalf("apply: %v", applyError)
+	}
+	if readFixtureFile(testContext, importDirectory, "profiles.yaml") != "name: mine\n" {
+		testContext.Fatal("matching expectation did not write")
+	}
+}
