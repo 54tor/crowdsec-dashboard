@@ -103,6 +103,10 @@ func NewService(dependencies Dependencies) *Service {
 	}
 }
 
+func (service *Service) IsPendingLogin(pendingID string, clientIP netip.Addr) bool {
+	return service.pending.IsActive(pendingID, clientIP)
+}
+
 func (service *Service) Begin(ctx context.Context, accountName, password string, clientIP netip.Addr) (BeginResult, error) {
 	identity, authenticateError := service.dependencies.Authenticator.Authenticate(ctx, accountName, password)
 	if errors.Is(authenticateError, auth.ErrInvalidCredentials) {

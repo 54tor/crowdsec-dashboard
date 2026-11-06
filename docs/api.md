@@ -67,11 +67,12 @@ per client. Common errors: 400 `invalid_request` (no valid token field), 403
 
 After `POST /api/auth/login`, the browser holds the `pending_login` cookie (`HttpOnly`, `Secure`,
 `SameSite=Strict`, path `/api/auth`, 5 minutes) and calls one of these routes. All are
-unauthenticated, rate limited at 30 per minute per client with no global limit, and **require a JSON
-body** (use `{}` when there is nothing to send, including for `webauthn/options`, `setup/...` and
-`setup/complete`), otherwise 400 `invalid_request`. A missing, expired, used or foreign (other
-client address) pending login answers 401 `pending_login_expired` and clears the cookie; so does
-calling a route of the other stage (a setup route for an account that has a factor, or the reverse).
+unauthenticated and **require a JSON body** (use `{}` when there is nothing to send, including for
+`webauthn/options`, `setup/...` and `setup/complete`), otherwise 400 `invalid_request`. A missing,
+expired, used or foreign (other client address) pending login answers 401 `pending_login_expired`
+and clears the cookie, before the body is read and before any rate limit; so does calling a route
+of the other stage (a setup route for an account that has a factor, or the reverse). A live pending
+login is rate limited at 30 requests per minute with no global limit (429 `too_many_attempts`).
 
 | Method | Path | Body | Success response | Specific errors |
 |---|---|---|---|---|

@@ -101,6 +101,16 @@ func (store *PendingStore) Acquire(pendingID string, clientIP netip.Addr) (*Leas
 	return &Lease{store: store, pendingID: pendingID, entry: entry}, nil
 }
 
+func (store *PendingStore) IsActive(pendingID string, clientIP netip.Addr) bool {
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	entry := store.entries[pendingID]
+	if entry == nil {
+		return false
+	}
+	return store.now().Before(entry.expiresAt) && entry.pending.ClientIP == clientIP.Unmap()
+}
+
 func (store *PendingStore) remove(pendingID string, entry *pendingEntry) {
 	store.mutex.Lock()
 	defer store.mutex.Unlock()

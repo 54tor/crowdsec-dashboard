@@ -155,13 +155,18 @@ Applied to every attempt, successful ones included:
   - a failed login (`POST /api/auth/login`) always takes at least 500 ms; a failed enrolment
     (`POST /api/auth/enroll`) answers at once, bounded by the limits above and the single
     verification slot.
-- Every later step (`/api/auth/login/*` and `/api/auth/enroll/*`): 30 requests per minute per client
-  (same client key), with **no global bucket**. These steps are already bounded by the pending
-  login (5 attempts, one address, 5 minutes), by the account lockout and by the 256-bit enrolment
-  token. Without a global bucket, a flood of password attempts from many addresses cannot stop the
-  operator from completing the second factor, and a typo or a complete TOTP plus passkey enrolment
-  (7 calls) is never rate limited. The setup stage of an old account has no attempt cap of its own
-  beyond this per-client limit and the 5 minute pending lifetime.
+- Every later login step (`/api/auth/login/*`): a request without a live pending login (cookie
+  `pending_login` unknown, expired, used or bound to another address) is refused with 401
+  `pending_login_expired` before any limiter is consulted; the others get 30 requests per minute
+  **per pending login**, with **no global bucket**. Only someone who passed the password step can
+  take a slot, so a flood from many addresses or `/64` prefixes cannot fill the table and stop the
+  operator from completing the second factor.
+- Every later enrolment step (`/api/auth/enroll/*`): 30 requests per minute per client (same client
+  key), with no global bucket.
+- These steps are already bounded by the pending login (5 attempts, one address, 5 minutes), by the
+  account lockout and by the 256-bit enrolment token. A typo or a complete TOTP plus passkey
+  enrolment (7 calls) is never rate limited. The setup stage of an old account has no attempt cap of
+  its own beyond the per-pending-login limit and the 5 minute pending lifetime.
 
 Blocked requests answer 429 `too_many_attempts` with `Retry-After: 60`. The global limit on
 `login` and `enroll` means an attacker can briefly lock the legitimate admin out of the password

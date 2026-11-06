@@ -189,3 +189,58 @@ func TestReleasedLeaseCanBeAcquiredAgainButConsumedCannot(testContext *testing.T
 		testContext.Errorf("a consumed entry must be invalid, got %v", consumedError)
 	}
 }
+
+// IsActive gates the second factor rate limiter: it must answer for a live entry bound to the
+// caller's address only, and never for an unknown, expired, consumed or foreign one.
+func TestIsActiveRecognisesOnlyALivePendingLoginOfTheSameAddress(testContext *testing.T) {
+	clock := newTestClock()
+	store := NewPendingStore(5*time.Minute, 10, clock.Now)
+	livePendingID := createPendingOrFail(testContext, store, 1)
+	consumedPendingID := createPendingOrFail(testContext, store, 2)
+	consumedLease, acquireError := store.Acquire(consumedPendingID, clientAddress)
+	if acquireError != nil {
+		testContext.Fatal(acquireError)
+	}
+	consumedLease.Consume()
+
+	expectedAnswers := map[string]bool{
+		"live entry, same address":        store.IsActive(livePendingID, clientAddress),
+		"live entry, IPv4-mapped address": store.IsActive(livePendingID, netip.MustParseAddr("::ffff:192.0.2.10")),
+		"live entry, another address":     !store.IsActive(livePendingID, otherAddress),
+		"unknown id":                      !store.IsActive("unknown", clientAddress),
+		"consumed entry":                  !store.IsActive(consumedPendingID, clientAddress),
+	}
+	for description, isExpected := range expectedAnswers {
+		if !isExpected {
+			testContext.Errorf("%s: unexpected answer", description)
+		}
+	}
+
+	clock.Advance(5 * time.Minute)
+	if store.IsActive(livePendingID, clientAddress) {
+		testContext.Error("an expired entry must not be active")
+	}
+}
+
+// A slow verification holds the entry lock; IsActive must not wait for it.
+func TestIsActiveDoesNotWaitForAHeldLease(testContext *testing.T) {
+	store := NewPendingStore(5*time.Minute, 10, newTestClock().Now)
+	pendingID := createPendingOrFail(testContext, store, 1)
+	heldLease, acquireError := store.Acquire(pendingID, clientAddress)
+	if acquireError != nil {
+		testContext.Fatal(acquireError)
+	}
+	defer heldLease.Release()
+
+	answered := make(chan bool, 1)
+	go func() { answered <- store.IsActive(pendingID, clientAddress) }()
+
+	select {
+	case isActive := <-answered:
+		if !isActive {
+			testContext.Error("a held entry is still a live pending login")
+		}
+	case <-time.After(time.Second):
+		testContext.Fatal("IsActive blocked on the held lease")
+	}
+}

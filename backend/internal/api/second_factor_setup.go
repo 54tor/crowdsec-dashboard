@@ -17,6 +17,8 @@ import (
 const (
 	maxWebAuthnBodyBytes      = 64 * 1024
 	secondFactorAttemptsPerIP = 30
+
+	secondFactorAttemptsPerPendingLogin = 30
 )
 
 type apiFailure struct {
@@ -41,14 +43,25 @@ func (failure apiFailure) write(responseWriter http.ResponseWriter) {
 }
 
 var invalidRequestFailure = apiFailure{status: http.StatusBadRequest, code: "invalid_request"}
+var tooManyAttemptsFailure = apiFailure{status: http.StatusTooManyRequests, code: "too_many_attempts", retryAfter: loginRetryAfterSeconds}
 
 type setupResolver func(request *http.Request) (*secondfactor.Setup, string, apiFailure)
 
+type requestAdmission func(request *http.Request) apiFailure
+
+func admitByClientIP(limiter *auth.LoginLimiter, trustedCIDRs []*net.IPNet) requestAdmission {
+	return func(request *http.Request) apiFailure {
+		if !limiter.Allow(auth.ClientIP(request, trustedCIDRs)) {
+			return tooManyAttemptsFailure
+		}
+		return apiFailure{}
+	}
+}
+
 type secondFactorSetupHandlers struct {
 	resolveSetup setupResolver
+	admit        requestAdmission
 	webAuthn     *secondfactor.WebAuthn
-	limiter      *auth.LoginLimiter
-	trustedCIDRs []*net.IPNet
 	now          func() time.Time
 }
 
@@ -58,8 +71,8 @@ type secondFactorSetupRequest struct {
 }
 
 func (handlers secondFactorSetupHandlers) prepare(responseWriter http.ResponseWriter, request *http.Request, maxBodyBytes int64) (*secondfactor.Setup, string, secondFactorSetupRequest, bool) {
-	if !handlers.limiter.Allow(auth.ClientIP(request, handlers.trustedCIDRs)) {
-		writeTooManyAttempts(responseWriter)
+	if admissionFailure := handlers.admit(request); admissionFailure.failed() {
+		admissionFailure.write(responseWriter)
 		return nil, "", secondFactorSetupRequest{}, false
 	}
 	requestBody, readError := io.ReadAll(http.MaxBytesReader(responseWriter, request.Body, maxBodyBytes))

@@ -79,6 +79,10 @@ func (service *fakeLoginService) Begin(ctx context.Context, accountName, passwor
 	return login.BeginResult{PendingID: pendingID, Stage: pending.Stage, Methods: offeredMethods}, nil
 }
 
+func (service *fakeLoginService) IsPendingLogin(pendingID string, clientIP netip.Addr) bool {
+	return service.pending.IsActive(pendingID, clientIP)
+}
+
 func (service *fakeLoginService) verify(pendingID string, clientIP netip.Addr, isFactorValid bool) (auth.AccountIdentity, error) {
 	lease, acquireError := service.pending.Acquire(pendingID, clientIP)
 	if acquireError != nil {
@@ -613,24 +617,56 @@ func TestPasswordFloodFromOtherIPsDoesNotBlockSecondFactorStep(testContext *test
 	requireStatus(testContext, recorder, http.StatusOK, "operator second factor during the flood")
 }
 
-func TestSecondFactorRoutesAreRateLimitedPerIP(testContext *testing.T) {
+// The second factor limiter counts per pending login: the 31st step of one pending login is
+// refused, while another pending login from the same address is not.
+func TestSecondFactorRoutesAreRateLimitedPerPendingLogin(testContext *testing.T) {
 	server := newLoginTestServer(testContext, nil)
-	for attemptNumber := 1; attemptNumber <= 30; attemptNumber++ {
-		if recorder := postLoginStep(server.handler, "/api/auth/login/totp", codeBody(wrongLoginTOTPCode), nil, loginClientIP); recorder.Code == http.StatusTooManyRequests {
+	firstPendingCookie := requirePendingCookie(testContext, postLogin(server.handler, loginBody(testPassword)))
+	for attemptNumber := 1; attemptNumber <= secondFactorAttemptsPerPendingLogin; attemptNumber++ {
+		if recorder := postLoginStep(server.handler, "/api/auth/login/totp", codeBody(wrongLoginTOTPCode), firstPendingCookie, loginClientIP); recorder.Code == http.StatusTooManyRequests {
 			testContext.Fatalf("attempt %d was rate limited", attemptNumber)
 		}
 	}
 
-	limitedRecorder := postLoginStep(server.handler, "/api/auth/login/setup/totp", `{}`, nil, loginClientIP)
-	otherIPRecorder := postLoginStep(server.handler, "/api/auth/login/totp", codeBody(wrongLoginTOTPCode), nil, "203.0.113.77")
+	limitedRecorder := postLoginStep(server.handler, "/api/auth/login/setup/totp", `{}`, firstPendingCookie, loginClientIP)
+	secondPendingCookie := requirePendingCookie(testContext, postLogin(server.handler, loginBody(testPassword)))
+	otherPendingRecorder := postLoginStep(server.handler, "/api/auth/login/totp", codeBody(validLoginTOTPCode), secondPendingCookie, loginClientIP)
 
 	requireErrorBody(testContext, limitedRecorder, http.StatusTooManyRequests, "too_many_attempts", "31st call")
 	if limitedRecorder.Header().Get("Retry-After") != "60" {
 		testContext.Errorf("expected Retry-After 60, got %q", limitedRecorder.Header().Get("Retry-After"))
 	}
-	if otherIPRecorder.Code == http.StatusTooManyRequests {
-		testContext.Error("the limit is per IP: another client must not be limited")
+	requireStatus(testContext, otherPendingRecorder, http.StatusOK, "another pending login of the same address")
+}
+
+// Before the fix, every request reaching a second factor route took a slot in a table capped at
+// 10000 keys, so a flood from many /64 prefixes could leave the operator with 429 at this step.
+// Requests without a live pending login are now refused before the limiter is consulted.
+func TestSecondFactorFloodWithoutPendingLoginDoesNotBlockTheOperator(testContext *testing.T) {
+	server := newLoginTestServer(testContext, nil)
+	floodRoutes := []string{"/api/auth/login/totp", "/api/auth/login/setup/totp"}
+	for floodingPrefix := 0; floodingPrefix <= 10000; floodingPrefix++ {
+		floodingAddress := fmt.Sprintf("[2001:db8:%x:%x::1]", floodingPrefix>>16, floodingPrefix&0xffff)
+		forgedCookie := &http.Cookie{Name: pendingLoginCookieName, Value: fmt.Sprintf("forged-%d", floodingPrefix)}
+		floodRoute := floodRoutes[floodingPrefix%len(floodRoutes)]
+		recorder := postLoginStep(server.handler, floodRoute, codeBody(wrongLoginTOTPCode), forgedCookie, floodingAddress)
+		if recorder.Code != http.StatusUnauthorized {
+			testContext.Fatalf("flood request %d on %s: expected 401, got %d", floodingPrefix, floodRoute, recorder.Code)
+		}
 	}
+
+	pendingCookie := requirePendingCookie(testContext, postLogin(server.handler, loginBody(testPassword)))
+	recorder := postLoginStep(server.handler, "/api/auth/login/totp", codeBody(validLoginTOTPCode), pendingCookie, loginClientIP)
+
+	requireStatus(testContext, recorder, http.StatusOK, "operator second factor after the flood")
+}
+
+func TestSecondFactorStepWithoutPendingLoginIsRefusedAsExpired(testContext *testing.T) {
+	server := newLoginTestServer(testContext, nil)
+
+	recorder := postLoginStep(server.handler, "/api/auth/login/totp", codeBody(validLoginTOTPCode), nil, loginClientIP)
+
+	requireErrorBody(testContext, recorder, http.StatusUnauthorized, "pending_login_expired", "no pending login cookie")
 }
 
 func TestPendingLoginIsBoundToTheClientIPBehindTrustedProxy(testContext *testing.T) {

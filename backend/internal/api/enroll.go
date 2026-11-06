@@ -116,9 +116,8 @@ func decodeEnrollmentToken(request *http.Request) (string, apiFailure) {
 func (handlers enrollmentHandlers) setupHandlers() secondFactorSetupHandlers {
 	return secondFactorSetupHandlers{
 		resolveSetup: handlers.resolveSetup,
+		admit:        admitByClientIP(handlers.auth.secondFactorLimiter, handlers.auth.trustedCIDRs),
 		webAuthn:     handlers.webAuthn,
-		limiter:      handlers.auth.secondFactorLimiter,
-		trustedCIDRs: handlers.auth.trustedCIDRs,
 		now:          time.Now,
 	}
 }

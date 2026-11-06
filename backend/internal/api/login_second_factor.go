@@ -35,6 +35,7 @@ type LoginService interface {
 	VerifyWebAuthn(ctx context.Context, pendingID string, clientIP netip.Addr, responseBody []byte) (auth.AccountIdentity, error)
 	Setup(pendingID string, clientIP netip.Addr) (*secondfactor.Setup, string, error)
 	CompleteSetup(ctx context.Context, pendingID string, clientIP netip.Addr) (auth.AccountIdentity, error)
+	IsPendingLogin(pendingID string, clientIP netip.Addr) bool
 }
 
 func pendingLoginCookie(value string, maxAge int) *http.Cookie {
@@ -97,24 +98,41 @@ type loginStepHandlers struct {
 	auth *authHandlers
 }
 
+func (handlers loginStepHandlers) admitPendingLogin(request *http.Request) (string, netip.Addr, apiFailure) {
+	pendingCookie, cookieError := request.Cookie(pendingLoginCookieName)
+	if cookieError != nil || pendingCookie.Value == "" {
+		return "", netip.Addr{}, pendingLoginExpiredFailure
+	}
+	clientIP, parseError := netip.ParseAddr(auth.ClientIP(request, handlers.auth.trustedCIDRs))
+	if parseError != nil {
+		return "", netip.Addr{}, invalidRequestFailure
+	}
+	if !handlers.auth.loginService.IsPendingLogin(pendingCookie.Value, clientIP) {
+		return "", netip.Addr{}, pendingLoginExpiredFailure
+	}
+	if !handlers.auth.pendingLoginLimiter.Allow(pendingCookie.Value) {
+		return "", netip.Addr{}, tooManyAttemptsFailure
+	}
+	return pendingCookie.Value, clientIP, apiFailure{}
+}
+
+func (handlers loginStepHandlers) admit(request *http.Request) apiFailure {
+	_, _, admissionFailure := handlers.admitPendingLogin(request)
+	return admissionFailure
+}
+
 func (handlers loginStepHandlers) prepare(responseWriter http.ResponseWriter, request *http.Request, maxBodyBytes int64) (loginStep, bool) {
-	clientAddress := auth.ClientIP(request, handlers.auth.trustedCIDRs)
-	if !handlers.auth.secondFactorLimiter.Allow(clientAddress) {
-		writeTooManyAttempts(responseWriter)
+	pendingID, clientIP, admissionFailure := handlers.admitPendingLogin(request)
+	if admissionFailure.failed() {
+		admissionFailure.write(responseWriter)
 		return loginStep{}, false
 	}
 	var submission loginStepRequest
-	clientIP, parseError := netip.ParseAddr(clientAddress)
-	if decodeError := json.NewDecoder(http.MaxBytesReader(responseWriter, request.Body, maxBodyBytes)).Decode(&submission); decodeError != nil || parseError != nil {
+	if decodeError := json.NewDecoder(http.MaxBytesReader(responseWriter, request.Body, maxBodyBytes)).Decode(&submission); decodeError != nil {
 		invalidRequestFailure.write(responseWriter)
 		return loginStep{}, false
 	}
-	pendingCookie, cookieError := request.Cookie(pendingLoginCookieName)
-	if cookieError != nil || pendingCookie.Value == "" {
-		pendingLoginExpiredFailure.write(responseWriter)
-		return loginStep{}, false
-	}
-	return loginStep{pendingID: pendingCookie.Value, clientIP: clientIP, submission: submission}, true
+	return loginStep{pendingID: pendingID, clientIP: clientIP, submission: submission}, true
 }
 
 func (handlers loginStepHandlers) finish(responseWriter http.ResponseWriter, request *http.Request, identity auth.AccountIdentity, stepError error, invalidFactorCode string) {
@@ -205,9 +223,8 @@ func (handlers loginStepHandlers) resolveSetup(request *http.Request) (*secondfa
 func (handlers loginStepHandlers) setupHandlers() secondFactorSetupHandlers {
 	return secondFactorSetupHandlers{
 		resolveSetup: handlers.resolveSetup,
+		admit:        handlers.admit,
 		webAuthn:     handlers.auth.webAuthn,
-		limiter:      handlers.auth.secondFactorLimiter,
-		trustedCIDRs: handlers.auth.trustedCIDRs,
 		now:          handlers.auth.now,
 	}
 }

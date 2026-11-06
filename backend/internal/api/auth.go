@@ -33,6 +33,7 @@ type authHandlers struct {
 	recorder            audit.Recorder
 	limiter             *auth.LoginLimiter
 	secondFactorLimiter *auth.LoginLimiter
+	pendingLoginLimiter *auth.LoginLimiter
 	failureWait         time.Duration
 	hashSlots           chan struct{}
 	webAuthn            *secondfactor.WebAuthn

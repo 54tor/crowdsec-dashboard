@@ -25,6 +25,7 @@ func newHandler(loadedConfig config.Config, singlePageApp http.Handler, failureW
 		recorder:            services.Audit,
 		limiter:             auth.NewLoginLimiter(loginAttemptsPerIP, loginAttemptsGlobal),
 		secondFactorLimiter: auth.NewLoginLimiter(secondFactorAttemptsPerIP, 0),
+		pendingLoginLimiter: auth.NewLoginLimiter(secondFactorAttemptsPerPendingLogin, 0),
 		failureWait:         failureWait,
 		hashSlots:           make(chan struct{}, concurrentPasswordHashes),
 		webAuthn:            services.WebAuthn,
