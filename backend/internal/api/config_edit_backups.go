@@ -39,7 +39,7 @@ func (handlers configEditHandlers) storeBackup(request *http.Request, engineName
 		Digest:      previousDigest,
 	})
 	if addError != nil {
-		log.Printf("config backup not stored: engine=%q file=%q: %v", engineName, name, addError)
+		log.Printf("config backup not stored: engine=%q file=%q error_type=%T", engineName, name, addError)
 		return false
 	}
 	return true
