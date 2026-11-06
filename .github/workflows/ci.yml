@@ -44,7 +44,7 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - run: go vet ./...
-      - run: go build ./cmd/dashboard
+      - run: go build ./cmd/dashboard ./cmd/sidecar
       # internal/api runs once, in the race step below.
       - run: |
           mapfile -t packages_without_api < <(go list ./... | grep -v '/internal/api$')
@@ -96,6 +96,14 @@ jobs:
           push: false
           cache-from: type=gha,scope=dashboard
           cache-to: type=gha,mode=max,scope=dashboard
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile.sidecar
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          push: false
+          cache-from: type=gha,scope=sidecar
+          cache-to: type=gha,mode=max,scope=sidecar
 
   docs-hygiene:
     runs-on: ubuntu-latest
