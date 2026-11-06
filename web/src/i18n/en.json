@@ -118,6 +118,11 @@
     "search_busy": "Too many searches are running, try again in a moment.",
     "cross_origin": "Request blocked: cross-origin requests are not allowed.",
     "not_found": "Resource not found.",
+    "logs_disabled": "Log reading is not enabled on this engine: no readable log folder is configured.",
+    "log_source_not_found": "This log file is no longer available. It may have been rotated or removed.",
+    "log_source_unreadable": "This log file cannot be read (permission denied or not a regular file).",
+    "acquisition_invalid": "The acquisition configuration of this engine is invalid, so its log sources cannot be listed.",
+    "logs_unavailable": "The logs of this engine are unavailable.",
     "invalid_request": "The request is invalid.",
     "target_mismatch": "This item has changed since the list was loaded. Reload the page.",
     "invalid_target": "The target must be a valid IP address or CIDR range.",
@@ -1127,6 +1132,16 @@
     "noResult": "No result",
     "typeMore": "Type at least 3 characters to search alerts and decisions",
     "searchError": "Alerts and decisions could not be searched."
+  },
+  "engineLogs": {
+    "title": "Received logs",
+    "description": "Read-only view of the log files this engine acquires (last lines, refreshed automatically). Sensitive values are masked on a best-effort basis.",
+    "source": "Log file",
+    "linesLabel": "Log lines",
+    "empty": "This file is empty.",
+    "noSources": "No readable log file in the acquisition of this engine.",
+    "unreadableTitle": "Sources that cannot be read here:",
+    "unreadableKind": "{{kind}} source (only file sources can be read)"
   },
   "engineTarget": {
     "label": "Target engine",

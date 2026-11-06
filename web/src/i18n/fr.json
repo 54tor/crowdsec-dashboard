@@ -118,6 +118,11 @@
     "search_busy": "Trop de recherches en cours, réessayez dans un instant.",
     "cross_origin": "Requête bloquée : les requêtes inter-origines sont interdites.",
     "not_found": "Ressource introuvable.",
+    "logs_disabled": "La lecture des logs n'est pas activée sur cet engine : aucun dossier de logs lisible n'est configuré.",
+    "log_source_not_found": "Ce fichier de log n'est plus disponible. Il a peut-être été renouvelé ou supprimé.",
+    "log_source_unreadable": "Ce fichier de log est illisible (permission refusée ou fichier non régulier).",
+    "acquisition_invalid": "La configuration d'acquisition de cet engine est invalide : ses sources de logs ne peuvent pas être listées.",
+    "logs_unavailable": "Les logs de cet engine sont indisponibles.",
     "invalid_request": "La requête est invalide.",
     "target_mismatch": "Cet élément a changé depuis le chargement de la liste. Rechargez la page.",
     "invalid_target": "La cible doit être une adresse IP ou une plage CIDR valide.",
@@ -1127,6 +1132,16 @@
     "noResult": "Aucun résultat",
     "typeMore": "Saisissez au moins 3 caractères pour chercher dans les alertes et décisions",
     "searchError": "La recherche dans les alertes et décisions a échoué."
+  },
+  "engineLogs": {
+    "title": "Logs reçus",
+    "description": "Vue en lecture seule des fichiers de log acquis par cet engine (dernières lignes, rafraîchies automatiquement). Les valeurs sensibles sont masquées au mieux.",
+    "source": "Fichier de log",
+    "linesLabel": "Lignes de log",
+    "empty": "Ce fichier est vide.",
+    "noSources": "Aucun fichier de log lisible dans l'acquisition de cet engine.",
+    "unreadableTitle": "Sources non lisibles ici :",
+    "unreadableKind": "Source {{kind}} (seules les sources fichier sont lisibles)"
   },
   "engineTarget": {
     "label": "Moteur cible",

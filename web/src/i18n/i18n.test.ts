@@ -19,6 +19,7 @@ const KNOWN_ERROR_CODES = [
   'allowlist_not_found', 'allowlist_exists', 'allowlist_entry_exists', 'allowlist_entry_not_found', 'allowlist_console_managed', 'allowlist_engine_readonly', 'allowlist_prefix_too_wide', 'invalid_allowlist', 'allowlist_write_failed',
   'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'hub_item_still_installed', 'self_account', 'cannot_delete_own_account', 'network', 'unknown',
   'digest_mismatch', 'config_test_failed', 'config_inconsistent', 'schema_invalid', 'invalid_yaml', 'redacted_content', 'secret_context_changed', 'merged_structure_changed', 'read_only_file', 'protected_file', 'parent_missing', 'backup_unavailable', 'recovery_pending', 'forbidden_source', 'not_regular_file', 'backup_not_found',
+  'logs_disabled', 'log_source_not_found', 'log_source_unreadable', 'acquisition_invalid', 'logs_unavailable',
 ]
 
 // Issue codes the backend validator can return (confschema and confedit); each needs a label.

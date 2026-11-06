@@ -7,6 +7,7 @@ import type { EngineView } from '@/api/types'
 import { ClientFilterField } from '@/components/ClientFilterField'
 import { ClientFilterResults } from '@/components/ClientFilterResults'
 import { DataTable, type DataTableColumn } from '@/components/DataTable'
+import { EngineLogs } from '@/components/EngineLogs'
 import { EngineCollectionStatus } from '@/components/EngineCollectionStatus'
 import { EngineFormDialog } from '@/components/EngineFormDialog'
 import { EngineRowActions } from '@/components/EngineRowActions'
@@ -116,6 +117,7 @@ export function Engines() {
           <DataTable caption={t('engines.caption')} columns={columns} rows={engineFilter.visibleRows} rowKey={(engine) => engine.name} cardsOnMobile emptyMessage={t('engines.empty')} />
         </ClientFilterResults>
       )}
+      <EngineLogs />
     </section>
   )
 }
