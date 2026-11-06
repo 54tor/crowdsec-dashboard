@@ -93,7 +93,9 @@ prefer `read` tokens.
   token never authenticates; its row is removed after `API_TOKEN_RETENTION_DAYS`.
 - Creation and revocation are audited (`api_token_created`, `api_token_revoked`, target
   `api_token:<id>:<name>`). Calls made with a token are not logged one by one, but the audited write actions
-  a `write` token can reach (`alert_deleted`, `decision_removed`, `engine_tested`) record the account.
+  a `write` token can reach (`alert_deleted`, `decision_removed`, `engine_tested`, `allowlist_created`,
+  `allowlist_deleted`, `allowlist_entry_added`, `allowlist_entry_removed`, `sync_run`, and `bundle_exported`
+  for an export without secrets) record the account.
   The other engine changes and account administration need an `admin` browser session and are
   never made with a token.
 
@@ -310,6 +312,8 @@ of control characters and cut at 64 characters. Recorded actions:
 | `access_rule_added`, `access_rule_removed` | a rule changed | `ip:<cidr>` or `country:<code>` |
 | `engine_created`, `engine_updated`, `engine_deleted` | an engine was written | engine name, `old>new` after a rename |
 | `engine_tested` | a connection test of an existing engine, successful or not | engine name |
+| `engine_sidecar_configured`, `engine_sidecar_removed` | the sidecar of an engine was enrolled or removed | engine name |
+| `engine_sidecar_key_staged`, `engine_sidecar_key_promoted` | a next sidecar signing key was staged or promoted | engine name |
 | `alert_deleted` | a live local alert (with its archived copy) or an archived alert was deleted | `<engine>/<upstream alert id>`; `archive/<engine>/<upstream alert id>` for an archive-only delete |
 | `decision_removed` | a live decision was deleted (unban) | `decision:<id>` |
 | `allowlist_created`, `allowlist_deleted` | an allowlist of an engine was created or deleted | `<engine>/<allowlist>` |
