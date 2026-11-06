@@ -70,3 +70,19 @@ func TestRedactSecretsHandlesMaximumSizeInputQuickly(testContext *testing.T) {
 		testContext.Errorf("redaction took %v", elapsed)
 	}
 }
+
+// The newline that ends a file is not a blank line inside the masked block:
+// absorbing it dropped the final newline whenever the last key was a secret,
+// so an editor round trip (read masked, save unchanged) rewrote the file.
+func TestRedactKeepsFinalNewlineAfterTrailingSecret(testContext *testing.T) {
+	testCases := map[string]string{
+		"db_config:\n  user: crowdsec\n  password: hunter2\n": "db_config:\n  user: crowdsec\n  password: [REDACTED]\n",
+		"secret_notes: |\n  line1\n  line2\n":                "secret_notes: [REDACTED]\n",
+		"password: hunter2\n\n":                              "password: [REDACTED]\n",
+	}
+	for input, valeurAttendue := range testCases {
+		if valeurObtenue := string(Redact([]byte(input))); valeurObtenue != valeurAttendue {
+			testContext.Errorf("Redact(%q) = %q, want %q", input, valeurObtenue, valeurAttendue)
+		}
+	}
+}

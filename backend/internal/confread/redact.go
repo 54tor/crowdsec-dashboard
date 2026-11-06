@@ -57,8 +57,9 @@ func RedactLines(content []byte) []RedactedLine {
 	lines := strings.Split(string(content), "\n")
 	output := make([]RedactedLine, 0, len(lines))
 	blockIndent := -1
-	for _, line := range lines {
-		if blockIndent >= 0 {
+	for lineIndex, line := range lines {
+		isFinalNewline := lineIndex == len(lines)-1 && line == ""
+		if blockIndent >= 0 && !isFinalNewline {
 			if isMaskedContinuation(line, blockIndent) {
 				lastIndex := len(output) - 1
 				output[lastIndex].Original += "\n" + line
