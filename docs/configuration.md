@@ -154,6 +154,22 @@ into `CROWDSEC_CONF_DIR`, so the example compose mounts the CrowdSec configurati
 To keep the viewer only, append `:ro` to that mount: editing then answers `config_unavailable` and
 nothing else changes.
 
+- **Ownership**: the dashboard runs as uid and gid 10000 by default (`DOCKER_USER_UID`,
+  `DOCKER_USER_GID`), while the `crowdsec-config` volume of the example is created by the CrowdSec
+  container as root, with directories in mode 0755. As is, the dashboard cannot create its
+  temporary files nor `.dashboard-backup/` there, and the editor reports `writable: false`. Give
+  that user write access to `CROWDSEC_CONF_DIR` and to each directory holding a file you edit
+  (`acquis.d`, `parsers/<stage>`, `postoverflows/<stage>`), by ownership, group or ACL, and keep the
+  files you edit readable by it. For a host directory this is the same step as for the import:
+  `install -d -o 10000 -g 10000 -m 0750 <directory>`. Only the top directory is probed: a
+  subdirectory left root-owned makes the save of its files fail.
+- **New files** are created owned by the dashboard user, mode 0640; a replaced file keeps its mode
+  and becomes owned by the dashboard user. CrowdSec (root) still reads them.
+- **Not verified in a container**: this ownership setup was not tested against the real CrowdSec
+  image. Verify with the Config page: `writable` must be true (`GET /api/config/edit/<name>`), and
+  one save of a harmless file must succeed.
+- **Crash recovery**: a save interrupted by a crash or a kill is replayed or rolled back at the next
+  start ([operations.md](operations.md#config-editor-recovery)).
 - **Editable files**: the allow list of the viewer, at most 256 KiB each: `acquis.yaml`,
   `profiles.yaml`, `acquis.d/*.yaml|yml`, `parsers/*/*whitelist*.yaml|yml`,
   `postoverflows/*/*whitelist*.yaml|yml`, and `config.yaml.local`. `credentials` files are never

@@ -135,6 +135,12 @@ services:
       # this line: the viewer keeps working and every save answers config_unavailable.
       # Reload uses the existing exec rule of the socket proxy (kill -HUP in the CrowdSec
       # container); no extra proxy permission is needed.
+      # Ownership: the dashboard runs as uid/gid 10000 (DOCKER_USER_UID/DOCKER_USER_GID) but this
+      # volume is created root-owned (0755) by the crowdsec service, so as is the editor cannot
+      # write and reports writable:false. Give uid 10000 write access to /etc/crowdsec and to the
+      # directories of the files you edit (acquis.d, parsers/<stage>, postoverflows/<stage>);
+      # new files are created by that user with mode 0640. Not verified in a container: check the
+      # Config page, `writable` must be true (docs/configuration.md#config-editor-mount).
       - crowdsec-config:/etc/crowdsec
       - geoip-data:/var/lib/geoip
       # Optional config import: the ONLY writable CrowdSec path, the same host directory that the

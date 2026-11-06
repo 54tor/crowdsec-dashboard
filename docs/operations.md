@@ -40,7 +40,9 @@ Operating notes:
 - A save runs `crowdsec -t` after writing and puts the previous files back when it fails
   (`config_test_failed`, `rolled_back: true`). If the rollback itself fails you get
   `config_inconsistent` with the affected files; further writes answer `recovery_pending` while a
-  journal is left. Check the listed files by hand, then follow [Config import recovery](#config-import-recovery).
+  journal is left. Follow [Config editor recovery](#config-editor-recovery).
+- The editor needs write access for uid 10000 to the configuration directories
+  ([configuration.md](configuration.md#config-editor-mount)); otherwise `writable` is false.
 - Edit digests are kept in memory: after a restart reload the file before saving.
 
 ## Troubleshooting
@@ -74,7 +76,8 @@ Errors reach the UI as a stable code (`{"error": "<code>"}`), translated in the 
 | `too_many_attempts` | 429 | Login rate limit or concurrency cap. Wait a minute (the response carries `Retry-After: 60`). If everybody is limited, the proxy address is probably not in `TRUSTED_PROXY_CIDRS` and all users share one client address. |
 | `digest_mismatch` | 409 | The file changed (another admin, `cscli`, a restart) since you read it. Reload it in the editor and redo the change. |
 | `config_test_failed` | 422 | `crowdsec -t` refused the new file; it was rolled back (`rolled_back: true`). Fix the content and save again. |
-| `config_inconsistent` | 500 | Rollback after a failed test failed too; `affected_files` lists the files. Check the files by hand; the journal procedure is in [Config import recovery](#config-import-recovery). |
+| `config_inconsistent` | 500 | Rollback after a failed test failed too; `affected_files` lists the files. Check the files by hand; the journal procedure is in [Config editor recovery](#config-editor-recovery). |
+| `recovery_pending` | 409 | A previous save left a journal under `<CROWDSEC_CONF_DIR>/.dashboard-backup/` (crash or failed rollback): every save is refused until the next start recovers it, or until you clear it by hand ([Config editor recovery](#config-editor-recovery)). |
 | `read_only_file`, `protected_file` | 403 | `config.yaml` cannot be written (use `config.yaml.local`), and a protected file such as `profiles.yaml` cannot be deleted. |
 | `parent_missing` | 404 | The directory of a new file does not exist (the editor creates files, not directories). |
 | `backup_unavailable` | 503 | The backup table is unreadable or unwritable; a delete is refused without its backup. Check the migration and PostgreSQL. |
@@ -634,6 +637,29 @@ that hit the same state reports `config_inconsistent` with `affected_files`). To
 3. delete `.dashboard-backup/<ts>/.pending` (or restart the dashboard to let it retry the recovery).
 
 Backups are kept 30 days and purged at start; a backup directory holding a journal is never purged.
+
+### Config editor recovery
+
+A save of the config editor journals itself the same way, under the configuration directory:
+`<CROWDSEC_CONF_DIR>/.dashboard-backup/<timestamp>/.pending` for the dashboard, and
+`<SIDECAR_CONF_DIR>/.dashboard-backup/<timestamp>/.pending` for a remote engine (also
+`<SIDECAR_ACQUISITION_DIR>` when it is set and differs). The copies of the replaced files sit next
+to the journal, at their relative path (for example `.dashboard-backup/<ts>/acquis.d/nginx.yaml`).
+While a journal is left, every save on that engine answers `recovery_pending`.
+
+At every start, when the directory is writable (and for the sidecar `SIDECAR_READ_ONLY=false`), the
+dashboard and the sidecar roll the interrupted save back: replaced files are restored from their
+copy, created files are deleted, the journal is removed, and the log says
+`config edit: config_recovered files=...` (sidecar: event `sidecar_config_recovery`). The edit is
+lost: save it again. The same start removes the stale `.dashboard-tmp-*` files of the
+configuration directory, of `acquis.d` and of `parsers/<stage>` and `postoverflows/<stage>` (never
+anything else, never through a symlink), and purges the backup directories older than 30 days
+that hold no journal. The masked database backups of the Config page are separate and unaffected.
+
+When a file cannot be restored, the log line is
+`config edit: config_inconsistent reason=<...> files=<names> backup=.dashboard-backup/<ts>: ...`
+and the journal stays. Follow the three steps of [Config import recovery](#config-import-recovery)
+inside `CROWDSEC_CONF_DIR` (or `SIDECAR_CONF_DIR`), then restart or delete the journal.
 
 ## Retention and purge
 
