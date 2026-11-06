@@ -56,7 +56,23 @@ func openImportRoot(rootDir string) (*os.Root, error) {
 	return root, nil
 }
 
+func requireRealParentDirectories(root *os.Root, name string) error {
+	for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+		parentInfo, lstatError := root.Lstat(parent)
+		if lstatError != nil {
+			return lstatError
+		}
+		if !parentInfo.IsDir() {
+			return ErrNotRegularFile
+		}
+	}
+	return nil
+}
+
 func openVerified(root *os.Root, name string) (*os.File, fs.FileInfo, error) {
+	if parentError := requireRealParentDirectories(root, name); parentError != nil {
+		return nil, nil, parentError
+	}
 	linkInfo, lstatError := root.Lstat(name)
 	if lstatError != nil {
 		return nil, nil, lstatError

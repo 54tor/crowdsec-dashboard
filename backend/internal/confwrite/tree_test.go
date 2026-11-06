@@ -196,3 +196,55 @@ func TestApplyTreeAppliesAcquisitionSourcePolicyToRootAcquisYaml(testContext *te
 		testContext.Fatal("acquis.yaml must not be written")
 	}
 }
+
+// ReadCurrentTree is the tree-wide counterpart of ReadCurrent used by the
+// editor: it accepts every readable configuration name (config.yaml included,
+// since reading it is allowed even though writing it is not).
+func TestReadCurrentTreeReadsNestedAndReadOnlyFiles(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	makeFixtureDirectory(testContext, importDirectory, "acquis.d")
+	writeFixtureFile(testContext, importDirectory, nestedAcquisition, webAcquisition, 0o640)
+	writeFixtureFile(testContext, importDirectory, "config.yaml", localOverrideConfig, 0o640)
+	for fileName, valeurAttendue := range map[string]string{nestedAcquisition: webAcquisition, "config.yaml": localOverrideConfig} {
+		valeurObtenue, readError := ReadCurrentTree(importDirectory, fileName)
+		if readError != nil {
+			testContext.Fatalf("%s: %v", fileName, readError)
+		}
+		if !valeurObtenue.Exists || string(valeurObtenue.Content) != valeurAttendue {
+			testContext.Errorf("%s: got %+v", fileName, valeurObtenue)
+		}
+	}
+}
+
+// A missing file is not an error: the editor needs Exists=false to compute the
+// absent digest and allow a creation.
+func TestReadCurrentTreeReportsMissingFileAsAbsent(testContext *testing.T) {
+	valeurObtenue, readError := ReadCurrentTree(testContext.TempDir(), "profiles.yaml")
+	if readError != nil || valeurObtenue.Exists {
+		testContext.Fatalf("got %+v, %v", valeurObtenue, readError)
+	}
+}
+
+// Names outside the allow-list (traversal, credentials, backups, temp files)
+// are refused before any file-system access.
+func TestReadCurrentTreeRefusesNamesOutsideTheAllowList(testContext *testing.T) {
+	for _, refusedName := range []string{"../etc/passwd", "local_api_credentials.yaml", BackupDirName + "/x/acquis.yaml", "acquis.d/" + tempFilePrefix + "x"} {
+		if _, readError := ReadCurrentTree(testContext.TempDir(), refusedName); !errors.Is(readError, ErrInvalidName) {
+			testContext.Errorf("%s: got %v, want ErrInvalidName", refusedName, readError)
+		}
+	}
+}
+
+// A symlinked parent directory would let os.Root follow a link to another
+// place inside the tree; the reader refuses it like the final-component link.
+func TestReadCurrentTreeRefusesSymlinkedParentDirectory(testContext *testing.T) {
+	importDirectory := testContext.TempDir()
+	makeFixtureDirectory(testContext, importDirectory, "elsewhere")
+	writeFixtureFile(testContext, importDirectory, "elsewhere/web.yaml", webAcquisition, 0o640)
+	if linkError := os.Symlink("elsewhere", filepath.Join(importDirectory, "acquis.d")); linkError != nil {
+		testContext.Fatalf("symlink: %v", linkError)
+	}
+	if _, readError := ReadCurrentTree(importDirectory, nestedAcquisition); !errors.Is(readError, ErrNotRegularFile) {
+		testContext.Fatalf("got %v, want ErrNotRegularFile", readError)
+	}
+}
