@@ -151,6 +151,28 @@ describe('config page advanced mode', () => {
     expect(screen.getByRole('button', { name: en.configEdit.save })).toBeDisabled()
   })
 
+  // A code added to the backend before the web catalogue must still read as a
+  // sentence: the generic label in the user's language, the raw code beside it.
+  it('labelsAnUnknownIssueCodeGenerically', async () => {
+    stubFetch(
+      advancedRoutes({
+        'POST /api/config/edit/validate': {
+          status: 200,
+          body: { issues: [{ line: 4, path: 'source', severity: 'warning', code: 'brand_new_check' }] },
+        },
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/config')
+    await openEditor(user)
+
+    await user.click(screen.getByRole('button', { name: en.configEdit.validate }))
+
+    const issueItem = (await screen.findByText('Line 4')).closest('li') as HTMLElement
+    expect(within(issueItem).getByText(en.configEdit.issues.unknownCode)).toBeInTheDocument()
+    expect(within(issueItem).getByText('brand_new_check')).toBeInTheDocument()
+  })
+
   it('warningsDoNotBlockSaving', async () => {
     stubFetch(
       advancedRoutes({

@@ -18,8 +18,11 @@ const KNOWN_ERROR_CODES = [
   'engine_exists', 'engine_deleting', 'engine_not_found', 'engine_local_readonly', 'invalid_engine', 'engine_secret_required', 'engine_unreachable', 'engine_auth_failed', 'engine_blocked_address', 'engine_secret_unreadable', 'archive_write_failed', 'registry_reload_failed',
   'allowlist_not_found', 'allowlist_exists', 'allowlist_entry_exists', 'allowlist_entry_not_found', 'allowlist_console_managed', 'allowlist_engine_readonly', 'allowlist_prefix_too_wide', 'invalid_allowlist', 'allowlist_write_failed',
   'lapi_unavailable', 'lapi_error', 'cscli_failed', 'cscli_timeout', 'hub_item_still_installed', 'self_account', 'cannot_delete_own_account', 'network', 'unknown',
-  'digest_mismatch', 'config_test_failed', 'config_inconsistent', 'schema_invalid', 'invalid_yaml', 'redacted_content', 'secret_context_changed', 'merged_structure_changed', 'read_only_file', 'protected_file', 'parent_missing', 'backup_unavailable', 'recovery_pending', 'forbidden_source', 'not_regular_file',
+  'digest_mismatch', 'config_test_failed', 'config_inconsistent', 'schema_invalid', 'invalid_yaml', 'redacted_content', 'secret_context_changed', 'merged_structure_changed', 'read_only_file', 'protected_file', 'parent_missing', 'backup_unavailable', 'recovery_pending', 'forbidden_source', 'not_regular_file', 'backup_not_found',
 ]
+
+// Issue codes the backend validator can return (confschema and confedit); each needs a label.
+const KNOWN_CONFIG_ISSUE_CODES = ['invalid_yaml', 'wrong_type', 'unknown_key', 'missing_required', 'secret_merge_refused']
 
 describe('i18n', () => {
   beforeEach(() => {
@@ -29,6 +32,15 @@ describe('i18n', () => {
 
   it('bothLocaleFilesHaveSameKeys', () => {
     expect(collectKeyPaths(fr).sort()).toEqual(collectKeyPaths(en).sort())
+  })
+
+  it('labelsEveryConfigIssueCodeInBothLanguages', () => {
+    for (const catalog of [en, fr]) {
+      const issueLabels: Record<string, string> = catalog.configEdit.issues.codes
+      for (const issueCode of KNOWN_CONFIG_ISSUE_CODES) {
+        expect(issueLabels[issueCode], issueCode).toBeTruthy()
+      }
+    }
   })
 
   it('interpolatesTheLockDurationInMinutes', async () => {

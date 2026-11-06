@@ -18,11 +18,25 @@ export function ConfigIssueList({ issues }: ConfigIssueListProps) {
               <Badge variant={issue.severity === 'error' ? 'critical' : 'warning'}>{t(`configEdit.issues.severity.${issue.severity}`)}</Badge>
               <span>{t('configEdit.issues.line', { line: issue.line })}</span>
               {issue.path !== '' && <code className="font-mono break-all">{issue.path}</code>}
-              <span>{t(`configEdit.issues.codes.${issue.code}`, { defaultValue: issue.code })}</span>
+              <ConfigIssueLabel code={issue.code} />
             </li>
           ))}
         </ul>
       )}
     </div>
+  )
+}
+
+function ConfigIssueLabel({ code }: { code: string }) {
+  const { t, i18n } = useTranslation()
+  const labelKey = `configEdit.issues.codes.${code}`
+  if (i18n.exists(labelKey)) {
+    return <span>{t(labelKey)}</span>
+  }
+  return (
+    <>
+      <span>{t('configEdit.issues.unknownCode')}</span>
+      <span className="font-mono text-muted-foreground">{code}</span>
+    </>
   )
 }

@@ -231,9 +231,10 @@
     "protected_file": "Ce fichier ne peut pas être supprimé.",
     "parent_missing": "Le répertoire parent n'existe pas.",
     "backup_unavailable": "Le stockage des sauvegardes est indisponible, rien n'a été modifié.",
-    "recovery_pending": "Une modification précédente est encore en cours de récupération. Réessayez dans un instant.",
+    "recovery_pending": "Une modification interrompue attend sa récupération. Redémarrez le tableau de bord, ou le sidecar d'un moteur distant, pour la terminer.",
     "forbidden_source": "Cette source d'acquisition n'est pas autorisée.",
-    "not_regular_file": "Ce chemin n'est pas un fichier ordinaire."
+    "not_regular_file": "Ce chemin n'est pas un fichier ordinaire.",
+    "backup_not_found": "Cette sauvegarde n'existe plus."
   },
   "filters": {
     "q": "Rechercher",
@@ -454,8 +455,10 @@
         "invalid_yaml": "YAML invalide",
         "wrong_type": "Type de valeur inattendu",
         "unknown_key": "Clé inconnue",
-        "missing_required": "Clé obligatoire manquante"
-      }
+        "missing_required": "Clé obligatoire manquante",
+        "secret_merge_refused": "Une valeur masquée ne peut pas être restaurée ici : saisissez-la de nouveau"
+      },
+      "unknownCode": "Problème non reconnu"
     },
     "backups": {
       "title": "Sauvegardes",

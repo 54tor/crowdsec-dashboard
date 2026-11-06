@@ -231,9 +231,10 @@
     "protected_file": "This file cannot be deleted.",
     "parent_missing": "The parent directory does not exist.",
     "backup_unavailable": "The backup store is unavailable, nothing was changed.",
-    "recovery_pending": "A previous change is still being recovered. Try again shortly.",
+    "recovery_pending": "An interrupted change is waiting for recovery. Restart the dashboard, or the sidecar of a remote engine, to complete it.",
     "forbidden_source": "This acquisition source is not allowed.",
-    "not_regular_file": "This path is not a regular file."
+    "not_regular_file": "This path is not a regular file.",
+    "backup_not_found": "This backup no longer exists."
   },
   "filters": {
     "q": "Search",
@@ -454,8 +455,10 @@
         "invalid_yaml": "Invalid YAML",
         "wrong_type": "Unexpected value type",
         "unknown_key": "Unknown key",
-        "missing_required": "Missing required key"
-      }
+        "missing_required": "Missing required key",
+        "secret_merge_refused": "A masked value cannot be restored here: retype it"
+      },
+      "unknownCode": "Unrecognized issue"
     },
     "backups": {
       "title": "Backups",
