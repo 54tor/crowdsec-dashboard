@@ -7,6 +7,8 @@ import (
 	"net/netip"
 	"strings"
 	"time"
+
+	"crowdsec-dashboard/internal/logtail"
 )
 
 const (
@@ -27,6 +29,7 @@ type Config struct {
 	CrowdSecContainer      string
 	DockerHost             string
 	ConfDir                string
+	LogsAllowedRoots       []string
 	TrustedProxyCIDRs      []*net.IPNet
 	WebAuthnRPID           string
 	WebAuthnRPOrigins      []string
@@ -97,6 +100,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, retentionError
 	}
 
+	logsAllowedRoots, logsRootsError := logtail.ParseAllowedRoots("LOGS_ALLOWED_ROOTS", getenv("LOGS_ALLOWED_ROOTS"))
+	if logsRootsError != nil {
+		return Config{}, logsRootsError
+	}
+
 	listenAddr := getenv("LISTEN_ADDR")
 	if listenAddr == "" {
 		listenAddr = defaultListenAddr
@@ -115,6 +123,7 @@ func Load(getenv func(string) string) (Config, error) {
 		CrowdSecContainer:      getenv("CROWDSEC_CONTAINER"),
 		DockerHost:             getenv("DOCKER_HOST"),
 		ConfDir:                getenv("CROWDSEC_CONF_DIR"),
+		LogsAllowedRoots:       logsAllowedRoots,
 		TrustedProxyCIDRs:      trustedProxyCIDRs,
 		WebAuthnRPID:           webAuthnRPID,
 		WebAuthnRPOrigins:      webAuthnRPOrigins,

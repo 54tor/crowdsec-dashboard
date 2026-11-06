@@ -58,6 +58,7 @@ const (
 	ActionConfigFileWritten        Action = "config_file_written"
 	ActionConfigFileDeleted        Action = "config_file_deleted"
 	ActionConfigFileRestored       Action = "config_file_restored"
+	ActionLogsViewed               Action = "logs_viewed"
 )
 
 const MaximumTargetRunes = 64

@@ -314,3 +314,23 @@ func TestLoadLeavesRetiredSecretsKeyFilesEmptyByDefault(testContext *testing.T) 
 		testContext.Errorf("expected no retired key file, got %v", loadedConfig.SecretsRetiredKeyFiles)
 	}
 }
+
+func TestLoad_litLesRacinesDeLogsAutorisees(testContext *testing.T) {
+	loadedConfig, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL, "LOGS_ALLOWED_ROOTS": "/var/log/nginx:/var/log/auth/"}))
+
+	if loadError != nil {
+		testContext.Fatal(loadError)
+	}
+	valeurAttendue := []string{"/var/log/nginx", "/var/log/auth"}
+	if len(loadedConfig.LogsAllowedRoots) != 2 || loadedConfig.LogsAllowedRoots[0] != valeurAttendue[0] || loadedConfig.LogsAllowedRoots[1] != valeurAttendue[1] {
+		testContext.Fatalf("got %v, want %v", loadedConfig.LogsAllowedRoots, valeurAttendue)
+	}
+}
+
+func TestLoad_refuseUneRacineDeLogsRelative(testContext *testing.T) {
+	_, loadError := Load(environmentFrom(map[string]string{"DATABASE_URL": validTestDatabaseURL, "LOGS_ALLOWED_ROOTS": "/var/log:logs"}))
+
+	if loadError == nil || !strings.Contains(loadError.Error(), "LOGS_ALLOWED_ROOTS") {
+		testContext.Fatalf("expected an error naming LOGS_ALLOWED_ROOTS, got %v", loadError)
+	}
+}

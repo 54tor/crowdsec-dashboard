@@ -130,6 +130,7 @@ func readRoutes(loadedConfig config.Config, services Services, searches searchLi
 	archivedAlerts := archivedAlertHandlers{archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
 	liveAlerts := alertHandlers{service: services.Alerts, lookup: services.AlertLookup, archiveReader: services.Archive, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, targets: services.EngineTargets}
 	configFiles := configFileHandlers{files: services.ConfigFiles, targets: services.EngineTargets}
+	logs := logHandlers{local: readerLogSources{reader: services.LocalLogs}, targets: services.EngineTargets, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs, gate: newViewAuditGate(time.Now)}
 	alertLists := alertReadHandlers{lister: services.AlertReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
 	decisionLists := decisionReadHandlers{lister: services.DecisionReader, archiveReader: services.Archive, searchTimeout: search.QueryTimeout, searches: searches}
 	platformLists := platformListHandlers{platform: services.Platform, selfMachineID: loadedConfig.LAPIMachineID, targets: services.EngineTargets}
@@ -147,6 +148,8 @@ func readRoutes(loadedConfig config.Config, services Services, searches searchLi
 		{"GET /api/metrics", accessAuthenticated, http.HandlerFunc(metricsHandlers{platform: services.Platform}.get)},
 		{"GET /api/config/files", accessAdmin, http.HandlerFunc(configFiles.list)},
 		{"GET /api/config/files/{name...}", accessAdmin, http.HandlerFunc(configFiles.get)},
+		{"GET /api/logs/sources", accessAdmin, http.HandlerFunc(logs.list)},
+		{"GET /api/logs/sources/{id}", accessAdmin, http.HandlerFunc(logs.read)},
 		{"GET /api/hub", accessAuthenticated, http.HandlerFunc(hubHandlers{service: services.Hub, targets: services.EngineTargets}.list)},
 		{"GET /api/bouncers", accessAuthenticated, http.HandlerFunc(platformLists.bouncers)},
 		{"GET /api/machines", accessAuthenticated, http.HandlerFunc(platformLists.machines)},

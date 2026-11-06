@@ -20,6 +20,7 @@ import (
 	"crowdsec-dashboard/internal/configbackups"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/logtail"
 	"crowdsec-dashboard/internal/oplock"
 	"crowdsec-dashboard/internal/retention"
 	"crowdsec-dashboard/internal/sessions"
@@ -89,6 +90,7 @@ func main() {
 	services.AccountManager = accountServices.repository
 	services.Database = database
 	services.Audit = auditRecorder
+	services.LocalLogs = logtail.Reader{ConfDir: loadedConfig.ConfDir, AllowedRoots: loadedConfig.LogsAllowedRoots}
 	services.Geolocator = accountServices.geolocator
 	services.AccessRules = accessrule.NewRepository(database)
 	services.TokenGate = api.NewTokenGate(services.AccessRules, services.Geolocator, time.Now)

@@ -11,6 +11,7 @@ import (
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
+	"crowdsec-dashboard/internal/logtail"
 	"crowdsec-dashboard/internal/oplock"
 	"crowdsec-dashboard/internal/secondfactor"
 )
@@ -49,6 +50,7 @@ type Services struct {
 	AuditLog           *audit.Reader
 	Platform           Platform
 	ConfigFiles        ConfigFiles
+	LocalLogs          logtail.Reader
 	ConfigEditor       ConfigEditor
 	ConfigBackups      configbackups.Store
 	Bouncers           BouncerService
