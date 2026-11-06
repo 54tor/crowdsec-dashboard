@@ -23,3 +23,14 @@ func (mergeError *MergeError) Error() string {
 func (mergeError *MergeError) Unwrap() error {
 	return mergeError.Err
 }
+
+func Sentinels() []error {
+	return []error{
+		ErrDigestMismatch,
+		ErrSchemaInvalid,
+		ErrRedactedWithoutOriginal,
+		ErrSecretContextChanged,
+		ErrNestingTooDeep,
+		ErrMergedStructureChanged,
+	}
+}

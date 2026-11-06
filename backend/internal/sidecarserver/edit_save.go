@@ -10,7 +10,9 @@ import (
 
 type editSaveOutcome struct {
 	execOutcome
-	result confedit.SaveResult
+	result        confedit.SaveResult
+	line          int
+	affectedFiles []string
 }
 
 func (handlers editHandlers) save(writer http.ResponseWriter, request *http.Request) {
@@ -45,7 +47,12 @@ func (handlers editHandlers) runSave(writer http.ResponseWriter, request *http.R
 		Delete:         saveRequest.Delete,
 	})
 	if saveError != nil {
-		return editSaveOutcome{execOutcome: outcomeOfEditError(saveError), result: result}
+		return editSaveOutcome{
+			execOutcome:   outcomeOfEditError(saveError),
+			result:        result,
+			line:          lineOfEditError(saveError),
+			affectedFiles: affectedFilesOfEditError(saveError),
+		}
 	}
 	return editSaveOutcome{execOutcome: execOutcome{http.StatusOK, ""}, result: result}
 }
@@ -64,9 +71,10 @@ func (handlers editHandlers) refusal() (execOutcome, bool) {
 }
 
 func editErrorResponseOf(outcome editSaveOutcome) sidecarapi.ErrorResponse {
-	errorResponse := sidecarapi.ErrorResponse{Code: outcome.code}
-	if outcome.result.RolledBack {
-		errorResponse.Result = &sidecarapi.ApplyResult{Created: []string{}, Updated: []string{}, Unchanged: []string{}, RolledBack: true}
+	errorResponse := sidecarapi.ErrorResponse{Code: outcome.code, Line: outcome.line, AffectedFiles: outcome.affectedFiles}
+	hasPartialResult := outcome.result.RolledBack || len(outcome.affectedFiles) > 0
+	if hasPartialResult {
+		errorResponse.Result = &sidecarapi.ApplyResult{Created: []string{}, Updated: []string{}, Unchanged: []string{}, RolledBack: outcome.result.RolledBack}
 	}
 	return errorResponse
 }

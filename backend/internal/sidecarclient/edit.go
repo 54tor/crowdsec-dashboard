@@ -38,9 +38,9 @@ func (editor remoteEditor) Read(ctx context.Context, name string) (confedit.File
 	var fileResponse sidecarapi.EditFileResponse
 	readError := editor.client.read(ctx, sidecarapi.PathEditFilePrefix+name, editSentinelOfCode, &fileResponse)
 	if readError != nil {
-		return confedit.File{}, readError
+		return confedit.File{}, withMergeLine(readError)
 	}
-	if fileResponse.Digest == "" || len(fileResponse.Content) > maxRedactedFileBytes {
+	if !isConsistentFileResponse(fileResponse) {
 		return confedit.File{}, ErrInvalidResponse
 	}
 	return confedit.File{
@@ -65,7 +65,7 @@ func (editor remoteEditor) Validate(ctx context.Context, name string, content []
 	var validateResponse sidecarapi.EditValidateResponse
 	validateCall := call{method: http.MethodPost, path: sidecarapi.PathEditValidate, body: body, routeCodes: editSentinelOfCode}
 	if exchangeError := editor.client.exchange(validateContext, validateCall, &validateResponse); exchangeError != nil {
-		return nil, exchangeError
+		return nil, withMergeLine(exchangeError)
 	}
 	if validateResponse.Issues == nil {
 		return nil, ErrInvalidResponse
@@ -105,6 +105,9 @@ func (editor remoteEditor) Save(ctx context.Context, request confedit.SaveReques
 	if exchangeError := editor.client.exchange(saveContext, saveCall, &saveResponse); exchangeError != nil {
 		return resultOfSaveFailure(exchangeError)
 	}
+	if saveResponse.Digest == "" {
+		return confedit.SaveResult{}, ErrInvalidResponse
+	}
 	return confedit.SaveResult{
 		Created:        saveResponse.Created,
 		Deleted:        saveResponse.Deleted,
@@ -114,11 +117,28 @@ func (editor remoteEditor) Save(ctx context.Context, request confedit.SaveReques
 	}, nil
 }
 
+func isConsistentFileResponse(fileResponse sidecarapi.EditFileResponse) bool {
+	if len(fileResponse.Content) > maxRedactedFileBytes {
+		return false
+	}
+	if !fileResponse.Exists {
+		return fileResponse.Digest == confedit.AbsentDigest && len(fileResponse.Content) == 0
+	}
+	return fileResponse.Digest != "" && fileResponse.Digest != confedit.AbsentDigest
+}
+
 func resultOfSaveFailure(exchangeError error) (confedit.SaveResult, error) {
 	var refusal *refusalError
 	if !errors.As(exchangeError, &refusal) {
 		return confedit.SaveResult{}, exchangeError
 	}
+	if !hasEditableNames(refusal.response.AffectedFiles) {
+		return confedit.SaveResult{}, ErrInvalidResponse
+	}
 	hasRollback := refusal.response.Result != nil && refusal.response.Result.RolledBack
-	return confedit.SaveResult{RolledBack: hasRollback}, exchangeError
+	saveResult := confedit.SaveResult{RolledBack: hasRollback}
+	if errors.Is(exchangeError, confwrite.ErrConfigInconsistent) {
+		return saveResult, &confwrite.InconsistentError{Files: nonNilNames(refusal.response.AffectedFiles)}
+	}
+	return saveResult, withMergeLine(exchangeError)
 }

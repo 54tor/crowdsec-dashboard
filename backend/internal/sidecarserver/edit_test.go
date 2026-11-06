@@ -202,7 +202,11 @@ func TestEditSaveMapsEditorSentinelsToStableCodes(testContext *testing.T) {
 		testContext.Run(testCase.description, func(subtestContext *testing.T) {
 			recorder := fixture.postJSON(subtestContext, sidecarapi.PathEditSave, testCase.request)
 
-			expectResponse(subtestContext, recorder, testCase.expectedStatus, codeBody(testCase.expectedCode))
+			var errorResponse sidecarapi.ErrorResponse
+			decodeStrictJSON(subtestContext, recorder, &errorResponse)
+			if recorder.Code != testCase.expectedStatus || errorResponse.Code != testCase.expectedCode {
+				subtestContext.Errorf("expected %d %s, got %d %s", testCase.expectedStatus, testCase.expectedCode, recorder.Code, errorResponse.Code)
+			}
 		})
 	}
 }

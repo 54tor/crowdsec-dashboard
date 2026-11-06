@@ -32,9 +32,13 @@ type failingRunner struct {
 	mutex         sync.Mutex
 	receivedArgvs [][]string
 	runnerError   error
+	onRun         func()
 }
 
 func (runner *failingRunner) Run(_ context.Context, argv []string) ([]byte, error) {
+	if runner.onRun != nil {
+		runner.onRun()
+	}
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()
 	runner.receivedArgvs = append(runner.receivedArgvs, slices.Clone(argv))
@@ -59,6 +63,13 @@ type configSidecar struct {
 // acquisition dir.
 func startConfigSidecar(testContext *testing.T, runnerError error) configSidecar {
 	testContext.Helper()
+	return startConfigSidecarWithHook(testContext, runnerError, nil)
+}
+
+// startConfigSidecarWithHook runs onRun inside every config test, which lets
+// a test sabotage the tree while a transaction is in flight.
+func startConfigSidecarWithHook(testContext *testing.T, runnerError error, onRun func(confDir string)) configSidecar {
+	testContext.Helper()
 	confDir := testContext.TempDir()
 	acquisitionDir := testContext.TempDir()
 	writeFixtureFile(testContext, filepath.Join(confDir, "config.yaml"), "db_config:\n  password: hunter2\n  flush:\n    max_items: 250\n")
@@ -69,6 +80,9 @@ func startConfigSidecar(testContext *testing.T, runnerError error) configSidecar
 		testContext.Fatalf("GenerateSigningKey: %v", generateError)
 	}
 	runner := &failingRunner{runnerError: runnerError}
+	if onRun != nil {
+		runner.onRun = func() { onRun(confDir) }
+	}
 	digestKey, digestKeyError := sidecarserver.LoadOrCreateDigestKey(ownerOnlyDataDir(testContext))
 	if digestKeyError != nil {
 		testContext.Fatalf("LoadOrCreateDigestKey: %v", digestKeyError)

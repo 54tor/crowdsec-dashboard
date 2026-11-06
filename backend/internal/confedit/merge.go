@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"crowdsec-dashboard/internal/confread"
+	"crowdsec-dashboard/internal/confwrite"
 )
 
 func firstMarkerLine(lines []string) int {
@@ -46,7 +47,7 @@ func MergeRedactedValues(originalRaw, submittedMasked []byte) ([]byte, error) {
 	}
 	submitted, submittedError := parseText(submittedText)
 	if submittedError != nil {
-		return nil, fmt.Errorf("parse submitted: %w", submittedError)
+		return nil, &MergeError{Line: firstMarkerLine(strings.Split(submittedText, "\n")), Err: fmt.Errorf("%w: parse submitted: %w", confwrite.ErrInvalidYAML, submittedError)}
 	}
 	if guardError := checkDestinationUnchanged(original.parsed, submitted); guardError != nil {
 		return nil, guardError

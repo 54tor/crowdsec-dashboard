@@ -4,6 +4,7 @@ const PingStatusOK = "ok"
 
 type ErrorResponse struct {
 	Code          string       `json:"code"`
+	Line          int          `json:"line,omitempty"`
 	Result        *ApplyResult `json:"result,omitempty"`
 	AffectedFiles []string     `json:"affected_files,omitempty"`
 }

@@ -21,4 +21,6 @@ const (
 	CodeProtectedFile          = "protected_file"
 	CodeParentMissing          = "parent_missing"
 	CodeSchemaInvalid          = "schema_invalid"
+	CodeSecretContextChanged   = "secret_context_changed"
+	CodeMergedStructureChanged = "merged_structure_changed"
 )
