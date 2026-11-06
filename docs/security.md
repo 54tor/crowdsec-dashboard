@@ -398,8 +398,10 @@ inline script, no CDN, no external font. The front end bundles its fonts and cha
 explicitly: no injected `<base>` can redirect relative URLs, no form can post off-site, and no page
 can frame the dashboard (the same as `X-Frame-Options: DENY`, for browsers that only read the CSP).
 Known consequence: the dialog library injects an inline `<style>` to lock page scrolling, which the
-policy blocks. A console message "Applying inline style violates ... Content Security Policy" appears
-when a dialog opens, and the page behind a modal dialog can still scroll. Dialogs themselves work.
+policy blocks, and a console message "Applying inline style violates ... Content Security Policy"
+appears when a dialog opens. The bundled stylesheet carries the same lock
+(`body[data-scroll-locked] { overflow: hidden }`), so the page behind a modal dialog does not
+scroll; only the scrollbar width is not compensated, which can shift the page slightly.
 
 Engine data (alert scenario, source, message, machine id, decision value, event meta keys and
 values) is attacker-controlled. The front end renders it as plain React text only: no HTML

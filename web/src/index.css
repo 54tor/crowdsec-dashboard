@@ -142,4 +142,8 @@
     html {
         @apply font-sans;
     }
+    /* The dialog scroll lock injects an inline <style> that the CSP blocks; the attribute it sets still applies this rule. */
+    body[data-scroll-locked] {
+        overflow: hidden;
+    }
 }
