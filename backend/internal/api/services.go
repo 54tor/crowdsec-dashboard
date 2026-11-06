@@ -7,6 +7,7 @@ import (
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/auth"
 	"crowdsec-dashboard/internal/bundle"
+	"crowdsec-dashboard/internal/configbackups"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/geo"
 	"crowdsec-dashboard/internal/lapi"
@@ -48,6 +49,8 @@ type Services struct {
 	AuditLog           *audit.Reader
 	Platform           Platform
 	ConfigFiles        ConfigFiles
+	ConfigEditor       ConfigEditor
+	ConfigBackups      configbackups.Store
 	Bouncers           BouncerService
 	Machines           MachineService
 	Hub                HubService
@@ -82,6 +85,7 @@ func NewServices(lapiClient *lapi.Client, executor cscli.Executor, confDir strin
 		AlertLookup:        lapiClient,
 		Platform:           cscliPlatform{executor: executor},
 		ConfigFiles:        dirConfigFiles{dir: confDir},
+		ConfigEditor:       localConfigEditorOf(confDir, importDeps.TestConfig),
 		Bouncers:           cscliBouncers{executor: executor},
 		Machines:           cscliMachines{executor: executor},
 		Hub:                cscliHub{executor: executor},
@@ -90,6 +94,13 @@ func NewServices(lapiClient *lapi.Client, executor cscli.Executor, confDir strin
 		BundleImport:       importDeps.ImportDeps,
 		localConfigTest:    importDeps.TestConfig,
 	}
+}
+
+func localConfigEditorOf(confDir string, configTest func(ctx context.Context) error) ConfigEditor {
+	if confDir == "" {
+		return nil
+	}
+	return NewLocalConfigEditor(confDir, configTest)
 }
 
 type lapiDecisions struct{ client *lapi.Client }

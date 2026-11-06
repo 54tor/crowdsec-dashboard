@@ -22,6 +22,7 @@ func apiRoutes(loadedConfig config.Config, services Services, authenticationHand
 	routes = append(routes, crowdsecWriteRoutes(loadedConfig, services)...)
 	routes = append(routes, syncRoutes(loadedConfig, services)...)
 	routes = append(routes, bundleRoutes(loadedConfig, services)...)
+	routes = append(routes, configEditRoutes(loadedConfig, services)...)
 	return routes
 }
 
@@ -189,5 +190,17 @@ func bundleRoutes(loadedConfig config.Config, services Services) []apiRoute {
 	return []apiRoute{
 		{"POST /api/export", accessAdmin, longWrite(http.HandlerFunc(handlers.export))},
 		{"POST /api/import", accessAdminSessionOnly, http.HandlerFunc(imports.importBundle)},
+	}
+}
+
+func configEditRoutes(loadedConfig config.Config, services Services) []apiRoute {
+	handlers := configEditHandlers{localEditor: services.ConfigEditor, backups: services.ConfigBackups, targets: services.EngineTargets, recorder: services.Audit, trustedCIDRs: loadedConfig.TrustedProxyCIDRs}
+	return []apiRoute{
+		{"GET /api/config/edit/{name...}", accessAdminSessionOnly, http.HandlerFunc(handlers.get)},
+		{"POST /api/config/edit/validate", accessAdminSessionOnly, http.HandlerFunc(handlers.validate)},
+		{"PUT /api/config/edit/{name...}", accessAdminSessionOnly, http.HandlerFunc(handlers.put)},
+		{"DELETE /api/config/edit/{name...}", accessAdminSessionOnly, http.HandlerFunc(handlers.remove)},
+		{"GET /api/config/backups/{name...}", accessAdminSessionOnly, http.HandlerFunc(handlers.listBackups)},
+		{"POST /api/config/backups/{id}/restore", accessAdminSessionOnly, http.HandlerFunc(handlers.restore)},
 	}
 }

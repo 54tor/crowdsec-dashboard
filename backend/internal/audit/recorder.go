@@ -55,6 +55,9 @@ const (
 	ActionAllowlistDeleted         Action = "allowlist_deleted"
 	ActionAllowlistEntryAdded      Action = "allowlist_entry_added"
 	ActionAllowlistEntryRemoved    Action = "allowlist_entry_removed"
+	ActionConfigFileWritten        Action = "config_file_written"
+	ActionConfigFileDeleted        Action = "config_file_deleted"
+	ActionConfigFileRestored       Action = "config_file_restored"
 )
 
 const MaximumTargetRunes = 64

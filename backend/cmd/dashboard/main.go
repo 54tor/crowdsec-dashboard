@@ -17,6 +17,7 @@ import (
 	"crowdsec-dashboard/internal/archive"
 	"crowdsec-dashboard/internal/audit"
 	"crowdsec-dashboard/internal/config"
+	"crowdsec-dashboard/internal/configbackups"
 	"crowdsec-dashboard/internal/cscli"
 	"crowdsec-dashboard/internal/lapi"
 	"crowdsec-dashboard/internal/oplock"
@@ -105,6 +106,7 @@ func main() {
 	services.Allowlists = allowlists.NewService(engineRepository, engineRegistry, allowlists.SidecarWriters(engineRegistry), time.Now)
 	services.CollectorStatus = engineCollector
 	services.SchemaVersion = store.NewVersionReader(database)
+	services.ConfigBackups = configbackups.NewPostgresStore(database)
 	operationLock := oplock.New()
 	services.OperationLock = operationLock
 	syncRunner, importRules := newSyncRunner(loadedConfig, engineRegistry, engineRepository, operationLock)

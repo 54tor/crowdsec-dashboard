@@ -645,6 +645,68 @@ export and an import share one operation lock: a second one answers 409 `operati
   [bundles.md](bundles.md#codes). Previews are not audited; an export and an apply are
   (`bundle_exported`, `bundle_imported`).
 
+## Configuration editor
+
+Edit the CrowdSec configuration files of an engine. Every route is **admin, session only**: a
+`read_only` account or a `read` token gets 403 `forbidden`, any token (even `write`) gets 403
+`session_required`. Every route takes the optional `engine` query parameter with the rules of the
+[engine target](#engine-target); a remote engine is read and written through its sidecar only (409
+`engine_has_no_sidecar` without one). Names follow the allow list of `GET /api/config/files`
+(anything else: 404 `not_found`). Bodies refuse unknown fields; `content` is at most 256 KiB
+(413 `file_too_large`), the whole body at most 516 KiB. Without `CROWDSEC_CONF_DIR` the local
+engine answers 500 `config_unavailable`.
+
+| Method | Path | Body | Success response |
+|---|---|---|---|
+| GET | `/api/config/edit/{name...}` | none | `200 {"name","exists","read_only","writable","digest","content"}`, `Cache-Control: no-store`; `content` has secrets masked as `[REDACTED]`; `digest` is `absent` for a missing file |
+| POST | `/api/config/edit/validate` | `{"name","content"}` | `200 {"issues":[{line,path,severity,code}]}`; nothing is written |
+| PUT | `/api/config/edit/{name...}` | `{"content","expected_digest"}` | `200 {"created","digest","rolled_back","backup_stored"}` |
+| DELETE | `/api/config/edit/{name...}` | `{"expected_digest","confirm":"<name>"}` (max 4 KiB) | `200 {"deleted","digest","backup_stored"}` |
+| GET | `/api/config/backups/{name...}` | none | `200 {"items":[{id,created_at,account_name,size}]}`, newest first, at most 10, never the content |
+| POST | `/api/config/backups/{id}/restore` | `{"expected_digest"}` (max 4 KiB) | as PUT, for the file the backup belongs to |
+
+- `read_only` is true for `config.yaml`, which is shown but never written (the override goes into
+  `config.yaml.local`). `writable` is false for a read-only file and, locally, when the
+  configuration directory is not writable by the dashboard. On a remote engine it is always true:
+  a read-only sidecar refuses the save itself (409 `sidecar_command_refused`).
+- `expected_digest` is the `digest` of the last read. Content resubmitted with `[REDACTED]` keeps
+  the secret of the file currently on disk at the same place; a secret is never returned.
+- Each save (PUT, restore) and each delete keeps the previous content, masked, as a backup of that
+  engine and file (the last 10 are kept). The save is already applied when the backup is written: a
+  failed backup only answers `backup_stored: false` (also false for a newly created file). A delete
+  stores the backup first and is refused with 503 `backup_unavailable` when it cannot.
+- A restore takes the backup's masked content and the secrets of the **current** file; a backup
+  belongs to one engine, and restoring it with another `engine` answers 404 `backup_not_found`. A
+  backup of a deleted file whose secrets no longer exist anywhere cannot be restored
+  (`redacted_content`).
+- `POST /api/crowdsec/reload` applies the change to the running engine; the editor does not reload.
+
+| Code | HTTP | When |
+|---|---|---|
+| `invalid_request` | 400 | Body malformed, with unknown fields, or without `content` / `expected_digest` |
+| `confirmation_required` | 400 | `confirm` is not exactly the file name |
+| `redacted_content` | 400 | A `[REDACTED]` marker has no secret at that place in the current file |
+| `secret_context_changed` | 400 | A URL, host or similar key next to a masked secret changed: retype the secret |
+| `merged_structure_changed`, `invalid_yaml` | 400 | The content cannot be merged or parsed; `line` gives the position when known |
+| `forbidden_source` | 400 | An acquisition source the dashboard does not allow |
+| `forbidden`, `session_required` | 403 | See the access rule above |
+| `read_only_file`, `protected_file` | 403 | `config.yaml` written, or a protected file deleted |
+| `not_found`, `parent_missing` | 404 | Unknown or refused name; the parent directory does not exist |
+| `backup_not_found` | 404 | No backup with that id for this engine |
+| `digest_mismatch` | 409 | The file changed since `expected_digest` was read |
+| `not_regular_file`, `recovery_pending` | 409 | Not a regular file; an interrupted write awaits recovery |
+| `file_too_large` | 413 | Content or body over the limit |
+| `schema_invalid` | 422 | The content has schema errors, listed in `issues` |
+| `config_test_failed` | 422 | `crowdsec -t` refused the file; `rolled_back` says the previous file was put back |
+| `config_inconsistent`, `config_unavailable` | 500 | Rollback failed (`affected_files` lists the files); the directory cannot be read |
+| `database_unavailable`, `backup_unavailable` | 503 | The backup table cannot be read or written |
+
+Sidecar failures keep their codes (`sidecar_*`, `cscli_timeout`, see the
+[engine target](#engine-target)). No answer carries file content other than the masked GET content.
+A successful write is audited `config_file_written`, a delete `config_file_deleted`, a restore
+`config_file_restored`, with target `<engine>/<name>` (`local` for the local engine); never the
+content or a digest. A refused or failed write is not audited.
+
 ## Everything else
 
 Any other `/api/...` path answers 404 `not_found` (401 without a session). Any other path serves the
