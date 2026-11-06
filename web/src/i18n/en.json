@@ -218,7 +218,22 @@
     "engine_has_no_sidecar": "This engine has no usable sidecar: it stays read-only.",
     "sidecar_busy": "The sidecar is busy. Try again in a moment.",
     "engine_target_mismatch": "The dashboard resolved another engine than the one requested: nothing was run.",
-    "remote_secrets_unsupported": "Secrets cannot be exported from a remote engine: its sidecar only returns redacted content."
+    "remote_secrets_unsupported": "Secrets cannot be exported from a remote engine: its sidecar only returns redacted content.",
+    "digest_mismatch": "The file changed since you opened it.",
+    "config_test_failed": "CrowdSec rejected the configuration.",
+    "config_inconsistent": "The configuration may be inconsistent: some files could not be restored.",
+    "schema_invalid": "The content does not match the expected structure.",
+    "invalid_yaml": "The content is not valid YAML.",
+    "redacted_content": "A masked value cannot be saved as it is.",
+    "secret_context_changed": "A masked value was moved or its surroundings changed.",
+    "merged_structure_changed": "The structure around a masked value changed.",
+    "read_only_file": "This file is read-only.",
+    "protected_file": "This file cannot be deleted.",
+    "parent_missing": "The parent directory does not exist.",
+    "backup_unavailable": "The backup store is unavailable, nothing was changed.",
+    "recovery_pending": "A previous change is still being recovered. Try again shortly.",
+    "forbidden_source": "This acquisition source is not allowed.",
+    "not_regular_file": "This path is not a regular file."
   },
   "filters": {
     "q": "Search",
@@ -403,6 +418,67 @@
     "select": "Select a file to view it.",
     "viewer": "Content of {{name}}",
     "loading": "Loading file…"
+  },
+  "configEdit": {
+    "advancedMode": "Advanced mode",
+    "editorLabel": "Editor for {{name}}",
+    "validate": "Validate",
+    "save": "Save",
+    "saveNeedsValidation": "Validate the current text without errors to enable saving.",
+    "notWritable": "This file cannot be written on this engine.",
+    "readOnly": "{{name}} is read-only. Change settings in {{overrides}}, which overrides it.",
+    "editOverrides": "Edit overrides",
+    "schemaInvalid": "The configuration structure is invalid. Fix the issues below.",
+    "rejected": "CrowdSec rejected the change.",
+    "rejectedRolledBack": "CrowdSec rejected the change and the files were restored to their previous content.",
+    "secretExplanation": "A masked value ([REDACTED]) can only be kept when its surroundings are unchanged; otherwise retype the secret.",
+    "conflict": {
+      "title": "The file was modified elsewhere",
+      "body": "Your edit was not saved so that nothing is overwritten. Reload the file to see the current version.",
+      "reload": "Reload file"
+    },
+    "discard": {
+      "title": "Discard unsaved edits?",
+      "body": "Your unsaved changes will be lost.",
+      "confirm": "Discard edits"
+    },
+    "issues": {
+      "title": "Validation issues",
+      "none": "No issue found.",
+      "line": "Line {{line}}",
+      "severity": {
+        "error": "Error",
+        "warning": "Warning"
+      },
+      "codes": {
+        "invalid_yaml": "Invalid YAML",
+        "wrong_type": "Unexpected value type",
+        "unknown_key": "Unknown key",
+        "missing_required": "Missing required key"
+      }
+    },
+    "backups": {
+      "title": "Backups",
+      "none": "No backup yet.",
+      "size": "{{size}} bytes",
+      "restore": "Restore",
+      "restoreAt": "Restore backup of {{date}}",
+      "confirmTitle": "Restore this backup?",
+      "confirmBody": "The file is replaced by this backup; masked secrets are merged back from the current file."
+    },
+    "newFile": {
+      "label": "New file",
+      "hint": "acquis.d/<name>.yaml, parsers/<stage>/<name>whitelist.yaml, postoverflows/<stage>/<name>whitelist.yaml or config.yaml.local",
+      "invalid": "This name is not an allowed configuration file.",
+      "create": "Create file",
+      "willCreate": "{{name}} does not exist yet: saving creates it."
+    },
+    "delete": {
+      "open": "Delete file",
+      "title": "Delete this file",
+      "description": "{{name}} will be deleted from the engine.",
+      "submit": "Delete"
+    }
   },
   "dialog": {
     "cancel": "Cancel",

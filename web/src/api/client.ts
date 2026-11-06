@@ -2,13 +2,15 @@ export class ApiError extends Error {
   readonly code: string
   readonly status: number
   readonly retryAfterSeconds?: number
+  readonly details?: Record<string, unknown>
 
-  constructor(code: string, status: number, retryAfterSeconds?: number) {
+  constructor(code: string, status: number, retryAfterSeconds?: number, details?: Record<string, unknown>) {
     super(code)
     this.name = 'ApiError'
     this.code = code
     this.status = status
     this.retryAfterSeconds = retryAfterSeconds
+    this.details = details
   }
 }
 
@@ -33,17 +35,22 @@ function notifyUnauthenticatedOnce(): void {
   unauthenticatedHandler?.()
 }
 
-async function readErrorCode(response: Response): Promise<string> {
+interface ErrorBody {
+  code: string
+  details?: Record<string, unknown>
+}
+
+async function readErrorBody(response: Response): Promise<ErrorBody> {
   const fallbackCode = response.status === 429 ? 'too_many_attempts' : 'unknown'
   try {
     const body: unknown = await response.json()
     if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
-      return body.error
+      return { code: body.error, details: body as Record<string, unknown> }
     }
   } catch {
-    return fallbackCode
+    return { code: fallbackCode }
   }
-  return fallbackCode
+  return { code: fallbackCode }
 }
 
 function readRetryAfterSeconds(response: Response): number | undefined {
@@ -64,11 +71,11 @@ export async function apiFetchResponse(path: string, init?: RequestInit): Promis
     throw new ApiError('network', 0)
   }
   if (!response.ok) {
-    const code = await readErrorCode(response)
+    const { code, details } = await readErrorBody(response)
     if (code === 'unauthenticated') {
       notifyUnauthenticatedOnce()
     }
-    throw new ApiError(code, response.status, readRetryAfterSeconds(response))
+    throw new ApiError(code, response.status, readRetryAfterSeconds(response), details)
   }
   return response
 }

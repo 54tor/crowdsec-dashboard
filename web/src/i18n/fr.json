@@ -218,7 +218,22 @@
     "engine_has_no_sidecar": "Ce moteur n'a pas de sidecar utilisable : il reste en lecture seule.",
     "sidecar_busy": "Le sidecar est occupé. Réessayez dans un instant.",
     "engine_target_mismatch": "Le tableau de bord a résolu un autre moteur que celui demandé : rien n'a été exécuté.",
-    "remote_secrets_unsupported": "Les secrets ne peuvent pas être exportés depuis un moteur distant : son sidecar ne renvoie que du contenu masqué."
+    "remote_secrets_unsupported": "Les secrets ne peuvent pas être exportés depuis un moteur distant : son sidecar ne renvoie que du contenu masqué.",
+    "digest_mismatch": "Le fichier a changé depuis son ouverture.",
+    "config_test_failed": "CrowdSec a rejeté la configuration.",
+    "config_inconsistent": "La configuration peut être incohérente : certains fichiers n'ont pas pu être restaurés.",
+    "schema_invalid": "Le contenu ne respecte pas la structure attendue.",
+    "invalid_yaml": "Le contenu n'est pas du YAML valide.",
+    "redacted_content": "Une valeur masquée ne peut pas être enregistrée telle quelle.",
+    "secret_context_changed": "Une valeur masquée a été déplacée ou son contexte a changé.",
+    "merged_structure_changed": "La structure autour d'une valeur masquée a changé.",
+    "read_only_file": "Ce fichier est en lecture seule.",
+    "protected_file": "Ce fichier ne peut pas être supprimé.",
+    "parent_missing": "Le répertoire parent n'existe pas.",
+    "backup_unavailable": "Le stockage des sauvegardes est indisponible, rien n'a été modifié.",
+    "recovery_pending": "Une modification précédente est encore en cours de récupération. Réessayez dans un instant.",
+    "forbidden_source": "Cette source d'acquisition n'est pas autorisée.",
+    "not_regular_file": "Ce chemin n'est pas un fichier ordinaire."
   },
   "filters": {
     "q": "Rechercher",
@@ -403,6 +418,67 @@
     "select": "Sélectionnez un fichier pour l'afficher.",
     "viewer": "Contenu de {{name}}",
     "loading": "Chargement du fichier…"
+  },
+  "configEdit": {
+    "advancedMode": "Mode avancé",
+    "editorLabel": "Éditeur de {{name}}",
+    "validate": "Valider",
+    "save": "Enregistrer",
+    "saveNeedsValidation": "Validez le texte actuel sans erreur pour activer l'enregistrement.",
+    "notWritable": "Ce fichier ne peut pas être écrit sur ce moteur.",
+    "readOnly": "{{name}} est en lecture seule. Modifiez les réglages dans {{overrides}}, qui le surcharge.",
+    "editOverrides": "Modifier les surcharges",
+    "schemaInvalid": "La structure de la configuration est invalide. Corrigez les problèmes ci-dessous.",
+    "rejected": "CrowdSec a rejeté la modification.",
+    "rejectedRolledBack": "CrowdSec a rejeté la modification et les fichiers ont été restaurés à leur contenu précédent.",
+    "secretExplanation": "Une valeur masquée ([REDACTED]) ne peut être conservée que si son contexte est inchangé ; sinon, retapez le secret.",
+    "conflict": {
+      "title": "Le fichier a été modifié ailleurs",
+      "body": "Votre modification n'a pas été enregistrée pour ne rien écraser. Rechargez le fichier pour voir la version actuelle.",
+      "reload": "Recharger le fichier"
+    },
+    "discard": {
+      "title": "Abandonner les modifications non enregistrées ?",
+      "body": "Vos modifications non enregistrées seront perdues.",
+      "confirm": "Abandonner les modifications"
+    },
+    "issues": {
+      "title": "Problèmes de validation",
+      "none": "Aucun problème détecté.",
+      "line": "Ligne {{line}}",
+      "severity": {
+        "error": "Erreur",
+        "warning": "Avertissement"
+      },
+      "codes": {
+        "invalid_yaml": "YAML invalide",
+        "wrong_type": "Type de valeur inattendu",
+        "unknown_key": "Clé inconnue",
+        "missing_required": "Clé obligatoire manquante"
+      }
+    },
+    "backups": {
+      "title": "Sauvegardes",
+      "none": "Aucune sauvegarde pour l'instant.",
+      "size": "{{size}} octets",
+      "restore": "Restaurer",
+      "restoreAt": "Restaurer la sauvegarde du {{date}}",
+      "confirmTitle": "Restaurer cette sauvegarde ?",
+      "confirmBody": "Le fichier est remplacé par cette sauvegarde ; les secrets masqués sont refusionnés depuis le fichier actuel."
+    },
+    "newFile": {
+      "label": "Nouveau fichier",
+      "hint": "acquis.d/<nom>.yaml, parsers/<étape>/<nom>whitelist.yaml, postoverflows/<étape>/<nom>whitelist.yaml ou config.yaml.local",
+      "invalid": "Ce nom n'est pas un fichier de configuration autorisé.",
+      "create": "Créer le fichier",
+      "willCreate": "{{name}} n'existe pas encore : l'enregistrement le crée."
+    },
+    "delete": {
+      "open": "Supprimer le fichier",
+      "title": "Supprimer ce fichier",
+      "description": "{{name}} sera supprimé du moteur.",
+      "submit": "Supprimer"
+    }
   },
   "dialog": {
     "cancel": "Annuler",
