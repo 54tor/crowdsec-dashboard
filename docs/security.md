@@ -639,9 +639,9 @@ every engine and change those of the local engine.
 - **Local writes only.** The LAPI can read allowlists but has no route to write them, and
   `cscli allowlists` must run on the host of the LAPI. The dashboard therefore writes with `cscli`
   in the local CrowdSec container, through the [command allowlist](#command-allowlist-the-security-boundary)
-  (fixed argv, validated fields, free text as a single `--flag=value`). Remote engines are
-  read-only (`allowlist_engine_readonly`) until a remote execution channel (SSH and SFTP) is
-  designed. Console-managed allowlists are read-only too (`allowlist_console_managed`).
+  (fixed argv, validated fields, free text as a single `--flag=value`). A remote engine is
+  written through its [sidecar](operations.md#engine-sidecar) only, and is read-only
+  (`allowlist_engine_readonly`) without one. Console-managed allowlists are read-only too (`allowlist_console_managed`).
 - **Verification.** `cscli allowlists` exits 0 on a duplicate, invalid or missing value, so the
   dashboard reads the allowlists from the LAPI before and after each write and reports
   `allowlist_write_failed` when the change is not visible. The output of `cscli` and the LAPI

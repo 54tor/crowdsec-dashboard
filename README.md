@@ -5,7 +5,7 @@ running in Docker. It reads alerts and decisions from the local API (LAPI) and m
 machines, hub collections, AppSec items and allowlists by running a fixed set of `cscli` commands
 in the CrowdSec container.
 It can also archive the alerts of remote engines, share bans between engines, and export or import
-the state of the local engine.
+the state of the local engine; a small sidecar next to a remote engine lets the dashboard run `cscli` there ([docs/operations.md](docs/operations.md#engine-sidecar)).
 
 ## What it is, and what it is not
 

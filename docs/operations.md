@@ -11,7 +11,7 @@
 | Hub whitelists | Parser and postoverflow whitelist files (`parsers/*/*whitelist*.yaml|yml`, `postoverflows/*/*whitelist*.yaml|yml`) are shown read-only on the Config page of the local engine. Those that the hub installs as symlinks are not listed there (symlinks are never followed); they stay visible as `parsers` and `postoverflows` items of the Hub page. Remote engines show none. |
 | Hub list | At most 1000 items are returned. |
 | Hub operations | `update`, `upgrade`, `install` and `remove` can take up to 120 s (others 30 s); the HTTP write deadline is extended to match. Other requests have a 60 s write deadline. Install and remove handle collections, AppSec rules and AppSec configurations of the target engine ([AppSec](#appsec)); they are not audited. |
-| Allowlists | The Allowlists page lists the CrowdSec allowlists of every engine (any role) and writes those of the local engine only (administrators): remote engines are read-only until a remote execution channel (SSH and SFTP) exists ([Allowlists](#allowlists)). Console-managed allowlists are shown read-only, but that case was only tested against simulated answers, never a real console. Over 4 MiB of allowlists on an engine, the page is empty, deleting an allowlist and adding or removing an entry answer `engine_unreachable` (creating an allowlist still proceeds; shrink the list with `cscli allowlists remove` on the engine host); over 10 000 entries, the entries beyond are not shown, writes proceed unverified (`refreshed:false`) and a duplicate beyond the cap is not detected (`cscli` does nothing, the API answers success and audits it); in both cases the manual ban and the sync refuse every target there. The manual ban reads the local allowlists just before writing: an entry added by an external `cscli` in between is not seen. An expired entry still counts as a duplicate when the same value is added again (remove it first). |
+| Allowlists | The Allowlists page lists the CrowdSec allowlists of every engine (any role) and writes those of the local engine and of the engines with a sidecar (administrators); an engine without a sidecar is read-only ([Allowlists](#allowlists), [Engine sidecar](#engine-sidecar)). Console-managed allowlists are shown read-only, but that case was only tested against simulated answers, never a real console. Over 4 MiB of allowlists on an engine, the page is empty, deleting an allowlist and adding or removing an entry answer `engine_unreachable` (creating an allowlist still proceeds; shrink the list with `cscli allowlists remove` on the engine host); over 10 000 entries, the entries beyond are not shown, writes proceed unverified (`refreshed:false`) and a duplicate beyond the cap is not detected (`cscli` does nothing, the API answers success and audits it); in both cases the manual ban and the sync refuse every target there. The manual ban reads the local allowlists just before writing: an entry added by an external `cscli` in between is not seen. An expired entry still counts as a duplicate when the same value is added again (remove it first). |
 | AppSec | AppSec alerts are badged and filtered by origin; the HTTP method and user agent of the request are not shown (they are in the alert-level meta, which the backend does not send). The per-rule AppSec alerts carry no decision: the ban is on the aggregate alert `crowdsecurity/appsec-vpatch` ([AppSec](#appsec)). |
 | Reload | "Reload CrowdSec" sends `SIGHUP` to process 1 of the CrowdSec container, so CrowdSec must be PID 1 (true for the official image). Hub changes need it to take effect; the banner "CrowdSec must be reloaded" appears on the Hub page after a change, for the engine that changed only, and is kept in the browser tab only, it disappears on a page reload. Counters of the Metrics page restart at zero after a reload. |
 | Metrics | Needs Prometheus enabled in CrowdSec, otherwise "Metrics are unavailable" ([configuration.md](configuration.md#prometheus-for-the-metrics-page)). Only the acquisition and parser tables are shown. |
@@ -421,6 +421,44 @@ two denormalisations: alert fields that CrowdSec repeats per alert (scenario, so
 value, country, AS, decision type and origin) are stored as text instead of lookup tables, and
 `event_meta` and `engine_public_address_list` are JSONB documents.
 
+## Engine sidecar
+
+A remote engine runs `cscli` through a sidecar deployed next to its CrowdSec: a small HTTPS service
+(image `ghcr.io/<repository>/sidecar`, built from `deploy/Dockerfile.sidecar`) that accepts signed
+requests from the dashboard only. Routes and errors: [api.md](api.md#engines). Without a sidecar, a
+remote engine is read-only.
+
+| Variable (sidecar) | Default | Meaning |
+|---|---|---|
+| `SIDECAR_ISSUER` | required | The dashboard's `WEBAUTHN_RP_ID`. |
+| `SIDECAR_AUDIENCE` | required | The engine name as registered in the dashboard. |
+| `SIDECAR_TRUSTED_KEYS_FILE` | required | Absolute path of the file of `<kid> <public key hex>` lines the dashboard gives at enrolment. It must hold at least one key at start. |
+| `SIDECAR_LISTEN_ADDR` | `:8443` | HTTPS listen address. |
+| `SIDECAR_DATA_DIR` | `/var/lib/crowdsec-dashboard-sidecar` | Private directory (mode 0700, a volume) holding the self-signed certificate and the digest key. |
+| `SIDECAR_CONF_DIR` | `/etc/crowdsec` | Read-only CrowdSec configuration served masked. |
+| `SIDECAR_ACQUISITION_DIR` | empty | Dedicated `acquis.d` directory, writable; enables the configuration import ([bundles.md](bundles.md)). |
+| `SIDECAR_ALLOWED_COMMANDS` | all | Comma-separated subset of the `cscli` commands the sidecar accepts. |
+| `SIDECAR_READ_ONLY` | `false` | Refuses every write command. |
+| `SIDECAR_MAX_CONCURRENT_EXECUTIONS` | `4` | Parallel `cscli` executions, 1 to 16. |
+| `DOCKER_HOST`, `CROWDSEC_CONTAINER` | none, `crowdsec` | Docker API endpoint (a socket proxy) and the CrowdSec container, as for the dashboard. |
+
+Enrolment, once per engine:
+
+1. Create the trusted keys file with one throw-away line, since the sidecar refuses an empty file
+   and the dashboard needs the running sidecar to read its certificate:
+   `printf 'bootstrap %s\n' "$(openssl genpkey -algorithm ed25519 | openssl pkey -pubout -outform DER | tail -c 32 | xxd -p -c 64)" > trusted.keys`.
+   Start the sidecar, reachable from the dashboard over `https`.
+2. On the Engines page, enrol the sidecar: the dashboard shows the certificate fingerprint (SPKI
+   SHA-256); compare it with the `spki_sha256` of the sidecar's `sidecar_started` log line, then
+   confirm. The dashboard answers with `issuer`, `audience` and the `trusted_key_line`.
+3. Put that line in the trusted keys file, replacing the throw-away one, and reload it without a
+   restart: `docker kill --signal=HUP <sidecar container>`. Then use the test action of the engine.
+
+Rotation: stage a new key from the Engines page, add its line to the file next to the old one,
+reload (`SIGHUP`), promote, then delete the old line and reload again. Keep the sidecar on a
+private network or behind a firewall that admits the dashboard only; a certificate renewal needs a
+new enrolment `PUT` to re-pin it.
+
 ## Allowlists
 
 The Allowlists page shows, for the engine chosen in its selector, every CrowdSec allowlist with its
@@ -429,10 +467,10 @@ anything). Every role can read it; administrators can create and delete allowlis
 entries on the **local** engine. Semantics and routes: [api.md](api.md#allowlists), threat model:
 [security.md](security.md#allowlists-of-the-engines).
 
-- **Remote engines are read-only.** The LAPI can read allowlists but not write them, and
-  `cscli allowlists` must run on the LAPI host: the dashboard writes with `cscli` in the local
-  container only. For a remote engine, run `cscli allowlists ...` on its host; the page shows the
-  result at the next read. Writing remotely waits for the SSH and SFTP design.
+- **Remote engines need a sidecar to be written.** The LAPI can read allowlists but not write them,
+  and `cscli allowlists` must run on the LAPI host: the dashboard writes with `cscli` in the local
+  container, or through the [sidecar](#engine-sidecar) of a remote engine. Without a sidecar, run
+  `cscli allowlists ...` on its host; the page shows the result at the next read.
 - **Wide ranges.** Wider than IPv4 /24 or IPv6 /48: the page asks you to retype the range. Wider
   than IPv4 /8 or IPv6 /32: refused.
 - **Adding an entry deletes decisions.** CrowdSec deletes at once every decision of the engine
