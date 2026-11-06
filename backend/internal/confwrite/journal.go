@@ -63,7 +63,7 @@ func readJournal(root *os.Root, backupDir string) (journal, error) {
 		return journal{}, ErrInvalidJournal
 	}
 	for _, journaledName := range append(append([]string{}, entry.Created...), entry.Replaced...) {
-		if ValidateName(journaledName) != nil {
+		if ValidateName(journaledName) != nil && ValidateEditableName(journaledName) != nil {
 			return journal{}, ErrInvalidJournal
 		}
 	}

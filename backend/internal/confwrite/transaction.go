@@ -18,6 +18,7 @@ type pendingWrite struct {
 	replaced fs.FileInfo
 	tempName string
 	renamed  bool
+	remove   bool
 }
 
 type transaction struct {
@@ -28,11 +29,15 @@ type transaction struct {
 }
 
 func (writeTransaction *transaction) classify(changes []FileChange) (Result, error) {
-	result := Result{Created: []string{}, Updated: []string{}, Unchanged: []string{}}
+	result := Result{Created: []string{}, Updated: []string{}, Unchanged: []string{}, Deleted: []string{}}
 	for _, change := range sortedChanges(changes) {
 		current, readError := readCurrent(writeTransaction.root, change.Name)
 		if readError != nil {
 			return Result{}, readError
+		}
+		if change.Delete {
+			writeTransaction.classifyDeletion(&result, change.Name, current)
+			continue
 		}
 		isUnchanged := current.Exists && !current.Oversized && bytes.Equal(current.Content, change.Content)
 		if isUnchanged {
@@ -40,6 +45,11 @@ func (writeTransaction *transaction) classify(changes []FileChange) (Result, err
 			continue
 		}
 		write := &pendingWrite{name: change.Name, content: change.Content, mode: newFileMode}
+		if !current.Exists {
+			if parentError := requireParentDirectory(writeTransaction.root, change.Name); parentError != nil {
+				return Result{}, parentError
+			}
+		}
 		if current.Exists {
 			write.mode, write.replaced = current.info.Mode().Perm(), current.info
 			result.Updated = append(result.Updated, change.Name)
@@ -51,12 +61,25 @@ func (writeTransaction *transaction) classify(changes []FileChange) (Result, err
 	return result, nil
 }
 
+func (writeTransaction *transaction) classifyDeletion(result *Result, name string, current Current) {
+	if !current.Exists {
+		result.Unchanged = append(result.Unchanged, name)
+		return
+	}
+	write := &pendingWrite{name: name, mode: current.info.Mode().Perm(), replaced: current.info, remove: true}
+	result.Deleted = append(result.Deleted, name)
+	writeTransaction.writes = append(writeTransaction.writes, write)
+}
+
 func (writeTransaction *transaction) stage() error {
 	if prepareError := writeTransaction.prepareBackupDir(); prepareError != nil {
 		return prepareError
 	}
 	for _, write := range writeTransaction.writes {
-		tempName, writeError := writeContentToTemp(writeTransaction.root, write.content, write.mode)
+		if write.remove {
+			continue
+		}
+		tempName, writeError := writeContentToTemp(writeTransaction.root, write.name, write.content, write.mode)
 		if writeError != nil {
 			return writeError
 		}
@@ -86,6 +109,9 @@ func (writeTransaction *transaction) backupReplacedFiles() error {
 			continue
 		}
 		backupName := path.Join(writeTransaction.backupDir, write.name)
+		if directoryError := ensureBackupSubdirectories(writeTransaction.root, writeTransaction.backupDir, write.name); directoryError != nil {
+			return directoryError
+		}
 		if backupError := backupFile(writeTransaction.root, write.name, write.replaced, backupName); backupError != nil {
 			return backupError
 		}
@@ -110,12 +136,27 @@ func (writeTransaction *transaction) commit() error {
 		if verifyError := writeTransaction.verifyTarget(write); verifyError != nil {
 			return verifyError
 		}
-		if renameError := writeTransaction.hooks.rename(writeTransaction.root, write.tempName, write.name); renameError != nil {
-			return renameError
+		if applyError := writeTransaction.applyWrite(write); applyError != nil {
+			return applyError
 		}
 		write.renamed = true
 	}
-	return writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")
+	return writeTransaction.syncTouchedDirectories()
+}
+
+func (writeTransaction *transaction) applyWrite(write *pendingWrite) error {
+	if write.remove {
+		return writeTransaction.root.Remove(write.name)
+	}
+	return writeTransaction.hooks.rename(writeTransaction.root, write.tempName, write.name)
+}
+
+func (writeTransaction *transaction) syncTouchedDirectories() error {
+	syncErrors := []error{writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")}
+	for _, directory := range parentDirectoriesOf(writeTransaction.writes) {
+		syncErrors = append(syncErrors, writeTransaction.hooks.syncDirectory(writeTransaction.root, directory))
+	}
+	return errors.Join(syncErrors...)
 }
 
 func (writeTransaction *transaction) verifyTarget(write *pendingWrite) error {
@@ -155,7 +196,7 @@ func (writeTransaction *transaction) rollback(result Result, cause error) (Resul
 			affectedFiles = append(affectedFiles, write.name)
 		}
 	}
-	syncError := writeTransaction.hooks.syncDirectory(writeTransaction.root, ".")
+	syncError := writeTransaction.syncTouchedDirectories()
 	if len(affectedFiles) > 0 {
 		return result, &InconsistentError{Files: affectedFiles}
 	}
@@ -178,6 +219,6 @@ func (writeTransaction *transaction) finish(result Result) (Result, error) {
 	if removeError == nil {
 		return result, nil
 	}
-	writtenFiles := append(append([]string{}, result.Created...), result.Updated...)
+	writtenFiles := append(append(append([]string{}, result.Created...), result.Updated...), result.Deleted...)
 	return result, &InconsistentError{Files: writtenFiles}
 }

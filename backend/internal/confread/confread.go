@@ -25,6 +25,7 @@ var allowedPatterns = []string{
 	"config.yaml",
 	"acquis.yaml",
 	"profiles.yaml",
+	localOverrideName,
 	"acquis.d/*.yaml",
 	"acquis.d/*.yml",
 	"parsers/*/*whitelist*.yaml",

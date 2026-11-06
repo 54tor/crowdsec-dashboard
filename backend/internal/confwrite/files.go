@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strings"
 )
 
 const (
@@ -126,8 +127,8 @@ func copyAndSync(file *os.File, source io.Reader, mode fs.FileMode) error {
 	return nil
 }
 
-func writeContentToTemp(root *os.Root, content []byte, mode fs.FileMode) (string, error) {
-	return writeTempFile(root, ".", bytes.NewReader(content), mode)
+func writeContentToTemp(root *os.Root, name string, content []byte, mode fs.FileMode) (string, error) {
+	return writeTempFile(root, path.Dir(name), bytes.NewReader(content), mode)
 }
 
 func backupFile(root *os.Root, name string, expected fs.FileInfo, targetName string) error {
@@ -152,7 +153,7 @@ func restoreFromBackup(root *os.Root, backupDir, name string) error {
 		return openError
 	}
 	defer backup.Close()
-	tempName, copyError := writeTempFile(root, ".", backup, backupInfo.Mode().Perm())
+	tempName, copyError := writeTempFile(root, path.Dir(name), backup, backupInfo.Mode().Perm())
 	if copyError != nil {
 		return copyError
 	}
@@ -201,4 +202,18 @@ func createDirectory(root *os.Root, name string) error {
 		return fmt.Errorf("confwrite: chmod dir: %w", chmodError)
 	}
 	return syncDirectory(root, path.Dir(name))
+}
+
+func ensureBackupSubdirectories(root *os.Root, backupDir, name string) error {
+	currentDirectory := backupDir
+	for _, segment := range strings.Split(path.Dir(name), "/") {
+		if segment == "." {
+			continue
+		}
+		currentDirectory = path.Join(currentDirectory, segment)
+		if ensureError := ensureDirectory(root, currentDirectory); ensureError != nil {
+			return ensureError
+		}
+	}
+	return nil
 }

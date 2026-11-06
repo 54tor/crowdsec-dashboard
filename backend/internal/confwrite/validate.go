@@ -3,6 +3,7 @@ package confwrite
 import (
 	"bytes"
 	"errors"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -32,6 +33,7 @@ var forbiddenNameFragments = []string{"whitelist", "credential", "secret"}
 type FileChange struct {
 	Name    string
 	Content []byte
+	Delete  bool
 }
 
 func ValidateName(name string) error {
@@ -49,26 +51,53 @@ func ValidateName(name string) error {
 }
 
 func ValidateContent(content []byte) error {
+	if sizeError := validateSizeAndRedaction(content); sizeError != nil {
+		return sizeError
+	}
+	return validateYAML(content)
+}
+
+func validateSizeAndRedaction(content []byte) error {
 	if len(content) > MaxFileBytes {
 		return ErrTooLarge
 	}
 	if bytes.Contains(content, []byte(confread.RedactedMarker)) {
 		return ErrRedactedContent
 	}
-	return validateYAML(content)
+	return nil
 }
 
-func validateChanges(changes []FileChange) error {
+func validateContentFor(name string, content []byte) error {
+	if isAcquisitionPath(name) {
+		return ValidateContent(content)
+	}
+	if sizeError := validateSizeAndRedaction(content); sizeError != nil {
+		return sizeError
+	}
+	return validateWellFormedYAML(content)
+}
+
+func isAcquisitionPath(name string) bool {
+	return ValidateName(name) == nil || path.Dir(name) == acquisitionDirectory
+}
+
+func validateChanges(changes []FileChange, validateName func(string) error) error {
 	seenNames := map[string]bool{}
 	for _, change := range changes {
-		if nameError := ValidateName(change.Name); nameError != nil {
+		if change.Delete && slices.Contains(protectedFromDeletion, change.Name) {
+			return ErrProtectedFile
+		}
+		if nameError := validateName(change.Name); nameError != nil {
 			return nameError
 		}
 		if seenNames[change.Name] {
 			return ErrDuplicateName
 		}
 		seenNames[change.Name] = true
-		if contentError := ValidateContent(change.Content); contentError != nil {
+		if change.Delete {
+			continue
+		}
+		if contentError := validateContentFor(change.Name, change.Content); contentError != nil {
 			return contentError
 		}
 	}

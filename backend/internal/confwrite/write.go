@@ -17,6 +17,7 @@ var (
 type Result struct {
 	Created    []string
 	Updated    []string
+	Deleted    []string
 	Unchanged  []string
 	RolledBack bool
 }
@@ -54,10 +55,18 @@ func Apply(rootDir string, changes []FileChange, test func(ctx context.Context) 
 	return applyWith(rootDir, changes, test, defaultHooks())
 }
 
+func ApplyTree(rootDir string, changes []FileChange, test func(ctx context.Context) error) (Result, error) {
+	return applyTreeWith(rootDir, changes, test, defaultHooks(), ValidateEditableName)
+}
+
 func applyWith(rootDir string, changes []FileChange, test func(ctx context.Context) error, hooks fileSystemHooks) (Result, error) {
+	return applyTreeWith(rootDir, changes, test, hooks, ValidateName)
+}
+
+func applyTreeWith(rootDir string, changes []FileChange, test func(ctx context.Context) error, hooks fileSystemHooks, validateName func(string) error) (Result, error) {
 	applyMutex.Lock()
 	defer applyMutex.Unlock()
-	if validationError := validateChanges(changes); validationError != nil {
+	if validationError := validateChanges(changes, validateName); validationError != nil {
 		return Result{}, validationError
 	}
 	root, openError := openImportRoot(rootDir)

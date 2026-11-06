@@ -327,3 +327,18 @@ func TestHubSymlinkedWhitelistIsRefused(testContext *testing.T) {
 		testContext.Errorf("symlinked whitelists must not be listed, got %v", obtainedNames)
 	}
 }
+
+func TestReadAllowsLocalOverrideConfigFile(testContext *testing.T) {
+	confDir := testContext.TempDir()
+	writeConfFile(testContext, confDir, "config.yaml.local", "api:\n  server:\n    listen_uri: 127.0.0.1:8080\n")
+	if !IsAllowedName("config.yaml.local") {
+		testContext.Fatal("config.yaml.local must be on the read allow-list")
+	}
+	listedNames, listError := List(confDir)
+	if listError != nil || !slices.Contains(listedNames, "config.yaml.local") {
+		testContext.Fatalf("List = %v, %v", listedNames, listError)
+	}
+	if _, readError := Read(confDir, "config.yaml.local"); readError != nil {
+		testContext.Fatalf("Read: %v", readError)
+	}
+}
