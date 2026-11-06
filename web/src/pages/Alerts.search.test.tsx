@@ -72,10 +72,10 @@ describe('alerts search', () => {
     })
     await renderAlertsAndWaitForTheFirstRows()
 
-    const typingUser = userEvent.setup()
-    for (const typedCharacter of 'ssh-bf') {
-      await typingUser.type(screen.getByLabelText(SEARCH_LABEL), typedCharacter)
-    }
+    // delay: null dispatches every keystroke without yielding to the timer queue, so a loaded
+    // machine cannot stretch the gap between two keys past the debounce and send a prefix.
+    const typingUser = userEvent.setup({ delay: null })
+    await typingUser.type(screen.getByLabelText(SEARCH_LABEL), 'ssh-bf')
     await waitForDebounce()
 
     expect(await screen.findByText('crowdsecurity/searched-row')).toBeInTheDocument()
