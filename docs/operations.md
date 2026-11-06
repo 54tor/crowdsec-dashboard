@@ -432,7 +432,7 @@ remote engine is read-only.
 |---|---|---|
 | `SIDECAR_ISSUER` | required | The dashboard's `WEBAUTHN_RP_ID`. |
 | `SIDECAR_AUDIENCE` | required | The engine name as registered in the dashboard. |
-| `SIDECAR_TRUSTED_KEYS_FILE` | required | Absolute path of the file of `<kid> <public key hex>` lines the dashboard gives at enrolment. It must hold at least one key at start. |
+| `SIDECAR_TRUSTED_KEYS_FILE` | required | Absolute path of the file of `<kid> <public key hex>` lines the dashboard gives at enrolment. It must hold at least one key at start. The file and its directory must not be writable by their group or by others (for example `0644` in a `0755` directory owned by root): anyone able to write either could trust their own key, so the sidecar refuses to start, or to reload, otherwise. |
 | `SIDECAR_LISTEN_ADDR` | `:8443` | HTTPS listen address. |
 | `SIDECAR_DATA_DIR` | `/var/lib/crowdsec-dashboard-sidecar` | Private directory (mode 0700, a volume) holding the self-signed certificate and the digest key. |
 | `SIDECAR_CONF_DIR` | `/etc/crowdsec` | Read-only CrowdSec configuration served masked. |
@@ -455,7 +455,9 @@ Enrolment, once per engine:
    restart: `docker kill --signal=HUP <sidecar container>`. Then use the test action of the engine.
 
 Rotation: stage a new key from the Engines page, add its line to the file next to the old one,
-reload (`SIGHUP`), promote, then delete the old line and reload again. Keep the sidecar on a
+reload (`SIGHUP`), promote, then delete the old line and reload again. A reload that would leave
+the file without any key is refused and the sidecar keeps its previous keys: to revoke every key
+at once (a compromised dashboard key with no successor), stop the sidecar. Keep the sidecar on a
 private network or behind a firewall that admits the dashboard only; a certificate renewal needs a
 new enrolment `PUT` to re-pin it.
 

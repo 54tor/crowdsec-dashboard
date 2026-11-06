@@ -15,11 +15,16 @@ import (
 	"aidanwoods.dev/go-paseto"
 )
 
-const maxTrustedKeysFileSize = 64 * 1024
+const (
+	maxTrustedKeysFileSize   = 64 * 1024
+	groupOrOtherWritableBits = 0o022
+)
 
 var errNoTrustedKeys = errors.New("sidecarauth: trusted keys file holds no key")
 var errTrustedKeysFileTooLarge = errors.New("sidecarauth: trusted keys file exceeds its size cap")
 var errTrustedKeysNotRegular = errors.New("sidecarauth: trusted keys file is not a regular file")
+var errTrustedKeysFileWritableByOthers = errors.New("sidecarauth: trusted keys file is writable by its group or by others")
+var errTrustedKeysDirectoryWritableByOthers = errors.New("sidecarauth: trusted keys directory is writable by its group or by others")
 
 type TrustedKeys struct {
 	path       string
@@ -114,6 +119,13 @@ func readTrustedKeysFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("sidecarauth: open trusted keys directory: %w", openRootError)
 	}
 	defer root.Close()
+	directoryInfo, directoryStatError := root.Stat(".")
+	if directoryStatError != nil {
+		return nil, fmt.Errorf("sidecarauth: stat trusted keys directory: %w", directoryStatError)
+	}
+	if directoryInfo.Mode().Perm()&groupOrOtherWritableBits != 0 {
+		return nil, errTrustedKeysDirectoryWritableByOthers
+	}
 	keysFile, openError := root.OpenFile(filepath.Base(path), os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if openError != nil {
 		return nil, fmt.Errorf("sidecarauth: open trusted keys file: %w", openError)
@@ -125,6 +137,9 @@ func readTrustedKeysFile(path string) ([]byte, error) {
 	}
 	if !fileInfo.Mode().IsRegular() {
 		return nil, errTrustedKeysNotRegular
+	}
+	if fileInfo.Mode().Perm()&groupOrOtherWritableBits != 0 {
+		return nil, errTrustedKeysFileWritableByOthers
 	}
 	content, readError := io.ReadAll(io.LimitReader(keysFile, maxTrustedKeysFileSize+1))
 	if readError != nil {

@@ -279,3 +279,52 @@ func TestParseTrustedKeysReportsAnOverLongLine(testContext *testing.T) {
 		testContext.Fatalf("error should report a too long line 1: %v", parseError)
 	}
 }
+
+// Whoever can write the trusted keys file, or swap it in its directory, can trust their own
+// signing key: a file or directory writable by the group or by others is refused, while a
+// world-readable file is fine since it only holds public keys. Chmod is used because os.WriteFile
+// and t.TempDir are filtered by the umask.
+func TestLoadTrustedKeysRefusesAFileOrDirectoryWritableByOthers(testContext *testing.T) {
+	trustedKey := mustGenerateSigningKey(testContext)
+	refusedCases := []struct {
+		description   string
+		fileMode      os.FileMode
+		directoryMode os.FileMode
+	}{
+		{"group writable file", 0o660, 0o700},
+		{"world writable file", 0o606, 0o700},
+		{"group writable directory", 0o600, 0o770},
+		{"world writable directory", 0o600, 0o757},
+	}
+	for _, refusedCase := range refusedCases {
+		testContext.Run(refusedCase.description, func(caseContext *testing.T) {
+			keysDirectory := caseContext.TempDir()
+			keysPath := filepath.Join(keysDirectory, "trusted_keys")
+			writeTrustedKeysFile(caseContext, keysPath, trustedKey.TrustedKeyLine()+"\n")
+			mustChmod(caseContext, keysPath, refusedCase.fileMode)
+			mustChmod(caseContext, keysDirectory, refusedCase.directoryMode)
+
+			if _, loadError := LoadTrustedKeys(keysPath); loadError == nil {
+				caseContext.Fatal("expected the trusted keys file to be refused")
+			}
+		})
+	}
+}
+
+func TestLoadTrustedKeysAcceptsAWorldReadableFileInAPrivateDirectory(testContext *testing.T) {
+	trustedKey := mustGenerateSigningKey(testContext)
+	keysDirectory := testContext.TempDir()
+	keysPath := filepath.Join(keysDirectory, "trusted_keys")
+	writeTrustedKeysFile(testContext, keysPath, trustedKey.TrustedKeyLine()+"\n")
+	mustChmod(testContext, keysPath, 0o644)
+	mustChmod(testContext, keysDirectory, 0o755)
+
+	mustLoadTrustedKeys(testContext, keysPath)
+}
+
+func mustChmod(testContext *testing.T, path string, mode os.FileMode) {
+	testContext.Helper()
+	if chmodError := os.Chmod(path, mode); chmodError != nil {
+		testContext.Fatalf("chmod %s: %v", filepath.Base(path), chmodError)
+	}
+}
