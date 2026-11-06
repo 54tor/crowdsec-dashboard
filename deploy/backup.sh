@@ -31,16 +31,21 @@ umask 077
 mkdir -p "$output_directory"
 cd "$output_directory"
 backup_name="$database-$(date -u +%Y%m%dT%H%M%SZ).dump"
+partial_name="./.$backup_name.partial"
+trap 'rm -f -- "$partial_name"' EXIT
 
-if ! docker compose -p "$project" exec -T "$service" sh -c 'pg_dump -Fc -U "${POSTGRES_USER:-postgres}" -d "$1"' sh "$database" > "./$backup_name"; then
-  rm -f -- "./$backup_name"
+if ! docker compose -p "$project" exec -T "$service" sh -c 'pg_dump -Fc -U "${POSTGRES_USER:-postgres}" -d "$1"' sh "$database" > "$partial_name"; then
   echo "backup failed" >&2
   exit 1
 fi
-if [ ! -s "./$backup_name" ]; then
-  rm -f -- "./$backup_name"
+if [ ! -s "$partial_name" ]; then
   echo "backup is empty" >&2
   exit 1
 fi
-chmod 0600 "./$backup_name"
+chmod 0600 "$partial_name"
+if [ -e "./$backup_name" ]; then
+  echo "backup $backup_name already exists" >&2
+  exit 1
+fi
+mv -- "$partial_name" "./$backup_name"
 echo "$PWD/$backup_name"
