@@ -12,10 +12,12 @@ const (
 )
 
 type spec struct {
-	kind     kind
-	fields   map[string]spec
-	item     *spec
-	required []string
+	kind         kind
+	fields       map[string]spec
+	item         *spec
+	required     []string
+	warnRequired []string
+	soft         bool
 }
 
 var (
@@ -35,3 +37,13 @@ func sequenceOf(item spec) spec {
 }
 
 var stringList = sequenceOf(stringValue)
+
+func (base spec) withWarnRequired(keys ...string) spec {
+	base.warnRequired = keys
+	return base
+}
+
+func (base spec) asSoft() spec {
+	base.soft = true
+	return base
+}

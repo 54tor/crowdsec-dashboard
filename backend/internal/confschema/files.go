@@ -2,15 +2,41 @@ package confschema
 
 import (
 	"path"
+	"slices"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
+const whitelistKey = "whitelist"
+
 type fileFamily struct {
-	root *spec
+	root        *spec
+	onlyWithKey string
+}
+
+func (family fileFamily) appliesTo(documentRoot *yaml.Node) bool {
+	if family.root == nil {
+		return false
+	}
+	if family.onlyWithKey == "" {
+		return true
+	}
+	if documentRoot.Kind != yaml.MappingNode {
+		return false
+	}
+	for pairIndex := 0; pairIndex < len(documentRoot.Content); pairIndex += 2 {
+		if documentRoot.Content[pairIndex].Value == family.onlyWithKey {
+			return true
+		}
+	}
+	return false
 }
 
 func familyForFile(fileName string) fileFamily {
-	baseName := path.Base(fileName)
+	segments := strings.Split(strings.ReplaceAll(fileName, "\\", "/"), "/")
+	baseName := path.Base(segments[len(segments)-1])
+	directories := segments[:len(segments)-1]
 	switch {
 	case baseName == "config.yaml":
 		return fileFamily{root: &mainConfigSpec}
@@ -18,57 +44,16 @@ func familyForFile(fileName string) fileFamily {
 		return fileFamily{root: &mainConfigOverrideSpec}
 	case baseName == "profiles.yaml":
 		return fileFamily{root: &profileSpec}
-	case isAcquisitionFile(fileName, baseName):
+	case baseName == "acquis.yaml":
 		return fileFamily{root: &acquisitionSpec}
-	case isWhitelistFile(fileName):
-		return fileFamily{root: &whitelistSpec}
+	case isYAMLFile(baseName) && slices.Contains(directories, "acquis.d"):
+		return fileFamily{root: &acquisitionSpec}
+	case isYAMLFile(baseName) && (slices.Contains(directories, "parsers") || slices.Contains(directories, "postoverflows")):
+		return fileFamily{root: &whitelistSpec, onlyWithKey: whitelistKey}
 	}
 	return fileFamily{}
 }
 
-func isAcquisitionFile(fileName string, baseName string) bool {
-	if baseName == "acquis.yaml" {
-		return true
-	}
-	isYAMLFile := strings.HasSuffix(baseName, ".yaml") || strings.HasSuffix(baseName, ".yml")
-	return isYAMLFile && strings.Contains(fileName, "acquis.d/")
+func isYAMLFile(baseName string) bool {
+	return strings.HasSuffix(baseName, ".yaml") || strings.HasSuffix(baseName, ".yml")
 }
-
-func isWhitelistFile(fileName string) bool {
-	return strings.Contains(fileName, "parsers/") || strings.Contains(fileName, "postoverflows/")
-}
-
-var profileSpec = mapping(map[string]spec{
-	"name":    stringValue,
-	"debug":   boolValue,
-	"filters": stringList,
-	"decisions": sequenceOf(mapping(map[string]spec{
-		"type":     stringValue,
-		"scope":    stringValue,
-		"value":    stringValue,
-		"duration": stringValue,
-		"origin":   stringValue,
-	})),
-	"duration_expr": stringValue,
-	"notifications": stringList,
-	"on_success":    stringValue,
-	"on_failure":    stringValue,
-}, "name", "filters")
-
-var whitelistSpec = mapping(map[string]spec{
-	"name":           stringValue,
-	"description":    stringValue,
-	"filter":         stringValue,
-	"debug":          boolValue,
-	"onsuccess":      stringValue,
-	"data":           anyValue,
-	"statics":        anyValue,
-	"nodes":          anyValue,
-	"pattern_syntax": openMapping,
-	"whitelist": mapping(map[string]spec{
-		"reason":     stringValue,
-		"ip":         stringList,
-		"cidr":       stringList,
-		"expression": stringList,
-	}, "reason"),
-}, "name", "description", "whitelist")

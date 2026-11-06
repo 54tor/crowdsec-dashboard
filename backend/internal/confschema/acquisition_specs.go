@@ -2,6 +2,7 @@ package confschema
 
 var acquisitionGenericFields = map[string]spec{
 	"source":           stringValue,
+	"unique_id":        stringValue,
 	"labels":           openMapping,
 	"log_level":        stringValue,
 	"use_time_machine": boolValue,
@@ -17,6 +18,7 @@ var acquisitionSourceFields = map[string]map[string]spec{
 		"poll_without_inotify": boolValue,
 		"force_inotify":        boolValue,
 		"discover_on_inotify":  boolValue,
+		"max_buffer_size":      intValue,
 	},
 	"journalctl": {
 		"journalctl_filter": stringList,
@@ -42,6 +44,7 @@ var acquisitionSourceFields = map[string]map[string]spec{
 		"timeout":   stringValue,
 		"tls":       openMapping,
 		"auth_type": stringValue,
+		"partition": intValue,
 	},
 	"cloudwatch": {
 		"aws_profile":                  stringValue,
@@ -68,6 +71,7 @@ var acquisitionSourceFields = map[string]map[string]spec{
 		"listen_port":     intValue,
 		"listen_socket":   stringValue,
 		"protocol":        stringValue,
+		"tls":             openMapping,
 		"max_message_len": intValue,
 	},
 	"k8s-audit": {
@@ -95,9 +99,40 @@ var acquisitionSourceFields = map[string]map[string]spec{
 		"key_file":            stringValue,
 		"routines":            intValue,
 	},
+	"loki": {
+		"url": stringValue, "query": stringValue, "headers": openMapping, "auth": openMapping,
+		"limit": intValue, "since": stringValue, "delay_for": stringValue, "wait_for": stringValue,
+		"max_failure_duration": stringValue, "no_ready_check": boolValue,
+	},
+	"victorialogs": {
+		"url": stringValue, "query": stringValue, "headers": openMapping, "auth": openMapping,
+		"limit": intValue, "since": stringValue, "wait_for": stringValue,
+		"max_failure_duration": stringValue, "no_ready_check": boolValue,
+	},
+	"http": {
+		"listen_addr": stringValue, "listen_socket": stringValue, "path": stringValue,
+		"auth_type": stringValue, "headers": openMapping, "basic_auth": openMapping,
+		"tls": openMapping, "max_body_size": intValue, "custom_status_code": intValue,
+		"custom_headers": openMapping, "timeout": stringValue,
+	},
+	"s3": {
+		"polling_method": stringValue, "bucket_name": stringValue, "sqs_name": stringValue,
+		"sqs_format": stringValue, "polling_interval": intValue, "prefix": stringValue,
+		"aws_region": stringValue, "aws_profile": stringValue, "aws_endpoint": stringValue,
+		"max_buffer_size": intValue,
+	},
+	"kinesis": {
+		"stream_name": stringValue, "stream_arn": stringValue, "use_enhanced_fanout": boolValue,
+		"consumer_name": stringValue, "from_subscription": boolValue, "aws_region": stringValue,
+		"aws_profile": stringValue, "aws_endpoint": stringValue, "max_retries": intValue,
+	},
+	"wineventlog": {
+		"event_channel": stringValue, "event_level": stringValue,
+		"event_ids": sequenceOf(intValue), "xpath_query": stringValue, "pretty_name": stringValue,
+	},
 }
 
-var acquisitionSpec = mapping(mergeAcquisitionFields(), "source")
+var acquisitionSpec = mapping(mergeAcquisitionFields(), "source").asSoft()
 
 func mergeAcquisitionFields() map[string]spec {
 	mergedFields := map[string]spec{}

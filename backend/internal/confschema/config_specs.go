@@ -1,22 +1,17 @@
 package confschema
 
-var mainConfigSpec = withRequired(mainConfigOverrideSpec, "common", "config_paths", "api")
+var mainConfigSpec = mainConfigOverrideSpec.withWarnRequired("common", "config_paths", "api")
 
 var mainConfigOverrideSpec = mapping(map[string]spec{
 	"common":           commonSpec,
-	"config_paths":     configPathsSpec,
-	"crowdsec_service": crowdsecServiceSpec,
-	"cscli":            cscliSpec,
+	"config_paths":     configPathsSpec.asSoft(),
+	"crowdsec_service": crowdsecServiceSpec.asSoft(),
+	"cscli":            cscliSpec.asSoft(),
 	"db_config":        dbConfigSpec,
 	"api":              apiSpec,
 	"prometheus":       prometheusSpec,
-	"plugin_config":    pluginConfigSpec,
+	"plugin_config":    pluginConfigSpec.asSoft(),
 })
-
-func withRequired(base spec, requiredKeys ...string) spec {
-	base.required = requiredKeys
-	return base
-}
 
 var commonSpec = mapping(map[string]spec{
 	"daemonize":        boolValue,
@@ -110,8 +105,8 @@ var dbConfigSpec = mapping(map[string]spec{
 })
 
 var apiSpec = mapping(map[string]spec{
-	"cti":    apiCTISpec,
-	"client": apiClientSpec,
+	"cti":    apiCTISpec.asSoft(),
+	"client": apiClientSpec.asSoft(),
 	"server": apiServerSpec,
 })
 
@@ -152,8 +147,8 @@ var apiServerSpec = mapping(map[string]spec{
 	"disable_usage_metrics_export":     boolValue,
 	"capi_whitelists_path":             stringValue,
 	"trusted_ips":                      stringList,
-	"tls":                              apiServerTLSSpec,
-	"online_client": mapping(map[string]spec{
+	"tls":                              apiServerTLSSpec.asSoft(),
+	"online_client": softMapping(map[string]spec{
 		"sharing":          boolValue,
 		"credentials_path": stringValue,
 		"pull": mapping(map[string]spec{
@@ -161,9 +156,13 @@ var apiServerSpec = mapping(map[string]spec{
 			"blocklists": boolValue,
 		}),
 	}),
-	"auto_registration": mapping(map[string]spec{
+	"auto_registration": softMapping(map[string]spec{
 		"enabled":        boolValue,
 		"token":          anyValue,
 		"allowed_ranges": stringList,
 	}),
 })
+
+func softMapping(fields map[string]spec) spec {
+	return mapping(fields).asSoft()
+}
