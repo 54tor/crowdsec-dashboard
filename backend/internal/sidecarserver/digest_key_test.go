@@ -2,6 +2,8 @@ package sidecarserver
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -182,5 +184,20 @@ func TestDigestKeyNeverPrintsItsSecret(testContext *testing.T) {
 		if strings.Contains(printedForms, secretForm) {
 			testContext.Fatalf("the digest key leaked in its printed forms:\n%s", printedForms)
 		}
+	}
+}
+
+// digestOf now delegates to confedit.Digester; the dashboard compares digests
+// it already holds, so the output must stay the plain hex HMAC-SHA256 of the
+// content under the persisted key, byte for byte.
+func TestDigestOfIsTheHexHMACSHA256OfTheContent(testContext *testing.T) {
+	digestKey := loadDigestKeyOrFail(testContext, secureDataDir(testContext))
+	content := []byte("source: file\nfilenames:\n  - /var/log/web.log\n")
+	mac := hmac.New(sha256.New, digestKey.secret)
+	mac.Write(content)
+	valeurAttendue := hex.EncodeToString(mac.Sum(nil))
+
+	if valeurObtenue := digestKey.digestOf(content); valeurObtenue != valeurAttendue {
+		testContext.Fatalf("got %s, want %s", valeurObtenue, valeurAttendue)
 	}
 }

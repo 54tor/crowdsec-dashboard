@@ -1,14 +1,13 @@
 package sidecarserver
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+
+	"crowdsec-dashboard/internal/confedit"
 )
 
 const (
@@ -74,9 +73,7 @@ func (digestKey DigestKey) isUsable() bool {
 }
 
 func (digestKey DigestKey) digestOf(content []byte) string {
-	mac := hmac.New(sha256.New, digestKey.secret)
-	mac.Write(content)
-	return hex.EncodeToString(mac.Sum(nil))
+	return confedit.NewDigester(digestKey.secret).Of(content)
 }
 
 func (digestKey DigestKey) Format(state fmt.State, _ rune) {
