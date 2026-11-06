@@ -447,6 +447,30 @@ two denormalisations: alert fields that CrowdSec repeats per alert (scenario, so
 value, country, AS, decision type and origin) are stored as text instead of lookup tables, and
 `event_meta` and `engine_public_address_list` are JSONB documents.
 
+## Received logs
+
+The Engines page (administrators) shows, per engine, the last lines of the log files that engine
+acquires, read-only and refreshed every 4 seconds while the tab is visible. It lists the `file`
+sources of the engine's acquisition (`acquis.yaml` and `acquis.d`, or the `acquisition_path` and
+`acquisition_dir` of `config.yaml`); other sources (`docker`, `journalctl`, ...) are listed as
+"cannot be read here".
+
+- **Allowed roots.** Only files under `LOGS_ALLOWED_ROOTS` (local engine) or
+  `SIDECAR_LOGS_ALLOWED_ROOTS` (engine with a sidecar) are readable, after symbolic links are
+  resolved. Mount the host log folders **read-only at the same paths** as in the acquisition
+  (`/var/log/nginx/access.log` must exist at that path in the dashboard or the sidecar container).
+  The dashboard never reads a path typed by a user: the browser only names a source returned by the
+  list.
+- **Bounds.** 200 files per engine, 500 lines per request (the page asks for 200), 4096 bytes per
+  line (longer lines are cut), 1 MiB per answer. Only the end of the file is read. When the end of
+  a file begins inside a line longer than the window, that line is not shown.
+- **Masking.** `Authorization`, cookie, bearer, `password`, `token`, `api_key`, `secret` values and
+  credentials in URLs are replaced by `[REDACTED]` before a line leaves the reader. This is best
+  effort: a log can still hold sensitive data, which is why the view is administrator-only.
+- **Errors.** `logs_disabled` (409, no allowed root), `log_source_not_found` (404, file rotated or
+  removed), `log_source_unreadable` (422, permission or not a regular file), `acquisition_invalid`
+  (422).
+
 ## Engine sidecar
 
 A remote engine runs `cscli` through a sidecar deployed next to its CrowdSec: a small HTTPS service
@@ -466,6 +490,7 @@ remote engine is read-only.
 | `SIDECAR_ALLOWED_COMMANDS` | all | Comma-separated subset of the `cscli` commands the sidecar accepts. |
 | `SIDECAR_READ_ONLY` | `false` | Refuses every write command, including config editor saves (the dashboard shows `sidecar_command_refused`). Validation stays available. |
 | `SIDECAR_MAX_CONCURRENT_EXECUTIONS` | `4` | Parallel `cscli` executions, 1 to 16. |
+| `SIDECAR_LOGS_ALLOWED_ROOTS` | empty | Colon-separated absolute folders the sidecar may read log files from ([Received logs](#received-logs)). Empty disables the view (`logs_disabled`). |
 | `DOCKER_HOST`, `CROWDSEC_CONTAINER` | none, `crowdsec` | Docker API endpoint (a socket proxy) and the CrowdSec container, as for the dashboard. |
 
 The editor uses the signed routes `GET /v1/config/edit/<name>`, `POST /v1/config/edit-validate` and

@@ -283,6 +283,8 @@ applies but the items carry no `source_kind` field.
 | GET | `/api/metrics` | authenticated | `{"available":true, "acquisition":[{source,lines_read,parsed,unparsed}], "parsers":[{name,hits,parsed,unparsed}]}` or `{"available":false,"reason":"unavailable"}` | none |
 | GET | `/api/config/files` | admin | `{"files":["acquis.yaml", ...]}`; optional `engine` (see [Remote configuration files](#remote-configuration-files)) | 500 `config_unavailable`; engine and sidecar errors below |
 | GET | `/api/config/files/{name...}` | admin | `{"name","content"}` with secrets redacted; optional `engine` | 403 `forbidden`, 404 `not_found`, 413 `file_too_large`, 500 `config_unavailable`; engine and sidecar errors below |
+| GET | `/api/logs/sources` | admin | `{"engine","sources":[{id,label}],"unreadable":[{kind,detail}],"truncated"}`: the readable `file` sources of the engine's acquisition; optional `engine` | 409 `logs_disabled`, 422 `acquisition_invalid`; engine and sidecar errors below |
+| GET | `/api/logs/sources/{id}` | admin | `{"engine","source_id","lines","file_size","truncated"}`: last `lines` lines (1 to 500, default 100) of a source, masked; optional `engine` | 400 `invalid_request`, 404 `log_source_not_found`, 409 `logs_disabled`, 422 `log_source_unreadable` or `acquisition_invalid`; engine and sidecar errors below |
 | GET | `/api/hub` | authenticated | array of `{type,name,status,local_version,description}` for every hub item, installed or not (`cscli hub list -a`, command `hub_list_all`; max 5000) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 | GET | `/api/bouncers` | authenticated | `{"items":[{name,type,version,ip_address,last_pull,revoked,auth_type}]}` (`cscli bouncers list -o json`) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
 | GET | `/api/machines` | authenticated | `{"items":[{machine_id,ip_address,last_heartbeat,version,is_validated,auth_type,self}]}` (`cscli machines list -o json`); `self` marks the machine the dashboard uses on that engine (`LAPI_MACHINE_ID` locally, the engine's `machine_id` on a remote engine) | 502 `cscli_failed`, 504 `cscli_timeout`; engine errors below |
@@ -706,6 +708,8 @@ Sidecar failures keep their codes (`sidecar_*`, `cscli_timeout`, see the
 A successful write is audited `config_file_written`, a delete `config_file_deleted`, a restore
 `config_file_restored`, with target `<engine>/<name>` (`local` for the local engine); never the
 content or a digest. A refused or failed write is not audited.
+
+Reading a log source ([Received logs](operations.md#received-logs)) is audited `logs_viewed` with target `<engine>/<file name>` when a view opens, when the engine or the source changes, or after 2 minutes without a read; polling reads in between are not audited, and no line is ever recorded.
 
 ## Everything else
 
