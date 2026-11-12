@@ -22,8 +22,8 @@ require (
 	github.com/things-go/go-socks5 v0.1.4
 	github.com/uptrace/bun v1.3.0
 	github.com/uptrace/bun/dialect/pgdialect v1.3.0
-	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/sys v0.49.0
+	go.yaml.in/yaml/v3 v3.0.6
+	golang.org/x/sys v0.50.0
 	golang.org/x/time v0.16.0
 )
 
